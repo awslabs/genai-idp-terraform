@@ -1,0 +1,9 @@
+nav:
+  - index.md
+  - getting-started
+  - examples
+  - terraform-modules
+  - deployment-guides
+  - security
+  - FAQs: faqs
+  - contributing

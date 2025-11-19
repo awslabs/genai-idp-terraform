@@ -1,0 +1,26 @@
+# Example configuration for Processing Environment API
+
+# AWS region to deploy resources
+region = "us-east-1"
+
+# Prefix to add to resource names
+prefix = "idp"
+
+# DynamoDB billing mode (PROVISIONED or PAY_PER_REQUEST)
+billing_mode = "PROVISIONED"
+
+# DynamoDB read capacity (only used with PROVISIONED billing mode)
+read_capacity = 5
+
+# DynamoDB write capacity (only used with PROVISIONED billing mode)
+write_capacity = 5
+
+# Enable point-in-time recovery for DynamoDB tables
+point_in_time_recovery_enabled = true
+
+# Tags to apply to all resources
+tags = {
+  Environment = "development"
+  Project     = "GenAI-IDP"
+  Owner       = "Data Processing Team"
+}

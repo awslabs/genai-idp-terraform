@@ -1,0 +1,26 @@
+# Terraform files
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Generated files (but keep assets/)
+files/requirements/
+files/*.zip
+
+# Python files in generated directories only
+files/**/__pycache__/
+files/**/*.py[cod]
+files/**/*$py.class
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

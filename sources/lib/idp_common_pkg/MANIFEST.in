@@ -1,0 +1,8 @@
+global-exclude build/*
+global-exclude build/lib/*
+global-exclude */build/*
+global-exclude */build/lib/*
+global-exclude **/build/**
+recursive-exclude build *
+recursive-exclude */build *
+recursive-exclude **/build **

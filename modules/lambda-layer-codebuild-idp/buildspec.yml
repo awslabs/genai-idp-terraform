@@ -1,0 +1,155 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+  pre_build:
+    commands:
+      - echo Creating Lambda layers with idp_common package...
+      - mkdir -p /tmp/layers
+      - ls -la
+  build:
+    commands:
+      - echo "Building layers from requirements files with idp_common package"
+      - |
+        set -e  # Exit immediately if a command fails
+        # Install common system dependencies
+        echo "Installing system dependencies..."
+        yum install -y gcc gcc-c++ python3-devel zlib-devel libjpeg-devel libpng-devel
+        
+        for req_file in $(find . -name "requirements.txt"); do
+          LAYER_NAME=$(basename $(dirname $req_file))
+          echo "=========================================="
+          echo "Building layer for $LAYER_NAME"
+          echo "Requirements file: $req_file"
+          echo "Contents of requirements file:"
+          cat $req_file
+          
+          # Create layer directory
+          mkdir -p /tmp/$LAYER_NAME/python
+          
+          # Check if this is the idp-common layer
+          if [ "$LAYER_NAME" = "idp-common" ]; then
+            echo "Building idp-common layer with Python package..."
+            
+            # Check if idp_common_pkg directory exists
+            if [ -d "$(dirname $req_file)/idp_common_pkg" ]; then
+              echo "Found idp_common_pkg directory"
+              
+              # Create a temporary build directory
+              mkdir -p /tmp/builddir
+              rsync -rLv $(dirname $req_file)/ /tmp/builddir/
+              
+              cd /tmp/builddir
+              
+              # Install dependencies first
+              if [ -s "requirements.txt" ]; then
+                echo "Installing dependencies..."
+                pip install -r requirements.txt -t /tmp/$LAYER_NAME/python --no-cache-dir
+              fi
+              
+              # Install the idp_common package
+              echo "Installing idp_common package..."
+              if [ -n "$IDP_COMMON_EXTRAS" ] && [ "$IDP_COMMON_EXTRAS" != "" ]; then
+                echo "Installing with extras: $IDP_COMMON_EXTRAS"
+                pip install -e ./idp_common_pkg[$IDP_COMMON_EXTRAS] -t /tmp/$LAYER_NAME/python --no-cache-dir
+              else
+                echo "Installing without extras"
+                pip install -e ./idp_common_pkg -t /tmp/$LAYER_NAME/python --no-cache-dir
+              fi
+              
+              # Copy the idp_common source code directly to ensure it's available
+              echo "Copying idp_common source code..."
+              mkdir -p /tmp/$LAYER_NAME/python/idp_common
+              rsync -rLv ./idp_common_pkg/idp_common/ /tmp/$LAYER_NAME/python/idp_common/
+              
+              # Clean up build artifacts but keep the package
+              echo "Cleaning up build artifacts..."
+              find /tmp/$LAYER_NAME/python -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+              find /tmp/$LAYER_NAME/python -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+              find /tmp/$LAYER_NAME/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+              find /tmp/$LAYER_NAME/python -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
+              find /tmp/$LAYER_NAME/python -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+              find /tmp/$LAYER_NAME/python -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
+              
+              # Clean up temporary directory
+              rm -rf /tmp/builddir
+              
+            else
+              echo "ERROR: idp_common_pkg directory not found!"
+              exit 1
+            fi
+            
+          else
+            # Normal installation for other layers
+            echo "Building regular layer..."
+            
+            # Check if requirements file is empty
+            if [ -s "$req_file" ]; then
+              # File is not empty, install dependencies
+              echo "Installing dependencies for $LAYER_NAME..."
+              pip install -r $req_file -t /tmp/$LAYER_NAME/python --no-cache-dir
+              
+              # Check if installation was successful
+              if [ $? -ne 0 ]; then
+                echo "Failed to install dependencies for $LAYER_NAME"
+                exit 1
+              fi
+            else
+              # File is empty, create minimal layer
+              echo "Requirements file is empty, creating minimal layer"
+              touch /tmp/$LAYER_NAME/python/__init__.py
+            fi
+          fi
+          
+          # List installed packages
+          echo "Installed packages for $LAYER_NAME:"
+          ls -la /tmp/$LAYER_NAME/python/
+          
+          # Check if idp_common is available for idp-common layer
+          if [ "$LAYER_NAME" = "idp-common" ]; then
+            echo "Checking idp_common availability:"
+            if [ -d "/tmp/$LAYER_NAME/python/idp_common" ]; then
+              echo "✓ idp_common directory found"
+              ls -la /tmp/$LAYER_NAME/python/idp_common/
+            else
+              echo "✗ idp_common directory NOT found"
+              exit 1
+            fi
+          fi
+          
+          # Create zip file
+          echo "Creating zip file for $LAYER_NAME..."
+          cd /tmp/$LAYER_NAME
+          zip -r /tmp/layers/$LAYER_NAME.zip python/
+          
+          # Check if zip was successful
+          if [ $? -ne 0 ]; then
+            echo "Failed to create zip file for $LAYER_NAME"
+            exit 1
+          fi
+          
+          # Check zip file size
+          echo "Zip file size for $LAYER_NAME:"
+          ls -lh /tmp/layers/$LAYER_NAME.zip
+          
+          # Return to original directory - use CODEBUILD_SRC_DIR or fallback
+          if [ -d "$CODEBUILD_SRC_DIR" ]; then
+            cd $CODEBUILD_SRC_DIR
+          else
+            # Just continue without changing directory if the path doesn't exist
+            echo "Source directory not found, continuing..."
+          fi
+          echo "=========================================="
+        done
+      - echo "All layers built successfully"
+      - echo "Contents of /tmp/layers/:"
+      - ls -lh /tmp/layers/
+  post_build:
+    commands:
+      - echo Lambda layers created successfully
+artifacts:
+  files:
+    - '**/*'
+  base-directory: /tmp/layers
+  discard-paths: no

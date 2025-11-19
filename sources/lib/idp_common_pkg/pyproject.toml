@@ -1,0 +1,128 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["build", "build.*", "*build", "*build.*", "*.build", "*.build.*", "**build**"]
+
+[project]
+name = "idp_common"
+version = "0.3.9"
+description = "Common utilities for GenAI IDP Accelerator patterns"
+authors = [
+    {name = "AWS", email = "noreply@amazon.com"}
+]
+requires-python = ">=3.9,<3.13"
+dependencies = [
+    "boto3==1.39.4",  # Core dependency for AWS services
+]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+# Optional dependencies for each component
+[project.optional-dependencies]
+# Core utilities only - minimal dependencies
+core = []
+
+# Development only dependencies
+dev = [
+    "python-dotenv (>=1.1.0,<2.0.0)",
+    "ipykernel (>=6.29.5,<7.0.0)",
+    "jupyter (>=1.1.1,<2.0.0)",
+]
+
+# Image handling dependencies
+image = [
+    "Pillow==11.2.1",
+]
+
+# OCR module dependencies
+ocr = [
+    "Pillow==11.2.1",
+    "PyMuPDF==1.25.5",
+    "amazon-textract-textractor[pandas]==1.9.2",
+    "numpy==1.26.4",
+    "pandas==2.2.3",
+    "openpyxl==3.1.5",
+    "python-docx==1.2.0",
+]
+
+# Classification module dependencies
+classification = [
+    "Pillow==11.2.1",  # For image handling
+]
+
+# Extraction module dependencies
+extraction = [
+    "Pillow==11.2.1",  # For image handling
+]
+
+# Assessment module dependencies
+assessment = [
+    "Pillow==11.2.1",  # For image handling
+]
+
+# Evaluation module dependencies
+evaluation = [
+    "munkres>=1.1.4",  # For Hungarian algorithm
+    "numpy==1.26.4",   # For numeric operations
+]
+
+# Criteria validation module dependencies
+criteria_validation = [
+    "s3fs==2023.12.2",  # For S3 file system operations
+]
+
+# Reporting module dependencies
+reporting = [
+    "pyarrow==20.0.0",  # For Parquet conversion
+]
+
+# Appsync module dependencies
+appsync = [
+    "requests==2.32.4",
+]
+
+# Document service factory dependencies (includes both appsync and dynamodb support)
+# This includes all dependencies needed for both backends
+docs_service = [
+    "requests==2.32.4",  # Required for appsync module (dynamodb only needs boto3 which is core)
+]
+
+# Testing dependencies
+test = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.3.1",  # For parallel test execution
+    "requests (>=2.32.3,<3.0.0)",
+    "pyarrow==20.0.0",
+    "PyYAML==6.0.2",
+    "openpyxl==3.1.5",
+    "python-docx==1.2.0",
+    "moto[s3]==5.1.8",  # For mocking AWS services in tests
+    "Pillow==11.2.1",  # Required for image processing in assessment tests
+    # "s3fs==2023.12.2",  # Required for criteria validation tests - disabled till we fix package dependencies
+]
+
+# Full package with all dependencies
+all = [
+    "Pillow==11.2.1",
+    "PyMuPDF==1.25.5",
+    "amazon-textract-textractor[pandas]==1.9.2",
+    "munkres>=1.1.4",
+    "numpy==1.26.4",
+    "pandas==2.2.3",
+    "requests==2.32.4",
+    "pyarrow==20.0.0",
+    "openpyxl==3.1.5",
+    "python-docx==1.2.0",
+    # "s3fs==2023.12.2" - - disabled till we fix package dependencies
+]
+
+[project.urls]
+"Homepage" = "https://github.com/aws-samples/sample-genai-idp"

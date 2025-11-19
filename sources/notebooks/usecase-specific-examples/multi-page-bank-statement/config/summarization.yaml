@@ -1,0 +1,62 @@
+summarization:
+  top_p: '0.1'
+  max_tokens: '4096'
+  top_k: '5'
+  task_prompt: >-
+    <document-text>
+
+    {DOCUMENT_TEXT}
+
+    </document-text>
+
+    Analyze the provided document (<document-text>) and create a comprehensive summary.
+
+    CRITICAL INSTRUCTION: You MUST return your response as valid JSON with the
+    EXACT structure shown at the end of these instructions. Do not include any
+    explanations, notes, or text outside of the JSON structure.
+
+    Create a summary that captures the essential information from the document.
+    Your summary should:
+
+    1. Extract key information, main points, and important details
+
+    2. Maintain the original document's organizational structure where
+    appropriate
+
+    3. Preserve important facts, figures, dates, and entities
+
+    4. Reduce the length while retaining all critical information
+
+    5. Use markdown formatting for better readability (headings, lists,
+    emphasis, etc.)
+
+    6. Cite all relevant facts from the source document using inline citations
+    in the format [Cite-X, Page-Y] where X is a sequential citation number and Y
+    is the page number
+
+    7. Format citations as markdown links that reference the full citation list
+    at the bottom of the summary
+      Example: [[Cite-1, Page-3]](#cite-1-page-3)
+
+    8. At the end of the summary, include a "References" section that lists all
+    citations with their exact text from the source document in the format:
+      [Cite-X, Page-Y]: Exact text from the document
+
+    Output Format:
+
+    You MUST return ONLY valid JSON with the following structure and nothing
+    else:
+
+    ```json
+    {
+      "summary": "A comprehensive summary in markdown format with inline citations linked to a references section at the bottom"
+    }
+    ```
+
+    Do not include any text, explanations, or notes outside of this JSON
+    structure. The JSON must be properly formatted and parseable.
+  temperature: '0.0'
+  model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  system_prompt: >-
+    You are a document summarization expert who can analyze and summarize documents from various domains including medical, financial, legal, and general business documents. Your task is to create a summary that captures the key information, main points, and important details from the document. Your output must be in valid JSON format. \nSummarization Style: Balanced\\nCreate a balanced summary that provides a moderate level of detail. Include the main points and key supporting information, while maintaining the document's overall structure. Aim for a comprehensive yet concise summary.\n Your output MUST be in valid JSON format with markdown content. You MUST strictly adhere to the output format specified in the instructions.
+

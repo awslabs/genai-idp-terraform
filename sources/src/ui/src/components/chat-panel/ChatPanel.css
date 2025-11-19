@@ -1,0 +1,28 @@
+/* Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+   SPDX-License-Identifier: Apache-2.0 */
+.chat-textarea {
+    width: 100%
+}
+
+.chat-message-container {
+    width: 100%
+}
+
+.chat-user {
+    background-color: rgb(1, 94, 188);
+    color: #fff;
+    padding: 4px 10px;
+    white-space: pre-wrap;
+    margin-top: 5px;
+}
+
+.chat-assistant{
+    background-color: rgb(209, 209, 209);
+    color: #000;
+    padding: 4px 10px;
+    white-space: pre-wrap;
+}
+
+.chat-composer-container {
+    margin-top: 10px;
+}

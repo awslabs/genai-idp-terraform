@@ -1,0 +1,2277 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GenAI Intelligent Document Processing for Terraform">
+      
+      
+      
+        <link rel="canonical" href="https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/faqs/troubleshooting.html">
+      
+      
+        <link rel="prev" href="cost.html">
+      
+      
+        <link rel="next" href="../contributing/index.html">
+      
+      
+      <link rel="icon" href="../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Troubleshooting Questions - GenAI IDP Accelerator for Terraform</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#troubleshooting-questions" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../index.html" title="GenAI IDP Accelerator for Terraform" class="md-header__button md-logo" aria-label="GenAI IDP Accelerator for Terraform" data-md-component="logo">
+      
+  <img src="../assets/images/aws-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            GenAI IDP Accelerator for Terraform
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Troubleshooting Questions
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1M8 13h8v-2H8zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4a5 5 0 0 0 5-5 5 5 0 0 0-5-5"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5M7 15a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    genaiic-idp-accelerator-terraform
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../index.html" class="md-tabs__link">
+        
+  
+    
+  
+  GenAI IDP Accelerator for Terraform
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../terraform-modules/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Terraform modules
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../deployment-guides/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Deployment guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Faqs
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contributing/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="GenAI IDP Accelerator for Terraform" class="md-nav__button md-logo" aria-label="GenAI IDP Accelerator for Terraform" data-md-component="logo">
+      
+  <img src="../assets/images/aws-logo.png" alt="logo">
+
+    </a>
+    GenAI IDP Accelerator for Terraform
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    genaiic-idp-accelerator-terraform
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    GenAI IDP Accelerator for Terraform
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../getting-started/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Getting started
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/prerequisites.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Prerequisites
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Installation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quick-start.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quick Start
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../terraform-modules/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Terraform modules
+  </span>
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Terraform modules
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../examples/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/bedrock-llm-processor.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Bedrock LLM Processor Example
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/bda-processor.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    BDA Processor Example
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../deployment-guides/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Deployment guides
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Deployment guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment-guides/environment-setup.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Environment Setup Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment-guides/monitoring.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Monitoring and Observability Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment-guides/cost-optimization.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Cost Optimization Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment-guides/best-practices.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Best Practices
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment-guides/troubleshooting.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Troubleshooting Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Faqs
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Faqs
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="general.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    General Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="deployment.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cost.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Cost Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Troubleshooting Questions
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="troubleshooting.html" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Troubleshooting Questions
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#permission-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Permission Errors
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Permission Errors">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#accessdenied-when-deploying-with-terraform" class="md-nav__link">
+    <span class="md-ellipsis">
+      "AccessDenied" when deploying with Terraform
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#user-is-not-authorized-to-invoke-bedrock-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      "User is not authorized to invoke Bedrock model"
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Limits
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Limits">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#limitexceededexception-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      "LimitExceededException" errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#throttlingexception-from-aws-services" class="md-nav__link">
+    <span class="md-ellipsis">
+      "ThrottlingException" from AWS services
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deployment-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deployment Failures
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deployment Failures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#terraform-state-lock-conflicts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Terraform state lock conflicts
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource-already-exists-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Resource already exists" errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Runtime Errors
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Runtime Errors">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lambda-function-timeouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lambda function timeouts
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#document-format-not-supported-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Document format not supported" errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#slow-document-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Slow document processing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#high-memory-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      High memory usage
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#vpc-connectivity-problems" class="md-nav__link">
+    <span class="md-ellipsis">
+      VPC connectivity problems
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#inconsistent-processing-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inconsistent processing results
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-debugging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Debugging
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Debugging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-debug-lambda-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to debug Lambda functions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-to-trace-api-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to trace API requests
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../contributing/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Contributing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/development.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Development Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#permission-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Permission Errors
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Permission Errors">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#accessdenied-when-deploying-with-terraform" class="md-nav__link">
+    <span class="md-ellipsis">
+      "AccessDenied" when deploying with Terraform
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#user-is-not-authorized-to-invoke-bedrock-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      "User is not authorized to invoke Bedrock model"
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Limits
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Limits">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#limitexceededexception-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      "LimitExceededException" errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#throttlingexception-from-aws-services" class="md-nav__link">
+    <span class="md-ellipsis">
+      "ThrottlingException" from AWS services
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deployment-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deployment Failures
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deployment Failures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#terraform-state-lock-conflicts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Terraform state lock conflicts
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource-already-exists-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Resource already exists" errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Runtime Errors
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Runtime Errors">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lambda-function-timeouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lambda function timeouts
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#document-format-not-supported-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Document format not supported" errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#slow-document-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Slow document processing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#high-memory-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      High memory usage
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#vpc-connectivity-problems" class="md-nav__link">
+    <span class="md-ellipsis">
+      VPC connectivity problems
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#inconsistent-processing-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inconsistent processing results
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-debugging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Debugging
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Debugging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-debug-lambda-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to debug Lambda functions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-to-trace-api-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to trace API requests
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="troubleshooting-questions">Troubleshooting Questions</h1>
+<p>Common issues and solutions when using the GenAI IDP Accelerator.</p>
+<h2 id="permission-errors">Permission Errors</h2>
+<h3 id="accessdenied-when-deploying-with-terraform">"AccessDenied" when deploying with Terraform</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: AccessDenied: User is not authorized to perform action
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Check IAM permissions</strong>:
+   <div class="highlight"><pre><span></span><code>aws<span class="w"> </span>sts<span class="w"> </span>get-caller-identity
+aws<span class="w"> </span>iam<span class="w"> </span>get-user
+</code></pre></div></p>
+<ol>
+<li><strong>Verify required permissions</strong>:</li>
+<li>IAM: Create/manage roles and policies</li>
+<li>Lambda: Create/update functions</li>
+<li>S3: Create/manage buckets</li>
+<li>DynamoDB: Create/manage tables</li>
+<li>
+<p>API Gateway: Create/manage APIs</p>
+</li>
+<li>
+<p><strong>Use administrator access temporarily</strong>:
+   <div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;Version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2012-10-17&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;Statement&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;Effect&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Allow&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;Action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;*&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;Resource&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;*&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+</ol>
+<h3 id="user-is-not-authorized-to-invoke-bedrock-model">"User is not authorized to invoke Bedrock model"</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: AccessDeniedException: Your account is not authorized to invoke this model
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Request model access</strong>:
+   - Go to Amazon Bedrock console
+   - Navigate to "Model access"
+   - Request access for required models</p>
+<ol>
+<li><strong>Check region availability</strong>:</li>
+<li>Bedrock models aren't available in all regions</li>
+<li>
+<p>Use supported regions like <code>us-east-1</code>, <code>us-west-2</code></p>
+</li>
+<li>
+<p><strong>Verify model ARN</strong>:
+   <div class="highlight"><pre><span></span><code><span class="c1"># Correct model ARN format</span>
+<span class="na">model_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;anthropic.claude-3-sonnet-20240229-v1:0&quot;</span>
+</code></pre></div></p>
+</li>
+</ol>
+<h2 id="resource-limits">Resource Limits</h2>
+<h3 id="limitexceededexception-errors">"LimitExceededException" errors</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: LimitExceededException: Account has reached the maximum number of functions
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Check service quotas</strong>:
+   <div class="highlight"><pre><span></span><code>aws<span class="w"> </span>service-quotas<span class="w"> </span>get-service-quota<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--service-code<span class="w"> </span>lambda<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--quota-code<span class="w"> </span>L-B99A9384
+</code></pre></div></p>
+<ol>
+<li><strong>Request quota increases</strong>:</li>
+<li>Go to AWS Service Quotas console</li>
+<li>Find the relevant service and quota</li>
+<li>
+<p>Submit increase request</p>
+</li>
+<li>
+<p><strong>Clean up unused resources</strong>:
+   <div class="highlight"><pre><span></span><code><span class="c1"># List unused Lambda functions</span>
+aws<span class="w"> </span>lambda<span class="w"> </span>list-functions<span class="w"> </span>--query<span class="w"> </span><span class="s1">&#39;Functions[?LastModified&lt;`2024-01-01`]&#39;</span>
+</code></pre></div></p>
+</li>
+</ol>
+<h3 id="throttlingexception-from-aws-services">"ThrottlingException" from AWS services</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: ThrottlingException: Rate exceeded
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Implement exponential backoff</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">random</span>
+
+<span class="k">def</span> <span class="nf">retry_with_backoff</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_retries</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">func</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">ThrottlingException</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">attempt</span> <span class="o">==</span> <span class="n">max_retries</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="n">wait_time</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">attempt</span><span class="p">)</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">wait_time</span><span class="p">)</span>
+</code></pre></div></p>
+<ol>
+<li><strong>Reduce request rate</strong>:</li>
+<li>Add delays between API calls</li>
+<li>Use batch operations where possible</li>
+<li>Implement queue-based processing</li>
+</ol>
+<h2 id="deployment-failures">Deployment Failures</h2>
+<h3 id="terraform-state-lock-conflicts">Terraform state lock conflicts</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: Error acquiring the state lock
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Wait for lock release</strong>:
+   - Another Terraform operation may be running
+   - Wait 10-15 minutes for automatic release</p>
+<ol>
+<li>
+<p><strong>Check lock status</strong>:
+   <div class="highlight"><pre><span></span><code>aws<span class="w"> </span>dynamodb<span class="w"> </span>get-item<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--table-name<span class="w"> </span>terraform-locks<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--key<span class="w"> </span><span class="s1">&#39;{&quot;LockID&quot;:{&quot;S&quot;:&quot;your-state-file&quot;}}&#39;</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Force unlock</strong> (use carefully):
+   <div class="highlight"><pre><span></span><code>terraform<span class="w"> </span>force-unlock<span class="w"> </span>LOCK_ID
+</code></pre></div></p>
+</li>
+</ol>
+<h3 id="resource-already-exists-errors">"Resource already exists" errors</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: ResourceAlreadyExistsException: Resource already exists
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Import existing resource</strong>:
+   <div class="highlight"><pre><span></span><code>terraform<span class="w"> </span>import<span class="w"> </span>aws_s3_bucket.documents<span class="w"> </span>existing-bucket-name
+</code></pre></div></p>
+<ol>
+<li>
+<p><strong>Use different resource names</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_s3_bucket&quot;</span><span class="w"> </span><span class="nv">&quot;documents&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">bucket</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-documents-${random_id.suffix.hex}&quot;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Check for naming conflicts</strong>:</p>
+</li>
+<li>S3 bucket names must be globally unique</li>
+<li>Lambda function names must be unique per region/account</li>
+</ol>
+<h2 id="runtime-errors">Runtime Errors</h2>
+<h3 id="lambda-function-timeouts">Lambda function timeouts</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Task timed out after 15.00 seconds
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Increase timeout</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_lambda_function&quot;</span><span class="w"> </span><span class="nv">&quot;processor&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">300</span><span class="c1">  # 5 minutes</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<ol>
+<li>
+<p><strong>Optimize function performance</strong>:
+   <div class="highlight"><pre><span></span><code><span class="c1"># Initialize clients outside handler</span>
+<span class="kn">import</span> <span class="nn">boto3</span>
+
+<span class="n">s3_client</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="s1">&#39;s3&#39;</span><span class="p">)</span>
+<span class="n">textract_client</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="s1">&#39;textract&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">lambda_handler</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+    <span class="c1"># Use pre-initialized clients</span>
+    <span class="k">pass</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Increase memory allocation</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_lambda_function&quot;</span><span class="w"> </span><span class="nv">&quot;processor&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">memory_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">1024</span><span class="c1">  # More memory = more CPU</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+</ol>
+<h3 id="document-format-not-supported-errors">"Document format not supported" errors</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Error: InvalidParameterException: Document format not supported
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Check supported formats</strong>:
+   - PDF, PNG, JPEG, TIFF only
+   - Maximum file size: 10MB (sync), 500MB (async)</p>
+<ol>
+<li>
+<p><strong>Validate file before processing</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">SUPPORTED_EXTENSIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;.pdf&#39;</span><span class="p">,</span> <span class="s1">&#39;.png&#39;</span><span class="p">,</span> <span class="s1">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s1">&#39;.jpeg&#39;</span><span class="p">,</span> <span class="s1">&#39;.tiff&#39;</span><span class="p">}</span>
+
+<span class="k">def</span> <span class="nf">validate_document</span><span class="p">(</span><span class="n">file_name</span><span class="p">):</span>
+    <span class="n">ext</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">file_name</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">ext</span> <span class="ow">in</span> <span class="n">SUPPORTED_EXTENSIONS</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Convert unsupported formats</strong>:</p>
+</li>
+<li>Use Lambda layers with image processing libraries</li>
+<li>Convert to supported format before processing</li>
+</ol>
+<h2 id="performance-issues">Performance Issues</h2>
+<h3 id="slow-document-processing">Slow document processing</h3>
+<p><strong>Symptoms</strong>:
+- Long processing times
+- Frequent timeouts
+- High costs</p>
+<p><strong>Solutions</strong>:
+1. <strong>Optimize Lambda configuration</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_lambda_function&quot;</span><span class="w"> </span><span class="nv">&quot;processor&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">memory_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">2048</span><span class="c1">  # Higher memory for better performance</span>
+<span class="w">  </span><span class="na">timeout</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="m">900</span><span class="c1">   # 15 minutes max</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<ol>
+<li>
+<p><strong>Implement parallel processing</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">concurrent.futures</span>
+
+<span class="k">def</span> <span class="nf">process_documents_parallel</span><span class="p">(</span><span class="n">documents</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+        <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">process_document</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span> <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">results</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Use asynchronous processing</strong>:</p>
+</li>
+<li>Use Textract async APIs for large documents</li>
+<li>Implement Step Functions for complex workflows</li>
+<li>Use SQS for queue-based processing</li>
+</ol>
+<h3 id="high-memory-usage">High memory usage</h3>
+<p><strong>Symptoms</strong>:
+<div class="highlight"><pre><span></span><code>Runtime.OutOfMemoryError: JavaScript heap out of memory
+</code></pre></div></p>
+<p><strong>Solutions</strong>:
+1. <strong>Increase Lambda memory</strong>:
+   <div class="highlight"><pre><span></span><code><span class="na">memory_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">3008</span><span class="c1">  # Maximum available</span>
+</code></pre></div></p>
+<ol>
+<li><strong>Optimize memory usage</strong>:
+   <div class="highlight"><pre><span></span><code><span class="c1"># Process documents in chunks</span>
+<span class="k">def</span> <span class="nf">process_large_document</span><span class="p">(</span><span class="n">document_text</span><span class="p">):</span>
+    <span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">10000</span>  <span class="c1"># characters</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">document_text</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="n">chunk_size</span><span class="p">]</span> 
+             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">document_text</span><span class="p">),</span> <span class="n">chunk_size</span><span class="p">)]</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">process_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">combine_results</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+</code></pre></div></li>
+</ol>
+<h2 id="network-issues">Network Issues</h2>
+<h3 id="vpc-connectivity-problems">VPC connectivity problems</h3>
+<p><strong>Symptoms</strong>:
+- Lambda functions can't reach AWS services
+- Timeout errors when calling APIs</p>
+<p><strong>Solutions</strong>:
+1. <strong>Check VPC configuration</strong>:
+   <div class="highlight"><pre><span></span><code><span class="c1"># Ensure NAT Gateway for private subnets</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_nat_gateway&quot;</span><span class="w"> </span><span class="nv">&quot;main&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">allocation_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_eip.nat.id</span>
+<span class="w">  </span><span class="na">subnet_id</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_subnet.public[0].id</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<ol>
+<li>
+<p><strong>Use VPC endpoints</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_vpc_endpoint&quot;</span><span class="w"> </span><span class="nv">&quot;s3&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">vpc_id</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_vpc.main.id</span>
+<span class="w">  </span><span class="na">service_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;com.amazonaws.${var.region}.s3&quot;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Check security groups</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_security_group&quot;</span><span class="w"> </span><span class="nv">&quot;lambda&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">egress</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">from_port</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="m">443</span>
+<span class="w">    </span><span class="na">to_port</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="m">443</span>
+<span class="w">    </span><span class="na">protocol</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;tcp&quot;</span>
+<span class="w">    </span><span class="na">cidr_blocks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;0.0.0.0/0&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+</ol>
+<h2 id="data-issues">Data Issues</h2>
+<h3 id="inconsistent-processing-results">Inconsistent processing results</h3>
+<p><strong>Symptoms</strong>:
+- Different results for same document
+- Missing or incorrect extracted data</p>
+<p><strong>Solutions</strong>:
+1. <strong>Improve prompt consistency</strong>:
+   <div class="highlight"><pre><span></span><code><span class="n">CONSISTENT_PROMPT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">Extract the following information from this document:</span>
+<span class="s2">1. Document type</span>
+<span class="s2">2. Date (format: YYYY-MM-DD)</span>
+<span class="s2">3. Amount (format: $X.XX)</span>
+<span class="s2">4. Parties involved</span>
+
+<span class="s2">Return as JSON with these exact keys: type, date, amount, parties</span>
+<span class="s2">&quot;&quot;&quot;</span>
+</code></pre></div></p>
+<ol>
+<li>
+<p><strong>Implement validation</strong>:
+   <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">validate_extraction_result</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+    <span class="n">required_fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">,</span> <span class="s1">&#39;date&#39;</span><span class="p">,</span> <span class="s1">&#39;amount&#39;</span><span class="p">,</span> <span class="s1">&#39;parties&#39;</span><span class="p">]</span>
+    <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">field</span> <span class="ow">in</span> <span class="n">result</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">required_fields</span><span class="p">)</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Add error handling</strong>:
+   <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">process_with_fallback</span><span class="p">(</span><span class="n">document</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">primary_processing</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">validate_result</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">result</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Primary processing failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Fallback to simpler processing</span>
+    <span class="k">return</span> <span class="n">fallback_processing</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+</code></pre></div></p>
+</li>
+</ol>
+<h2 id="monitoring-and-debugging">Monitoring and Debugging</h2>
+<h3 id="how-to-debug-lambda-functions">How to debug Lambda functions</h3>
+<ol>
+<li>
+<p><strong>Enable detailed logging</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">lambda_handler</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received event: </span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="c1"># ... processing logic</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing result: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Use X-Ray tracing</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_lambda_function&quot;</span><span class="w"> </span><span class="nv">&quot;processor&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">tracing_config</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Active&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Monitor CloudWatch metrics</strong>:</p>
+</li>
+<li>Duration, Errors, Throttles</li>
+<li>Memory utilization</li>
+<li>Concurrent executions</li>
+</ol>
+<h3 id="how-to-trace-api-requests">How to trace API requests</h3>
+<ol>
+<li>
+<p><strong>Enable API Gateway logging</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_api_gateway_stage&quot;</span><span class="w"> </span><span class="nv">&quot;main&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">xray_tracing_enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+
+<span class="w">  </span><span class="nb">access_log_settings</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">destination_arn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_cloudwatch_log_group.api_gateway.arn</span>
+<span class="w">    </span><span class="na">format</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">jsonencode</span><span class="p">({</span>
+<span class="w">      </span><span class="na">requestId</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.requestId&quot;</span>
+<span class="w">      </span><span class="na">ip</span><span class="w">            </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.identity.sourceIp&quot;</span>
+<span class="w">      </span><span class="na">caller</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.identity.caller&quot;</span>
+<span class="w">      </span><span class="na">user</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.identity.user&quot;</span>
+<span class="w">      </span><span class="na">requestTime</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.requestTime&quot;</span>
+<span class="w">      </span><span class="na">httpMethod</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.httpMethod&quot;</span>
+<span class="w">      </span><span class="na">resourcePath</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.resourcePath&quot;</span>
+<span class="w">      </span><span class="na">status</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.status&quot;</span>
+<span class="w">      </span><span class="na">protocol</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.protocol&quot;</span>
+<span class="w">      </span><span class="na">responseLength</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$context.responseLength&quot;</span>
+<span class="w">    </span><span class="p">})</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Use correlation IDs</strong>:
+   <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="k">def</span> <span class="nf">lambda_handler</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+    <span class="n">correlation_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing request </span><span class="si">{</span><span class="n">correlation_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Pass correlation ID through processing chain</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">process_document</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">correlation_id</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;statusCode&#39;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="s1">&#39;headers&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;X-Correlation-ID&#39;</span><span class="p">:</span> <span class="n">correlation_id</span><span class="p">},</span>
+        <span class="s1">&#39;body&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+    <span class="p">}</span>
+</code></pre></div></p>
+</li>
+</ol>
+<hr />
+<p>For more troubleshooting help, see:
+- <a href="../deployment-guides/troubleshooting.html">Deployment Troubleshooting</a>
+- <a href="../deployment-guides/monitoring.html">Monitoring Guide</a>
+- <a href="../deployment-guides/best-practices.html">Best Practices</a></p>
+
+
+
+
+
+
+
+  
+    
+  
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    2025-07-08
+  </span>
+
+    
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="cost.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Cost Questions">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Cost Questions
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../contributing/index.html" class="md-footer__link md-footer__link--next" aria-label="Next: Contributing">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Contributing
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025 Amazon Web Services, Inc. or its affiliates.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://aws.amazon.com" target="_blank" rel="noopener" title="Amazon Web Services, Inc." class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M180.41 203.01c-.72 22.65 10.6 32.68 10.88 39.05a8.16 8.16 0 0 1-4.1 6.27l-12.8 8.96a10.66 10.66 0 0 1-5.63 1.92c-.43-.02-8.19 1.83-20.48-25.61a78.6 78.6 0 0 1-62.61 29.45c-16.28.89-60.4-9.24-58.13-56.21-1.59-38.28 34.06-62.06 70.93-60.05 7.1.02 21.6.37 46.99 6.27v-15.62c2.69-26.46-14.7-46.99-44.81-43.91-2.4.01-19.4-.5-45.84 10.11-7.36 3.38-8.3 2.82-10.75 2.82-7.41 0-4.36-21.48-2.94-24.2 5.21-6.4 35.86-18.35 65.94-18.18a76.86 76.86 0 0 1 55.69 17.28 70.29 70.29 0 0 1 17.67 52.36zM93.99 235.4c32.43-.47 46.16-19.97 49.29-30.47 2.46-10.05 2.05-16.41 2.05-27.4-9.67-2.32-23.59-4.85-39.56-4.87-15.15-1.14-42.82 5.63-41.74 32.26-1.24 16.79 11.12 31.4 29.96 30.48m170.92 23.05c-7.86.72-11.52-4.86-12.68-10.37l-49.8-164.65c-.97-2.78-1.61-5.65-1.92-8.58a4.61 4.61 0 0 1 3.86-5.25c.24-.04-2.13 0 22.25 0 8.78-.88 11.64 6.03 12.55 10.37l35.72 140.83 33.16-140.83c.53-3.22 2.94-11.07 12.8-10.24h17.16c2.17-.18 11.11-.5 12.68 10.37l33.42 142.63L420.98 80.1c.48-2.18 2.72-11.37 12.68-10.37h19.72c.85-.13 6.15-.81 5.25 8.58-.43 1.85 3.41-10.66-52.75 169.9-1.15 5.51-4.82 11.09-12.68 10.37h-18.69c-10.94 1.15-12.51-9.66-12.68-10.75L328.67 110.7l-32.78 136.99c-.16 1.09-1.73 11.9-12.68 10.75h-18.3zm273.48 5.63c-5.88.01-33.92-.3-57.36-12.29a12.8 12.8 0 0 1-7.81-11.91v-10.75c0-8.45 6.2-6.9 8.83-5.89 10.04 4.06 16.48 7.14 28.81 9.6 36.65 7.53 52.77-2.3 56.72-4.48 13.15-7.81 14.19-25.68 5.25-34.95-10.48-8.79-15.48-9.12-53.13-21-4.64-1.29-43.7-13.61-43.79-52.36-.61-28.24 25.05-56.18 69.52-55.95 12.67-.01 46.43 4.13 55.57 15.62 1.35 2.09 2.02 4.55 1.92 7.04v10.11c0 4.44-1.62 6.66-4.87 6.66-7.71-.86-21.39-11.17-49.16-10.75-6.89-.36-39.89.91-38.41 24.97-.43 18.96 26.61 26.07 29.7 26.89 36.46 10.97 48.65 12.79 63.12 29.58 17.14 22.25 7.9 48.3 4.35 55.44-19.08 37.49-68.42 34.44-69.26 34.42m40.2 104.86c-70.03 51.72-171.69 79.25-258.49 79.25A469.13 469.13 0 0 1 2.83 327.46c-6.53-5.89-.77-13.96 7.17-9.47a637.37 637.37 0 0 0 316.88 84.12 630.2 630.2 0 0 0 241.59-49.55c11.78-5 21.77 7.8 10.12 16.38m29.19-33.29c-8.96-11.52-59.28-5.38-81.81-2.69-6.79.77-7.94-5.12-1.79-9.47 40.07-28.17 105.88-20.1 113.44-10.63 7.55 9.47-2.05 75.41-39.56 106.91-5.76 4.87-11.27 2.3-8.71-4.1 8.44-21.25 27.39-68.49 18.43-80.02"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.tabs.link", "toc.follow", "navigation.path", "navigation.expand", "navigation.indexes", "navigation.instant", "navigation.tabs", "navigation.footer"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>

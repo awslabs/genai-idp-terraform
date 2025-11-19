@@ -1,0 +1,22 @@
+# Basic Configuration
+region = "us-east-1"
+prefix = "my-idp-user-identity"
+
+# User Identity Configuration (Required)
+admin_email = "admin@example.com"
+
+# Optional: Allow self-service signup for specific email domains
+# allowed_signup_email_domain = "example.com,mycompany.com"
+
+# Optional: Allow unauthenticated identities (not recommended for production)
+allow_unauthenticated_identities = false
+
+# Optional: Disable deletion protection (not recommended for production)
+deletion_protection = true
+
+# Tags
+tags = {
+  Environment = "development"
+  Project     = "GenAI-IDP"
+  Owner       = "your-name"
+}

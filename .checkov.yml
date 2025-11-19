@@ -1,0 +1,56 @@
+# Checkov configuration file
+# Infrastructure as Code security scanning for Terraform
+
+# Framework to scan (terraform, cloudformation, kubernetes, etc.)
+framework: 
+  - terraform
+
+# Directories to skip
+skip-path:
+  - .terraform/
+  - .git/
+  - docs/
+  - examples/
+  - sources/
+  - .tfsec/
+
+# File patterns to skip
+# skip-files:
+#   - "*.example"
+#   - "*.backup"
+#   - "**/test_fixtures/**"
+
+# Specific checks to skip (if needed)
+# skip-check:
+#   - CKV_AWS_1   # Example: skip specific check
+
+# Only run specific checks (if you want to be selective)
+# check:
+#   - CKV_AWS_*   # Only run AWS checks
+
+# Output format: cli, json, junitxml, github_failed_only, sarif
+output: junitxml
+
+# Additional output formats for CI/CD integration
+# Will be overridden in CI pipeline for specific formats
+
+# Severity threshold: CRITICAL, HIGH, MEDIUM, LOW
+# soft-fail: false
+
+# Enable/disable specific frameworks
+enable-secret-scan-all-files: false
+
+# Custom policies directory (if you have custom checks)
+# external-checks-dir: .checkov/custom
+
+# Compact output for better readability in CI logs
+compact: true
+
+# Download external modules for scanning
+download-external-modules: false
+
+# Evaluate variables and locals
+evaluate-variables: true
+
+# Include passed checks in output (useful for compliance reporting)
+# include-all-checkov-policies: true

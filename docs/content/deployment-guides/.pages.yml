@@ -1,0 +1,6 @@
+nav:
+  - index.md
+  - environment-setup.md
+  - monitoring.md
+  - best-practices.md
+  - troubleshooting.md

@@ -1,0 +1,192 @@
+/* Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. */
+/* SPDX-License-Identifier: MIT-0 */
+
+.execution-status {
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.execution-status-succeeded {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.execution-status-failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.execution-status-running {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.execution-status-pending {
+  background-color: #f8f9fa;
+  color: #6c757d;
+}
+
+.steps-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-step {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.timeline-step:hover {
+  border-color: #007dbc;
+  box-shadow: 0 2px 4px rgba(0, 125, 188, 0.1);
+}
+
+.timeline-step.selected {
+  border-color: #007dbc;
+  background-color: #f0f8ff;
+  box-shadow: 0 2px 8px rgba(0, 125, 188, 0.2);
+}
+
+/* Styling for nested steps */
+.timeline-step.nested-step {
+  margin-left: 40px;
+  border-left: 3px solid #007dbc;
+  background-color: #f8f9fa;
+  padding-left: 20px;
+}
+
+.timeline-step-icon {
+  margin-right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #f8f9fa;
+}
+
+.timeline-step.succeeded .timeline-step-icon {
+  background-color: #d4edda;
+}
+
+.timeline-step.failed .timeline-step-icon {
+  background-color: #f8d7da;
+}
+
+.timeline-step.running .timeline-step-icon {
+  background-color: #d1ecf1;
+  animation: pulse 2s infinite;
+}
+
+.timeline-step-content {
+  flex: 1;
+}
+
+.timeline-step-name {
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-step-meta {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.timeline-step-status {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-succeeded {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-running {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.status-pending {
+  background-color: #f8f9fa;
+  color: #6c757d;
+}
+
+.timeline-step-duration {
+  font-family: monospace;
+}
+
+.timeline-step-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border-radius: 4px;
+  font-size: 14px;
+  border-left: 4px solid #dc3545;
+  display: flex;
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.step-icon {
+  transition: all 0.2s ease;
+}
+
+.step-icon-succeeded {
+  color: #28a745;
+}
+
+.step-icon-failed {
+  color: #dc3545;
+}
+
+.step-icon-running {
+  color: #17a2b8;
+  animation: pulse 2s infinite;
+}
+
+.step-icon-pending {
+  color: #6c757d;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

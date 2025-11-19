@@ -1,0 +1,2720 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GenAI Intelligent Document Processing for Terraform">
+      
+      
+      
+        <link rel="canonical" href="https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/deployment-guides/monitoring.html">
+      
+      
+        <link rel="prev" href="environment-setup.html">
+      
+      
+        <link rel="next" href="cost-optimization.html">
+      
+      
+      <link rel="icon" href="../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Monitoring and Observability Guide - GenAI IDP Accelerator for Terraform</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#monitoring-and-observability-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../index.html" title="GenAI IDP Accelerator for Terraform" class="md-header__button md-logo" aria-label="GenAI IDP Accelerator for Terraform" data-md-component="logo">
+      
+  <img src="../assets/images/aws-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            GenAI IDP Accelerator for Terraform
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Monitoring and Observability Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1M8 13h8v-2H8zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4a5 5 0 0 0 5-5 5 5 0 0 0-5-5"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5M7 15a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    genaiic-idp-accelerator-terraform
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../index.html" class="md-tabs__link">
+        
+  
+    
+  
+  GenAI IDP Accelerator for Terraform
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../terraform-modules/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Terraform modules
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Deployment guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../faqs/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Faqs
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contributing/index.html" class="md-tabs__link">
+          
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="GenAI IDP Accelerator for Terraform" class="md-nav__button md-logo" aria-label="GenAI IDP Accelerator for Terraform" data-md-component="logo">
+      
+  <img src="../assets/images/aws-logo.png" alt="logo">
+
+    </a>
+    GenAI IDP Accelerator for Terraform
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    genaiic-idp-accelerator-terraform
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    GenAI IDP Accelerator for Terraform
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../getting-started/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Getting started
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/prerequisites.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Prerequisites
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Installation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quick-start.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quick Start
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../terraform-modules/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Terraform modules
+  </span>
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Terraform modules
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../examples/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/bedrock-llm-processor.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Bedrock LLM Processor Example
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/bda-processor.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    BDA Processor Example
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Deployment guides
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Deployment guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="environment-setup.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Environment Setup Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Monitoring and Observability Guide
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="monitoring.html" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Monitoring and Observability Guide
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-pillars-of-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      Three Pillars of Observability
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Stack
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloudwatch-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CloudWatch Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#log-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Log Groups
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Custom Metrics
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloudwatch-alarms" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Alarms
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CloudWatch Alarms">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#performance-alarms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Alarms
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource-utilization-alarms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Utilization Alarms
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloudwatch-dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Dashboards
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CloudWatch Dashboards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#main-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      Main Dashboard
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Dashboard
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#x-ray-tracing" class="md-nav__link">
+    <span class="md-ellipsis">
+      X-Ray Tracing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="X-Ray Tracing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-tracing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Custom Tracing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#application-insights" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application Insights
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Application Insights">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cloudwatch-application-insights" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Application Insights
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notification-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Notification Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Notification Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sns-topics" class="md-nav__link">
+    <span class="md-ellipsis">
+      SNS Topics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slack-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Slack Integration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#log-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Log Analysis
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Log Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cloudwatch-insights-queries" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Insights Queries
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automated-log-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automated Log Analysis
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost Monitoring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost Monitoring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cost-and-usage-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost and Usage Tracking
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#health-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Health Checks
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Health Checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#application-health-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application Health Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cost-optimization.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Cost Optimization Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="best-practices.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Best Practices
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="troubleshooting.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Troubleshooting Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../faqs/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Faqs
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Faqs
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faqs/general.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    General Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faqs/deployment.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faqs/cost.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Cost Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faqs/troubleshooting.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Troubleshooting Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../contributing/index.html" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Contributing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/development.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Development Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-pillars-of-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      Three Pillars of Observability
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Stack
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloudwatch-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CloudWatch Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#log-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Log Groups
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Custom Metrics
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloudwatch-alarms" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Alarms
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CloudWatch Alarms">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#performance-alarms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Alarms
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource-utilization-alarms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Utilization Alarms
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloudwatch-dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Dashboards
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CloudWatch Dashboards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#main-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      Main Dashboard
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Dashboard
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#x-ray-tracing" class="md-nav__link">
+    <span class="md-ellipsis">
+      X-Ray Tracing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="X-Ray Tracing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-tracing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Custom Tracing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#application-insights" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application Insights
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Application Insights">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cloudwatch-application-insights" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Application Insights
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notification-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Notification Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Notification Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sns-topics" class="md-nav__link">
+    <span class="md-ellipsis">
+      SNS Topics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slack-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Slack Integration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#log-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Log Analysis
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Log Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cloudwatch-insights-queries" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudWatch Insights Queries
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automated-log-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automated Log Analysis
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost Monitoring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost Monitoring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cost-and-usage-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost and Usage Tracking
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#health-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Health Checks
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Health Checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#application-health-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application Health Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="monitoring-and-observability-guide">Monitoring and Observability Guide</h1>
+<p>This guide covers comprehensive monitoring, logging, and observability setup for the GenAI IDP Accelerator.</p>
+<h2 id="monitoring-architecture">Monitoring Architecture</h2>
+<h3 id="three-pillars-of-observability">Three Pillars of Observability</h3>
+<ol>
+<li><strong>Metrics</strong>: Quantitative measurements of system behavior</li>
+<li><strong>Logs</strong>: Detailed records of events and transactions</li>
+<li><strong>Traces</strong>: Request flow through distributed components</li>
+</ol>
+<h3 id="monitoring-stack">Monitoring Stack</h3>
+<pre class="mermaid"><code>graph TB
+    App[Application] --&gt; CW[CloudWatch]
+    App --&gt; XRay[X-Ray]
+    CW --&gt; Alarms[CloudWatch Alarms]
+    CW --&gt; Dashboards[CloudWatch Dashboards]
+    Alarms --&gt; SNS[SNS Topics]
+    SNS --&gt; Email[Email Notifications]
+    SNS --&gt; Slack[Slack Integration]
+    XRay --&gt; ServiceMap[Service Map]
+    XRay --&gt; Traces[Distributed Traces]</code></pre>
+<h2 id="cloudwatch-configuration">CloudWatch Configuration</h2>
+<h3 id="log-groups">Log Groups</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Lambda function log groups</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_log_group&quot;</span><span class="w"> </span><span class="nv">&quot;lambda_logs&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">for_each</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.lambda_functions</span>
+
+<span class="w">  </span><span class="na">name</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/aws/lambda/${var.environment}-idp-${each.key}&quot;</span>
+<span class="w">  </span><span class="na">retention_in_days</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.log_retention_days</span>
+<span class="w">  </span><span class="na">kms_key_id</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_kms_key.cloudwatch_logs_key.arn</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># API Gateway log group</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_log_group&quot;</span><span class="w"> </span><span class="nv">&quot;api_gateway_logs&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/aws/apigateway/${var.environment}-idp-api&quot;</span>
+<span class="w">  </span><span class="na">retention_in_days</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.log_retention_days</span>
+<span class="w">  </span><span class="na">kms_key_id</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_kms_key.cloudwatch_logs_key.arn</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Step Functions log group</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_log_group&quot;</span><span class="w"> </span><span class="nv">&quot;step_functions_logs&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/aws/stepfunctions/${var.environment}-idp-workflow&quot;</span>
+<span class="w">  </span><span class="na">retention_in_days</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.log_retention_days</span>
+<span class="w">  </span><span class="na">kms_key_id</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_kms_key.cloudwatch_logs_key.arn</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="custom-metrics">Custom Metrics</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Custom metric filters</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_log_metric_filter&quot;</span><span class="w"> </span><span class="nv">&quot;document_processing_duration&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-document-processing-duration&quot;</span>
+<span class="w">  </span><span class="na">log_group_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_cloudwatch_log_group.lambda_logs</span><span class="p">[</span><span class="s2">&quot;document_processor&quot;</span><span class="p">].</span><span class="err">name</span>
+<span class="w">  </span><span class="na">pattern</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;[timestamp, request_id, \&quot;PROCESSING_DURATION\&quot;, duration]&quot;</span>
+
+<span class="w">  </span><span class="nb">metric_transformation</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">name</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;DocumentProcessingDuration&quot;</span>
+<span class="w">    </span><span class="na">namespace</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;IDP/Performance&quot;</span>
+<span class="w">    </span><span class="na">value</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;$duration&quot;</span>
+<span class="w">    </span><span class="na">unit</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Seconds&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_log_metric_filter&quot;</span><span class="w"> </span><span class="nv">&quot;document_processing_errors&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-document-processing-errors&quot;</span>
+<span class="w">  </span><span class="na">log_group_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_cloudwatch_log_group.lambda_logs</span><span class="p">[</span><span class="s2">&quot;document_processor&quot;</span><span class="p">].</span><span class="err">name</span>
+<span class="w">  </span><span class="na">pattern</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;[timestamp, request_id, \&quot;ERROR\&quot;, ...]&quot;</span>
+
+<span class="w">  </span><span class="nb">metric_transformation</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">name</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;DocumentProcessingErrors&quot;</span>
+<span class="w">    </span><span class="na">namespace</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;IDP/Errors&quot;</span>
+<span class="w">    </span><span class="na">value</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_log_metric_filter&quot;</span><span class="w"> </span><span class="nv">&quot;bedrock_api_calls&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-bedrock-api-calls&quot;</span>
+<span class="w">  </span><span class="na">log_group_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_cloudwatch_log_group.lambda_logs</span><span class="p">[</span><span class="s2">&quot;ai_processor&quot;</span><span class="p">].</span><span class="err">name</span>
+<span class="w">  </span><span class="na">pattern</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;[timestamp, request_id, \&quot;BEDROCK_API_CALL\&quot;, model, tokens]&quot;</span>
+
+<span class="w">  </span><span class="nb">metric_transformation</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">name</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;BedrockAPICalls&quot;</span>
+<span class="w">    </span><span class="na">namespace</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;IDP/Usage&quot;</span>
+<span class="w">    </span><span class="na">value</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="cloudwatch-alarms">CloudWatch Alarms</h2>
+<h3 id="performance-alarms">Performance Alarms</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Lambda function duration alarm</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;lambda_duration&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">for_each</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.lambda_functions</span>
+
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-${each.key}-duration&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;GreaterThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Duration&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/Lambda&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;300&quot;</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Average&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="nv">each.value.timeout_threshold</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Lambda function ${each.key} duration is too high&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">FunctionName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_lambda_function.functions[each.key].function_name</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.alerts.arn</span><span class="p">]</span>
+<span class="w">  </span><span class="na">ok_actions</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Lambda function error rate alarm</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;lambda_error_rate&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">for_each</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.lambda_functions</span>
+
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-${each.key}-error-rate&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;GreaterThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Errors&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/Lambda&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;300&quot;</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Sum&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;5&quot;</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Lambda function ${each.key} error rate is too high&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">FunctionName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_lambda_function.functions[each.key].function_name</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># API Gateway 4xx errors</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;api_gateway_4xx_errors&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-api-4xx-errors&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;GreaterThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;4XXError&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/ApiGateway&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;300&quot;</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Sum&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;10&quot;</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;API Gateway 4xx error rate is too high&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">ApiName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_api_gateway_rest_api.idp_api.name</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># API Gateway 5xx errors</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;api_gateway_5xx_errors&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-api-5xx-errors&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;GreaterThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;5XXError&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/ApiGateway&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;300&quot;</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Sum&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;API Gateway 5xx error detected&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">ApiName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_api_gateway_rest_api.idp_api.name</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.critical_alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="resource-utilization-alarms">Resource Utilization Alarms</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># DynamoDB throttling alarm</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;dynamodb_throttling&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-dynamodb-throttling&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;GreaterThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ThrottledRequests&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/DynamoDB&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;300&quot;</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Sum&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0&quot;</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;DynamoDB requests are being throttled&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">TableName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_dynamodb_table.document_metadata.name</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># S3 bucket size alarm</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;s3_bucket_size&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-s3-bucket-size&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;GreaterThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;BucketSizeBytes&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/S3&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;86400&quot;</span><span class="c1">  # Daily</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Average&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="nv">var.s3_size_threshold_bytes</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;S3 bucket size is approaching limits&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">BucketName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_s3_bucket.documents.bucket</span>
+<span class="w">    </span><span class="na">StorageType</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;StandardStorage&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="cloudwatch-dashboards">CloudWatch Dashboards</h2>
+<h3 id="main-dashboard">Main Dashboard</h3>
+<div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_dashboard&quot;</span><span class="w"> </span><span class="nv">&quot;idp_main_dashboard&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">dashboard_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-main-dashboard&quot;</span>
+
+<span class="w">  </span><span class="na">dashboard_body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">jsonencode</span><span class="p">({</span>
+<span class="w">    </span><span class="na">widgets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">12</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;AWS/Lambda&quot;, &quot;Invocations&quot;, &quot;FunctionName&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">aws_lambda_function.document_processor.function_name</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;Duration&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;Errors&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;Throttles&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Document Processor Lambda Metrics&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">300</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">12</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">12</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;AWS/ApiGateway&quot;, &quot;Count&quot;, &quot;ApiName&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">aws_api_gateway_rest_api.idp_api.name</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;Latency&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;4XXError&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;5XXError&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;API Gateway Metrics&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">300</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">8</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;AWS/DynamoDB&quot;, &quot;ConsumedReadCapacityUnits&quot;, &quot;TableName&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">aws_dynamodb_table.document_metadata.name</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;ConsumedWriteCapacityUnits&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;ThrottledRequests&quot;, &quot;.&quot;, &quot;.&quot;</span><span class="p">]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;DynamoDB Metrics&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">300</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">8</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">8</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;IDP/Performance&quot;, &quot;DocumentProcessingDuration&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;IDP/Errors&quot;, &quot;DocumentProcessingErrors&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;IDP/Usage&quot;, &quot;BedrockAPICalls&quot;</span><span class="p">]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Custom Application Metrics&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">300</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;log&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">16</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">8</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">query</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;SOURCE &#39;/aws/lambda/${var.environment}-idp-document-processor&#39; | fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 20&quot;</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Recent Errors&quot;</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;table&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="performance-dashboard">Performance Dashboard</h3>
+<div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_dashboard&quot;</span><span class="w"> </span><span class="nv">&quot;idp_performance_dashboard&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">dashboard_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-performance-dashboard&quot;</span>
+
+<span class="w">  </span><span class="na">dashboard_body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">jsonencode</span><span class="p">({</span>
+<span class="w">    </span><span class="na">widgets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">24</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;IDP/Performance&quot;, &quot;DocumentProcessingDuration&quot;, { &quot;stat&quot;: &quot;Average&quot;</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;.&quot;, { &quot;stat&quot;: &quot;p95&quot;</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;.&quot;, { &quot;stat&quot;: &quot;p99&quot;</span><span class="w"> </span><span class="p">}]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Document Processing Duration (Average, P95, P99)&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">300</span>
+<span class="w">          </span><span class="nb">yAxis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nb">left</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">              </span><span class="na">min</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">          </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">0</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">12</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;AWS/Lambda&quot;, &quot;ConcurrentExecutions&quot;, &quot;FunctionName&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">aws_lambda_function.document_processor.function_name</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;.&quot;, &quot;FunctionName&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">aws_lambda_function.ai_processor.function_name</span><span class="p">]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Lambda Concurrent Executions&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">300</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;metric&quot;</span>
+<span class="w">        </span><span class="na">x</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">12</span>
+<span class="w">        </span><span class="na">y</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+<span class="w">        </span><span class="na">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">12</span>
+<span class="w">        </span><span class="na">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">6</span>
+
+<span class="w">        </span><span class="nb">properties</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="na">metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;AWS/S3&quot;, &quot;NumberOfObjects&quot;, &quot;BucketName&quot;, aws_s3_bucket.documents.bucket, &quot;StorageType&quot;, &quot;AllStorageTypes&quot;</span><span class="p">],</span>
+<span class="w">            </span><span class="p">[</span><span class="s2">&quot;.&quot;, &quot;BucketSizeBytes&quot;, &quot;.&quot;, &quot;.&quot;, &quot;.&quot;, &quot;StandardStorage&quot;</span><span class="p">]</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">          </span><span class="na">view</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;timeSeries&quot;</span>
+<span class="w">          </span><span class="na">stacked</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="w">          </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">          </span><span class="na">title</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;S3 Storage Metrics&quot;</span>
+<span class="w">          </span><span class="na">period</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="m">86400</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="x-ray-tracing">X-Ray Tracing</h2>
+<h3 id="configuration">Configuration</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># X-Ray sampling rule</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_xray_sampling_rule&quot;</span><span class="w"> </span><span class="nv">&quot;idp_sampling_rule&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">rule_name</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-sampling-rule&quot;</span>
+<span class="w">  </span><span class="na">priority</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="m">9000</span>
+<span class="w">  </span><span class="na">version</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="m">1</span>
+<span class="w">  </span><span class="na">reservoir_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">1</span>
+<span class="w">  </span><span class="na">fixed_rate</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.xray_sampling_rate</span>
+<span class="w">  </span><span class="na">url_path</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;*&quot;</span>
+<span class="w">  </span><span class="na">host</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;*&quot;</span>
+<span class="w">  </span><span class="na">http_method</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;*&quot;</span>
+<span class="w">  </span><span class="na">service_type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;*&quot;</span>
+<span class="w">  </span><span class="na">service_name</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-*&quot;</span>
+<span class="w">  </span><span class="na">resource_arn</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;*&quot;</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Lambda tracing configuration</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_lambda_function&quot;</span><span class="w"> </span><span class="nv">&quot;document_processor&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="c1">  # ... other configuration ...</span>
+
+<span class="w">  </span><span class="nb">tracing_config</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.enable_xray_tracing</span><span class="w"> </span><span class="p">?</span><span class="w"> </span><span class="s2">&quot;Active&quot;</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;PassThrough&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1"># API Gateway tracing</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_api_gateway_stage&quot;</span><span class="w"> </span><span class="nv">&quot;idp_api_stage&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">deployment_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_api_gateway_deployment.idp_api_deployment.id</span>
+<span class="w">  </span><span class="na">rest_api_id</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_api_gateway_rest_api.idp_api.id</span>
+<span class="w">  </span><span class="na">stage_name</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="nv">var.environment</span>
+
+<span class="w">  </span><span class="na">xray_tracing_enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.enable_xray_tracing</span>
+
+<span class="c1">  # ... other configuration ...</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="custom-tracing">Custom Tracing</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Lambda function with custom X-Ray tracing</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">boto3</span>
+<span class="kn">from</span> <span class="nn">aws_xray_sdk.core</span> <span class="kn">import</span> <span class="n">xray_recorder</span>
+<span class="kn">from</span> <span class="nn">aws_xray_sdk.core</span> <span class="kn">import</span> <span class="n">patch_all</span>
+
+<span class="c1"># Patch AWS SDK calls</span>
+<span class="n">patch_all</span><span class="p">()</span>
+
+<span class="nd">@xray_recorder</span><span class="o">.</span><span class="n">capture</span><span class="p">(</span><span class="s1">&#39;document_processor&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">lambda_handler</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+
+    <span class="nd">@xray_recorder</span><span class="o">.</span><span class="n">capture</span><span class="p">(</span><span class="s1">&#39;validate_input&#39;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">validate_input</span><span class="p">(</span><span class="n">event_data</span><span class="p">):</span>
+        <span class="c1"># Input validation logic</span>
+        <span class="k">return</span> <span class="n">validated_data</span>
+
+    <span class="nd">@xray_recorder</span><span class="o">.</span><span class="n">capture</span><span class="p">(</span><span class="s1">&#39;process_with_textract&#39;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">process_with_textract</span><span class="p">(</span><span class="n">document_key</span><span class="p">):</span>
+        <span class="n">textract</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="s1">&#39;textract&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Add custom metadata to trace</span>
+        <span class="n">xray_recorder</span><span class="o">.</span><span class="n">current_subsegment</span><span class="p">()</span><span class="o">.</span><span class="n">put_metadata</span><span class="p">(</span><span class="s1">&#39;document_key&#39;</span><span class="p">,</span> <span class="n">document_key</span><span class="p">)</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">textract</span><span class="o">.</span><span class="n">detect_document_text</span><span class="p">(</span>
+            <span class="n">Document</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;S3Object&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;Bucket&#39;</span><span class="p">:</span> <span class="n">bucket_name</span><span class="p">,</span> <span class="s1">&#39;Name&#39;</span><span class="p">:</span> <span class="n">document_key</span><span class="p">}}</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Add result metadata</span>
+        <span class="n">xray_recorder</span><span class="o">.</span><span class="n">current_subsegment</span><span class="p">()</span><span class="o">.</span><span class="n">put_metadata</span><span class="p">(</span><span class="s1">&#39;text_blocks_count&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s1">&#39;Blocks&#39;</span><span class="p">]))</span>
+
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="nd">@xray_recorder</span><span class="o">.</span><span class="n">capture</span><span class="p">(</span><span class="s1">&#39;process_with_bedrock&#39;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">process_with_bedrock</span><span class="p">(</span><span class="n">extracted_text</span><span class="p">):</span>
+        <span class="n">bedrock</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="s1">&#39;bedrock-runtime&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Add custom annotation for filtering</span>
+        <span class="n">xray_recorder</span><span class="o">.</span><span class="n">current_subsegment</span><span class="p">()</span><span class="o">.</span><span class="n">put_annotation</span><span class="p">(</span><span class="s1">&#39;model_used&#39;</span><span class="p">,</span> <span class="s1">&#39;claude-3-sonnet&#39;</span><span class="p">)</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">bedrock</span><span class="o">.</span><span class="n">invoke_model</span><span class="p">(</span>
+            <span class="n">modelId</span><span class="o">=</span><span class="s1">&#39;anthropic.claude-3-sonnet-20240229-v1:0&#39;</span><span class="p">,</span>
+            <span class="n">body</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span>
+                <span class="s1">&#39;anthropic_version&#39;</span><span class="p">:</span> <span class="s1">&#39;bedrock-2023-05-31&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;max_tokens&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+                <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;Analyze this text: </span><span class="si">{</span><span class="n">extracted_text</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">}]</span>
+            <span class="p">})</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Process the document</span>
+        <span class="n">validated_input</span> <span class="o">=</span> <span class="n">validate_input</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+        <span class="n">textract_result</span> <span class="o">=</span> <span class="n">process_with_textract</span><span class="p">(</span><span class="n">validated_input</span><span class="p">[</span><span class="s1">&#39;document_key&#39;</span><span class="p">])</span>
+        <span class="n">bedrock_result</span> <span class="o">=</span> <span class="n">process_with_bedrock</span><span class="p">(</span><span class="n">textract_result</span><span class="p">[</span><span class="s1">&#39;text&#39;</span><span class="p">])</span>
+
+        <span class="c1"># Add success annotation</span>
+        <span class="n">xray_recorder</span><span class="o">.</span><span class="n">current_subsegment</span><span class="p">()</span><span class="o">.</span><span class="n">put_annotation</span><span class="p">(</span><span class="s1">&#39;processing_status&#39;</span><span class="p">,</span> <span class="s1">&#39;success&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s1">&#39;statusCode&#39;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+            <span class="s1">&#39;body&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s1">&#39;result&#39;</span><span class="p">:</span> <span class="s1">&#39;success&#39;</span><span class="p">})</span>
+        <span class="p">}</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Add error annotation</span>
+        <span class="n">xray_recorder</span><span class="o">.</span><span class="n">current_subsegment</span><span class="p">()</span><span class="o">.</span><span class="n">put_annotation</span><span class="p">(</span><span class="s1">&#39;processing_status&#39;</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">)</span>
+        <span class="n">xray_recorder</span><span class="o">.</span><span class="n">current_subsegment</span><span class="p">()</span><span class="o">.</span><span class="n">add_exception</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+
+        <span class="k">raise</span> <span class="n">e</span>
+</code></pre></div>
+<h2 id="application-insights">Application Insights</h2>
+<h3 id="cloudwatch-application-insights">CloudWatch Application Insights</h3>
+<div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_applicationinsights_application&quot;</span><span class="w"> </span><span class="nv">&quot;idp_application&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">resource_group_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_resourcegroups_group.idp_resources.name</span>
+<span class="w">  </span><span class="na">auto_config_enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="w">  </span><span class="na">auto_create</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+
+<span class="w">  </span><span class="nb">log_pattern</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">pattern_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;LambdaErrors&quot;</span>
+<span class="w">    </span><span class="na">pattern</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;[timestamp, request_id, level=\&quot;ERROR\&quot;, ...]&quot;</span>
+<span class="w">    </span><span class="na">rank</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="m">1</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="nb">log_pattern</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">pattern_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;APIGatewayErrors&quot;</span>
+<span class="w">    </span><span class="na">pattern</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;[timestamp, request_id, ip, user, timestamp2, method, resource, protocol, status_code=5*, ...]&quot;</span>
+<span class="w">    </span><span class="na">rank</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="m">1</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Resource group for application insights</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_resourcegroups_group&quot;</span><span class="w"> </span><span class="nv">&quot;idp_resources&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-resources&quot;</span>
+
+<span class="w">  </span><span class="nb">resource_query</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">query</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">jsonencode</span><span class="p">({</span>
+<span class="w">      </span><span class="na">ResourceTypeFilters</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;AWS::AllSupported&quot;</span><span class="p">]</span>
+<span class="w">      </span><span class="na">TagFilters</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">          </span><span class="na">Key</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Environment&quot;</span>
+<span class="w">          </span><span class="na">Values</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">var.environment</span><span class="p">]</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">          </span><span class="na">Key</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Project&quot;</span>
+<span class="w">          </span><span class="na">Values</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;genai-idp-accelerator&quot;</span><span class="p">]</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">]</span>
+<span class="w">    </span><span class="p">})</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="notification-setup">Notification Setup</h2>
+<h3 id="sns-topics">SNS Topics</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># General alerts topic</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_sns_topic&quot;</span><span class="w"> </span><span class="nv">&quot;alerts&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-alerts&quot;</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Critical alerts topic</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_sns_topic&quot;</span><span class="w"> </span><span class="nv">&quot;critical_alerts&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-critical-alerts&quot;</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Email subscriptions</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_sns_topic_subscription&quot;</span><span class="w"> </span><span class="nv">&quot;email_alerts&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">count</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nf">length</span><span class="p">(</span><span class="nv">var.alert_email_addresses</span><span class="p">)</span>
+<span class="w">  </span><span class="na">topic_arn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_sns_topic.alerts.arn</span>
+<span class="w">  </span><span class="na">protocol</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;email&quot;</span>
+<span class="w">  </span><span class="na">endpoint</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.alert_email_addresses[count.index</span><span class="p">]</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_sns_topic_subscription&quot;</span><span class="w"> </span><span class="nv">&quot;critical_email_alerts&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">count</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nf">length</span><span class="p">(</span><span class="nv">var.critical_alert_email_addresses</span><span class="p">)</span>
+<span class="w">  </span><span class="na">topic_arn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_sns_topic.critical_alerts.arn</span>
+<span class="w">  </span><span class="na">protocol</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;email&quot;</span>
+<span class="w">  </span><span class="na">endpoint</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.critical_alert_email_addresses[count.index</span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="slack-integration">Slack Integration</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Lambda function for Slack notifications</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_lambda_function&quot;</span><span class="w"> </span><span class="nv">&quot;slack_notifier&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.slack_webhook_url</span><span class="w"> </span><span class="p">!=</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w"> </span><span class="p">?</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="m">0</span>
+
+<span class="w">  </span><span class="na">filename</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;slack_notifier.zip&quot;</span>
+<span class="w">  </span><span class="na">function_name</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-slack-notifier&quot;</span>
+<span class="w">  </span><span class="na">role</span><span class="w">            </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_iam_role.slack_notifier_role[0].arn</span>
+<span class="w">  </span><span class="na">handler</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;index.handler&quot;</span>
+<span class="w">  </span><span class="na">runtime</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;python3.9&quot;</span>
+<span class="w">  </span><span class="na">timeout</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="m">30</span>
+
+<span class="w">  </span><span class="nb">environment</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">variables</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="na">SLACK_WEBHOOK_URL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.slack_webhook_url</span>
+<span class="w">      </span><span class="na">ENVIRONMENT</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="nv">var.environment</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># SNS subscription for Slack notifications</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_sns_topic_subscription&quot;</span><span class="w"> </span><span class="nv">&quot;slack_alerts&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">count</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.slack_webhook_url</span><span class="w"> </span><span class="p">!=</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w"> </span><span class="p">?</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="m">0</span>
+<span class="w">  </span><span class="na">topic_arn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_sns_topic.alerts.arn</span>
+<span class="w">  </span><span class="na">protocol</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;lambda&quot;</span>
+<span class="w">  </span><span class="na">endpoint</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_lambda_function.slack_notifier[0].arn</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="log-analysis">Log Analysis</h2>
+<h3 id="cloudwatch-insights-queries">CloudWatch Insights Queries</h3>
+<p><strong>Common Queries</strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Find all errors in the last hour</span>
+<span class="n">fields</span><span class="w"> </span><span class="o">@</span><span class="k">timestamp</span><span class="p">,</span><span class="w"> </span><span class="o">@</span><span class="n">message</span>
+<span class="o">|</span><span class="w"> </span><span class="n">filter</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="k">like</span><span class="w"> </span><span class="o">/</span><span class="n">ERROR</span><span class="o">/</span>
+<span class="o">|</span><span class="w"> </span><span class="n">sort</span><span class="w"> </span><span class="o">@</span><span class="k">timestamp</span><span class="w"> </span><span class="k">desc</span>
+<span class="o">|</span><span class="w"> </span><span class="k">limit</span><span class="w"> </span><span class="mi">100</span>
+
+<span class="c1">-- Analyze processing duration</span>
+<span class="n">fields</span><span class="w"> </span><span class="o">@</span><span class="k">timestamp</span><span class="p">,</span><span class="w"> </span><span class="o">@</span><span class="n">message</span>
+<span class="o">|</span><span class="w"> </span><span class="n">filter</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="k">like</span><span class="w"> </span><span class="o">/</span><span class="n">PROCESSING_DURATION</span><span class="o">/</span>
+<span class="o">|</span><span class="w"> </span><span class="n">parse</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="ss">&quot;PROCESSING_DURATION: * seconds&quot;</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">duration</span>
+<span class="o">|</span><span class="w"> </span><span class="n">stats</span><span class="w"> </span><span class="k">avg</span><span class="p">(</span><span class="n">duration</span><span class="p">),</span><span class="w"> </span><span class="k">max</span><span class="p">(</span><span class="n">duration</span><span class="p">),</span><span class="w"> </span><span class="k">min</span><span class="p">(</span><span class="n">duration</span><span class="p">)</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">bin</span><span class="p">(</span><span class="mi">5</span><span class="n">m</span><span class="p">)</span>
+
+<span class="c1">-- Track API Gateway response times</span>
+<span class="n">fields</span><span class="w"> </span><span class="o">@</span><span class="k">timestamp</span><span class="p">,</span><span class="w"> </span><span class="o">@</span><span class="n">message</span>
+<span class="o">|</span><span class="w"> </span><span class="n">filter</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="k">like</span><span class="w"> </span><span class="o">/</span><span class="err">\</span><span class="n">d</span><span class="o">+</span><span class="n">ms</span><span class="o">/</span>
+<span class="o">|</span><span class="w"> </span><span class="n">parse</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="o">/</span><span class="p">(</span><span class="o">?&lt;</span><span class="n">responseTime</span><span class="o">&gt;</span><span class="err">\</span><span class="n">d</span><span class="o">+</span><span class="p">)</span><span class="n">ms</span><span class="o">/</span>
+<span class="o">|</span><span class="w"> </span><span class="n">stats</span><span class="w"> </span><span class="k">avg</span><span class="p">(</span><span class="n">responseTime</span><span class="p">),</span><span class="w"> </span><span class="k">max</span><span class="p">(</span><span class="n">responseTime</span><span class="p">),</span><span class="w"> </span><span class="n">p95</span><span class="p">(</span><span class="n">responseTime</span><span class="p">)</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">bin</span><span class="p">(</span><span class="mi">5</span><span class="n">m</span><span class="p">)</span>
+
+<span class="c1">-- Monitor Bedrock API usage</span>
+<span class="n">fields</span><span class="w"> </span><span class="o">@</span><span class="k">timestamp</span><span class="p">,</span><span class="w"> </span><span class="o">@</span><span class="n">message</span>
+<span class="o">|</span><span class="w"> </span><span class="n">filter</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="k">like</span><span class="w"> </span><span class="o">/</span><span class="n">BEDROCK_API_CALL</span><span class="o">/</span>
+<span class="o">|</span><span class="w"> </span><span class="n">parse</span><span class="w"> </span><span class="o">@</span><span class="n">message</span><span class="w"> </span><span class="ss">&quot;BEDROCK_API_CALL: model=* tokens=*&quot;</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">model</span><span class="p">,</span><span class="w"> </span><span class="n">tokens</span>
+<span class="o">|</span><span class="w"> </span><span class="n">stats</span><span class="w"> </span><span class="k">sum</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">model</span><span class="p">,</span><span class="w"> </span><span class="n">bin</span><span class="p">(</span><span class="mi">1</span><span class="n">h</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="automated-log-analysis">Automated Log Analysis</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># CloudWatch Insights scheduled query</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_query_definition&quot;</span><span class="w"> </span><span class="nv">&quot;error_analysis&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-error-analysis&quot;</span>
+
+<span class="w">  </span><span class="na">log_group_names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="nv">aws_cloudwatch_log_group.lambda_logs</span><span class="p">[</span><span class="s2">&quot;document_processor&quot;</span><span class="p">].</span><span class="err">name</span><span class="p">,</span>
+<span class="w">    </span><span class="nv">aws_cloudwatch_log_group.lambda_logs</span><span class="p">[</span><span class="s2">&quot;ai_processor&quot;</span><span class="p">].</span><span class="err">name</span><span class="p">,</span>
+<span class="w">    </span><span class="nv">aws_cloudwatch_log_group.api_gateway_logs.name</span>
+<span class="w">  </span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">query_string</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="dl">EOF</span>
+<span class="sh">fields @timestamp, @message, @logStream</span>
+<span class="sh">| filter @message like /ERROR/</span>
+<span class="sh">| stats count() by @logStream, bin(1h)</span>
+<span class="sh">| sort @timestamp desc</span>
+<span class="dl">EOF</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="cost-monitoring">Cost Monitoring</h2>
+<h3 id="cost-and-usage-tracking">Cost and Usage Tracking</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Cost anomaly detection</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_ce_anomaly_detector&quot;</span><span class="w"> </span><span class="nv">&quot;idp_cost_anomaly&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-cost-anomaly&quot;</span>
+<span class="w">  </span><span class="na">monitor_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;DIMENSIONAL&quot;</span>
+
+<span class="w">  </span><span class="na">specification</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">jsonencode</span><span class="p">({</span>
+<span class="w">    </span><span class="na">Dimension</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;SERVICE&quot;</span>
+<span class="w">    </span><span class="na">MatchOptions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;EQUALS&quot;</span><span class="p">]</span>
+<span class="w">    </span><span class="na">Values</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Amazon Bedrock&quot;, &quot;AWS Lambda&quot;, &quot;Amazon S3&quot;, &quot;Amazon DynamoDB&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="p">})</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_ce_anomaly_subscription&quot;</span><span class="w"> </span><span class="nv">&quot;idp_cost_anomaly_subscription&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-cost-anomaly-subscription&quot;</span>
+<span class="w">  </span><span class="na">frequency</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;DAILY&quot;</span>
+
+<span class="w">  </span><span class="na">monitor_arn_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="nv">aws_ce_anomaly_detector.idp_cost_anomaly.arn</span>
+<span class="w">  </span><span class="p">]</span>
+
+<span class="w">  </span><span class="nb">subscriber</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">type</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;EMAIL&quot;</span>
+<span class="w">    </span><span class="na">address</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.cost_alert_email</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="nb">threshold_expression</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">and</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nb">dimension</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="na">key</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ANOMALY_TOTAL_IMPACT_ABSOLUTE&quot;</span>
+<span class="w">        </span><span class="na">values</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;100&quot;</span><span class="p">]</span>
+<span class="w">        </span><span class="na">match_options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;GREATER_THAN_OR_EQUAL&quot;</span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="health-checks">Health Checks</h2>
+<h3 id="application-health-monitoring">Application Health Monitoring</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Route 53 health check for API endpoint</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_route53_health_check&quot;</span><span class="w"> </span><span class="nv">&quot;idp_api_health&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">count</span><span class="w">                           </span><span class="o">=</span><span class="w"> </span><span class="nv">var.enable_health_checks</span><span class="w"> </span><span class="p">?</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="m">0</span>
+<span class="w">  </span><span class="na">fqdn</span><span class="w">                           </span><span class="o">=</span><span class="w"> </span><span class="nv">var.api_domain_name</span>
+<span class="w">  </span><span class="na">port</span><span class="w">                           </span><span class="o">=</span><span class="w"> </span><span class="m">443</span>
+<span class="w">  </span><span class="na">type</span><span class="w">                           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;HTTPS&quot;</span>
+<span class="w">  </span><span class="na">resource_path</span><span class="w">                  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/health&quot;</span>
+<span class="w">  </span><span class="na">failure_threshold</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;3&quot;</span>
+<span class="w">  </span><span class="na">request_interval</span><span class="w">               </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;30&quot;</span>
+<span class="w">  </span><span class="na">cloudwatch_alarm_region</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">  </span><span class="na">cloudwatch_alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_cloudwatch_metric_alarm.api_health_alarm[0].alarm_name</span>
+<span class="w">  </span><span class="na">insufficient_data_health_status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Failure&quot;</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+
+<span class="c1"># Health check alarm</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;aws_cloudwatch_metric_alarm&quot;</span><span class="w"> </span><span class="nv">&quot;api_health_alarm&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">count</span><span class="w">               </span><span class="o">=</span><span class="w"> </span><span class="nv">var.enable_health_checks</span><span class="w"> </span><span class="p">?</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="m">0</span>
+<span class="w">  </span><span class="na">alarm_name</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.environment}-idp-api-health&quot;</span>
+<span class="w">  </span><span class="na">comparison_operator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;LessThanThreshold&quot;</span>
+<span class="w">  </span><span class="na">evaluation_periods</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2&quot;</span>
+<span class="w">  </span><span class="na">metric_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;HealthCheckStatus&quot;</span>
+<span class="w">  </span><span class="na">namespace</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;AWS/Route53&quot;</span>
+<span class="w">  </span><span class="na">period</span><span class="w">              </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;60&quot;</span>
+<span class="w">  </span><span class="na">statistic</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Minimum&quot;</span>
+<span class="w">  </span><span class="na">threshold</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="w">  </span><span class="na">alarm_description</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;API health check failed&quot;</span>
+
+<span class="w">  </span><span class="nb">dimensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">HealthCheckId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_route53_health_check.idp_api_health[0].id</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">alarm_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">aws_sns_topic.critical_alerts.arn</span><span class="p">]</span>
+
+<span class="w">  </span><span class="na">tags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">local.common_tags</span>
+<span class="p">}</span>
+</code></pre></div>
+<hr />
+<p>Next: <a href="cost-optimization.html">Cost Optimization</a> | <a href="best-practices.html">Best Practices</a></p>
+
+
+
+
+
+
+
+  
+    
+  
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    2025-07-08
+  </span>
+
+    
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="environment-setup.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Environment Setup Guide">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Environment Setup Guide
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="cost-optimization.html" class="md-footer__link md-footer__link--next" aria-label="Next: Cost Optimization Guide">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Cost Optimization Guide
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025 Amazon Web Services, Inc. or its affiliates.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://aws.amazon.com" target="_blank" rel="noopener" title="Amazon Web Services, Inc." class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M180.41 203.01c-.72 22.65 10.6 32.68 10.88 39.05a8.16 8.16 0 0 1-4.1 6.27l-12.8 8.96a10.66 10.66 0 0 1-5.63 1.92c-.43-.02-8.19 1.83-20.48-25.61a78.6 78.6 0 0 1-62.61 29.45c-16.28.89-60.4-9.24-58.13-56.21-1.59-38.28 34.06-62.06 70.93-60.05 7.1.02 21.6.37 46.99 6.27v-15.62c2.69-26.46-14.7-46.99-44.81-43.91-2.4.01-19.4-.5-45.84 10.11-7.36 3.38-8.3 2.82-10.75 2.82-7.41 0-4.36-21.48-2.94-24.2 5.21-6.4 35.86-18.35 65.94-18.18a76.86 76.86 0 0 1 55.69 17.28 70.29 70.29 0 0 1 17.67 52.36zM93.99 235.4c32.43-.47 46.16-19.97 49.29-30.47 2.46-10.05 2.05-16.41 2.05-27.4-9.67-2.32-23.59-4.85-39.56-4.87-15.15-1.14-42.82 5.63-41.74 32.26-1.24 16.79 11.12 31.4 29.96 30.48m170.92 23.05c-7.86.72-11.52-4.86-12.68-10.37l-49.8-164.65c-.97-2.78-1.61-5.65-1.92-8.58a4.61 4.61 0 0 1 3.86-5.25c.24-.04-2.13 0 22.25 0 8.78-.88 11.64 6.03 12.55 10.37l35.72 140.83 33.16-140.83c.53-3.22 2.94-11.07 12.8-10.24h17.16c2.17-.18 11.11-.5 12.68 10.37l33.42 142.63L420.98 80.1c.48-2.18 2.72-11.37 12.68-10.37h19.72c.85-.13 6.15-.81 5.25 8.58-.43 1.85 3.41-10.66-52.75 169.9-1.15 5.51-4.82 11.09-12.68 10.37h-18.69c-10.94 1.15-12.51-9.66-12.68-10.75L328.67 110.7l-32.78 136.99c-.16 1.09-1.73 11.9-12.68 10.75h-18.3zm273.48 5.63c-5.88.01-33.92-.3-57.36-12.29a12.8 12.8 0 0 1-7.81-11.91v-10.75c0-8.45 6.2-6.9 8.83-5.89 10.04 4.06 16.48 7.14 28.81 9.6 36.65 7.53 52.77-2.3 56.72-4.48 13.15-7.81 14.19-25.68 5.25-34.95-10.48-8.79-15.48-9.12-53.13-21-4.64-1.29-43.7-13.61-43.79-52.36-.61-28.24 25.05-56.18 69.52-55.95 12.67-.01 46.43 4.13 55.57 15.62 1.35 2.09 2.02 4.55 1.92 7.04v10.11c0 4.44-1.62 6.66-4.87 6.66-7.71-.86-21.39-11.17-49.16-10.75-6.89-.36-39.89.91-38.41 24.97-.43 18.96 26.61 26.07 29.7 26.89 36.46 10.97 48.65 12.79 63.12 29.58 17.14 22.25 7.9 48.3 4.35 55.44-19.08 37.49-68.42 34.44-69.26 34.42m40.2 104.86c-70.03 51.72-171.69 79.25-258.49 79.25A469.13 469.13 0 0 1 2.83 327.46c-6.53-5.89-.77-13.96 7.17-9.47a637.37 637.37 0 0 0 316.88 84.12 630.2 630.2 0 0 0 241.59-49.55c11.78-5 21.77 7.8 10.12 16.38m29.19-33.29c-8.96-11.52-59.28-5.38-81.81-2.69-6.79.77-7.94-5.12-1.79-9.47 40.07-28.17 105.88-20.1 113.44-10.63 7.55 9.47-2.05 75.41-39.56 106.91-5.76 4.87-11.27 2.3-8.71-4.1 8.44-21.25 27.39-68.49 18.43-80.02"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.tabs.link", "toc.follow", "navigation.path", "navigation.expand", "navigation.indexes", "navigation.instant", "navigation.tabs", "navigation.footer"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>

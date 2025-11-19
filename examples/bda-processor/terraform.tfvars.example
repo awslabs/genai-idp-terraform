@@ -1,0 +1,47 @@
+# AWS Configuration
+region = "us-east-1"
+prefix = "genai-bda-idp"
+
+# Administrator Configuration
+admin_email = "admin@example.com"
+
+# Logging Configuration
+log_level          = "INFO"
+log_retention_days = 7
+
+# Data Retention
+data_tracking_retention_days = 365
+
+# Configuration File Path (optional - uses default lending package config)
+# config_file_path = "../../sources/config_library/pattern-1/lending-package-sample/config.yaml"
+
+# Feature Toggles
+summarization_enabled = true
+enable_evaluation     = false
+enable_reporting      = false
+
+# Knowledge Base Configuration
+enable_knowledge_base                = true
+knowledge_base_model_id              = "us.amazon.nova-pro-v1:0"
+knowledge_base_embeddings_model_id   = "amazon.titan-embed-text-v2:0"
+
+# Model Configuration
+summarization_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+evaluation_model_id    = "anthropic.claude-3-sonnet-20240229-v1:0"
+
+# API Configuration
+enable_api = true
+
+# Web UI Configuration
+web_ui = {
+  enabled = true
+}
+
+# Force rebuild of Lambda layers (set to true if you need to rebuild)
+force_layer_rebuild = false
+
+# Tags
+tags = {
+  Environment = "dev"
+  Project     = "genai-idp-accelerator"
+}

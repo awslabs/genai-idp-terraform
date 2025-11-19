@@ -1,0 +1,211 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+notes: Criteria validation configuration for healthcare/insurance prior authorization
+criteria_validation:
+  model: us.anthropic.claude-3-5-sonnet-20240620-v1:0
+  temperature: 0.0
+  top_k: 20
+  top_p: 0.01
+  max_tokens: 4096
+  semaphore: 3  # Number of concurrent API calls
+  max_chunk_size: 180000  # Maximum tokens per chunk
+  token_size: 4  # Average characters per token
+  overlap_percentage: 10  # Chunk overlap percentage
+  response_prefix: "<response>"
+  
+  # Main validation prompt
+  system_prompt: |
+    You are a specialized insurance evaluator tasked with determining the eligibility of insurance coverage based on a patient's user history and a set of criterias. 
+    Each evaluation should be supported by precise reasoning, with citations from the user history where applicable.
+  
+  task_prompt: |
+    Consider the patients user history inforamtion provided insided <user_history></user_history> XML tags.
+
+    <user_history>
+     <source_filepath>
+     {source_filepath}
+     </source_filepath>
+
+     <content>
+     {content}
+     </content>
+    </user_history>
+
+    <criteria>
+    <criteria_type>
+    {criteria_type}
+    </criteria_type>
+
+    <question>
+    {question}
+    </question>
+    </criteria>
+
+    <instruction>
+    Evaluate the patient's insurance eligibility for each question provided insided <question></question> XML tags  and patients user history information provided inside <user_history></user_history> XML tags. 
+
+    Your Task:
+
+    For each question, provide:
+
+    Decision: Carefully review each requirement in the context of the patient's user history to decide if it is "Pass," "Fail," or "Information Not Found" and select one of the following options:
+
+    {recommendation_options}
+
+    Reasoning: Provide a brief explanation for the decision, highlighting any relevant details or absence of data.
+    Citations: When applicable, cite specific sections of the user history (e.g., page numbers, sections, S3 URI) that support your decision.
+
+    Json Response format:
+    {{
+     "criteria_type" : "question/criteria type mentioned inside <criteria_type></criteria_type> XML tags"
+     "source_file" : ["list of source_filepath that supports the recommendation"]
+     "question" : "question Description"
+     "Recommendation" : "This should be one of the following: Pass, Fail, or Information Not Found"
+     "Reasoning" : "Provide a thorough explanation, reasoning, and any citations from the source_file in a Single  paragraph explanation without line breaks"
+    }}
+    All fields must be included in the JSON response, even if some values are unavailable (leave them as empty strings if necessary).
+    Ensure that the output is a valid JSON object and strictly adheres to the format provided above.
+    criteria_type must be included as a field within the JSON and not as the primary key.
+    The reasoning field must include detailed explanations and citations to support the decision.
+
+    </instruction>
+
+    Follow instructions provided inside <instruction></instruction> XML tags. 
+    Provide the output in a Json format inside <response></response> XML tags. Do not include any space after <response> tag and before </response> tag.
+
+  # Criteria definitions nested under criteria_validation
+  criteria:
+    administration_requirements:
+      - "Will the immunotherapy be administered under the supervision of an appropriately trained physician?"
+      - "Is the facility equipped to treat anaphylaxis?"
+      - "Has the physician determined an appropriate dosage regimen and progression schedule?"
+      - "Are there adequate safety protocols in place for infusion reactions?"
+    medical_necessity:
+      - "Has the patient failed standard treatments?"
+      - "Is the proposed treatment medically necessary?"
+      - "Does the patient meet the clinical criteria for this treatment?"
+    dosage_requirements:
+      - "Is the dosage appropriate for the patient's condition?"
+      - "Has the physician documented the rationale for the selected dosage?"
+      - "Are dosage adjustments based on patient response documented?"
+    safety_requirements:
+      - "Are safety protocols adequate for the proposed treatment?"
+      - "Has the patient been screened for contraindications?"
+      - "Are monitoring procedures in place during treatment?"
+    
+    # Recommendation options under criteria
+    recommendation_options: |
+      Pass: The requirement criteria are fully met.
+      Fail: The requirement is partially met or requires additional information.
+      Information Not Found: No relevant data exists in the user history.
+
+# Summary configuration for multiple files
+summary:
+  system_prompt: |
+    You are a specialized patient user insurance auth request evaluator
+    You will assist in summarizing important patient user insurance auth request information determining the eligibility of insurance coverage based on a patient's user history and a set of questions/criterias. 
+    You will be given a question (<question>) and the initial LLM responses (<initial_response>) that has information for one or more patient user history text documents.
+    Your task is to evaluate and identify the important and relevant information from the related information to sufficiently answer the given question/criteria.
+  
+  task_prompt: |
+    <criteria>
+    <criteria_type>{criteria_type}</criteria_type>
+    <question>{question}</question>
+    </criteria
+
+    <initial_response>
+    {initial_response}
+    </initial_response>
+
+    <instructions>
+    Analyze the provided criteria and initial response to generate a consolidated final evaluation, considering all available evidence to reach a single determination for each unique criterion.
+    Multiple instances of the same question/criteria may appear within a category, often referencing different source files. 
+
+    {recommendation_options}
+
+    JSON RESPONSE FORMAT 
+
+    {{
+     "criteria_type" : "question/criteria type mentioned inside <criteria_type></criteria_type> XML tags"
+     "source_file" : ["list of source_filepath that supports the recommendation"]
+     "question" : "question Description"
+     "Recommendation" : "This should be one of the following: Pass, Fail, or Information Not Found"
+     "Reasoning" : "Provide a thorough explanation, reasoning, and any citations from the source_file in a Single paragraph explanation without line breaks"
+    }}
+
+    SOURCE FILE RULES:
+    1. Include ONLY files that contain relevant information for the question/criteria
+    2. If no information is found, source_file should be an empty list []
+    3. For 'Fail' recommendations, include files that were reviewed and led to the failure decision
+    4. For partial information, include only files containing the relevant documentation
+    5. Cite specific evidence from each listed file in the reasoning
+
+    RESPONSE RULES:
+    1. Provide a single consolidated evaluation
+    2. Include all source files that support the recommendation
+    3. Keep reasoning concise and in a single paragraph
+    4. Use only basic punctuation (. , : ;)
+    5. Avoid special characters or line breaks in reasoning
+    6. Base recommendation strictly on documented evidence
+    7. All JSON fields must be included
+    8. For 'Fail' or partial findings, explicitly state what documentation was missing or insufficient
+
+    EVALUATION STEPS:
+    1. Review initial response and evidence
+    2. Identify files containing relevant information
+    3. Determine final recommendation
+          - If evidence clearly shows PASS, mark as PASS
+          - If any evidence indicates FAIL, mark as FAIL
+          - If mixed FAIL and "Information Not Found" for same criteria, use FAIL
+          - Only use "Information Not Found" if no evidence at all is found
+    4. List only files with supporting evidence
+    5. Summarize reasoning with specific citations
+    6. Format response as valid JSON
+
+    </instruction>
+    Follow instructions provided inside <instruction></instruction> XML tags. 
+    Let's think step by step to analyze the question/criteria.
+    Provide the output in a Json format inside <response></response> XML tags.
+
+# Criteria types to validate
+criteria_types:
+  - administration_requirements
+  - medical_necessity
+  - dosage_requirements
+  - safety_requirements
+
+# S3 bucket configuration
+request_bucket: criteria-validation-user-history
+request_history_prefix: Prior-Auth
+criteria_bucket: criteria-validation-criteria
+output_bucket: criteria-validation-output
+textract_page_tracker: criteria-validation-textract
+cost_report_bucket: criteria-validation-cost-reports
+
+# Pricing configuration for cost tracking
+pricing:
+  - name: textract/detect_document_text
+    units:
+      - name: first_million_pages
+        price: 0.0015
+      - name: over_million_pages
+        price: 0.0006
+  - name: bedrock/us.anthropic.claude-3-5-sonnet-20240620-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 0.0000003
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/us.amazon.nova-pro-v1:0
+    units:
+      - name: inputTokens
+        price: 0.0000008
+      - name: outputTokens
+        price: 0.0000032
+      - name: cacheReadInputTokens
+        price: 0.0000002

@@ -1,0 +1,9 @@
+# tfsec ignore file
+# Add specific ignores with justification
+
+# Example ignores (remove if not applicable):
+# AWS001:modules/web-ui/main.tf:45-50  # S3 bucket intentionally public for CloudFront
+# AWS006:modules/processing-environment/security_groups.tf:20-25  # Security group rule required for service communication
+
+# Add your specific ignores here with clear justification
+# Format: CHECK_ID:file_path:line_range  # Justification comment

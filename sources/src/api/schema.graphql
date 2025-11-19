@@ -1,0 +1,204 @@
+interface DynamoDbBase {
+	PK: ID!
+	SK: ID!
+	ExpiresAfter: AWSTimestamp
+}
+
+type Document implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
+  PK: ID!
+  SK: ID!
+  ObjectKey: ID
+  ObjectStatus: String
+  InitialEventTime: AWSDateTime
+  QueuedTime: AWSDateTime
+  WorkflowStartTime: AWSDateTime
+  CompletionTime: AWSDateTime
+  WorkflowExecutionArn: String
+  WorkflowStatus: String
+  PageCount: Int
+  Sections: [Section]
+  Pages: [Page]
+  Metering: AWSJSON
+  EvaluationReportUri: String
+  EvaluationStatus: String
+  SummaryReportUri: String
+  ExpiresAfter: AWSTimestamp
+  HITLStatus: String
+  HITLReviewURL: String
+}
+
+type Section @aws_cognito_user_pools @aws_iam {
+  Id: String
+  PageIds: [ Int ]
+  Class: String
+  OutputJSONUri: String
+  ConfidenceThresholdAlerts: [ConfidenceThresholdAlert]
+}
+
+type ConfidenceThresholdAlert @aws_cognito_user_pools @aws_iam {
+  attributeName: String
+  confidence: Float
+  confidenceThreshold: Float
+}
+
+type Page @aws_cognito_user_pools @aws_iam {
+  Id: Int
+  Class: String
+  ImageUri: String
+  TextUri: String
+  TextConfidenceUri: String
+}
+
+type DocumentList @aws_cognito_user_pools @aws_iam {
+	Documents: [DocumentListItem]
+	nextToken: String
+}
+
+type DocumentListItem implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
+	PK: ID!
+	SK: ID!
+    ObjectKey: ID
+    InitialEventTime: AWSDateTime
+    ExpiresAfter: AWSTimestamp
+    HITLStatus: String
+    HITLReviewURL: String
+}
+
+type ConfigurationResponse @aws_cognito_user_pools @aws_iam {
+  Schema: AWSJSON
+  Default: AWSJSON
+  Custom: AWSJSON
+}
+
+input CreateDocumentInput {
+  ObjectKey: ID
+  ObjectStatus: String
+  InitialEventTime: AWSDateTime
+  QueuedTime: AWSDateTime
+  ExpiresAfter: AWSTimestamp
+}
+
+type CreateDocumentOutput @aws_iam {
+  ObjectKey: ID
+}
+
+type PresignedUrlResponse @aws_cognito_user_pools {
+  presignedUrl: String!
+  objectKey: String!
+  usePostMethod: String!
+}
+
+input UpdateDocumentInput {
+  ObjectKey: ID!
+  ObjectStatus: String
+  QueuedTime: AWSDateTime
+  WorkflowStartTime: AWSDateTime
+  CompletionTime: AWSDateTime
+  WorkflowExecutionArn: String
+  WorkflowStatus: String
+  PageCount: Int
+  Sections: [SectionInput]
+  Pages: [PageInput]
+  Metering: AWSJSON
+  EvaluationReportUri: String
+  EvaluationStatus: String
+  SummaryReportUri: String
+  HITLStatus: String
+  HITLReviewURL: String
+}
+
+input SectionInput {
+  Id: String
+  PageIds: [ Int ]
+  Class: String
+  OutputJSONUri: String
+  ConfidenceThresholdAlerts: [ConfidenceThresholdAlertInput]
+}
+
+input ConfidenceThresholdAlertInput {
+  attributeName: String
+  confidence: Float
+  confidenceThreshold: Float
+}
+
+input PageInput {
+  Id: Int
+  Class: String
+  ImageUri: String
+  TextUri: String
+  TextConfidenceUri: String
+}
+
+type CopyToBaselineResponse @aws_cognito_user_pools {
+  success: Boolean!
+  message: String
+}
+
+type FileContentsResponse @aws_cognito_user_pools @aws_iam {
+  content: String!
+  contentType: String!
+  size: Int!
+  isBinary: Boolean
+}
+
+type StepFunctionExecutionStep @aws_cognito_user_pools @aws_iam {
+  name: String!
+  type: String!
+  status: String!
+  startDate: AWSDateTime
+  stopDate: AWSDateTime
+  input: AWSJSON
+  output: AWSJSON
+  error: String
+  mapIterations: Int
+  mapIterationDetails: [StepFunctionExecutionStep]
+}
+
+type StepFunctionExecutionResponse @aws_cognito_user_pools @aws_iam {
+  executionArn: String!
+  status: String!
+  startDate: AWSDateTime
+  stopDate: AWSDateTime
+  input: AWSJSON
+  output: AWSJSON
+  error: String
+  steps: [StepFunctionExecutionStep]
+}
+
+type Mutation  {
+  createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
+  updateDocument(input: UpdateDocumentInput!): Document @aws_iam
+  deleteDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
+  updateConfiguration(customConfig: AWSJSON!): Boolean @aws_cognito_user_pools
+  uploadDocument(fileName: String!, contentType: String, prefix: String, bucket: String): PresignedUrlResponse! @aws_cognito_user_pools
+  copyToBaseline(objectKey: String!): CopyToBaselineResponse! @aws_cognito_user_pools
+  reprocessDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
+  publishStepFunctionExecutionUpdate(executionArn: String!, data: AWSJSON!): StepFunctionExecutionResponse @aws_iam
+}
+
+type Query @aws_cognito_user_pools @aws_iam {
+  getDocument(ObjectKey: ID!): Document
+  listDocuments(startDateTime: AWSDateTime, endDateTime: AWSDateTime): DocumentList
+  listDocumentsDateHour(date: AWSDate, hour: Int): DocumentList
+  listDocumentsDateShard(date: AWSDate, shard: Int): DocumentList 
+  getFileContents(s3Uri: String!): FileContentsResponse
+  getConfiguration: ConfigurationResponse
+  queryKnowledgeBase(input: String!, sessionId: String): String
+  chatWithDocument(s3Uri: String!, prompt: String!): String
+  getStepFunctionExecution(executionArn: String!): StepFunctionExecutionResponse
+}
+
+type Subscription @aws_cognito_user_pools @aws_iam {
+  onCreateDocument: CreateDocumentOutput
+	@aws_subscribe(mutations: ["createDocument"])
+  onUpdateDocument: Document
+    @aws_subscribe(mutations: ["updateDocument"])
+  onStepFunctionExecutionUpdate(executionArn: String!): StepFunctionExecutionResponse
+    @aws_subscribe(mutations: ["publishStepFunctionExecutionUpdate"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

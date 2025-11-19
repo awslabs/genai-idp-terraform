@@ -1,0 +1,86 @@
+site_name: GenAI IDP Accelerator for Terraform
+site_description: GenAI Intelligent Document Processing for Terraform
+repo_name: genaiic-idp-accelerator-terraform
+repo_url: https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform
+site_url: https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform
+copyright: Copyright &copy; 2025 Amazon Web Services, Inc. or its affiliates.
+use_directory_urls: false
+docs_dir: content
+
+extra:
+  social:
+    - icon: fontawesome/brands/aws
+      name: Amazon Web Services, Inc.
+      link: https://aws.amazon.com
+  project_name: GenAI IDP (Terraform)
+  # version:
+  #   provider: mike
+
+theme:
+  name: material
+  # custom_dir: overrides
+  logo: assets/images/aws-logo.png
+  icon:
+    repo: fontawesome/brands/git-alt
+  favicon: assets/images/logo.png
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/link
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/toggle-switch-off
+        name: Switch to system preference
+
+  features:
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+    - navigation.path
+    - navigation.expand
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tabs
+    - navigation.footer
+
+markdown_extensions:
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - md_in_html
+  - pymdownx.highlight
+  - tables
+  - toc:
+      toc_depth: 4
+
+plugins:
+  - drawio
+  - awesome-pages:
+      filename: .pages.yml
+  - git-revision-date
+  - search
+  - macros

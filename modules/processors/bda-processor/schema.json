@@ -1,0 +1,463 @@
+{
+  "type": "object",
+  "required": [
+    "notes"
+  ],
+  "properties": {
+    "notes": {
+      "type": "string",
+      "description": "Notes",
+      "order": "1"
+    },
+    "classes": {
+      "type": "array",
+      "listLabel": "Classes",
+      "itemLabel": "Class",
+      "columns": "2",
+      "sectionLabel": "Class definitions",
+      "order": "2",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "attributes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Class name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Class description"
+          },
+          "examples": {
+            "type": "array",
+            "description": "Class few-shot examples",
+            "listLabel": "Few-shot examples",
+            "itemLabel": "Few-shot example",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "classPrompt",
+                "attributesPrompt",
+                "imagesPath"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Example name",
+                  "order": "0"
+                },
+                "classPrompt": {
+                  "type": "string",
+                  "description": "Classification prompt as few-shot classification example for this class",
+                  "order": "2"
+                },
+                "attributesPrompt": {
+                  "type": "string",
+                  "description": "Extraction prompt as few-shot attribute value extraction example for this class.",
+                  "order": "3"
+                },
+                "imagePath": {
+                  "type": "string",
+                  "description": "Image(s) Path in the Configuration Bucket. Supports single files, or S3 prefixes for folders with multiple images. Optional but recommended for better visual understanding.",
+                  "order": "4"
+                }
+              }
+            }
+          },
+          "attributes": {
+            "type": "array",
+            "listLabel": "Attributes",
+            "itemLabel": "Attribute",
+            "items": {
+              "type": "object",
+              "columns": "2",
+              "required": [
+                "name",
+                "description",
+                "attributeType"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Attribute name",
+                  "order": "0"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Attribute description",
+                  "order": "1"
+                },
+                "attributeType": {
+                  "type": "string",
+                  "description": "Type of attribute",
+                  "enum": ["simple", "group", "list"],
+                  "order": "2"
+                },
+                "evaluation_method": {
+                  "type": "string",
+                  "description": "Evaluation Method",
+                  "enum": [
+                    "",
+                    "LLM",
+                    "SEMANTIC",
+                    "FUZZY",
+                    "NUMERIC_EXACT",
+                    "EXACT"
+                  ],
+                  "order": "3",
+                  "dependsOn": {
+                    "field": "attributeType",
+                    "value": "simple"
+                  }
+                },
+                "evaluation_threshold": {
+                  "type": "number",
+                  "description": "Evaluation Threshold - used for SEMANTIC, and FUZZY methods",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "order": "5",
+                  "dependsOn": {
+                    "field": "evaluation_method",
+                    "values": [
+                      "SEMANTIC",
+                      "FUZZY"
+                    ]
+                  }
+                },
+                "confidence_threshold": {
+                  "type": "number",
+                  "description": "Confidence threshold for this specific attribute (0.0 to 1.0). If not set, the default confidence threshold from assessment section will be used.",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "order": "6",
+                  "dependsOn": {
+                    "field": "attributeType",
+                    "value": "simple"
+                  }
+                },
+                "groupAttributes": {
+                  "type": "array",
+                  "listLabel": "Group Attributes",
+                  "itemLabel": "Attribute",
+                  "order": "7",
+                  "dependsOn": {
+                    "field": "attributeType",
+                    "value": "group"
+                  },
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "description"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Attribute name",
+                        "order": "0"
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "Attribute description",
+                        "order": "1"
+                      },
+                      "evaluation_method": {
+                        "type": "string",
+                        "description": "Evaluation Method",
+                        "enum": [
+                          "",
+                          "LLM",
+                          "SEMANTIC",
+                          "FUZZY",
+                          "NUMERIC_EXACT",
+                          "EXACT"
+                        ],
+                        "order": "2"
+                      },
+                      "evaluation_threshold": {
+                        "type": "number",
+                        "description": "Evaluation Threshold - used for SEMANTIC, and FUZZY methods",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "order": "4",
+                        "dependsOn": {
+                          "field": "evaluation_method",
+                          "values": [
+                            "SEMANTIC",
+                            "FUZZY"
+                          ]
+                        }
+                      },
+                      "confidence_threshold": {
+                        "type": "number",
+                        "description": "Confidence threshold for this specific attribute (0.0 to 1.0). If not set, the default confidence threshold from assessment section will be used.",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "order": "5"
+                      }
+                    },
+                    "columns": "2"
+                  }
+                },
+                "listItemTemplate": {
+                  "type": "object",
+                  "sectionLabel": "List Item Template",
+                  "order": "8",
+                  "dependsOn": {
+                    "field": "attributeType",
+                    "value": "list"
+                  },
+                  "required": [
+                    "itemAttributes"
+                  ],
+                  "properties": {
+                    "itemDescription": {
+                      "type": "string",
+                      "description": "Description of each list item",
+                      "order": "0"
+                    },
+                    "itemAttributes": {
+                      "type": "array",
+                      "listLabel": "Item Attributes",
+                      "itemLabel": "Attribute",
+                      "order": "1",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "description"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Attribute name",
+                            "order": "0"
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "Attribute description",
+                            "order": "1"
+                          },
+                          "evaluation_method": {
+                            "type": "string",
+                            "description": "Evaluation Method",
+                            "enum": [
+                              "",
+                              "LLM",
+                              "SEMANTIC",
+                              "FUZZY",
+                              "NUMERIC_EXACT",
+                              "EXACT"
+                            ],
+                            "order": "2"
+                          },
+                          "evaluation_threshold": {
+                            "type": "number",
+                            "description": "Evaluation Threshold - used for SEMANTIC, and FUZZY methods",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "order": "4",
+                            "dependsOn": {
+                              "field": "evaluation_method",
+                              "values": [
+                                "SEMANTIC",
+                                "FUZZY"
+                              ]
+                            }
+                          },
+                          "confidence_threshold": {
+                            "type": "number",
+                            "description": "Confidence threshold for this specific attribute (0.0 to 1.0). If not set, the default confidence threshold from assessment section will be used.",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "order": "5"
+                          }
+                        },
+                        "columns": "2"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "sectionLabel": "Evaluation Inference",
+      "order": "3",
+      "properties": {
+        "llm_method": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "Bedrock model ID",
+              "enum": [
+                "us.amazon.nova-lite-v1:0",
+                "us.amazon.nova-pro-v1:0",
+                "us.amazon.nova-premier-v1:0",
+                "us.anthropic.claude-3-haiku-20240307-v1:0",
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                "us.anthropic.claude-opus-4-20250514-v1:0"
+              ],
+              "order": "1"
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Sampling temperature",
+              "order": "2"
+            },
+            "top_k": {
+              "type": "number",
+              "description": "Sampling Top K",
+              "order": "3"
+            },
+            "top_p": {
+              "type": "number",
+              "description": "Sampling Top P",
+              "order": "4"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Max tokens",
+              "order": "5"
+            },
+            "system_prompt": {
+              "type": "string",
+              "format": "textarea",
+              "description": "System prompt for LLM evaluation",
+              "order": "6"
+            },
+            "task_prompt": {
+              "type": "string",
+              "format": "textarea",
+              "description": "Task prompt for LLM evaluation - supports parameters {DOCUMENT_CLASS}, {ATTRIBUTE_NAME}, {ATTRIBUTE_DESCRIPTION}, {EXPECTED_VALUE} and {ACTUAL_VALUE}",
+              "order": "7"
+            }
+          }
+        }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "sectionLabel": "Assessment & HITL Configuration",
+      "order": "4",
+      "properties": {
+        "default_confidence_threshold": {
+          "type": "number",
+          "description": "HITL Confidence Threshold (0.0-1.0) - Documents with confidence below this threshold will be sent for Human In The Loop review",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "order": "1"
+        }
+      }
+    },
+    "summarization": {
+      "type": "object",
+      "sectionLabel": "Summarization Inference",
+      "order": "5",
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Bedrock model ID",
+          "enum": [
+            "us.amazon.nova-lite-v1:0",
+            "us.amazon.nova-pro-v1:0",
+            "us.amazon.nova-premier-v1:0",
+            "us.anthropic.claude-3-haiku-20240307-v1:0",
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            "us.anthropic.claude-opus-4-20250514-v1:0"
+          ],
+          "order": "1"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature",
+          "order": "2"
+        },
+        "top_k": {
+          "type": "number",
+          "description": "Sampling Top K",
+          "order": "3"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Sampling Top P",
+          "order": "4"
+        },
+        "max_tokens": {
+          "type": "number",
+          "description": "Max tokens",
+          "order": "5"
+        },
+        "system_prompt": {
+          "type": "string",
+          "format": "textarea",
+          "description": "System prompt",
+          "order": "6"
+        },
+        "task_prompt": {
+          "type": "string",
+          "format": "textarea",
+          "description": "Task prompt - supports parameter {DOCUMENT_TEXT}. Optionally use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.",
+          "order": "7"
+        }
+      }
+    },
+    "pricing": {
+      "type": "array",
+      "listLabel": "Services",
+      "itemLabel": "Service/API",
+      "columns": "2",
+      "sectionLabel": "Pricing Estimates - check https://aws.amazon.com/bedrock/pricing/",
+      "order": "6",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "units"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Service/API"
+          },
+          "units": {
+            "type": "array",
+            "listLabel": "Metered unit pricing",
+            "itemLabel": "Metered Unit price",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "price"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Metered unit name"
+                },
+                "price": {
+                  "type": "number",
+                  "description": "Estimated cost/unit"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
