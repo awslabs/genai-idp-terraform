@@ -7,7 +7,7 @@ This guide walks you through setting up your development environment and cloning
 First, clone the GenAI IDP Accelerator repository to your local machine:
 
 ```bash
-git clone https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform.git
+git clone https://github.com/awslabs/genai-idp-terraform.git
 cd genaiic-idp-accelerator-terraform
 ```
 

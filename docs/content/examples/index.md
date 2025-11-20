@@ -9,7 +9,7 @@ These are complete document processing solutions that demonstrate different appr
 ### [Bedrock LLM Processor](bedrock-llm-processor.md)
 **Complete E2E Solution**  
 **Deployment Time**: 15-20 minutes  
-**Based on**: [examples/bedrock-llm-processor/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/bedrock-llm-processor?ref_type=heads)
+**Based on**: [examples/bedrock-llm-processor/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/bedrock-llm-processor?ref_type=heads)
 
 **The flexible AI-powered document processing pattern** - Perfect for organizations needing custom document analysis with advanced AI capabilities and comprehensive analytics.
 
@@ -47,7 +47,7 @@ These are complete document processing solutions that demonstrate different appr
 ### [BDA Processor](bda-processor.md)
 **Complete E2E Solution**  
 **Deployment Time**: 15-20 minutes  
-**Based on**: [examples/bda-processor/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/bda-processor?ref_type=heads)
+**Based on**: [examples/bda-processor/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/bda-processor?ref_type=heads)
 
 **The managed document processing pattern** - Perfect for organizations processing standard document types with minimal configuration.
 
@@ -70,7 +70,7 @@ These are complete document processing solutions that demonstrate different appr
 ### [SageMaker UDOP Processor](sagemaker-udop.md)
 **Complete E2E Solution**  
 **Deployment Time**: 25-35 minutes  
-**Based on**: [examples/sagemaker-udop-processor/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/sagemaker-udop-processor?ref_type=heads)
+**Based on**: [examples/sagemaker-udop-processor/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/sagemaker-udop-processor?ref_type=heads)
 
 **The specialized AI model pattern** - Perfect for organizations requiring highly accurate, custom-trained models for specific document types.
 
@@ -94,7 +94,7 @@ These examples provide individual components that can be combined to build custo
 
 ### [Processing Environment](processing-environment.md)
 **Deployment Time**: 15-20 minutes  
-**Based on**: [examples/processing-environment/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/processing-environment?ref_type=heads)
+**Based on**: [examples/processing-environment/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/processing-environment?ref_type=heads)
 
 Core infrastructure setup without specific processors - perfect for building custom solutions.
 
@@ -111,7 +111,7 @@ Core infrastructure setup without specific processors - perfect for building cus
 
 ### [Processing Environment API](processing-environment-api.md)
 **Deployment Time**: 10-15 minutes  
-**Based on**: [examples/processing-environment-api/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/processing-environment-api?ref_type=heads)
+**Based on**: [examples/processing-environment-api/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/processing-environment-api?ref_type=heads)
 
 Standalone API deployment for document processing management and monitoring.
 
@@ -128,7 +128,7 @@ Standalone API deployment for document processing management and monitoring.
 
 ### [User Identity Standalone](user-identity.md)
 **Deployment Time**: 5-10 minutes  
-**Based on**: [examples/user-identity-standalone/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/user-identity-standalone?ref_type=heads)
+**Based on**: [examples/user-identity-standalone/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/user-identity-standalone?ref_type=heads)
 
 Standalone user authentication and authorization setup using Amazon Cognito.
 
@@ -145,7 +145,7 @@ Standalone user authentication and authorization setup using Amazon Cognito.
 
 ### [Core Tables](core-tables.md)
 **Deployment Time**: 5-10 minutes  
-**Based on**: [examples/core-tables/](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/tree/main/examples/core-tables?ref_type=heads)
+**Based on**: [examples/core-tables/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/core-tables?ref_type=heads)
 
 Essential DynamoDB tables for document tracking and configuration management.
 

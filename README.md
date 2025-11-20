@@ -343,7 +343,7 @@ For detailed guidance on implementing these best practices, see the [AWS Best Pr
 This project includes comprehensive documentation built with Material for MkDocs, covering everything from getting started to advanced deployment scenarios.
 
 #### 🌐 Online Documentation
-- **GitLab Pages**: [https://gciupryk.gitlab.io/genaiic-idp-accelerator-terraform](https://gciupryk.gitlab.io/genaiic-idp-accelerator-terraform)
+- **GitHub Pages**: [https://awslabs.github.io/genai-idp-terraform/](https://awslabs.github.io/genai-idp-terraform/)
 - **Auto-deployed**: Updated automatically with each commit to main branch
 - **Mobile-friendly**: Responsive design for all devices
 

@@ -63,4 +63,4 @@ If you encounter any issues or have questions, please:
 
 ## License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](https://gitlab.aws.dev/gciupryk/genaiic-idp-accelerator-terraform/-/blob/main/LICENSE) file for details.
+This project is licensed under the Apache License 2.0. See the [LICENSE](https://github.com/awslabs/genai-idp-terraform/blob/main/LICENSE) file for details.
