@@ -1,4 +1,6 @@
 #!/bin/bash
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 # GenAI IDP Accelerator - Source Sync Validation Script
 # This script validates that all expected files have been synced from sources/ to assets/

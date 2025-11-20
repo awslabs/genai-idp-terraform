@@ -1,4 +1,6 @@
 #!/bin/bash
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 # GenAI IDP Accelerator - Source File Synchronization Script
 # This script copies relevant files from the sources/ directory to the appropriate

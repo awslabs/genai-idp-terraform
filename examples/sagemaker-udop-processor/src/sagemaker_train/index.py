@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from botocore.exceptions import ClientError
 from sagemaker.debugger import TensorBoardOutputConfig
 from sagemaker.pytorch import PyTorch

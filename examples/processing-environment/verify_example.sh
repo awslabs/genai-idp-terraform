@@ -1,4 +1,6 @@
 #!/bin/bash
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 # Verification script for the updated processing-environment example
 

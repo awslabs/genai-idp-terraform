@@ -1,4 +1,6 @@
 #!/bin/bash
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 # Quick start script for GenAI IDP Accelerator documentation
 # This script helps you get the documentation running locally
