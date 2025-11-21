@@ -27,7 +27,7 @@
     "dompurify": "^3.2.5",
     "graphql": "^16.10.0",
     "graphql-tag": "^2.12.6",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.1.1",
     "mammoth": "^1.9.1",
     "prop-types": "^15.8.1",
     "react": "^17.0.2",
