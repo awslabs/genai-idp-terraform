@@ -4,7 +4,7 @@ A modular Terraform implementation of the GenAI **Intelligent Document Processin
 
 ## Overview
 
-This project provides a Terraform-based implementation of the [GenAI **Intelligent Document Processing** Accelerator](https://gitlab.aws.dev/genaiic-reusable-assets/engagement-artifacts/genaiic-idp-accelerator), offering flexible deployment options and infrastructure-as-code management for **Intelligent Document Processing** workflows.
+This project provides a Terraform-based implementation of the [GenAI **Intelligent Document Processing** Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws), offering flexible deployment options and infrastructure-as-code management for **Intelligent Document Processing** workflows.
 
 ## Experimental Status
 
@@ -500,7 +500,7 @@ This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE
 
 ## Additional Resources
 
-- **[AWS CDK Version](../genaiic-idp-accelerator-cdk/)**: Original CDK implementation
+- **[AWS CDK Version](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)**: Original CDK implementation
 - **[Terraform Documentation](https://www.terraform.io/docs)**: Terraform best practices
 - **[AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)**: Bedrock service documentation
 - **[Amazon Textract Documentation](https://docs.aws.amazon.com/textract/)**: OCR service documentation
