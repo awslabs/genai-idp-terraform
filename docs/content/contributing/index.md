@@ -54,10 +54,10 @@ Enhance testing coverage:
 ### 1. Fork the Repository
 
 ```bash
-# Fork the repository on GitLab
+# Fork the repository on GitHub
 # Then clone your fork
-git clone https://gitlab.aws.dev/your-username/genaiic-idp-accelerator-terraform.git
-cd genaiic-idp-accelerator-terraform
+git clone https://github.com/your-username/genai-idp-terraform.git
+cd genai-idp-terraform
 ```
 
 ### 2. Set Up Development Environment

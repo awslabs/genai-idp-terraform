@@ -122,7 +122,7 @@ Before deploying, enable access to the required Bedrock models in the AWS Consol
 
 ```bash
 git clone <repository-url>
-cd genaiic-idp-accelerator-terraform/examples/bedrock-llm-processor
+cd genai-idp-terraform/examples/bedrock-llm-processor
 ```
 
 ### 2. **Configure Variables**

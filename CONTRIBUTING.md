@@ -39,7 +39,7 @@ This Terraform implementation is based on the AWS CDK version located in the adj
 ## Repository Structure
 
 ```
-genaiic-idp-accelerator-terraform/
+genai-idp-terraform/
 ├── modules/                           # Reusable Terraform modules
 │   ├── processors/                    # Document processing patterns
 │   │   ├── bda-processor/            # Pattern 1: Bedrock Data Automation
@@ -75,7 +75,7 @@ genaiic-idp-accelerator-terraform/
 
    ```bash
    git clone <repository-url>
-   cd genaiic-idp-accelerator-terraform
+   cd genai-idp-terraform
    ```
 
 2. **Choose Example**: Navigate to the appropriate example directory:
