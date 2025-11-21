@@ -1,10 +1,10 @@
 # SageMaker UDOP Model Training Module (Enhanced)
 
-This enhanced Terraform module creates and trains a SageMaker UDOP model using the RVL-CDIP dataset with production-ready features including Docker container images and robust Lambda deployment using the `terraform-aws-modules/lambda/aws` module.
+This enhanced Terraform module creates and trains a SageMaker UDOP model using the RVL-CDIP dataset with enhanced features including Docker container images and robust Lambda deployment using the `terraform-aws-modules/lambda/aws` module.
 
 ## Features
 
-### 🚀 **Production-Ready Architecture**
+### 🚀 **Enhanced Architecture**
 
 - **Docker Container Images**: Lambda functions with all dependencies included
 - **terraform-aws-modules/lambda**: Battle-tested Lambda deployment with best practices
@@ -405,4 +405,4 @@ For issues and questions:
 - **SageMaker**: Use AWS SageMaker documentation and support
 - **Training Issues**: Check CloudWatch logs and SageMaker training job details
 
-This enhanced implementation provides a production-ready foundation for SageMaker model training with Terraform, closely matching the capabilities of the original CDK implementation while maintaining pure Terraform architecture.
+This enhanced implementation provides a comprehensive foundation for SageMaker model training with Terraform, closely matching the capabilities of the original CDK implementation while maintaining pure Terraform architecture.

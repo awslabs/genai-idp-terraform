@@ -353,7 +353,7 @@ The assessment service automatically handles each attribute type differently:
 **Common Mistakes to Avoid:**
 
 ```json
-// ❌ WRONG: Aggregate assessment for list
+// WRONG: Aggregate assessment for list
 {
   "LineItems": {
     "confidence": 0.85,
@@ -361,7 +361,7 @@ The assessment service automatically handles each attribute type differently:
   }
 }
 
-// ✅ CORRECT: Individual item assessments
+// CORRECT: Individual item assessments
 {
   "LineItems": [
     {

@@ -12,7 +12,6 @@ The GenAI Intelligent Document Processing (GenAI IDP) Accelerator is a comprehen
 Directory structure:
 └── aws-solutions-library-samples-accelerated-intelligent-document-processing-on-aws/
     ├── README.md
-    ├── AmazonQ.md
     ├── CHANGELOG.md
     ├── CONTRIBUTING.md
     ├── genaiic-idp-accelerator.code-workspace

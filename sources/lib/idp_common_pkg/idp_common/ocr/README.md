@@ -16,28 +16,28 @@ The service supports three OCR backends, each with different capabilities and us
 ### 1. Textract Backend (Default - Recommended for Assessment)
 
 - **Technology**: AWS Textract OCR service
-- **Confidence Data**: ✅ Full granular confidence scores per text line (displayed as markdown table)
+- **Confidence Data**: Full granular confidence scores per text line (displayed as markdown table)
 - **Features**: Basic text detection + enhanced document analysis (tables, forms, signatures, layout)
-- **Assessment Quality**: ⭐⭐⭐ Optimal - Real OCR confidence enables accurate assessment
-- **Use Cases**: Standard document processing, when assessment is enabled, production workflows
+- **Assessment Quality**: Optimal - Real OCR confidence enables accurate assessment
+- **Use Cases**: Standard document processing, when assessment is enabled
 
 ### 2. Bedrock Backend (LLM-based OCR)
 
 - **Technology**: Amazon Bedrock LLMs (Claude, Nova) for text extraction
-- **Confidence Data**: ❌ No confidence data (displays "No confidence data available from LLM OCR")
+- **Confidence Data**: No confidence data (displays "No confidence data available from LLM OCR")
 - **Features**: Advanced text understanding, better handling of challenging/degraded documents
-- **Assessment Quality**: ❌ No confidence data for assessment
+- **Assessment Quality**: No confidence data for assessment
 - **Use Cases**: Challenging documents where traditional OCR fails, specialized text extraction needs
 
 ### 3. None Backend (Image-only)
 
 - **Technology**: No OCR processing
-- **Confidence Data**: ❌ No confidence data (displays "No OCR performed")
+- **Confidence Data**: No confidence data (displays "No OCR performed")
 - **Features**: Image extraction and storage only
-- **Assessment Quality**: ❌ No text confidence for assessment
+- **Assessment Quality**: No text confidence for assessment
 - **Use Cases**: Image-only workflows, custom OCR integration
 
-> ⚠️ **CRITICAL for Assessment**: When assessment functionality is enabled, use `backend="textract"` (default) to preserve granular confidence data. Using `backend="bedrock"` results in empty confidence data that eliminates assessment capability.
+> **CRITICAL for Assessment**: When assessment functionality is enabled, use `backend="textract"` (default) to preserve granular confidence data. Using `backend="bedrock"` results in empty confidence data that eliminates assessment capability.
 
 ## Features
 
@@ -298,12 +298,12 @@ def handler(event, context):
 
 ### Phase 1: Current Implementation (Basic Integration)
 
-- ✅ Basic OCR service with PyMuPDF for PDF processing
-- ✅ Support for Textract's text detection
-- ✅ Compatible with existing Pattern workflow
-- ✅ Full integration with Document data model
-- ✅ Automatic document retrieval from S3
-- ✅ Comprehensive error handling
+- Basic OCR service with PyMuPDF for PDF processing
+- Support for Textract's text detection
+- Compatible with existing Pattern workflow
+- Full integration with Document data model
+- Automatic document retrieval from S3
+- Comprehensive error handling
 
 ### Phase 2: Enhanced Features
 

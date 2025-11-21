@@ -555,11 +555,11 @@ The extraction service is designed to be thread-safe, supporting concurrent proc
 
 ## Future Enhancements
 
-- ✅ Few-shot example support for improved accuracy and consistency
-- ✅ Class-specific example filtering for targeted extraction guidance
-- ✅ Multimodal example support with document images
-- ✅ Enhanced imagePath support for multiple images from directories and S3 prefixes
-- 🔲 Dynamic few-shot example selection based on document similarity
-- 🔲 Confidence scoring for extracted attributes
+- Few-shot example support for improved accuracy and consistency
+- Class-specific example filtering for targeted extraction guidance
+- Multimodal example support with document images
+- Enhanced imagePath support for multiple images from directories and S3 prefixes
+- Dynamic few-shot example selection based on document similarity (planned)
+- Confidence scoring for extracted attributes (planned)
 - 🔲 Support for additional extraction backends (custom models)
 - 🔲 Automatic example quality assessment and recommendations

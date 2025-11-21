@@ -92,7 +92,7 @@ examples/processing-environment/
 
 - Users can customize layer extras based on their needs
 - Development-friendly options (force rebuild, custom timeouts)
-- Production-ready defaults
+- Sensible defaults
 
 ### ✅ **Complete Example**
 
@@ -122,10 +122,10 @@ force_layer_rebuild = true
 layer_build_wait_time = 900
 ```
 
-### 3. Production Usage
+### 3. Full Feature Configuration
 
 ```hcl
-# Production configuration with all features
+# Configuration with all features
 idp_common_layer_extras = ["all"]
 force_layer_rebuild = false
 layer_build_wait_time = 600

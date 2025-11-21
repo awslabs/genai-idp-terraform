@@ -17,25 +17,19 @@ This directory contains tests for the `idp_common` package, organized into unit 
 - Enables safe refactoring and optimization
 - Validates that features meet requirements
 
-### Using AI Coding Agents for Test Generation
+### Test Generation Best Practices
 
-You can use AI Coding Agents like Amazon Q to help generate tests for your code:
+When creating tests for your code:
 
-1. **Reference the AmazonQ.md file**: Ensure the AI agent has access to the `AmazonQ.md` file in the project root, which contains specific guidelines for test creation in this project.
+1. **Follow Project Structure**: Ensure tests follow the project's test structure and conventions
 
-2. **Test Generation Best Practices**:
-   - Provide the AI with the code you want to test
+2. **Test Coverage**:
+   - Provide tests for the code you want to validate
    - Specify whether you need unit or integration tests
-   - Ask the AI to follow the project's test structure and conventions
-   - Review and validate the generated tests before committing
+   - Cover edge cases and error conditions
+   - Review and validate tests before committing
 
-3. **Example Prompt for Amazon Q**:
-
-   ```
-   Generate unit tests for this file: relate/path/to/your/file.py.
-   ```
-
-4. **Always Verify AI-Generated Tests**: While AI can help create test scaffolding, always review and verify that:
+3. **Always Verify Tests**: Review and verify that:
    - Tests actually validate the expected behavior
    - Edge cases are properly covered
    - Tests follow project conventions

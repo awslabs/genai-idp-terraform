@@ -354,9 +354,9 @@ terraform destroy
 - **Scale Performance**: Adjust concurrency settings for your workload
 - **Integrate APIs**: Use the GraphQL API for custom applications
 - **Advanced Analytics**: Build custom dashboards with the reporting data
-- **Production Deployment**: Review security and compliance requirements
+- **Deployment**: Review security and compliance requirements
 
-This example provides a complete, production-ready document processing solution with advanced AI capabilities and comprehensive monitoring.
+This example provides a complete document processing solution with advanced AI capabilities and comprehensive monitoring.
 aws s3 ls s3://$(terraform output -raw buckets | jq -r '.output_bucket.bucket_name')/ --recursive
 
 ```
@@ -373,7 +373,7 @@ The Bedrock LLM Processor example provides three configuration levels:
 ### Comprehensive
 - Copy `terraform.tfvars.example` to `terraform.tfvars`
 - All features enabled
-- Production-ready configuration
+- Full-featured configuration
 
 ### Custom
 - Start with `terraform.tfvars.example`

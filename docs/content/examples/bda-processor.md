@@ -300,7 +300,7 @@ Error: Document doesn't match expected schema
 
 - Standard document types (invoices, forms, etc.)
 - Managed processing with minimal customization
-- Production-ready solution out of the box
+- Comprehensive solution out of the box
 - Enterprise-grade reliability and support
 
 **Choose Bedrock LLM Processor when you need**:

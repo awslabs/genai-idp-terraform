@@ -2,7 +2,7 @@
 
 This directory contains comprehensive examples demonstrating how to deploy the GenAI IDP Accelerator using Terraform. Each example is designed to be easily deployable with `terraform init`, `terraform plan`, and `terraform apply` after setting up the `terraform.tfvars` file.
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Choose your processing pattern** from the examples below
 2. **Navigate to the example directory**
@@ -10,7 +10,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 4. **Customize the variables** in `terraform.tfvars`
 5. **Deploy**: `terraform init && terraform plan && terraform apply`
 
-## 📁 Available Examples
+## Available Examples
 
 ### 1. **Bedrock LLM Processor** (`bedrock-llm-processor/`)
 
@@ -23,12 +23,12 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 
 **Key Features**:
 
-- ✅ Web UI with CloudFront distribution
-- ✅ Knowledge Base integration for RAG
-- ✅ Assessment functions for quality measurement
-- ✅ Evaluation against baseline documents
-- ✅ Analytics and reporting environment
-- ✅ Configurable model selection (Claude, Nova)
+- Web UI with CloudFront distribution
+- Knowledge Base integration for RAG
+- Assessment functions for quality measurement
+- Evaluation against baseline documents
+- Analytics and reporting environment
+- Configurable model selection (Claude, Nova)
 
 ### 2. **BDA Processor** (`bda-processor/`)
 
@@ -41,11 +41,11 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 
 **Key Features**:
 
-- ✅ Bedrock Data Automation integration
-- ✅ Web UI for document management
-- ✅ Evaluation against baseline documents
-- ✅ Analytics and reporting environment
-- ✅ Configurable document schemas
+- Bedrock Data Automation integration
+- Web UI for document management
+- Evaluation against baseline documents
+- Analytics and reporting environment
+- Configurable document schemas
 
 ### 3. **SageMaker UDOP Processor** (`sagemaker-udop-processor/`)
 
@@ -58,12 +58,12 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 
 **Key Features**:
 
-- ✅ SageMaker endpoint deployment with auto-scaling
-- ✅ Custom UDOP model integration
-- ✅ Assessment functions for quality measurement
-- ✅ Evaluation against baseline documents
-- ✅ Analytics and reporting environment
-- ✅ GPU-optimized instance types
+- SageMaker endpoint deployment with auto-scaling
+- Custom UDOP model integration
+- Assessment functions for quality measurement
+- Evaluation against baseline documents
+- Analytics and reporting environment
+- GPU-optimized instance types
 
 ### 4. **Processing Environment** (`processing-environment/`)
 
@@ -97,37 +97,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Features**: Cognito User Pool, Identity Pool, admin user creation
 - **Use Case**: Adding authentication to custom applications
 
-## 🎯 New Features in All Examples
-
-### **Assessment Functions** 🔍
-
-- **Purpose**: Document quality assessment and validation
-- **Models**: Configurable Bedrock models (Claude Haiku recommended)
-- **Usage**: Set `enable_assessment = true` in terraform.tfvars (defaults to `false`)
-- **Benefits**: Real-time quality scoring and feedback
-
-### **Evaluation Functions** 📊
-
-- **Purpose**: Compare processing results against baseline documents
-- **Models**: Configurable Bedrock models for evaluation
-- **Usage**: Set `enable_evaluation = true` and provide baseline bucket (defaults to `false`)
-- **Benefits**: Accuracy measurement and performance tracking
-
-### **Reporting Environment** 📈
-
-- **Purpose**: Analytics and metrics storage in Parquet format
-- **Components**: S3 bucket, Glue database, 4 analytical tables
-- **Usage**: Set `enable_reporting = true` in terraform.tfvars (defaults to `false`)
-- **Benefits**: Athena-ready analytics, cost tracking, performance metrics
-
-### **Enhanced Monitoring** 📋
-
-- **CloudWatch Dashboards**: Comprehensive metrics and alarms
-- **Custom Metrics**: Processing time, accuracy, cost per document
-- **Log Aggregation**: Centralized logging with configurable retention
-- **Performance Tracking**: Throughput and latency monitoring
-
-## 🔧 Configuration Guide
+## Configuration Guide
 
 ### **Basic Configuration**
 
@@ -164,7 +134,7 @@ cloudfront_price_class  = "PriceClass_100"
 enable_geo_restriction  = false
 ```
 
-## 📋 Prerequisites
+## Prerequisites
 
 ### **AWS Requirements**
 
@@ -174,7 +144,7 @@ enable_geo_restriction  = false
 
 ### **Bedrock Model Access**
 
-**⚠️ Important**: Enable model access in AWS Console before deployment:
+**Important**: Enable model access in AWS Console before deployment:
 
 1. Navigate to **Amazon Bedrock** → **Model access**
 2. Request access to required models:
@@ -192,7 +162,7 @@ Ensure adequate quotas for:
 - SageMaker endpoints (for UDOP processor)
 - Bedrock model invocations
 
-## 🚀 Deployment Steps
+## Deployment Steps
 
 ### **1. Choose Your Example**
 
@@ -227,7 +197,7 @@ terraform output
 # input_bucket = "my-idp-input-documents-abc123"
 ```
 
-## 📊 Analytics and Reporting
+## Analytics and Reporting
 
 When `enable_reporting = true`, you can query analytics data using Amazon Athena:
 
@@ -256,7 +226,7 @@ WHERE year = 2024 AND month = 7
 GROUP BY processor_type;
 ```
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### **Common Issues**
 
@@ -291,21 +261,21 @@ Error: LimitExceededException: Rate exceeded
 - Verify all prerequisites are met
 - Ensure service quotas are adequate
 
-## 🎉 What's New
+## What's New
 
 ### **v0.3.8 Functional Parity**
 
-- ✅ **Assessment Functions**: Document quality measurement
-- ✅ **Enhanced Evaluation**: Baseline comparison with configurable models
-- ✅ **Reporting Environment**: Parquet-based analytics with Glue tables
-- ✅ **Save Reporting Data**: Automated metrics collection
-- ✅ **Enhanced Monitoring**: Comprehensive CloudWatch integration
-- ✅ **Conditional Resources**: Optional feature deployment
-- ✅ **Environment Variable Parity**: 100% CDK compatibility
+- **Assessment Functions**: Document quality measurement
+- **Enhanced Evaluation**: Baseline comparison with configurable models
+- **Reporting Environment**: Parquet-based analytics with Glue tables
+- **Save Reporting Data**: Automated metrics collection
+- **Enhanced Monitoring**: Comprehensive CloudWatch integration
+- **Conditional Resources**: Optional feature deployment
+- **Environment Variable Parity**: 100% CDK compatibility
 
 ### **Deployment Ready**
 
-All examples are now **production-ready** with:
+All examples include:
 
 - Complete IAM permission sets
 - KMS encryption support
@@ -314,4 +284,4 @@ All examples are now **production-ready** with:
 - Dead letter queues for reliability
 - Auto-scaling configurations
 
-Each example can be deployed independently with just `terraform init && terraform apply` after configuring `terraform.tfvars`! 🚀
+Each example can be deployed independently with just `terraform init && terraform apply` after configuring `terraform.tfvars`!

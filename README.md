@@ -6,20 +6,20 @@ A modular Terraform implementation of the GenAI **Intelligent Document Processin
 
 This project provides a Terraform-based implementation of the [GenAI **Intelligent Document Processing** Accelerator](https://gitlab.aws.dev/genaiic-reusable-assets/engagement-artifacts/genaiic-idp-accelerator), offering flexible deployment options and infrastructure-as-code management for **Intelligent Document Processing** workflows.
 
-## ⚠️ Experimental Status
+## Experimental Status
 
 This solution is in experimental stage. While it implements security best practices, conduct thorough testing and security review before production use.
 
 ### Key Features
 
-- **🏗️ Modular Architecture**: Reusable Terraform modules for flexible composition
-- **🤖 Multiple AI Processing Patterns**: Three distinct approaches for different use cases
-- **☁️ Serverless Design**: Built on AWS Lambda, Step Functions, and other serverless technologies
-- **🔒 Security First**: KMS encryption, IAM least privilege, and VPC support with comprehensive security fixes
-- **📊 Comprehensive Monitoring**: Built-in CloudWatch dashboards and alerting
-- **🌐 Web Interface**: Optional React-based UI for document management
-- **📚 Knowledge Base**: Query processed documents using natural language
-- **🔧 Enhanced Permissions**: Comprehensive IAM policies aligned with AWS security best practices
+- **Modular Architecture**: Reusable Terraform modules for flexible composition
+- **Multiple AI Processing Patterns**: Three distinct approaches for different use cases
+- **Serverless Design**: Built on AWS Lambda, Step Functions, and other serverless technologies
+- **Security First**: KMS encryption, IAM least privilege, and VPC support with comprehensive security fixes
+- **Comprehensive Monitoring**: Built-in CloudWatch dashboards and alerting
+- **Web Interface**: Optional React-based UI for document management
+- **Knowledge Base**: Query processed documents using natural language
+- **Enhanced Permissions**: Comprehensive IAM policies aligned with AWS security best practices
 
 ## Processing Patterns
 
@@ -73,8 +73,6 @@ genaiic-idp-accelerator-terraform/
 
 Based on comprehensive security analysis and AWS best practices, the solution now includes:
 
-**Note**: These security enhancements are still under development and not production-ready yet. Additional testing and validation are required before deploying to production environments.
-
 ### Enhanced IAM Permissions
 
 - **DynamoDB**: Full CRUD operations for tracking and configuration tables
@@ -112,7 +110,7 @@ Before deploying the solution, ensure you have:
 
 ### Enable Bedrock Model Access
 
-**⚠️ Important**: Before deploying, you must enable access to Bedrock models:
+**Important**: Before deploying, you must enable access to Bedrock models:
 
 1. Go to the [AWS Console](https://console.aws.amazon.com/)
 2. Navigate to **Amazon Bedrock**
@@ -360,17 +358,17 @@ For detailed guidance on implementing these best practices, see the [AWS Best Pr
 
 ## Documentation
 
-### 📚 Comprehensive Documentation
+### Comprehensive Documentation
 
 This project includes comprehensive documentation built with Material for MkDocs, covering everything from getting started to advanced deployment scenarios.
 
-#### 🌐 Online Documentation
+#### Online Documentation
 
 - **GitHub Pages**: [https://awslabs.github.io/genai-idp-terraform/](https://awslabs.github.io/genai-idp-terraform/)
 - **Auto-deployed**: Updated automatically with each commit to main branch
 - **Mobile-friendly**: Responsive design for all devices
 
-#### 🏠 Local Documentation
+#### Local Documentation
 
 Run the documentation locally for development:
 
@@ -386,24 +384,24 @@ mkdocs serve
 
 Visit [http://127.0.0.1:8000](http://127.0.0.1:8000) to view the documentation.
 
-#### 📖 Documentation Sections
+#### Documentation Sections
 
 - **[Getting Started](docs/content/getting-started/)**: Prerequisites, installation, and quick start
 - **[Terraform Modules](docs/content/terraform-modules/)**: Detailed module documentation
 - **[Examples](docs/content/examples/)**: Real-world implementation examples
-- **[Deployment Guides](docs/content/deployment-guides/)**: Production deployment best practices
+- **[Deployment Guides](docs/content/deployment-guides/)**: Deployment best practices
 - **[Security Guide](docs/content/security/)**: Security best practices and compliance
 - **[FAQs](docs/content/faqs/)**: Common questions and troubleshooting
 - **[Contributing](docs/content/contributing/)**: How to contribute to the project
 
-#### 🔄 Documentation Features
+#### Documentation Features
 
 - **Live Examples**: All examples reference real, working Terraform configurations
 - **Cost Estimates**: Detailed cost breakdowns for each deployment pattern
 - **Architecture Diagrams**: Visual representations of system components
 - **Step-by-step Guides**: Detailed instructions for every deployment scenario
 - **Troubleshooting**: Common issues and their solutions
-- **Best Practices**: Production-ready configurations and security guidelines
+- **Best Practices**: Recommended configurations and security guidelines
 
 ## Examples and Use Cases
 
