@@ -1,0 +1,318 @@
+{
+  "type": "object",
+  "required": ["notes", "classes", "classification", "extraction"],
+  "properties": {
+    "notes": {
+      "order": 0,
+      "type": "string",
+      "description": "Notes"
+    },
+    "ocr": {
+      "order": 1,
+      "type": "object",
+      "sectionLabel": "OCR Configuration",
+      "required": ["features"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "sectionLabel": "Image Processing Settings",
+          "description": "Configure image resolution and processing options for OCR",
+          "order": 0,
+          "properties": {
+            "dpi": {
+              "type": "number",
+              "description": "DPI (dots per inch) for extracting images from PDF pages. Higher values produce better quality but larger images. Default: 150",
+              "minimum": 72,
+              "maximum": 300,
+              "default": 150,
+              "order": 0
+            },
+            "target_width": {
+              "type": "number",
+              "description": "Target width in pixels for resizing images before OCR. Images will be resized proportionally. Default: 1024",
+              "minimum": 512,
+              "maximum": 2048,
+              "default": 1024,
+              "order": 1
+            },
+            "target_height": {
+              "type": "number",
+              "description": "Target height in pixels for resizing images before OCR. Images will be resized proportionally. Default: 1024",
+              "minimum": 512,
+              "maximum": 2048,
+              "default": 1024,
+              "order": 2
+            }
+          }
+        },
+        "features": {
+          "type": "array",
+          "description": "OCR features to enable. Available options: TABLES, FORMS, LAYOUT, SIGNATURES",
+          "items": {
+            "type": "string",
+            "enum": ["TABLES", "FORMS", "LAYOUT", "SIGNATURES"]
+          },
+          "default": ["TABLES", "FORMS", "LAYOUT"],
+          "order": 1
+        }
+      }
+    },
+    "classes": {
+      "order": 2,
+      "type": "array",
+      "sectionLabel": "Document Classes",
+      "description": "Define the types of documents that can be processed",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "attributes"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique identifier for the document class"
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the document type"
+          },
+          "attributes": {
+            "type": "array",
+            "description": "List of attributes to extract from this document type",
+            "items": {
+              "type": "object",
+              "required": ["name", "description"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the attribute to extract"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Description of what this attribute represents and how to find it"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "classification": {
+      "order": 3,
+      "type": "object",
+      "sectionLabel": "Classification Configuration",
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "type": "object",
+          "sectionLabel": "SageMaker Model Settings",
+          "required": ["endpoint_name"],
+          "properties": {
+            "endpoint_name": {
+              "type": "string",
+              "description": "Name of the SageMaker endpoint for document classification"
+            },
+            "max_workers": {
+              "type": "number",
+              "description": "Maximum number of concurrent classification workers",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        },
+        "prompt": {
+          "type": "object",
+          "sectionLabel": "Classification Prompt Configuration",
+          "properties": {
+            "system_prompt": {
+              "type": "string",
+              "description": "System prompt for classification model",
+              "default": "You are an expert document classifier. Analyze the provided document and classify it into one of the predefined categories."
+            },
+            "user_prompt_template": {
+              "type": "string",
+              "description": "Template for user prompt in classification",
+              "default": "Please classify this document into one of these categories: {classes}\n\nDocument content:\n{content}\n\nReturn only the category name."
+            }
+          }
+        }
+      }
+    },
+    "extraction": {
+      "order": 4,
+      "type": "object",
+      "sectionLabel": "Extraction Configuration",
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "type": "object",
+          "sectionLabel": "Bedrock Model Settings",
+          "required": ["model_id"],
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Bedrock model ID for information extraction",
+              "default": "anthropic.claude-3-haiku-20240307-v1:0"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Maximum number of tokens for extraction response",
+              "minimum": 100,
+              "maximum": 4096,
+              "default": 2048
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Temperature setting for extraction model",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.1
+            }
+          }
+        },
+        "prompt": {
+          "type": "object",
+          "sectionLabel": "Extraction Prompt Configuration",
+          "properties": {
+            "system_prompt": {
+              "type": "string",
+              "description": "System prompt for extraction model",
+              "default": "You are an expert at extracting structured information from documents. Extract the requested information accurately and return it in the specified JSON format."
+            },
+            "user_prompt_template": {
+              "type": "string",
+              "description": "Template for user prompt in extraction",
+              "default": "Extract the following information from this {document_type} document:\n\n{attributes}\n\nDocument content:\n{content}\n\nReturn the extracted information as a JSON object with the attribute names as keys."
+            }
+          }
+        }
+      }
+    },
+    "summarization": {
+      "order": 5,
+      "type": "object",
+      "sectionLabel": "Summarization Configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable document summarization",
+          "default": false
+        },
+        "model": {
+          "type": "object",
+          "sectionLabel": "Summarization Model Settings",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Bedrock model ID for summarization",
+              "default": "anthropic.claude-3-haiku-20240307-v1:0"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Maximum number of tokens for summarization response",
+              "minimum": 100,
+              "maximum": 4096,
+              "default": 1024
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Temperature setting for summarization model",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.3
+            }
+          }
+        },
+        "prompt": {
+          "type": "object",
+          "sectionLabel": "Summarization Prompt Configuration",
+          "properties": {
+            "system_prompt": {
+              "type": "string",
+              "description": "System prompt for summarization model",
+              "default": "You are an expert at creating concise, accurate summaries of documents. Focus on the key information and main points."
+            },
+            "user_prompt_template": {
+              "type": "string",
+              "description": "Template for user prompt in summarization",
+              "default": "Please provide a concise summary of this {document_type} document:\n\n{content}\n\nSummary:"
+            }
+          }
+        }
+      }
+    },
+    "assessment": {
+      "order": 6,
+      "type": "object",
+      "sectionLabel": "Assessment Configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable document quality assessment",
+          "default": false
+        },
+        "model": {
+          "type": "object",
+          "sectionLabel": "Assessment Model Settings",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Bedrock model ID for assessment",
+              "default": "anthropic.claude-3-haiku-20240307-v1:0"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Maximum number of tokens for assessment response",
+              "minimum": 100,
+              "maximum": 2048,
+              "default": 1024
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Temperature setting for assessment model",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.1
+            }
+          }
+        }
+      }
+    },
+    "evaluation": {
+      "order": 7,
+      "type": "object",
+      "sectionLabel": "Evaluation Configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable extraction result evaluation",
+          "default": false
+        },
+        "model": {
+          "type": "object",
+          "sectionLabel": "Evaluation Model Settings",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Bedrock model ID for evaluation",
+              "default": "anthropic.claude-3-haiku-20240307-v1:0"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Maximum number of tokens for evaluation response",
+              "minimum": 100,
+              "maximum": 2048,
+              "default": 1024
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Temperature setting for evaluation model",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.1
+            }
+          }
+        }
+      }
+    }
+  }
+}

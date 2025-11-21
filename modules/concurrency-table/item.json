@@ -1,0 +1,11 @@
+{
+    "counter_id": {
+        "S": "workflow_counter"
+    },
+    "active_count": {
+        "N": "0"
+    },
+    "max_count": {
+        "N": "10"
+    }
+}

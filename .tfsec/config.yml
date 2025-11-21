@@ -1,0 +1,72 @@
+# tfsec configuration file
+# Based on AWS IA Terraform standards
+
+# Severity levels: CRITICAL, HIGH, MEDIUM, LOW
+minimum_severity: MEDIUM
+
+# Output format options: default, json, csv, checkstyle, junit, sarif
+format: default
+
+# Exclude specific checks if needed
+# exclude:
+#   - AWS001  # Example: exclude specific check
+
+# Include specific checks only (if you want to be selective)
+# include:
+#   - AWS*    # Include all AWS checks
+
+# Soft fail - don't exit with error code even if issues found
+# soft_fail: false
+
+# Custom check directories
+# custom_check_dir: .tfsec/custom
+
+# Exclude directories from scanning
+exclude_paths:
+  - .terraform/
+  - .git/
+  - docs/
+  - examples/
+  - sources/
+
+# Include additional file extensions
+# include_patterns:
+#   - "*.tf"
+#   - "*.tfvars"
+
+# Exclude specific file patterns
+exclude_patterns:
+  - "*.example"
+  - "*.backup"
+  - "**/test_fixtures/**"
+
+# Configure specific checks
+checks:
+  # AWS S3 bucket encryption
+  - check: AWS017
+    severity: HIGH
+  
+  # AWS S3 bucket public access
+  - check: AWS001
+    severity: CRITICAL
+  
+  # AWS IAM policies
+  - check: AWS039
+    severity: HIGH
+  
+  # AWS Security Groups
+  - check: AWS006
+    severity: HIGH
+  
+  # AWS RDS encryption
+  - check: AWS051
+    severity: HIGH
+  
+  # AWS Lambda environment variables encryption
+  - check: AWS066
+    severity: MEDIUM
+
+# Enable/disable specific rule sets
+rule_sets:
+  aws: true
+  general: true

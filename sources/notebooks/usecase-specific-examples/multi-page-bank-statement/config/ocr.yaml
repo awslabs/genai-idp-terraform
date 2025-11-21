@@ -1,0 +1,9 @@
+# OCR Service Configuration
+ocr:
+  features:
+    - name: "LAYOUT"
+    - name: "TABLES" 
+    - name: "SIGNATURES"
+  # Additional OCR-specific settings can be added here
+  # region: "us-east-1"  # Will be set from environment
+  # enhanced_features: ["LAYOUT"]  # Can override the features list above

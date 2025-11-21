@@ -1,0 +1,10 @@
+mkdocs~=1.6.1
+mkdocs-drawio~=1.11.2
+pygments>=2.12
+mkdocs-awesome-pages-plugin~=2.9.2
+mkdocs-material~=9.5.34
+mkdocs-material-extensions
+mkdocs-redirects~=1.2.0
+mkdocs-macros-plugin~=1.0.4
+mkdocs-git-revision-date-plugin~=0.3.2
+mike~=2.1.3

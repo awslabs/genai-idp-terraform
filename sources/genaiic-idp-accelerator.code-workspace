@@ -1,0 +1,33 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python.analysis.extraPaths": [
+			"lib/idp_common_pkg"
+		],
+		"notebook.formatOnSave.enabled": true,
+		"notebook.codeActionsOnSave": {
+			"notebook.source.fixAll": "explicit",
+			"notebook.source.organizeImports": "explicit"
+		},
+		"[python]": {
+			"editor.formatOnSave": true,
+			"editor.defaultFormatter": "charliermarsh.ruff",
+			"editor.codeActionsOnSave": {
+				"source.fixAll": "explicit",
+				"source.organizeImports": "explicit"
+			},
+		},
+		"makefile.configureOnOpen": false
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-toolsai.jupyter",
+			"ms-python.python",
+			"charliermarsh.ruff",
+		]
+	}
+}

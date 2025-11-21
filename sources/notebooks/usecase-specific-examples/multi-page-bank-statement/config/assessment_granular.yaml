@@ -1,0 +1,151 @@
+# Granular Assessment Service Configuration
+# This configuration enables the new granular assessment approach for improved
+# accuracy and scalability when assessing document extraction confidence.
+
+assessment:
+  default_confidence_threshold: '0.8'
+  top_p: '0.1'
+  max_tokens: '10000'
+  top_k: '5'
+  temperature: '0.0'
+  model: us.amazon.nova-pro-v1:0
+  system_prompt: >-
+    You are a document analysis assessment expert. Your task is to evaluate the confidence of extraction results by analyzing the source document evidence. Respond only with JSON containing confidence scores for each extracted attribute.
+  
+  # Granular assessment configuration
+  granular:
+    # Enable granular assessment (set to false to use original approach)
+    enabled: true
+    
+    # Maximum number of parallel workers for concurrent processing
+    max_workers: '20'
+    
+    # Batch size for simple attributes (how many simple attributes to assess together)
+    simple_batch_size: '3'
+    
+    # Batch size for list items (how many list items to assess together, usually 1 for best accuracy)
+    list_batch_size: '1'
+  
+  task_prompt: >-
+    <background>
+
+    You are an expert document analysis assessment system. Your task is to evaluate the confidence of extraction results for a document of class {DOCUMENT_CLASS}.
+
+    </background>
+
+
+    <task>
+
+    Analyze the extraction results against the source document and provide confidence assessments for each extracted attribute. Consider factors such as:
+
+    1. Text clarity and OCR quality in the source regions
+    2. Alignment between extracted values and document content
+    3. Presence of clear evidence supporting the extraction
+    4. Potential ambiguity or uncertainty in the source material
+    5. Completeness and accuracy of the extracted information
+
+    </task>
+
+
+    <assessment-guidelines>
+
+    For each attribute, provide:
+    A confidence score between 0.0 and 1.0 where:
+       - 1.0 = Very high confidence, clear and unambiguous evidence
+       - 0.8-0.9 = High confidence, strong evidence with minor uncertainty
+       - 0.6-0.7 = Medium confidence, reasonable evidence but some ambiguity
+       - 0.4-0.5 = Low confidence, weak or unclear evidence
+       - 0.0-0.3 = Very low confidence, little to no supporting evidence
+
+    Guidelines:
+    - Base assessments on actual document content and OCR quality
+    - Consider both text-based evidence and visual/layout clues
+    - Account for OCR confidence scores when provided
+    - Be objective and specific in reasoning
+    - If an extraction appears incorrect, score accordingly with explanation
+
+    </assessment-guidelines>
+
+    <final-instructions>
+
+    Analyze the extraction results against the source document and provide confidence assessments. Return a JSON object with the following structure based on the attribute type:
+
+    For SIMPLE attributes:
+    {
+      "simple_attribute_name": {
+        "confidence": 0.85,
+      }
+    }
+
+    For GROUP attributes (nested object structure):
+    {
+      "group_attribute_name": {
+        "sub_attribute_1": {
+          "confidence": 0.90,
+        },
+        "sub_attribute_2": {
+          "confidence": 0.75,
+        }
+      }
+    }
+
+    For LIST attributes (array of assessed items):
+    {
+      "list_attribute_name": [
+        {
+          "item_attribute_1": {
+            "confidence": 0.95,
+          },
+          "item_attribute_2": {
+            "confidence": 0.88,
+          }
+        },
+        {
+          "item_attribute_1": {
+            "confidence": 0.92,
+          },
+          "item_attribute_2": {
+            "confidence": 0.70,
+          }
+        }
+      ]
+    }
+
+    IMPORTANT: 
+    - For LIST attributes like "Transactions", assess EACH individual item in the list separately
+    - Each transaction should be assessed as a separate object in the array
+    - Do NOT provide aggregate assessments for list items - assess each one individually
+    - Include assessments for ALL attributes present in the extraction results
+    - Match the exact structure of the extracted data
+
+    </final-instructions>
+
+    <attributes-definitions>
+
+    {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+
+    </attributes-definitions>
+
+    <<CACHEPOINT>>
+
+    <document-image>
+
+    {DOCUMENT_IMAGE}
+
+    </document-image>
+
+
+    <ocr-text-confidence-results>
+
+    {OCR_TEXT_CONFIDENCE}
+
+    </ocr-text-confidence-results>
+
+    <<CACHEPOINT>>
+
+    <extraction-results>
+
+    {EXTRACTION_RESULTS}
+
+    </extraction-results>
+

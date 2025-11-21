@@ -1,0 +1,121 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create an AWS Bedrock Data Automation Project'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name for the Bedrock Data Automation Project
+    MinLength: 1
+    MaxLength: 128
+    AllowedPattern: ^[a-zA-Z0-9-_]+$
+    ConstraintDescription: Project name can only contain alphanumeric characters, hyphens, and underscores
+    Default: "MyProject"
+  
+  ProjectDescription:
+    Type: String
+    Description: Description for the Bedrock Data Automation Project
+    Default: "Data Automation Project created via CloudFormation"
+  
+  BlueprintName:
+    Type: String
+    Description: Name for the Bedrock Blueprint
+    Default: "MyBlueprint"
+
+Resources:
+  BedrockBlueprint:
+    Type: AWS::Bedrock::Blueprint
+    Properties:
+      BlueprintName: !Ref BlueprintName
+      Schema:
+        $schema: "http://json-schema.org/draft-07/schema#"
+        description: "Medical Discharge Summary Schema"
+        class: "medical_discharge"
+        type: "object"
+        definitions: {}
+        properties:
+          PatientName:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the patient's full name from the document."
+          PatientID:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the patient's ID number from the document."
+          AdmitDate:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the date when the patient was admitted to the hospital."
+          DischargeDate:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the date when the patient was discharged from the hospital."
+          AttendingPhysician:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the name of the attending physician who treated the patient."
+          ChiefComplaint:
+            type: "string"
+            inferenceType: "inferred"
+            instruction: "Identify the main reason for the patient's hospital visit or primary symptom."
+          DiagnosisSummary:
+            type: "string"
+            inferenceType: "inferred"
+            instruction: "Summarize the key diagnosis information from the document, focusing on the main medical condition."
+          DischargeSummary:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the discharge summary instructions provided to the patient."
+          MedicalHistory:
+            type: "string"
+            inferenceType: "inferred"
+            instruction: "Extract information about the patient's previous medical history (PMHx) and any relevant conditions."
+          FacilityInformation:
+            type: "string"
+            inferenceType: "explicit"
+            instruction: "Extract the hospital or medical facility name and contact information."
+      Type: "DOCUMENT"  # Added required Type property
+      Tags:
+        - Key: Environment
+          Value: Development
+        - Key: CreatedBy
+          Value: CloudFormation
+
+  BedRockDataAutomationProject:
+    Type: AWS::Bedrock::DataAutomationProject
+    Properties:
+      ProjectName: !Ref ProjectName
+      ProjectDescription: !Ref ProjectDescription
+      StandardOutputConfiguration:
+        Document: {}
+        Image: {}
+        Audio: {}
+        Video: {}
+      CustomOutputConfiguration:
+        Blueprints:
+          - BlueprintArn: !GetAtt BedrockBlueprint.BlueprintArn
+            # You can add additional blueprint configuration if needed
+      Tags:
+        - Key: Environment
+          Value: Development
+        - Key: CreatedBy
+          Value: CloudFormation
+
+Outputs:
+  ProjectArn:
+    Description: ARN of the created Bedrock Data Automation Project
+    Value: !GetAtt BedRockDataAutomationProject.ProjectArn
+  
+  ProjectStatus:
+    Description: Status of the created Bedrock Data Automation Project
+    Value: !GetAtt BedRockDataAutomationProject.Status
+  
+  CreationTime:
+    Description: Creation time of the Bedrock Data Automation Project
+    Value: !GetAtt BedRockDataAutomationProject.CreationTime
+  
+  BlueprintArn:
+    Description: ARN of the created Bedrock Blueprint
+    Value: !GetAtt BedrockBlueprint.BlueprintArn

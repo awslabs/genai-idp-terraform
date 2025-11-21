@@ -1,0 +1,36 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 Bucket for initial deployment'
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket to create
+    Default: idp-sdlc-sourcecode-YOUR_AWS_ACCOUNT-YOUR_REGION
+
+Resources:
+  InitialInstallBucket:
+    Type: 'AWS::S3::Bucket'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W51
+            reason: "This is a temporary bucket for initial deployment artifacts, bucket policy not required for this use case"
+          - id: W35
+            reason: "This is a deployment artifact bucket, access logging not required for this temporary resource"
+    # checkov:skip=CKV_AWS_18: "This is a temporary deployment artifact bucket, access logging not required"
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256

@@ -1,0 +1,40 @@
+# Example configuration for Processing Environment
+
+# AWS region to deploy resources
+region = "us-east-1"
+
+# Prefix to add to resource names
+prefix = "idp"
+
+# Log level for document processing components
+log_level = "INFO"
+
+# Log retention period in days
+log_retention_days = 7
+
+# Document tracking data retention period in days
+data_tracking_retention_days = 365
+
+# Feature Toggles
+enable_evaluation = false
+enable_reporting  = false
+
+# Evaluation Model (when enabled)
+evaluation_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+
+# IDP Common Layer configuration
+# List of extra dependencies to include in the layer
+idp_common_layer_extras = ["appsync", "evaluation"]
+
+# Force rebuild of the layer (useful for development)
+force_layer_rebuild = false
+
+# Time to wait for layer build to complete (in seconds)
+layer_build_wait_time = 600
+
+# Tags to apply to all resources
+tags = {
+  Environment = "development"
+  Project     = "GenAI-IDP"
+  Owner       = "Data Processing Team"
+}

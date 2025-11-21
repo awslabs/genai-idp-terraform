@@ -1,0 +1,151 @@
+{
+  "Comment": "BDA Document Processing Workflow",
+  "StartAt": "InvokeBDA",
+  "States": {
+    "InvokeBDA": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${InvokeBDALambdaArn}",
+        "Payload": {
+          "detail.$": "$.detail",
+          "input_bucket.$": "$.input_bucket",
+          "object_key.$": "$.object_key",
+          "working_bucket": "${WorkingBucket}",
+          "bda_project_arn": "${BDAProjectArn}"
+        }
+      },
+      "ResultPath": "$.InvokeBDAResult",
+      "Next": "WaitForBDACompletion",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "WaitForBDACompletion": {
+      "Type": "Wait",
+      "Seconds": 10,
+      "Next": "CheckBDAStatus"
+    },
+    "CheckBDAStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.InvokeBDAResult.Payload.status",
+          "StringEquals": "COMPLETED",
+          "Next": "ProcessResults"
+        },
+        {
+          "Variable": "$.InvokeBDAResult.Payload.status",
+          "StringEquals": "FAILED",
+          "Next": "HandleError"
+        },
+        {
+          "Variable": "$.InvokeBDAResult.Payload.status",
+          "StringEquals": "IN_PROGRESS",
+          "Next": "WaitForBDACompletion"
+        }
+      ],
+      "Default": "WaitForBDACompletion"
+    },
+    "ProcessResults": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ProcessResultsLambdaArn}",
+        "Payload": {
+          "detail.$": "$.detail",
+          "input_bucket.$": "$.input_bucket",
+          "object_key.$": "$.object_key",
+          "working_bucket": "${WorkingBucket}",
+          "output_bucket": "${OutputBucket}",
+          "bda_result.$": "$.InvokeBDAResult.Payload.result"
+        }
+      },
+      "ResultPath": "$.ProcessResultsResult",
+      "Next": "CheckSummarizationEnabled",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "CheckSummarizationEnabled": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "${IsSummarizationEnabled}",
+          "StringEquals": "true",
+          "Next": "Summarization"
+        }
+      ],
+      "Default": "Success"
+    },
+    "Summarization": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${SummarizationLambdaArn}",
+        "Payload": {
+          "detail.$": "$.detail",
+          "input_bucket.$": "$.input_bucket",
+          "object_key.$": "$.object_key",
+          "output_bucket": "${OutputBucket}",
+          "process_results.$": "$.ProcessResultsResult.Payload"
+        }
+      },
+      "ResultPath": "$.SummarizationResult",
+      "Next": "Success",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "HandleError": {
+      "Type": "Pass",
+      "Result": {
+        "status": "FAILED"
+      },
+      "End": true
+    },
+    "Success": {
+      "Type": "Pass",
+      "Result": {
+        "status": "SUCCEEDED"
+      },
+      "End": true
+    }
+  }
+}

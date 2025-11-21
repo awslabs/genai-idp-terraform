@@ -1,0 +1,1427 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+notes: Default settings for lending-package-sample configuration
+ocr:
+  backend: "textract"  # Default to Textract for backward compatibility
+  model_id: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+  system_prompt: "You are an expert OCR system. Extract all text from the provided image accurately, preserving layout where possible."
+  task_prompt: "Extract all text from this document image. Preserve the layout, including paragraphs, tables, and formatting."
+  features:
+    - name: LAYOUT
+    - name: TABLES
+    - name: SIGNATURES
+  image:
+    target_width: ''
+    target_height: ''
+classes:
+  - name: Payslip
+    description: >-
+      An employee wage statement showing earnings, deductions, taxes, and net pay for a specific pay period, 
+      typically issued by employers to document compensation details including gross pay, various tax withholdings, 
+      and year-to-date totals.
+    attributes:
+      - name: YTDNetPay
+        description: >-
+          Year-to-date net pay amount representing cumulative take-home earnings after all deductions 
+          from the beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: PayPeriodStartDate
+        description: >-
+          The beginning date of the pay period covered by this payslip, indicating when the earning 
+          period started for the compensation shown.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: PayPeriodEndDate
+        description: >-
+          The ending date of the pay period covered by this payslip, indicating when the earning 
+          period ended for the compensation shown.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: PayDate
+        description: >-
+          The actual date when the employee was paid, representing when the compensation was issued 
+          or deposited.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CurrentGrossPay
+        description: >-
+          The total earnings before any deductions for the current pay period, representing gross 
+          compensation for the period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDGrossPay
+        description: >-
+          Year-to-date gross pay representing cumulative earnings before deductions from the 
+          beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: CurrentNetPay
+        description: >-
+          The take-home pay after all deductions for the current pay period, representing the 
+          actual amount paid to the employee.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: CurrentTotalDeductions
+        description: >-
+          Total amount deducted from gross pay for the current period, including all taxes, 
+          benefits, and other withholdings.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDTotalDeductions
+        description: >-
+          Year-to-date total deductions representing cumulative amounts withheld from gross pay 
+          from the beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: RegularHourlyRate
+        description: >-
+          The standard hourly wage rate for regular working hours, representing the base 
+          compensation rate for normal work time.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: HolidayHourlyRate
+        description: >-
+          The hourly wage rate for holiday work, typically higher than the regular rate to 
+          reflect premium compensation for holiday hours.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: EmployeeNumber
+        description: >-
+          The unique identifier assigned to the employee by the employer for payroll and 
+          administrative purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: PayrollNumber
+        description: >-
+          The payroll batch or sequence number for this pay period, used for payroll processing 
+          identification and tracking.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: FederalFilingStatus
+        description: >-
+          The employee's federal tax filing status for withholding purposes, such as Single, 
+          Married Filing Jointly, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: StateFilingStatus
+        description: >-
+          The employee's state tax filing status for withholding purposes, which may differ 
+          from federal filing status based on state requirements.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: YTDFederalTax
+        description: >-
+          Year-to-date federal income tax withheld, representing cumulative federal tax 
+          deductions from the beginning of the year.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDStateTax
+        description: >-
+          Year-to-date state income tax withheld, representing cumulative state tax deductions 
+          from the beginning of the year.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDCityTax
+        description: >-
+          Year-to-date city or local income tax withheld, representing cumulative local tax 
+          deductions from the beginning of the year.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: currency
+        description: >-
+          The currency in which all monetary amounts on the payslip are denominated, typically 
+          represented as a three-letter code like USD, EUR, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: is_gross_pay_valid
+        description: >-
+          A validation flag indicating whether the gross pay calculation is correct and valid 
+          based on payroll system checks.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: are_field_names_sufficient
+        description: >-
+          A validation flag indicating whether the field names on the payslip provide sufficient 
+          information for processing and understanding.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: is_ytd_gross_pay_highest
+        description: >-
+          A validation flag indicating whether the year-to-date gross pay represents the highest 
+          value among pay categories.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CompanyAddress
+        groupAttributes:
+          - name: State
+            description: The state or province portion of the company's business address.
+            evaluation_method: EXACT
+          - name: ZipCode
+            description: The postal code portion of the company's business address.
+            evaluation_method: EXACT
+          - name: City
+            description: The city portion of the company's business address.
+            evaluation_method: EXACT
+          - name: Line1
+            description: The primary street address line of the company's business location.
+            evaluation_method: EXACT
+          - name: Line2
+            description: The secondary address line for the company, such as suite or floor number.
+            evaluation_method: EXACT
+        description: >-
+          The complete business address of the employing company, including street address, 
+          city, state, and postal code information.
+        evaluation_method: LLM
+        attributeType: group
+      - name: EmployeeAddress
+        groupAttributes:
+          - name: State
+            description: The state or province portion of the employee's residential address.
+            evaluation_method: EXACT
+          - name: ZipCode
+            description: The postal code portion of the employee's residential address.
+            evaluation_method: EXACT
+          - name: City
+            description: The city portion of the employee's residential address.
+            evaluation_method: EXACT
+          - name: Line1
+            description: The primary street address line of the employee's residence.
+            evaluation_method: EXACT
+          - name: Line2
+            description: The secondary address line for the employee, such as apartment number.
+            evaluation_method: EXACT
+        description: >-
+          The complete residential address of the employee, including street address, city, 
+          state, and postal code information.
+        evaluation_method: LLM
+        attributeType: group
+      - name: EmployeeName
+        groupAttributes:
+          - name: FirstName
+            description: The given name of the employee.
+            evaluation_method: EXACT
+          - name: SuffixName
+            description: Name suffix such as Jr., Sr., III, etc.
+            evaluation_method: EXACT
+          - name: LastName
+            description: The family name or surname of the employee.
+            evaluation_method: EXACT
+          - name: MiddleName
+            description: The middle name or initial of the employee.
+            evaluation_method: EXACT
+        description: >-
+          The complete name information of the employee, including first name, middle name, 
+          last name, and any suffix.
+        evaluation_method: LLM
+        attributeType: group
+      - name: FederalTaxes
+        listItemTemplate:
+          itemAttributes:
+            - name: YTD
+              description: Year-to-date amount for this federal tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: Period
+              description: Current period amount for this federal tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: ItemDescription
+              description: Description of the specific federal tax type or category.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific federal tax withholding category
+        description: >-
+          List of federal tax withholdings showing different types of federal taxes deducted, 
+          with both current period and year-to-date amounts.
+        evaluation_method: LLM
+        attributeType: list
+      - name: CityTaxes
+        listItemTemplate:
+          itemAttributes:
+            - name: YTD
+              description: Year-to-date amount for this city tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: Period
+              description: Current period amount for this city tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: ItemDescription
+              description: Description of the specific city tax type or jurisdiction.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific city or local tax withholding
+        description: >-
+          List of city or local tax withholdings showing different municipal taxes deducted, 
+          with both current period and year-to-date amounts.
+        evaluation_method: LLM
+        attributeType: list
+      - name: StateTaxes
+        listItemTemplate:
+          itemAttributes:
+            - name: YTD
+              description: Year-to-date amount for this state tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: Period
+              description: Current period amount for this state tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: ItemDescription
+              description: Description of the specific state tax type or category.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific state tax withholding category
+        description: >-
+          List of state tax withholdings showing different types of state taxes deducted, 
+          with both current period and year-to-date amounts.
+        evaluation_method: LLM
+        attributeType: list
+
+  - name: US-drivers-licenses
+    description: >-
+      An official government-issued identification document that authorizes an individual to operate 
+      motor vehicles, containing personal information, physical characteristics, address details, 
+      and driving privileges with restrictions and endorsements.
+    attributes:
+      - name: STATE_NAME
+        description: >-
+          The state or jurisdiction that issued the driver's license, typically shown as a 
+          two-letter state abbreviation like MA, CA, NY, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: ID_NUMBER
+        description: >-
+          The unique driver's license identification number assigned by the issuing state, 
+          prominently displayed on the license for identification purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: EXPIRATION_DATE
+        description: >-
+          The date when the driver's license expires and requires renewal, typically in 
+          YYYY-MM-DD format indicating when the license becomes invalid.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: DATE_OF_ISSUE
+        description: >-
+          The date when the driver's license was originally issued by the state authority, 
+          typically in YYYY-MM-DD format showing the license creation date.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CLASS
+        description: >-
+          The type or category of driving privileges granted by the license, such as Class D 
+          for regular driver's license or other classifications for commercial vehicles.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: DATE_OF_BIRTH
+        description: >-
+          The birth date of the license holder in YYYY-MM-DD format, used for age verification 
+          and identification purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: COUNTY
+        description: >-
+          The county of residence for the license holder, though this field may be empty 
+          if not provided by the issuing jurisdiction.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: NAME_DETAILS
+        groupAttributes:
+          - name: SUFFIX
+            description: Name suffix such as Jr., Sr., III, etc.
+            evaluation_method: EXACT
+          - name: MIDDLE_NAME
+            description: The middle name of the license holder.
+            evaluation_method: EXACT
+          - name: LAST_NAME
+            description: The family name or surname of the license holder.
+            evaluation_method: EXACT
+          - name: FIRST_NAME
+            description: The given name of the license holder.
+            evaluation_method: EXACT
+        description: >-
+          Complete name information of the license holder including first name, middle name, 
+          last name, and any suffix, structured for official identification.
+        evaluation_method: LLM
+        attributeType: group
+      - name: PERSONAL_DETAILS
+        groupAttributes:
+          - name: SEX
+            description: The gender of the license holder, typically 'M' for male or 'F' for female.
+            evaluation_method: EXACT
+          - name: HAIR_COLOR
+            description: The color of the license holder's hair, often abbreviated like BLN, BRN, etc.
+            evaluation_method: EXACT
+          - name: HEIGHT
+            description: The physical height of the license holder, often in feet-inches format like '5-10'.
+            evaluation_method: EXACT
+          - name: WEIGHT
+            description: The weight of the license holder, typically in pounds.
+            evaluation_method: EXACT
+          - name: EYE_COLOR
+            description: The color of the license holder's eyes, often abbreviated like BLU, BRN, GRN, etc.
+            evaluation_method: EXACT
+        description: >-
+          Physical characteristics and personal details of the license holder used for 
+          identification purposes, including gender, height, weight, and eye/hair color.
+        evaluation_method: LLM
+        attributeType: group
+      - name: ADDRESS_DETAILS
+        groupAttributes:
+          - name: CITY
+            description: The city of residence for the license holder.
+            evaluation_method: EXACT
+          - name: ZIP_CODE
+            description: The postal code of the license holder's address.
+            evaluation_method: EXACT
+          - name: STATE
+            description: The state of residence for the license holder, may be abbreviated.
+            evaluation_method: EXACT
+          - name: STREET_ADDRESS
+            description: The street address of the license holder's residence.
+            evaluation_method: EXACT
+        description: >-
+          Complete residential address information of the license holder including street 
+          address, city, state, and postal code.
+        evaluation_method: LLM
+        attributeType: group
+      - name: ENDORSEMENTS
+        listItemTemplate:
+          itemAttributes:
+            - name: endorsement
+              description: Specific driving endorsement or certification code.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a special driving endorsement or certification
+        description: >-
+          List of special driving endorsements or certifications held by the license holder, 
+          or 'NONE' if no special endorsements apply.
+        evaluation_method: LLM
+        attributeType: list
+      - name: RESTRICTIONS
+        listItemTemplate:
+          itemAttributes:
+            - name: restriction
+              description: Specific driving restriction or limitation code.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a driving restriction or limitation
+        description: >-
+          List of driving restrictions or limitations that apply to the license holder, 
+          or 'NONE' if no restrictions apply.
+        evaluation_method: LLM
+        attributeType: list
+
+  - name: Bank-checks
+    description: >-
+      A written financial instrument directing a bank to pay a specific amount of money from 
+      the account holder's account to a designated payee, containing payment details, account 
+      information, and verification elements.
+    attributes:
+      - name: date
+        description: >-
+          The date when the check was written, typically handwritten or printed in the 
+          date field of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: dollar_amount
+        description: >-
+          The numerical amount to be paid as specified on the check, typically found in 
+          the amount box on the right side of the check.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: check_number
+        description: >-
+          The unique sequential number identifying this specific check, usually found in 
+          the upper right corner and bottom of the check.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: account_holder_name
+        description: >-
+          The name of the person or entity who owns the bank account and wrote the check, 
+          typically printed in the upper left corner.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: payee_name
+        description: >-
+          The name of the person or entity receiving the payment, written on the 'Pay to 
+          the order of' line of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: bank_name
+        description: >-
+          The name of the financial institution where the account is held, usually printed 
+          prominently on the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: memo
+        description: >-
+          Optional note or reference information written in the memo field, typically in 
+          the lower left area of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: routing_number_valid
+        description: >-
+          A boolean indicator of whether the bank routing number on the check is valid 
+          and properly formatted.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: bank_routing_number
+        description: >-
+          The bank's routing number for electronic transactions, typically found in the 
+          MICR line at the bottom of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: amount_in_words
+        description: >-
+          The payment amount written out in words, typically on the line below the payee 
+          name and ending with 'DOLLARS'.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: is_signed
+        description: >-
+          A boolean indicator of whether the check has been signed by the account holder 
+          in the signature area.
+        evaluation_method: EXACT
+        attributeType: simple
+
+  - name: Bank-Statement
+    description: >-
+      A periodic financial document issued by banks detailing account activity, balances, 
+      and transactions over a specific time period, providing account holders with a summary 
+      of their financial activity and current account status.
+    attributes:
+      - name: account_holder_address
+        description: >-
+          The mailing address of the account holder as recorded by the bank, typically 
+          displayed prominently on the statement header.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_number
+        description: >-
+          The unique identifier for the bank account, often partially masked for security 
+          purposes on the statement.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_type
+        description: >-
+          The category of bank account such as checking, savings, money market, etc., 
+          indicating the type of banking service.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: statement_end_date
+        description: >-
+          The ending date of the statement period in MM/DD/YYYY format, indicating when 
+          the reporting period concluded.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: statement_start_date
+        description: >-
+          The beginning date of the statement period in MM/DD/YYYY format, indicating 
+          when the reporting period began.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_holder_name
+        description: >-
+          The name of the person or entity who owns the bank account, as registered 
+          with the financial institution.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: branch_transit_number
+        description: >-
+          The specific branch identifier or transit number associated with the account, 
+          used for routing and identification purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: bank_name
+        description: >-
+          The name of the financial institution issuing the statement, typically displayed 
+          prominently at the top of the document.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_summary
+        listItemTemplate:
+          itemAttributes:
+            - name: summary_desc
+              description: Description of the account summary item, such as opening balance or closing balance.
+              evaluation_method: EXACT
+            - name: summary_amount
+              description: The monetary amount associated with this summary item.
+              evaluation_method: NUMERIC_EXACT
+          itemDescription: Each item represents a key account balance or summary figure
+        description: >-
+          Summary of key account information including opening balance, closing balance, 
+          and other important account totals for the statement period.
+        evaluation_method: LLM
+        attributeType: list
+      - name: transaction_details
+        listItemTemplate:
+          itemAttributes:
+            - name: date
+              description: The date when the transaction occurred.
+              evaluation_method: EXACT
+            - name: balance
+              description: The account balance after this transaction.
+              evaluation_method: NUMERIC_EXACT
+            - name: description
+              description: Description of the transaction or merchant information.
+              evaluation_method: EXACT
+            - name: deposits
+              description: Amount deposited or credited to the account.
+              evaluation_method: NUMERIC_EXACT
+            - name: withdrawals
+              description: Amount withdrawn or debited from the account.
+              evaluation_method: NUMERIC_EXACT
+          itemDescription: Each item represents an individual transaction record
+        description: >-
+          Detailed listing of all transactions that occurred during the statement period, 
+          including deposits, withdrawals, and resulting account balances.
+        evaluation_method: LLM
+        attributeType: list
+
+  - name: W2
+    description: >-
+      An annual tax document provided by employers to employees reporting wages earned and 
+      taxes withheld during the tax year for federal and state income tax filing purposes, 
+      containing comprehensive compensation and withholding information.
+    attributes:
+      - name: other
+        description: >-
+          Other compensation or benefits not covered in standard W2 boxes, representing 
+          additional taxable or non-taxable benefits provided to the employee.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: nonqualified_plans_incom
+        description: >-
+          Income from nonqualified deferred compensation plans, representing distributions 
+          or benefits from employer-sponsored retirement or compensation plans.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: employer_info
+        groupAttributes:
+          - name: employer_address
+            description: The complete business address of the employing company.
+            evaluation_method: EXACT
+          - name: control_number
+            description: A unique identifier assigned by the employer for tracking and processing purposes.
+            evaluation_method: EXACT
+          - name: employer_name
+            description: The legal name of the employing company or organization.
+            evaluation_method: EXACT
+          - name: ein
+            description: The federal Employer Identification Number of the company.
+            evaluation_method: EXACT
+          - name: employer_zip_code
+            description: The postal code portion of the employer's address.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the employing organization including name, address, 
+          tax identification numbers, and control numbers for processing.
+        evaluation_method: LLM
+        attributeType: group
+      - name: filing_info
+        groupAttributes:
+          - name: omb_number
+            description: The Office of Management and Budget form number for the W2 form.
+            evaluation_method: EXACT
+          - name: verification_code
+            description: A verification code used to validate the authenticity of the form.
+            evaluation_method: EXACT
+        description: >-
+          Official form identification and verification information including OMB numbers 
+          and validation codes for the W2 document.
+        evaluation_method: LLM
+        attributeType: group
+      - name: federal_tax_info
+        groupAttributes:
+          - name: federal_income_tax
+            description: The amount of federal income tax withheld from the employee's pay.
+            evaluation_method: NUMERIC_EXACT
+          - name: allocated_tips
+            description: Tips allocated by the employer to the employee for tax purposes.
+            evaluation_method: NUMERIC_EXACT
+          - name: social_security_tax
+            description: The amount of Social Security tax withheld from the employee's pay.
+            evaluation_method: NUMERIC_EXACT
+          - name: medicare_tax
+            description: The amount of Medicare tax withheld from the employee's pay.
+            evaluation_method: NUMERIC_EXACT
+        description: >-
+          Federal tax withholding information including income tax, Social Security tax, 
+          Medicare tax, and allocated tips for federal tax reporting.
+        evaluation_method: LLM
+        attributeType: group
+      - name: employee_general_info
+        groupAttributes:
+          - name: employee_name_suffix
+            description: Name suffix of the employee such as Jr., Sr., III, etc.
+            evaluation_method: EXACT
+          - name: employee_address
+            description: The complete residential address of the employee.
+            evaluation_method: EXACT
+          - name: employee_last_name
+            description: The family name or surname of the employee.
+            evaluation_method: EXACT
+          - name: employee_zip_code
+            description: The postal code portion of the employee's address.
+            evaluation_method: EXACT
+          - name: first_name
+            description: The given name of the employee.
+            evaluation_method: EXACT
+          - name: ssn
+            description: The Social Security Number of the employee.
+            evaluation_method: EXACT
+        description: >-
+          Complete personal information about the employee including full name, address, 
+          and Social Security Number for tax identification purposes.
+        evaluation_method: LLM
+        attributeType: group
+      - name: federal_wage_info
+        groupAttributes:
+          - name: social_security_tips
+            description: Tips subject to Social Security tax reporting.
+            evaluation_method: NUMERIC_EXACT
+          - name: wages_tips_other_compensation
+            description: Total wages, tips, and other compensation paid to the employee.
+            evaluation_method: NUMERIC_EXACT
+          - name: medicare_wages_tips
+            description: Wages and tips subject to Medicare tax.
+            evaluation_method: NUMERIC_EXACT
+          - name: social_security_wages
+            description: Wages subject to Social Security tax.
+            evaluation_method: NUMERIC_EXACT
+        description: >-
+          Federal wage and compensation information including total wages, tips, and 
+          amounts subject to Social Security and Medicare taxes.
+        evaluation_method: LLM
+        attributeType: group
+      - name: codes
+        listItemTemplate:
+          itemAttributes:
+            - name: amount
+              description: The monetary amount associated with this compensation code.
+              evaluation_method: NUMERIC_EXACT
+            - name: code
+              description: The letter code representing the type of compensation or benefit.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific type of compensation or benefit with its corresponding code
+        description: >-
+          Additional compensation codes and amounts representing various types of benefits, 
+          deferred compensation, or other taxable/non-taxable items.
+        evaluation_method: LLM
+        attributeType: list
+      - name: state_taxes_table
+        listItemTemplate:
+          itemAttributes:
+            - name: state_name
+              description: The name of the state for tax reporting purposes.
+              evaluation_method: EXACT
+            - name: local_wages_tips
+              description: Wages and tips subject to local income tax.
+              evaluation_method: NUMERIC_EXACT
+            - name: employer_state_id_number
+              description: The employer's state identification number for this jurisdiction.
+              evaluation_method: NUMERIC_EXACT
+            - name: state_wages_and_tips
+              description: Wages and tips subject to state income tax.
+              evaluation_method: NUMERIC_EXACT
+            - name: state_income_tax
+              description: State income tax withheld for this jurisdiction.
+              evaluation_method: NUMERIC_EXACT
+            - name: local_income_tax
+              description: Local income tax withheld for this jurisdiction.
+              evaluation_method: NUMERIC_EXACT
+            - name: locality_name
+              description: The name of the local jurisdiction for local tax reporting.
+              evaluation_method: EXACT
+          itemDescription: Each item represents state and local tax information for a specific jurisdiction
+        description: >-
+          State and local tax information including wages subject to tax, taxes withheld, 
+          and jurisdiction details for state and local tax reporting.
+        evaluation_method: LLM
+        attributeType: list
+
+  - name: Homeowners-Insurance-Application
+    description: >-
+      An application form for homeowners insurance coverage containing applicant personal information, 
+      property details, coverage requirements, existing insurance history, and underwriting data 
+      necessary for evaluating risk and determining appropriate coverage terms.
+    attributes:
+      - name: Expiration Date
+        description: >-
+          The date when the insurance policy expires and requires renewal, indicating when 
+          coverage will terminate if not renewed.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Purchase Date and Time
+        description: >-
+          The specific date and time when the insurance policy was purchased, including both 
+          date and time components for precise transaction recording.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Policy Number
+        description: >-
+          The unique identifier assigned to the insurance policy for tracking and reference 
+          purposes throughout the policy lifecycle.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Named Insured(s) and Mailing Address
+        description: >-
+          The complete name and mailing address of the primary insured party, representing 
+          the policyholder and their contact information.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Insurance Company
+        description: >-
+          The name and address of the insurance provider issuing the policy, including 
+          complete company contact information.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Insured Property
+        description: >-
+          The complete address of the property being insured, representing the physical 
+          location covered by the homeowners insurance policy.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Primary Phone number
+        description: >-
+          The main contact phone number for the policyholder, used for communication 
+          regarding the insurance policy and claims.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Effective Date
+        description: >-
+          The date when the insurance coverage begins and becomes active, marking the 
+          start of the policy period.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Primary Email
+        description: >-
+          The main email address for the policyholder, used for electronic communication 
+          regarding policy matters and updates.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Alternate Phone number
+        description: >-
+          The secondary contact phone number for the policyholder, providing an alternative 
+          method of communication for policy-related matters.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Co-Applicant Information
+        groupAttributes:
+          - name: Drivers License Number
+            description: The driver's license number of the co-applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Current Auto Carrier
+            description: Duration of relationship with current auto insurance provider for co-applicant.
+            evaluation_method: EXACT
+          - name: DL State
+            description: The state that issued the co-applicant's driver's license.
+            evaluation_method: EXACT
+          - name: Education Level
+            description: The highest level of education completed by the co-applicant.
+            evaluation_method: EXACT
+          - name: Currently Insured- Auto
+            description: Current auto insurance carrier for the co-applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Prior Auto Carrier
+            description: Duration of relationship with previous auto insurance provider for co-applicant.
+            evaluation_method: EXACT
+          - name: Date of Birth
+            description: The birth date of the co-applicant.
+            evaluation_method: EXACT
+          - name: Gender
+            description: The gender of the co-applicant.
+            evaluation_method: EXACT
+          - name: Marital Status
+            description: The marital status of the co-applicant.
+            evaluation_method: EXACT
+          - name: Relationship to Primary Applicant
+            description: The relationship of the co-applicant to the primary policyholder.
+            evaluation_method: EXACT
+          - name: Name
+            description: The full name of the co-applicant.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the co-applicant including personal details, driver's 
+          license information, insurance history, and relationship to primary applicant.
+        evaluation_method: LLM
+        attributeType: group
+      - name: Auto Claims, Accidents, and Violations
+        groupAttributes:
+          - name: Major
+            description: Information about major auto claims or incidents.
+            evaluation_method: EXACT
+          - name: Number of Comp Claims
+            description: The number of comprehensive auto insurance claims filed.
+            evaluation_method: EXACT
+          - name: Number of Violations
+            description: The total number of traffic violations.
+            evaluation_method: EXACT
+          - name: At-Fault
+            description: Details about at-fault accidents or incidents.
+            evaluation_method: EXACT
+          - name: Number of Auto Accidents
+            description: The total number of auto accidents.
+            evaluation_method: EXACT
+          - name: Minor
+            description: Information about minor auto claims or incidents.
+            evaluation_method: EXACT
+          - name: Not-at-Fault
+            description: Details about not-at-fault accidents or incidents.
+            evaluation_method: EXACT
+        description: >-
+          Comprehensive history of auto claims, accidents, and traffic violations for 
+          underwriting risk assessment purposes.
+        evaluation_method: LLM
+        attributeType: group
+      - name: Primary Applicant Information
+        groupAttributes:
+          - name: Type of Current Property Policy
+            description: The type of current property insurance policy held by primary applicant.
+            evaluation_method: EXACT
+          - name: Drivers License Number
+            description: The driver's license number of the primary applicant.
+            evaluation_method: EXACT
+          - name: Education Level
+            description: The highest level of education completed by the primary applicant.
+            evaluation_method: EXACT
+          - name: Currently Insured Auto
+            description: Current auto insurance carrier for the primary applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Prior Auto Carrier
+            description: Duration of relationship with previous auto insurance provider for primary applicant.
+            evaluation_method: EXACT
+          - name: Gender
+            description: The gender of the primary applicant.
+            evaluation_method: EXACT
+          - name: Marital Status
+            description: The marital status of the primary applicant.
+            evaluation_method: EXACT
+          - name: Name
+            description: The full name of the primary applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Current Auto Carrier
+            description: Duration of relationship with current auto insurance provider for primary applicant.
+            evaluation_method: EXACT
+          - name: Existing Esurance Policy
+            description: Existing insurance policy number or reference for primary applicant.
+            evaluation_method: EXACT
+          - name: DL State
+            description: The state that issued the primary applicant's driver's license.
+            evaluation_method: EXACT
+          - name: Date of Birth
+            description: The birth date of the primary applicant.
+            evaluation_method: EXACT
+          - name: Years with Prior Property Company
+            description: Number of years with previous property insurance company for primary applicant.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the primary applicant including personal details, 
+          driver's license information, insurance history, and existing policy details.
+        evaluation_method: LLM
+        attributeType: group
+classification:
+  image:
+    target_height: ''
+    target_width: ''
+  top_p: '0.1'
+  max_tokens: '4096'
+  top_k: '5'
+  task_prompt: >-
+    <task-description>
+    Analyze the provided document using both its visual layout and textual content to determine its document type. You must classify it into exactly one of the predefined categories.
+    </task-description>
+
+    <document-types>
+    {CLASS_NAMES_AND_DESCRIPTIONS}
+    </document-types>
+
+    <classification-instructions>
+    Follow these steps to classify the document:
+    1. Examine the visual layout: headers, logos, formatting, structure, and visual organization
+    2. Analyze the textual content: key phrases, terminology, purpose, and information type
+    3. Identify distinctive features that match the document type descriptions
+    4. Consider both visual and textual evidence together to determine the best match
+    5. CRITICAL: Only use document types explicitly listed in the <document-types> section
+    </classification-instructions>
+
+    <reasoning-guidelines>
+    When determining the document type:
+    - First identify the document's primary purpose and function
+    - Note specific visual elements (letterhead, forms, tables, signatures)
+    - Identify key textual indicators (terminology, phrases, structure)
+    - Consider the document's intended audience and use case
+    - Provide specific evidence from both visual and textual analysis
+    </reasoning-guidelines>
+
+    <output-format>
+    Return your classification as valid JSON following this exact structure:
+    {
+      "classification_reason": "Detailed reasoning including specific visual and textual evidence that led to this classification",
+      "class": "exact_document_type_from_list"
+    }
+    </output-format>
+
+    <<CACHEPOINT>>
+
+    <document-ocr-data>
+    {DOCUMENT_TEXT}
+    </document-ocr-data>
+
+    <document-image>
+    {DOCUMENT_IMAGE}
+    </document-image>
+
+    <final-instructions>
+    Analyze the document above by:
+    1. Applying the <classification-instructions> to examine both visual and textual features
+    2. Following the <reasoning-guidelines> to build your classification rationale
+    3. Selecting ONLY from document types in <document-types>
+    4. Providing clear reasoning with specific evidence before the classification
+    5. Outputting in the exact JSON format specified in <output-format>
+    </final-instructions>
+  temperature: '0.0'
+  model: us.amazon.nova-pro-v1:0
+  system_prompt: >-
+    You are a multimodal document classification expert that analyzes business documents using both visual layout and textual content. Your task is to classify single-page documents into predefined categories based on their structural patterns, visual features, and text content. Your output must be valid JSON according to the requested format.
+
+    <variables>
+    DOCUMENT_TEXT: OCR-extracted text content from the document page that provides textual information for classification
+    DOCUMENT_IMAGE: Visual representation of the document page that provides layout, formatting, and visual structure information
+    CLASS_NAMES_AND_DESCRIPTIONS: List of valid document types with their descriptions that the document must be classified into
+    </variables>
+  classificationMethod: multimodalPageLevelClassification
+extraction:
+  image:
+    target_width: ''
+    target_height: ''
+  top_p: '0.1'
+  max_tokens: '10000'
+  top_k: '5'
+  task_prompt: >-
+    <background>
+    
+    You are an expert in document analysis and information extraction. 
+    You can understand and extract key information from documents classified as type 
+
+    {DOCUMENT_CLASS}.
+
+    </background>
+
+
+    <task>
+
+    Your task is to take the unstructured text provided and convert it into a well-organized table format using JSON. Identify the main entities, attributes, or categories mentioned in the attributes list below and use them as keys in the JSON object. 
+    Then, extract the relevant information from the text and populate the corresponding values in the JSON object.
+
+    </task>
+
+
+    <extraction-guidelines>
+
+    Guidelines:
+        1. Ensure that the data is accurately represented and properly formatted within
+        the JSON structure
+        2. Include double quotes around all keys and values
+        3. Do not make up data - only extract information explicitly found in the
+        document
+        4. Do not use /n for new lines, use a space instead
+        5. If a field is not found or if unsure, return null
+        6. All dates should be in MM/DD/YYYY format
+        7. Do not perform calculations or summations unless totals are explicitly given
+        8. If an alias is not found in the document, return null
+        9. Guidelines for checkboxes:
+         9.A. CAREFULLY examine each checkbox, radio button, and selection field:
+            - Look for marks like ✓, ✗, x, filled circles (●), darkened areas, or handwritten checks indicating selection
+            - For checkboxes and multi-select fields, ONLY INCLUDE options that show clear visual evidence of selection
+            - DO NOT list options that have no visible selection mark
+         9.B. For ambiguous or overlapping tick marks:
+            - If a mark overlaps between two or more checkboxes, determine which option contains the majority of the mark
+            - Consider a checkbox selected if the mark is primarily inside the check box or over the option text
+            - When a mark touches multiple options, analyze which option was most likely intended based on position and density. For handwritten checks, the mark typically flows from the selected checkbox outward.
+            - Carefully analyze visual cues and contextual hints. Think from a human perspective, anticipate natural tendencies, and apply thoughtful reasoning to make the best possible judgment.
+        10. Think step by step first and then answer.
+
+    </extraction-guidelines>
+
+    If the attributes section below contains a list of attribute names and
+    descriptions, then output only those attributes, using the provided
+    descriptions as guidance for finding the correct values. 
+
+    <attributes>
+
+    {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+
+    </attributes>
+
+
+    <<CACHEPOINT>>
+
+
+    <document-text>
+
+    {DOCUMENT_TEXT}
+
+    </document-text>
+  
+
+    <document_image>
+
+    {DOCUMENT_IMAGE}
+
+    </document_image>
+
+
+    <final-instructions>
+
+    Extract key information from the document and return a JSON object with the following key steps:
+    1. Carefully analyze the document text to identify the requested attributes
+    2. Extract only information explicitly found in the document - never make up data
+    3. Format all dates as MM/DD/YYYY and replace newlines with spaces
+    4. For checkboxes, only include options with clear visual selection marks
+    5. Use null for any fields not found in the document
+    6. Ensure the output is properly formatted JSON with quoted keys and values
+    7. Think step by step before finalizing your answer
+
+    </final-instructions>
+  temperature: '0.0'
+  model: us.amazon.nova-pro-v1:0
+  system_prompt: >-
+    You are a document assistant. Respond only with JSON. Never make up data, only provide data found in the document being provided.
+summarization:
+  top_p: '0.1'
+  max_tokens: '4096'
+  top_k: '5'
+  task_prompt: >-
+    <document-text>
+
+    {DOCUMENT_TEXT}
+
+    </document-text>
+
+    Analyze the provided document (<document-text>) and create a comprehensive summary.
+
+    CRITICAL INSTRUCTION: You MUST return your response as valid JSON with the
+    EXACT structure shown at the end of these instructions. Do not include any
+    explanations, notes, or text outside of the JSON structure.
+
+    Create a summary that captures the essential information from the document.
+    Your summary should:
+
+    1. Extract key information, main points, and important details
+
+    2. Maintain the original document's organizational structure where
+    appropriate
+
+    3. Preserve important facts, figures, dates, and entities
+
+    4. Reduce the length while retaining all critical information
+
+    5. Use markdown formatting for better readability (headings, lists,
+    emphasis, etc.)
+
+    6. Cite all relevant facts from the source document using inline citations
+    in the format [Cite-X, Page-Y] where X is a sequential citation number and Y
+    is the page number
+
+    7. Format citations as markdown links that reference the full citation list
+    at the bottom of the summary
+      Example: [[Cite-1, Page-3]](#cite-1-page-3)
+
+    8. At the end of the summary, include a "References" section that lists all
+    citations with their exact text from the source document in the format:
+      [Cite-X, Page-Y]: Exact text from the document
+
+    Output Format:
+
+    You MUST return ONLY valid JSON with the following structure and nothing
+    else:
+
+    ```json
+    {
+      "summary": "A comprehensive summary in markdown format with inline citations linked to a references section at the bottom"
+    }
+    ```
+
+    Do not include any text, explanations, or notes outside of this JSON
+    structure. The JSON must be properly formatted and parseable.
+  temperature: '0.0'
+  model: us.amazon.nova-premier-v1:0
+  system_prompt: >-
+    You are a document summarization expert who can analyze and summarize documents from various domains including medical, financial, legal, and general business documents. Your task is to create a summary that captures the key information, main points, and important details from the document. Your output must be in valid JSON format. \nSummarization Style: Balanced\\nCreate a balanced summary that provides a moderate level of detail. Include the main points and key supporting information, while maintaining the document's overall structure. Aim for a comprehensive yet concise summary.\n Your output MUST be in valid JSON format with markdown content. You MUST strictly adhere to the output format specified in the instructions.
+assessment:
+  image:
+    target_height: ''
+    target_width: ''
+  granular:
+    enabled: true
+    max_workers: "20"
+    simple_batch_size: "3"
+    list_batch_size: "1"
+  default_confidence_threshold: '0.8'
+  top_p: '0.1'
+  max_tokens: '10000'
+  top_k: '5'
+  temperature: '0.0'
+  model: us.amazon.nova-lite-v1:0
+  system_prompt: >-
+    You are a document analysis assessment expert. Your task is to evaluate the confidence of extraction results by analyzing the source document evidence. Respond only with JSON containing confidence scores for each extracted attribute.
+  task_prompt: >-
+    <background>
+
+    You are an expert document analysis assessment system. Your task is to evaluate the confidence of extraction results for a document of class {DOCUMENT_CLASS}.
+
+    </background>
+
+
+    <task>
+
+    Analyze the extraction results against the source document and provide confidence assessments for each extracted attribute. Consider factors such as:
+
+    1. Text clarity and OCR quality in the source regions
+    2. Alignment between extracted values and document content
+    3. Presence of clear evidence supporting the extraction
+    4. Potential ambiguity or uncertainty in the source material
+    5. Completeness and accuracy of the extracted information
+
+    </task>
+
+
+    <assessment-guidelines>
+
+    For each attribute, provide:
+    A confidence score between 0.0 and 1.0 where:
+       - 1.0 = Very high confidence, clear and unambiguous evidence
+       - 0.8-0.9 = High confidence, strong evidence with minor uncertainty
+       - 0.6-0.7 = Medium confidence, reasonable evidence but some ambiguity
+       - 0.4-0.5 = Low confidence, weak or unclear evidence
+       - 0.0-0.3 = Very low confidence, little to no supporting evidence
+
+    Guidelines:
+    - Base assessments on actual document content and OCR quality
+    - Consider both text-based evidence and visual/layout clues
+    - Account for OCR confidence scores when provided
+    - Be objective and specific in reasoning
+    - If an extraction appears incorrect, score accordingly with explanation
+
+    </assessment-guidelines>
+
+    <final-instructions>
+
+    Analyze the extraction results against the source document and provide confidence assessments. Return a JSON object with the following structure based on the attribute type:
+
+    For SIMPLE attributes:
+    {
+      "simple_attribute_name": {
+        "confidence": 0.85,
+      }
+    }
+
+    For GROUP attributes (nested object structure):
+    {
+      "group_attribute_name": {
+        "sub_attribute_1": {
+          "confidence": 0.90,
+        },
+        "sub_attribute_2": {
+          "confidence": 0.75,
+        }
+      }
+    }
+
+    For LIST attributes (array of assessed items):
+    {
+      "list_attribute_name": [
+        {
+          "item_attribute_1": {
+            "confidence": 0.95,
+          },
+          "item_attribute_2": {
+            "confidence": 0.88,
+          }
+        },
+        {
+          "item_attribute_1": {
+            "confidence": 0.92,
+          },
+          "item_attribute_2": {
+            "confidence": 0.70,
+          }
+        }
+      ]
+    }
+
+    IMPORTANT: 
+    - For LIST attributes like "Transactions", assess EACH individual item in the list separately
+    - Each transaction should be assessed as a separate object in the array
+    - Do NOT provide aggregate assessments for list items - assess each one individually
+    - Include assessments for ALL attributes present in the extraction results
+    - Match the exact structure of the extracted data
+
+    </final-instructions>
+
+    <<CACHEPOINT>>
+
+    <document-image>
+
+    {DOCUMENT_IMAGE}
+
+    </document-image>
+
+    <ocr-text-confidence-results>
+
+    {OCR_TEXT_CONFIDENCE}
+
+    </ocr-text-confidence-results>
+
+    <<CACHEPOINT>>
+
+    <attributes-definitions>
+
+    {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+
+    </attributes-definitions>
+
+    <extraction-results>
+
+    {EXTRACTION_RESULTS}
+
+    </extraction-results>
+evaluation:
+  llm_method:
+    top_p: '0.1'
+    max_tokens: '4096'
+    top_k: '5'
+    task_prompt: >-
+      I need to evaluate attribute extraction for a document of class: {DOCUMENT_CLASS}.
+
+
+      For the attribute named "{ATTRIBUTE_NAME}" described as "{ATTRIBUTE_DESCRIPTION}":
+
+      - Expected value: {EXPECTED_VALUE}
+
+      - Actual value: {ACTUAL_VALUE}
+
+
+      Do these values match in meaning, taking into account formatting differences, word order, abbreviations, and semantic equivalence?
+
+      Provide your assessment as a JSON with three fields:
+
+      - "match": boolean (true if they match, false if not)
+
+      - "score": number between 0 and 1 representing the confidence/similarity score
+
+      - "reason": brief explanation of your decision
+
+
+      Respond ONLY with the JSON and nothing else. Here's the exact format:
+
+      {
+        "match": true or false,
+        "score": 0.0 to 1.0,
+        "reason": "Your explanation here"
+      }
+    temperature: '0.0'
+    model: us.anthropic.claude-3-haiku-20240307-v1:0
+    system_prompt: >-
+      You are an evaluator that helps determine if the predicted and expected values match for document attribute extraction. You will consider the context and meaning rather than just exact string matching.
+pricing:
+  - name: textract/detect_document_text
+    units:
+      - name: pages
+        price: '0.0015'
+  - name: textract/analyze_document-Layout
+    units:
+      - name: pages
+        price: '0.004'
+  - name: textract/analyze_document-Signatures
+    units:
+      - name: pages
+        price: '0.0035'
+  - name: textract/analyze_document-Forms
+    units:
+      - name: pages
+        price: '0.05'
+  - name: textract/analyze_document-Tables
+    units:
+      - name: pages
+        price: '0.015'
+  - name: textract/analyze_document-Tables+Forms
+    units:
+      - name: pages
+        price: '0.065'
+  - name: bedrock/us.amazon.nova-lite-v1:0
+    units:
+      - name: inputTokens
+        price: '6.0E-8'
+      - name: outputTokens
+        price: '2.4E-7'
+      - name: cacheReadInputTokens
+        price: '1.5E-8'
+      - name: cacheWriteInputTokens
+        price: '6.0E-8'
+  - name: bedrock/us.amazon.nova-pro-v1:0
+    units:
+      - name: inputTokens
+        price: '8.0E-7'
+      - name: outputTokens
+        price: '3.2E-6'
+      - name: cacheReadInputTokens
+        price: '2.0E-7'
+      - name: cacheWriteInputTokens
+        price: '8.0E-7'
+  - name: bedrock/us.amazon.nova-premier-v1:0
+    units:
+      - name: inputTokens
+        price: '2.5E-6'
+      - name: outputTokens
+        price: '1.25E-5'
+  - name: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
+    units:
+      - name: inputTokens
+        price: '2.5E-7'
+      - name: outputTokens
+        price: '1.25E-6'
+  - name: bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0
+    units:
+      - name: inputTokens
+        price: '8.0E-7'
+      - name: outputTokens
+        price: '4.0E-6'
+      - name: cacheReadInputTokens
+        price: '8.0E-8'
+      - name: cacheWriteInputTokens
+        price: '1.0E-6'
+  - name: bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    units:
+      - name: inputTokens
+        price: '3.0E-6'
+      - name: outputTokens
+        price: '1.5E-5'
+      - name: cacheReadInputTokens
+        price: '3.0E-7'
+      - name: cacheWriteInputTokens
+        price: '3.75E-6'
+  - name: bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    units:
+      - name: inputTokens
+        price: '3.0E-6'
+      - name: outputTokens
+        price: '1.5E-5'
+      - name: cacheReadInputTokens
+        price: '3.0E-7'
+      - name: cacheWriteInputTokens
+        price: '3.75E-6'
+  - name: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0
+    units:
+      - name: inputTokens
+        price: '3.0E-6'
+      - name: outputTokens
+        price: '1.5E-5'
+      - name: cacheReadInputTokens
+        price: '3.0E-7'
+      - name: cacheWriteInputTokens
+        price: '3.75E-6'
+  - name: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
+    units:
+      - name: inputTokens
+        price: '1.5E-5'
+      - name: outputTokens
+        price: '7.5E-5'
+      - name: cacheReadInputTokens
+        price: '1.5E-6'
+      - name: cacheWriteInputTokens
+        price: '1.875E-5'

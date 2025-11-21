@@ -1,0 +1,41 @@
+# AWS Configuration
+region = "us-east-1"
+prefix = "genai-idp-vpc"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+
+# Alternative: Use existing VPC (comment out vpc_cidr above and uncomment below)
+# vpc = {
+#   vpc_id                 = "vpc-12345678"
+#   vpc_subnet_ids         = ["subnet-12345678", "subnet-87654321"]
+#   vpc_security_group_ids = ["sg-12345678"]
+# }
+
+# Logging Configuration
+log_level           = "INFO"
+log_retention_days  = 7
+
+# Data Retention
+data_tracking_retention_days = 365
+
+# Configuration File Path (optional - uses default lending package config)
+# config_file_path = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
+
+# Model Configuration
+classification_model_id = "us.amazon.nova-pro-v1:0"
+extraction_model_id     = "us.amazon.nova-pro-v1:0"
+summarization_model_id  = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
+
+# Feature Toggles
+summarization_enabled = true
+enable_assessment     = false
+enable_evaluation     = false
+enable_reporting      = false
+
+# Tags
+tags = {
+  Environment = "dev"
+  Project     = "genai-idp-accelerator-vpc"
+}
