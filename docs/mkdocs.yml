@@ -1,6 +1,6 @@
 site_name: GenAI IDP Accelerator for Terraform
 site_description: GenAI Intelligent Document Processing for Terraform
-repo_name: genaiic-idp-accelerator-terraform
+repo_name: genai-idp-terraform
 repo_url: https://github.com/awslabs/genai-idp-terraform
 site_url: https://awslabs.github.io/genai-idp-terraform/
 copyright: Copyright &copy; 2025 Amazon Web Services, Inc. or its affiliates.

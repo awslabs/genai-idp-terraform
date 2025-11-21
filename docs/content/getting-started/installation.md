@@ -8,7 +8,7 @@ First, clone the GenAI IDP Accelerator repository to your local machine:
 
 ```bash
 git clone https://github.com/awslabs/genai-idp-terraform.git
-cd genaiic-idp-accelerator-terraform
+cd genai-idp-terraform
 ```
 
 ## Repository Structure
@@ -16,7 +16,7 @@ cd genaiic-idp-accelerator-terraform
 After cloning, you'll see the following structure:
 
 ```
-genaiic-idp-accelerator-terraform/
+genai-idp-terraform/
 ├── modules/                           # Terraform modules
 │   ├── concurrency-table/            # DynamoDB concurrency management
 │   ├── configuration-table/          # Configuration storage

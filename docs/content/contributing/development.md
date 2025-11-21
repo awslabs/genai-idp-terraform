@@ -19,8 +19,8 @@ Before starting development, ensure you have:
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/your-org/genaiic-idp-accelerator-terraform.git
-   cd genaiic-idp-accelerator-terraform
+   git clone https://github.com/your-org/genai-idp-terraform.git
+   cd genai-idp-terraform
    ```
 
 2. **Set up development environment**:
@@ -53,7 +53,7 @@ Before starting development, ensure you have:
 ### Directory Layout
 
 ```
-genaiic-idp-accelerator-terraform/
+genai-idp-terraform/
 ├── modules/                    # Reusable Terraform modules
 │   ├── lambda-processor/      # Lambda function module
 │   ├── api-gateway/          # API Gateway module

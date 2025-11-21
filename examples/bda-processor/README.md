@@ -72,7 +72,7 @@ The BDA resources are organized in a separate `bda.tf` file for better code orga
 
 ```bash
 git clone <repository-url>
-cd genaiic-idp-accelerator-terraform/examples/bda-processor
+cd genai-idp-terraform/examples/bda-processor
 ```
 
 ### 2. **Configure Variables**

@@ -50,7 +50,7 @@ The GenAI IDP Accelerator supports three different processing patterns, each opt
 ## Repository Structure
 
 ```
-genaiic-idp-accelerator-terraform/
+genai-idp-terraform/
 ├── modules/                           # Reusable Terraform modules
 │   ├── processors/                    # Document processing patterns
 │   │   ├── bda-processor/            # Pattern 1: Bedrock Data Automation

@@ -102,7 +102,7 @@ Ensure you have sufficient quotas for:
 
 ```bash
 git clone <repository-url>
-cd genaiic-idp-accelerator-terraform/examples/sagemaker-udop-processor
+cd genai-idp-terraform/examples/sagemaker-udop-processor
 ```
 
 ### 2. **Configure Variables**

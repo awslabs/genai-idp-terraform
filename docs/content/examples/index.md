@@ -187,7 +187,7 @@ Essential DynamoDB tables for document tracking and configuration management.
 All examples are available in the repository at:
 
 ```
-genaiic-idp-accelerator-terraform/examples/
+genai-idp-terraform/examples/
 ```
 
 Each example includes:
