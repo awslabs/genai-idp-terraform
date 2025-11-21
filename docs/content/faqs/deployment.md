@@ -7,6 +7,7 @@ Frequently asked questions about deploying the GenAI IDP Accelerator.
 ### What do I need before starting?
 
 Before your first deployment, ensure you have:
+
 - AWS account with administrative permissions
 - Terraform installed (version 1.0 or later)
 - AWS CLI configured with credentials
@@ -24,6 +25,7 @@ Before your first deployment, ensure you have:
 ### What regions are supported?
 
 The accelerator works in any AWS region that supports:
+
 - Amazon Bedrock
 - Amazon Textract
 - AWS Lambda
@@ -35,6 +37,7 @@ Popular regions include: `us-east-1`, `us-west-2`, `eu-west-1`, `ap-southeast-1`
 ### How long does deployment take?
 
 Typical deployment times:
+
 - **Initial deployment**: 10-15 minutes
 - **Updates**: 5-10 minutes
 - **Destroy**: 5-10 minutes
@@ -46,6 +49,7 @@ Times may vary based on region and resource complexity.
 ### How do I customize the deployment?
 
 Create a `terraform.tfvars` file with your settings:
+
 ```hcl
 environment = "dev"
 region = "us-east-1"
@@ -62,6 +66,7 @@ s3_bucket_prefix = "my-company-idp"
 ### Can I use existing AWS resources?
 
 Yes, you can reference existing resources:
+
 ```hcl
 # Use existing VPC
 vpc_id = "vpc-12345678"
@@ -77,6 +82,7 @@ existing_dynamodb_table = "my-existing-table"
 ### How do I configure different environments?
 
 Create separate directories for each environment:
+
 ```
 terraform/
 ├── environments/
@@ -93,6 +99,7 @@ terraform/
 ### Should I use remote state?
 
 Yes, always use remote state for shared environments:
+
 ```hcl
 terraform {
   backend "s3" {
@@ -108,6 +115,7 @@ terraform {
 ### How do I handle state conflicts?
 
 If you encounter state lock issues:
+
 ```bash
 # Check who has the lock
 aws dynamodb get-item \
@@ -121,6 +129,7 @@ terraform force-unlock LOCK_ID
 ### Can I import existing resources?
 
 Yes, you can import existing AWS resources:
+
 ```bash
 # Import existing S3 bucket
 terraform import aws_s3_bucket.documents my-existing-bucket
@@ -141,6 +150,7 @@ terraform import aws_lambda_function.processor my-existing-function
 ### How do I handle breaking changes?
 
 Before major updates:
+
 1. Backup your Terraform state
 2. Test in a development environment
 3. Review the changelog for breaking changes
@@ -150,6 +160,7 @@ Before major updates:
 ### Can I rollback a deployment?
 
 Yes, you can rollback using:
+
 ```bash
 # Restore previous state file
 cp terraform.tfstate.backup terraform.tfstate
@@ -164,16 +175,19 @@ terraform apply
 ### Common deployment errors?
 
 **Permission denied errors**:
+
 - Check IAM permissions
 - Verify AWS credentials
 - Ensure service-linked roles exist
 
 **Resource already exists**:
+
 - Import existing resources
 - Use different resource names
 - Check for naming conflicts
 
 **Timeout errors**:
+
 - Increase timeout values
 - Check network connectivity
 - Verify service availability
@@ -181,6 +195,7 @@ terraform apply
 ### How do I debug deployment issues?
 
 Enable detailed logging:
+
 ```bash
 export TF_LOG=DEBUG
 terraform apply
@@ -191,6 +206,7 @@ Check AWS CloudTrail for API calls and errors.
 ### What if deployment fails halfway?
 
 Terraform handles partial failures gracefully:
+
 1. Fix the underlying issue
 2. Run `terraform apply` again
 3. Terraform will continue from where it left off
@@ -208,6 +224,7 @@ Terraform handles partial failures gracefully:
 ### Can I deploy multiple environments simultaneously?
 
 Yes, but be careful with:
+
 - Resource limits and quotas
 - API rate limits
 - State file conflicts
@@ -220,6 +237,7 @@ Use separate state files and workspaces for each environment.
 ### What permissions does Terraform need?
 
 Terraform needs permissions to create and manage:
+
 - IAM roles and policies
 - Lambda functions
 - S3 buckets
@@ -232,6 +250,7 @@ Use the principle of least privilege and consider using cross-account roles.
 ### How do I secure sensitive variables?
 
 Use Terraform's sensitive variables:
+
 ```hcl
 variable "api_key" {
   description = "API key for external service"
@@ -241,6 +260,7 @@ variable "api_key" {
 ```
 
 Or use AWS Systems Manager Parameter Store:
+
 ```hcl
 data "aws_ssm_parameter" "api_key" {
   name = "/idp/api-key"
@@ -250,6 +270,7 @@ data "aws_ssm_parameter" "api_key" {
 ---
 
 For more deployment help, see:
+
 - [Environment Setup Guide](../deployment-guides/environment-setup.md)
 - [Troubleshooting Guide](../deployment-guides/troubleshooting.md)
 - [Best Practices](../deployment-guides/best-practices.md)

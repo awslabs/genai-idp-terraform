@@ -5,6 +5,7 @@ Before you begin deploying the GenAI IDP Accelerator, ensure you have the follow
 ## AWS Account Requirements
 
 ### AWS Account Access
+
 - An active AWS account with appropriate permissions
 - AWS CLI configured with credentials
 - Access to the following AWS services:
@@ -48,6 +49,7 @@ Your AWS credentials must have permissions to create and manage:
 ## Software Requirements
 
 ### Terraform
+
 - **Version**: 1.5.0 or later
 - **Installation**: [Download from terraform.io](https://www.terraform.io/downloads)
 
@@ -57,6 +59,7 @@ terraform version
 ```
 
 ### AWS CLI
+
 - **Version**: 2.0 or later
 - **Installation**: [AWS CLI Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 
@@ -69,6 +72,7 @@ aws configure
 ```
 
 ### Git
+
 - Required for cloning the repository
 - **Installation**: [Git Installation Guide](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
 
@@ -98,17 +102,20 @@ Ensure your AWS account has sufficient service quotas for:
 ## Network Requirements
 
 ### Internet Access
+
 - Required for downloading Terraform providers
 - Required for accessing AWS APIs
 - Required for Lambda functions to access AWS services
 
 ### VPC Considerations
+
 - Default VPC is sufficient for basic deployments
 - Custom VPC configuration available for advanced deployments
 
 ## Optional Tools
 
 ### Terraform State Management
+
 Consider using remote state storage for team collaboration:
 
 - **AWS S3** + **DynamoDB** for state locking
@@ -116,6 +123,7 @@ Consider using remote state storage for team collaboration:
 - **Terraform Enterprise**
 
 ### Development Tools
+
 - **VS Code** with Terraform extension
 - **terraform-docs** for documentation generation
 - **tflint** for Terraform linting

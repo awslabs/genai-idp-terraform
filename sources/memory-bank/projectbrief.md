@@ -363,6 +363,7 @@ idp_common/
 **Purpose:** Converts PDF documents to machine-readable text using Amazon Textract
 
 **Configuration Example:**
+
 ```yaml
 ocr:
   features:
@@ -372,6 +373,7 @@ ocr:
 ```
 
 **Integration Process:**
+
 1. Takes input PDF from S3
 2. Converts pages to images with configurable DPI
 3. Processes with Textract using specified features
@@ -381,7 +383,8 @@ ocr:
    - `parsed_text_uri`: Markdown-formatted text
    - `text_confidence_uri`: Condensed confidence data for assessment
 
-**Dependencies:** 
+**Dependencies:**
+
 - `s3/` for file operations
 - `image/` for image processing
 - `utils/` for common operations
@@ -394,6 +397,7 @@ ocr:
 **Purpose:** Identifies document types and creates logical document boundaries
 
 **Configuration Example:**
+
 ```yaml
 classification:
   model: us.amazon.nova-pro-v1:0
@@ -413,6 +417,7 @@ classification:
 ```
 
 **Integration Process:**
+
 1. Receives `Document` with OCR results from Step 1
 2. Analyzes document structure to identify boundaries
 3. Creates `Section` objects grouping related pages
@@ -421,6 +426,7 @@ classification:
    - **Page-level:** Classifies individual pages independently
 
 **Dependencies:**
+
 - `bedrock/` for LLM interactions
 - `config/` for document class definitions
 - `s3/` for retrieving OCR results
@@ -433,6 +439,7 @@ classification:
 **Purpose:** Extracts structured data fields specific to each document class
 
 **Configuration Example:**
+
 ```yaml
 extraction:
   model: us.amazon.nova-pro-v1:0
@@ -455,6 +462,7 @@ extraction:
 ```
 
 **Attribute Types Supported:**
+
 ```yaml
 classes:
   - name: Bank Statement
@@ -480,6 +488,7 @@ classes:
 ```
 
 **Integration Process:**
+
 1. Processes each `Section` from classification results
 2. Applies class-specific extraction templates
 3. Supports multimodal analysis (text + images)
@@ -487,6 +496,7 @@ classes:
 5. Updates `Section.attributes` with extracted data
 
 **Dependencies:**
+
 - `bedrock/` for LLM interactions
 - `config/` for attribute definitions
 - `image/` for multimodal processing
@@ -499,6 +509,7 @@ classes:
 **Purpose:** Evaluates confidence of extraction results using LLMs
 
 **Configuration Example:**
+
 ```yaml
 assessment:
   model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
@@ -520,6 +531,7 @@ assessment:
 ```
 
 **Assessment Output Formats:**
+
 ```json
 {
   "simple_attribute": {
@@ -538,6 +550,7 @@ assessment:
 ```
 
 **Integration Process:**
+
 1. Analyzes extraction results against source documents
 2. Provides per-attribute confidence scores (0.0-1.0)
 3. Includes explanatory reasoning for confidence levels
@@ -545,6 +558,7 @@ assessment:
 5. Integrates with evaluation module for quality metrics
 
 **Dependencies:**
+
 - `bedrock/` for LLM interactions
 - `extraction/` results for assessment
 - `ocr/` confidence data for analysis
@@ -557,6 +571,7 @@ assessment:
 **Purpose:** Creates human-readable summaries of processed documents
 
 **Configuration Example:**
+
 ```yaml
 summarization:
   model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
@@ -575,6 +590,7 @@ summarization:
 ```
 
 **Output Format:**
+
 ```json
 {
   "summary": "## Executive Summary\n\nThis bank statement for account [12345](#cite-1-page-1) covers the period...\n\n### References\n[Cite-1, Page-1]: Account Number: 12345"
@@ -582,6 +598,7 @@ summarization:
 ```
 
 **Integration Process:**
+
 1. Synthesizes all processing results into consumable summaries
 2. Maintains document structure with proper formatting
 3. Includes citations with page references
@@ -589,6 +606,7 @@ summarization:
 5. Updates `Document.summary_report_uri`
 
 **Dependencies:**
+
 - `bedrock/` for LLM interactions
 - All previous processing results
 - `s3/` for storing summary reports
@@ -601,6 +619,7 @@ summarization:
 **Purpose:** Compares processing results against ground truth for accuracy assessment
 
 **Configuration Example:**
+
 ```yaml
 evaluation:
   llm_method:
@@ -621,6 +640,7 @@ evaluation:
 ```
 
 **Evaluation Methods:**
+
 - **EXACT:** Character-by-character comparison
 - **FUZZY:** Similarity matching with thresholds
 - **SEMANTIC:** Embedding-based semantic comparison
@@ -628,6 +648,7 @@ evaluation:
 - **LLM:** AI-powered semantic equivalence
 
 **Attribute Type Processing:**
+
 ```yaml
 # Simple attributes
 - name: Account Number
@@ -651,6 +672,7 @@ evaluation:
 ```
 
 **Integration Process:**
+
 1. Compares extraction results against baseline data
 2. Generates document, section, and attribute-level metrics
 3. Creates comprehensive evaluation reports with visual indicators
@@ -658,6 +680,7 @@ evaluation:
 5. Integrates with assessment confidence scores
 
 **Dependencies:**
+
 - `bedrock/` for LLM-based evaluation
 - `extraction/` results for comparison
 - `assessment/` confidence data
@@ -668,6 +691,7 @@ evaluation:
 ### Configuration Management (`config/`)
 
 **Modular Configuration System:**
+
 ```
 config/
 ├── main.yaml           # Overall pipeline settings
@@ -681,6 +705,7 @@ config/
 ```
 
 **Configuration Loading:**
+
 ```python
 from idp_common.config import get_config
 config = get_config()  # Automatically merges all YAML files
@@ -689,11 +714,13 @@ config = get_config()  # Automatically merges all YAML files
 ### Data Persistence
 
 **S3 Integration (`s3/`):**
+
 - Handles all file operations across modules
 - Provides utilities for JSON content retrieval
 - Manages S3 URI construction and parsing
 
 **Document State Management:**
+
 - Each module updates the central `Document` object
 - State persisted between processing steps
 - Full serialization/deserialization support
@@ -701,6 +728,7 @@ config = get_config()  # Automatically merges all YAML files
 ### Performance Monitoring (`metrics/`)
 
 **Comprehensive Tracking:**
+
 - Processing time per module
 - Token usage for LLM operations
 - Memory usage and resource utilization
@@ -709,6 +737,7 @@ config = get_config()  # Automatically merges all YAML files
 ### Image Processing (`image/`)
 
 **Shared Image Operations:**
+
 - Configurable image resizing and optimization
 - Aspect ratio preservation
 - Multi-format support (JPG, PNG, PDF)
@@ -735,11 +764,13 @@ class ServiceExample:
 ### Service Dependencies
 
 **Dependency Chain:**
+
 ```
 OcrService → ClassificationService → ExtractionService → AssessmentService → SummarizationService → EvaluationService
 ```
 
 **Shared Dependencies:**
+
 - `bedrock/` - Used by Classification, Extraction, Assessment, Summarization, Evaluation
 - `s3/` - Used by all services for file operations
 - `config/` - Used by all services for configuration
@@ -843,4 +874,3 @@ classes:
 2. **Module Isolation:** Test individual modules independently
 3. **Configuration Validation:** Validate all configuration combinations
 4. **Performance Testing:** Monitor resource usage and processing times
-

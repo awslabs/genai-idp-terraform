@@ -17,12 +17,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure reserved concurrency for each Lambda function to prevent runaway costs
 
 **Why This Matters:**
+
 - Protects against unexpected spikes in invocations that could exhaust your AWS account's Lambda concurrency limit (default 1,000 concurrent executions per region)
 - Prevents runaway costs from infinite loops or DDoS attacks
 - Ensures critical functions have guaranteed capacity
 - Protects downstream services from being overwhelmed
 
 **Recommended Limits by Function Type:**
+
 - High-volume processing functions (e.g., document classification): 50-100
 - API handlers: 20-50
 - Background jobs: 10-20
@@ -36,12 +38,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure DLQ for Lambda functions to capture and analyze failed invocations
 
 **Why This Matters:**
+
 - Captures failed asynchronous invocations for debugging and retry logic
 - Prevents silent failures and data loss
 - Enables monitoring and alerting on processing failures
 - Provides visibility into error patterns and system issues
 
 **When to Use DLQ:**
+
 - Asynchronous Lambda invocations (S3 events, SNS, EventBridge)
 - Critical processing workflows where failures must be tracked
 - Functions with retry logic that may eventually fail
@@ -55,18 +59,21 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure Lambda functions to run inside a VPC when accessing private resources
 
 **Why This Matters:**
+
 - Required for accessing resources in private subnets (RDS, ElastiCache, internal APIs)
 - Provides network-level isolation and security controls
 - Enables use of security groups and network ACLs
 - Required for compliance with certain security standards
 
 **When to Use VPC:**
+
 - Functions accessing RDS databases or other VPC-only resources
 - Functions requiring private network connectivity
 - Compliance requirements mandate network isolation
 - Not needed for functions only accessing public AWS services (S3, DynamoDB, Bedrock)
 
 **Trade-offs:**
+
 - Adds cold start latency (mitigated with Hyperplane ENIs in newer Lambda runtime)
 - Requires NAT Gateway for internet access (additional cost)
 - More complex networking configuration
@@ -79,12 +86,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure Lambda functions to encrypt environment variables using KMS customer-managed keys
 
 **Why This Matters:**
+
 - Environment variables often contain sensitive data (API keys, database credentials, secrets)
 - Default encryption uses AWS-managed keys with limited control and auditability
 - Customer-managed keys provide detailed access control and audit trails
 - Prevents unauthorized access to sensitive configuration data
 
 **Best Practices:**
+
 - Use AWS Secrets Manager or Parameter Store for highly sensitive data instead of environment variables
 - Rotate encryption keys regularly
 - Apply least-privilege access to KMS keys
@@ -98,18 +107,21 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure Lambda functions to validate code signatures to ensure code integrity
 
 **Why This Matters:**
+
 - Ensures only trusted code is deployed to Lambda functions
 - Prevents deployment of unauthorized or tampered code
 - Provides audit trail of who signed and deployed code
 - Required for compliance with certain security frameworks
 
 **When to Use Code Signing:**
+
 - Production environments with strict security requirements
 - Regulated industries (finance, healthcare, government)
 - Multi-team environments where code provenance is critical
 - Organizations with formal change management processes
 
 **Trade-offs:**
+
 - Adds complexity to deployment pipeline
 - Requires managing signing profiles and certificates
 - May slow down deployment process
@@ -128,12 +140,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure CodeBuild projects to use customer-managed KMS keys for encryption
 
 **Why This Matters:**
+
 - Provides greater control over encryption keys and access policies
 - Enables detailed audit trails through CloudTrail for key usage
 - Supports compliance requirements for customer-managed encryption
 - Allows key rotation policies aligned with organizational security standards
 
 **What Gets Encrypted:**
+
 - Build artifacts stored in S3
 - Build environment variables containing sensitive data
 - Cache data used during builds
@@ -147,12 +161,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure CloudWatch Log Groups to use KMS encryption for log data at rest
 
 **Why This Matters:**
+
 - Protects sensitive information in application logs (API keys, user data, system details)
 - Meets compliance requirements for data encryption at rest
 - Provides audit trail of who accessed log data
 - Enables fine-grained access control through KMS key policies
 
 **Affected Log Groups:**
+
 - Lambda function logs
 - Step Functions execution logs
 - API Gateway access logs
@@ -165,6 +181,7 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 ### CloudWatch Integration
 
 #### Alarms and Alerts
+
 - **Recommendation**: Set up CloudWatch alarms for critical metrics and error rates
 - **Implementation**: *(To be added)*
 - **Rationale**: Enables proactive monitoring and rapid incident response
@@ -177,18 +194,21 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure CloudWatch Log Groups with appropriate retention periods based on compliance and operational needs
 
 **Why This Matters:**
+
 - Required for compliance with data retention regulations (SOC 2, HIPAA, PCI-DSS)
 - Enables historical analysis and troubleshooting of past incidents
 - Supports security investigations and audit requirements
 - Prevents indefinite log storage costs
 
 **Recommended Retention Periods:**
+
 - Production logs: 1 year minimum (365 days)
 - Security and audit logs: 2-7 years depending on compliance requirements
 - Development/test logs: 30-90 days
 - Debug logs: 7-30 days
 
 **Trade-offs:**
+
 - Longer retention increases storage costs
 - Balance compliance requirements with cost optimization
 - Consider archiving to S3 for long-term retention at lower cost
@@ -200,6 +220,7 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 ### Resource Management
 
 #### Tagging Strategy
+
 - **Recommendation**: Implement comprehensive tagging strategy for cost allocation
 - **Implementation**: *(To be added)*
 - **Rationale**: Enables accurate cost tracking and optimization opportunities
@@ -211,6 +232,7 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 ### High Availability
 
 #### Multi-AZ Deployment
+
 - **Recommendation**: Deploy critical components across multiple availability zones
 - **Implementation**: *(To be added)*
 - **Rationale**: Ensures service availability during AZ-level failures
@@ -225,12 +247,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure CloudFront with origin groups for automatic failover to secondary origins
 
 **Why This Matters:**
+
 - Ensures high availability of web UI and content delivery
 - Automatically routes traffic to backup origin if primary fails
 - Reduces downtime and improves user experience
 - Provides resilience against origin failures
 
 **Use Cases:**
+
 - Primary S3 bucket with failover to replica in another region
 - Primary origin with backup origin for redundancy
 - Multi-region disaster recovery scenarios
@@ -243,12 +267,14 @@ This guide outlines AWS best practices for deploying the GenAI IDP Accelerator t
 - **Recommendation**: Configure geo restrictions based on your application's geographic requirements and compliance needs
 
 **Why This Matters:**
+
 - Helps comply with data residency and export control regulations
 - Reduces exposure to attacks from specific geographic regions
 - Controls content distribution based on licensing agreements
 - Can reduce costs by limiting traffic to specific regions
 
 **When to Use:**
+
 - Compliance requirements restrict access to certain countries
 - Content licensing limited to specific geographic regions
 - Security policy requires blocking high-risk regions

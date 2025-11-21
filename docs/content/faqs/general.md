@@ -9,6 +9,7 @@ The GenAI IDP Accelerator is a comprehensive solution for **Intelligent Document
 ## What document types are supported?
 
 The accelerator supports common document formats including:
+
 - PDF documents
 - Images (PNG, JPEG, TIFF)
 - Scanned documents
@@ -18,6 +19,7 @@ The accelerator supports common document formats including:
 ## Which AWS services does it use?
 
 Key AWS services include:
+
 - **Amazon Textract**: For text and data extraction
 - **Amazon Bedrock**: For AI-powered analysis and processing
 - **AWS Lambda**: For serverless compute
@@ -28,6 +30,7 @@ Key AWS services include:
 ## Can I customize the processing logic?
 
 Yes, the accelerator is designed to be customizable:
+
 - Modify Lambda function code for custom processing
 - Adjust AI prompts for specific use cases
 - Add new document types and processing workflows
@@ -36,6 +39,7 @@ Yes, the accelerator is designed to be customizable:
 ## What are the prerequisites?
 
 To use the accelerator, you need:
+
 - AWS account with appropriate permissions
 - Terraform installed (version 1.0+)
 - AWS CLI configured
@@ -45,6 +49,7 @@ To use the accelerator, you need:
 ## Is it enterprise-ready?
 
 The accelerator is in experimental stage and provides a foundation for enterprise use but requires additional work:
+
 - Security assessment and hardening
 - Monitoring and alerting setup
 - Backup and disaster recovery planning
@@ -54,6 +59,7 @@ The accelerator is in experimental stage and provides a foundation for enterpris
 ## How do I get support?
 
 Support options include:
+
 - Documentation and guides
 - GitHub issues and discussions
 - AWS Support (for AWS service issues)
@@ -62,6 +68,7 @@ Support options include:
 ## Can I integrate with existing systems?
 
 Yes, integration options include:
+
 - REST API endpoints for external systems
 - Event-driven processing with SQS/SNS
 - Database integration with DynamoDB
@@ -71,6 +78,7 @@ Yes, integration options include:
 ## What security features are included?
 
 Security features include:
+
 - IAM roles and policies for least privilege access
 - Encryption at rest and in transit
 - VPC isolation and security groups
@@ -81,6 +89,7 @@ Security features include:
 ## How do I monitor the system?
 
 Monitoring capabilities include:
+
 - CloudWatch metrics and alarms
 - Application logs and error tracking
 - Performance monitoring and optimization
@@ -89,6 +98,7 @@ Monitoring capabilities include:
 ## Can I use it for batch processing?
 
 Yes, the accelerator supports both real-time and batch processing:
+
 - SQS queues for batch job management
 - Step Functions for complex workflows
 - Scheduled processing with EventBridge
@@ -97,5 +107,6 @@ Yes, the accelerator supports both real-time and batch processing:
 ---
 
 For more specific questions, see:
+
 - [Deployment FAQs](deployment.md)
 - [Troubleshooting FAQs](troubleshooting.md)

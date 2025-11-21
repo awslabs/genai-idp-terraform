@@ -38,6 +38,7 @@ This pattern implements an intelligent document processing workflow that uses Am
 ## Architecture Overview
 
 The workflow consists of three main processing steps with an optional assessment step:
+
 1. OCR processing using Amazon Textract
 2. Document classification using Claude via Amazon Bedrock (with two available methods):
    - Page-level classification: Classifies individual pages and groups them
@@ -54,6 +55,7 @@ OCRStep → ClassificationStep → ProcessPageGroups (Map State for Extraction) 
 ```
 
 Each step includes comprehensive retry logic for handling transient errors:
+
 - Initial retry after 2 seconds
 - Exponential backoff with rate of 2
 - Maximum of 8-10 retry attempts depending on the step
@@ -61,6 +63,7 @@ Each step includes comprehensive retry logic for handling transient errors:
 ### Lambda Functions
 
 #### OCR Function
+
 - **Purpose**: Processes input PDFs using Amazon Textract or Amazon Bedrock
 - **Key Features**:
   - Supports two OCR backends:
@@ -75,6 +78,7 @@ Each step includes comprehensive retry logic for handling transient errors:
   - Comprehensive error handling and retries
   - Detailed metrics tracking
 - **Input**:
+
   ```json
   {
     "execution_arn": "<ARN>",
@@ -87,7 +91,9 @@ Each step includes comprehensive retry logic for handling transient errors:
     }
   }
   ```
+
 - **Output**:
+
   ```json
   {
     "metadata": {
@@ -108,6 +114,7 @@ Each step includes comprehensive retry logic for handling transient errors:
   ```
 
 #### Classification Function
+
 - **Purpose**: Classifies pages or document packets using Claude via Bedrock and segments into sections
 - **Key Features**:
   - Two classification methods:
@@ -120,6 +127,7 @@ Each step includes comprehensive retry logic for handling transient errors:
   - **Few shot example support for improved accuracy**
 - **Input**: Output from OCR function
 - **Output**:
+
   ```json
   {
     "metadata": "<FROM_OCR>",
@@ -134,6 +142,7 @@ Each step includes comprehensive retry logic for handling transient errors:
   ```
 
 #### Extraction Function
+
 - **Purpose**: Extracts fields using Claude via Bedrock
 - **Key Features**:
   - Document class-specific attribute extraction
@@ -143,6 +152,7 @@ Each step includes comprehensive retry logic for handling transient errors:
   - **Few shot example support for improved accuracy**
 - **Input**: Individual section from Classification output
 - **Output**:
+
   ```json
   {
     "section": {
@@ -156,8 +166,10 @@ Each step includes comprehensive retry logic for handling transient errors:
   ```
 
 #### ProcessResults Function
+
 - **Purpose**: Consolidates results from all sections
 - **Output**: Standardized format for GenAIIDP parent stack:
+
   ```json
   {
     "Sections": [{
@@ -181,6 +193,7 @@ Each step includes comprehensive retry logic for handling transient errors:
 The pattern includes a comprehensive CloudWatch dashboard with:
 
 #### Performance Metrics
+
 - Document and page throughput
 - Token usage (input/output/total)
 - Bedrock request statistics
@@ -188,12 +201,14 @@ The pattern includes a comprehensive CloudWatch dashboard with:
 - Throttling and retry metrics
 
 #### Error Tracking
+
 - Lambda function errors
 - Long-running invocations
 - Classification/extraction failures
 - Throttling events
 
 #### Lambda Function Metrics
+
 - Duration
 - Memory usage
 - Error rates
@@ -212,6 +227,7 @@ The pattern exports these outputs to the parent stack:
 ### Configuration
 
 **Stack Deployment Parameters:**
+
 - `ClassificationMethod`: Classification methodology to use (options: 'multimodalPageLevelClassification' or 'textbasedHolisticClassification')
 - `IsSummarizationEnabled`: Boolean to enable/disable summarization functionality (true|false)
 - `ConfigurationDefaultS3Uri`: Optional S3 URI to custom configuration (uses default configuration if not specified)
@@ -220,6 +236,7 @@ The pattern exports these outputs to the parent stack:
 - `ExecutionTimeThresholdMs`: Latency threshold for alerts
 
 **Configuration Management:**
+
 - Model selection is now handled through configuration files rather than CloudFormation parameters
 - Configuration supports multiple presets per pattern (e.g., default, checkboxed_attributes_extraction, medical_records_summarization, few_shot_example)
 - Configuration can be updated through the Web UI without stack redeployment
@@ -250,7 +267,7 @@ To use Bedrock OCR:
 1. **Set the backend**: Configure `backend: "bedrock"` in your OCR configuration
 2. **Choose a model**: Select from supported vision-capable models:
    - `us.amazon.nova-lite-v1:0`
-   - `us.amazon.nova-pro-v1:0` 
+   - `us.amazon.nova-pro-v1:0`
    - `us.amazon.nova-premier-v1:0`
    - `us.anthropic.claude-3-haiku-20240307-v1:0`
    - `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
@@ -263,6 +280,7 @@ To use Bedrock OCR:
 ### Benefits
 
 **Advantages of Bedrock OCR:**
+
 - **Multimodal Understanding**: LLMs can understand both visual layout and textual content
 - **Context Awareness**: Better handling of complex document structures and relationships
 - **Flexibility**: Customizable prompts for domain-specific terminology and formats
@@ -270,6 +288,7 @@ To use Bedrock OCR:
 - **Unified Processing**: Same models used for OCR, classification, and extraction provide consistency
 
 **When to Use Bedrock OCR:**
+
 - Documents with complex layouts or mixed content types
 - Handwritten or low-quality documents where Textract struggles
 - Domain-specific documents requiring contextual understanding
@@ -279,12 +298,14 @@ To use Bedrock OCR:
 ### Cost Considerations
 
 **Bedrock OCR Pricing:**
+
 - Charged per input/output token rather than per page
 - Typically higher cost per page than Textract for standard documents
 - Cost varies significantly by model (Nova Lite < Nova Pro < Claude models)
 - Image tokens are more expensive than text tokens
 
 **Cost Optimization Tips:**
+
 1. **Model Selection**: Use Nova Lite for cost-sensitive applications, Claude for quality-critical use cases
 2. **Image Preprocessing**: Enable image resizing and preprocessing to reduce token consumption
 3. **Prompt Optimization**: Use concise, focused prompts to minimize token usage
@@ -327,7 +348,7 @@ ocr:
 ### OCR Image Processing Features
 
 - **Configurable DPI**: Higher DPI (400+) for better quality, standard DPI (300) for balanced performance
-- **Dual Image Strategy**: 
+- **Dual Image Strategy**:
   - Stores original high-DPI images in S3 for archival and downstream processing
   - Uses resized images for OCR processing to optimize performance
 - **Aspect Ratio Preservation**: Images are resized proportionally without distortion
@@ -347,12 +368,14 @@ ocr:
 ```
 
 **Adaptive Binarization Benefits:**
+
 - **Improved OCR Accuracy**: Significantly enhances text extraction on documents with uneven lighting, shadows, or low contrast
 - **Background Noise Reduction**: Removes background gradients and noise that can interfere with OCR
 - **Enhanced Edge Detection**: Sharpens text boundaries for better character recognition
 - **Robust Processing**: Handles challenging document conditions like poor scans or faded text
 
 **When to Enable Preprocessing:**
+
 - Documents with uneven lighting or shadows
 - Low contrast text or faded documents
 - Scanned documents with background noise
@@ -398,6 +421,7 @@ You can select which method to use by setting the `ClassificationMethod` paramet
 The classification system uses RVL-CDIP dataset categories and can be customized through the configuration files. Classification models and prompts are now managed through the configuration library rather than CloudFormation parameters.
 
 Available categories:
+
 - letter
 - form
 - email
@@ -471,6 +495,7 @@ Using few shot examples provides several advantages:
 The few shot examples are automatically integrated into the classification and extraction prompts using the `{FEW_SHOT_EXAMPLES}` placeholder. You can also use the `{DOCUMENT_IMAGE}` placeholder for precise image positioning:
 
 **Standard Template with Text Only:**
+
 ```python
 # In classification task_prompt
 task_prompt: |
@@ -500,6 +525,7 @@ task_prompt: |
 ```
 
 **Enhanced Template with Image Placement:**
+
 ```python
 # In classification task_prompt with image positioning
 task_prompt: |
@@ -550,6 +576,7 @@ Pattern 2 supports several placeholders for building dynamic prompts:
 - **`{ATTRIBUTE_NAMES_AND_DESCRIPTIONS}`**: List of attributes to extract with their descriptions
 
 **Image Placement Benefits:**
+
 - **Visual Context**: Position images where they provide maximum context for the task
 - **Multimodal Understanding**: Help models correlate visual and textual information effectively
 - **Flexible Design**: Create prompts that flow naturally between different content types
@@ -574,7 +601,7 @@ To use few shot examples in your deployment:
 
 The extraction system can be customized through the configuration files rather than CloudFormation parameters:
 
-1. **Attribute Definitions**: 
+1. **Attribute Definitions**:
    - Define attributes per document class in the `classes` section of the configuration
    - Specify descriptions for each attribute
    - Configure the format and structure
@@ -590,6 +617,7 @@ The extraction system can be customized through the configuration files rather t
    - Changes can be made through the Web UI without redeployment
 
 Example attribute definition from the configuration:
+
 ```yaml
 classes:
   - name: invoice
@@ -610,6 +638,7 @@ Pattern 2 includes an optional assessment feature that evaluates the confidence 
 ### Overview
 
 The assessment feature runs after successful extraction and provides:
+
 - **Confidence Scores**: Per-attribute confidence ratings (0.0-1.0)
 - **Explanatory Reasoning**: Human-readable explanations for each confidence score
 - **UI Integration**: Automatic display in the web interface visual editor
@@ -660,7 +689,9 @@ The assessment step integrates seamlessly into Pattern-2's ProcessSections map s
 Pattern 2 supports both standard and granular assessment approaches:
 
 #### Standard Assessment
+
 For documents with moderate complexity:
+
 ```yaml
 assessment:
   model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -677,7 +708,9 @@ assessment:
 ```
 
 #### Granular Assessment
+
 For complex documents with many attributes or large lists:
+
 ```yaml
 assessment:
   model: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
@@ -702,6 +735,7 @@ assessment:
 ### When to Use Granular Assessment
 
 Consider granular assessment for:
+
 - **Bank statements** with hundreds of transactions
 - **Documents with 10+ attributes** requiring individual attention
 - **Complex nested structures** (group and list attributes)
@@ -725,6 +759,7 @@ jupyter notebook notebooks/examples/step4_assessment_granular.ipynb
 For detailed information about assessment configuration, output formats, confidence thresholds, UI integration, cost optimization, and troubleshooting, see the [Assessment Documentation](./assessment.md).
 
 The assessment documentation covers:
+
 - Complete configuration examples and placeholders
 - Attribute types and assessment formats (simple, group, list)
 - Confidence threshold configuration and UI integration

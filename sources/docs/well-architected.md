@@ -40,12 +40,12 @@ The GenAI Intelligent Document Processing (GenAIIDP) Accelerator demonstrates st
 
 ### Recommendations
 
-- **CloudFront Security Enhancement**: 
+- **CloudFront Security Enhancement**:
   - Create a custom domain with a custom ACM certificate for the CloudFront distribution
   - Enforce TLS 1.2 or greater protocol in the CloudFront security policy
   - Configure secure response headers (X-Content-Type-Options, X-Frame-Options, Content-Security-Policy)
   - Restrict viewer access using signed URLs or cookies for sensitive content
-- **Additional WAF Protection**: 
+- **Additional WAF Protection**:
   - Deploy a WAF WebACL with GLOBAL scope in the us-east-1 region
   - Associate this WAF with the CloudFront distribution to protect the UI
   - Enable core rule sets (AWS Managed Rules) including protections against XSS and SQL injection

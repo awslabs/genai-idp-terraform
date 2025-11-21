@@ -189,26 +189,31 @@ vpc_security_group_ids = ["sg-abcdef"]
 ## Understanding the Processing Pipeline
 
 ### 1. Document Classification
+
 - **Model**: Nova Pro (configurable)
 - **Purpose**: Identify document type and structure
 - **Output**: Document class and confidence score
 
 ### 2. Text Extraction
+
 - **Model**: Nova Pro (configurable)
 - **Purpose**: Extract structured data based on document class
 - **Output**: JSON with extracted fields
 
 ### 3. Summarization (Optional)
+
 - **Model**: Claude 3.7 Sonnet (configurable)
 - **Purpose**: Generate document summary
 - **Output**: Concise summary text
 
 ### 4. Assessment (Optional)
+
 - **Model**: Claude 3 Haiku (configurable)
 - **Purpose**: Quality measurement and validation
 - **Output**: Quality scores and feedback
 
 ### 5. Evaluation (Optional)
+
 - **Model**: Claude 3.5 Sonnet (configurable)
 - **Purpose**: Compare against baseline documents
 - **Output**: Accuracy metrics and comparison results
@@ -218,6 +223,7 @@ vpc_security_group_ids = ["sg-abcdef"]
 When `enable_reporting = true`, you get comprehensive analytics:
 
 ### Glue Tables Created
+
 - `document_processing_metrics`: Processing performance data
 - `document_evaluations`: Accuracy and quality metrics
 - `metering`: Cost and usage tracking
@@ -226,6 +232,7 @@ When `enable_reporting = true`, you get comprehensive analytics:
 ### Example Athena Queries
 
 **Processing Performance**:
+
 ```sql
 SELECT 
     document_class,
@@ -237,6 +244,7 @@ GROUP BY document_class;
 ```
 
 **Quality Analysis**:
+
 ```sql
 SELECT 
     document_class,
@@ -248,6 +256,7 @@ GROUP BY document_class;
 ```
 
 **Cost Analysis**:
+
 ```sql
 SELECT 
     model_id,
@@ -261,14 +270,18 @@ GROUP BY model_id;
 ## Monitoring and Troubleshooting
 
 ### CloudWatch Dashboards
+
 The deployment creates comprehensive dashboards for:
+
 - Processing throughput and latency
 - Error rates and success metrics
 - Cost tracking per model
 - Quality and accuracy trends
 
 ### Log Groups
+
 Monitor processing with structured logs:
+
 ```bash
 # Stream processing logs
 aws logs tail /aws/lambda/$(terraform output -raw prefix)-classification --follow
@@ -280,22 +293,28 @@ aws logs tail /aws/lambda/$(terraform output -raw prefix)-assessment --follow
 ### Common Issues
 
 #### Model Access Denied
+
 ```
 Error: AccessDeniedException: You don't have access to the model
 ```
+
 **Solution**: Enable model access in Bedrock console
 
 #### High Processing Latency
+
 **Symptoms**: Slow document processing
-**Solutions**: 
+**Solutions**:
+
 - Configure appropriate Lambda memory and timeout settings
 - Enable evaluation and reporting for monitoring
 - Use appropriate model selection for your use case
 - Consider using faster models for classification
 
 #### Quality Score Issues
+
 **Symptoms**: Low assessment scores
 **Solutions**:
+
 - Review and customize assessment prompts
 - Ensure document quality is sufficient
 - Consider using different assessment models
@@ -339,6 +358,7 @@ terraform destroy
 
 This example provides a complete, production-ready document processing solution with advanced AI capabilities and comprehensive monitoring.
 aws s3 ls s3://$(terraform output -raw buckets | jq -r '.output_bucket.bucket_name')/ --recursive
+
 ```
 
 ## Configuration Options
@@ -386,6 +406,7 @@ custom_prompts = {
 ```
 
 ### Model Selection
+
 Choose different Bedrock models for different processing tasks:
 
 ```hcl

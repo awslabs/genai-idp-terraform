@@ -100,6 +100,7 @@ The `metering` table captures detailed usage metrics for each document processin
 This table is partitioned by date (YYYY-MM-DD format).
 
 The metering table is particularly valuable for:
+
 - Cost analysis and allocation
 - Usage pattern identification
 - Resource optimization
@@ -124,6 +125,7 @@ Document sections are stored in dynamically created tables based on the section 
 
 **Dynamic Data Columns:**
 The remaining columns are dynamically inferred from the JSON extraction results and vary by section type. Common patterns include:
+
 - Nested JSON objects are flattened using dot notation (e.g., `customer.name`, `customer.address.street`)
 - Arrays are converted to JSON strings
 - Primitive values (strings, numbers, booleans) are preserved as their native types
@@ -132,6 +134,7 @@ The remaining columns are dynamically inferred from the JSON extraction results 
 Each section type table is partitioned by date (YYYY-MM-DD format) for efficient querying.
 
 **File Organization:**
+
 ```
 document_sections/
 ├── invoice/
@@ -149,9 +152,10 @@ document_sections/
 ### Crawler Configuration
 
 The AWS Glue Crawler automatically discovers new section types and creates corresponding tables. The crawler can be configured to run:
+
 - Manually (on-demand)
 - Every 15 minutes
-- Every hour 
+- Every hour
 - Daily (default)
 
 This ensures that new section types are automatically available for querying without manual intervention.
@@ -171,6 +175,7 @@ To use the reporting database with Athena:
 Here are some example queries to get you started:
 
 **Overall accuracy by document type:**
+
 ```sql
 SELECT 
   section_type, 
@@ -185,6 +190,7 @@ ORDER BY
 ```
 
 **Token usage by model:**
+
 ```sql
 SELECT 
   service_api, 
@@ -203,6 +209,7 @@ ORDER BY
 ```
 
 **Extraction confidence vs. accuracy:**
+
 ```sql
 SELECT 
   CASE 
@@ -227,6 +234,7 @@ ORDER BY
 ```
 
 **Token usage per page by document type:**
+
 ```sql
 SELECT 
   se.section_type,
@@ -245,6 +253,7 @@ ORDER BY
 ```
 
 **Document sections analysis by type:**
+
 ```sql
 -- Query invoice sections for customer analysis
 SELECT 
@@ -263,6 +272,7 @@ ORDER BY
 ```
 
 **Section processing volume by date:**
+
 ```sql
 -- Count sections processed by type and date
 SELECT 
@@ -284,6 +294,7 @@ ORDER BY
 ```
 
 **Date range queries with new partition structure:**
+
 ```sql
 -- Efficient date range query using single date partition
 SELECT 

@@ -84,7 +84,7 @@ tags = {
 
 !!! tip "Model Access Required"
     Before deployment, ensure you have access to the required Bedrock models in the AWS Console:
-    
+
     - Navigate to **Amazon Bedrock** → **Model access**
     - Request access to: Claude 3 Sonnet, Claude 3 Haiku, Nova Pro, and Titan Text Express
 
@@ -173,6 +173,7 @@ aws s3 cp s3://$OUTPUT_BUCKET/processed/ ./results/ --recursive
 ## Step 6: Explore the Features
 
 ### Assessment Results
+
 If you enabled assessment, check the quality scores:
 
 ```bash
@@ -181,6 +182,7 @@ cat ./results/*/assessment.json
 ```
 
 ### Analytics Data
+
 If you enabled reporting, query analytics with Athena:
 
 ```sql
@@ -196,6 +198,7 @@ LIMIT 10;
 ```
 
 ### Web UI Features
+
 Explore the web interface:
 
 - Document upload and management
@@ -247,21 +250,27 @@ Now that you have a working deployment:
 ### Common Issues
 
 #### Model Access Denied
+
 ```
 Error: AccessDeniedException: You don't have access to the model
 ```
+
 **Solution**: Enable model access in Bedrock console before deployment
 
 #### Bucket Name Conflicts
+
 ```
 Error: BucketAlreadyExists
 ```
+
 **Solution**: Change the `prefix` variable to something unique
 
 #### Lambda Layer Build Failures
+
 ```
 Error: Failed to build Lambda layer
 ```
+
 **Solution**: Ensure Docker is running and try rebuilding the Lambda layers
 
 ### Getting Help

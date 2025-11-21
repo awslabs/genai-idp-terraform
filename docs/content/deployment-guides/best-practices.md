@@ -7,6 +7,7 @@ This guide covers recommended practices for deploying and operating the GenAI ID
 ### Environment Management
 
 **Use Separate Environments**:
+
 ```hcl
 # terraform/environments/dev/terraform.tfvars
 environment = "dev"
@@ -19,6 +20,7 @@ enable_detailed_monitoring = false
 ```
 
 **Consistent Tagging**:
+
 ```hcl
 locals {
   common_tags = {
@@ -33,6 +35,7 @@ locals {
 ### State Management
 
 **Remote State Backend**:
+
 ```hcl
 terraform {
   backend "s3" {
@@ -46,6 +49,7 @@ terraform {
 ```
 
 **State Locking**:
+
 ```hcl
 resource "aws_dynamodb_table" "terraform_locks" {
   name           = "terraform-locks"
@@ -64,6 +68,7 @@ resource "aws_dynamodb_table" "terraform_locks" {
 ### IAM Permissions
 
 **Least Privilege Principle**:
+
 ```hcl
 resource "aws_iam_policy" "lambda_policy" {
   name = "${var.environment}-idp-lambda-policy"
@@ -95,6 +100,7 @@ resource "aws_iam_policy" "lambda_policy" {
 ### Data Protection
 
 **Encryption at Rest**:
+
 ```hcl
 resource "aws_s3_bucket_server_side_encryption_configuration" "documents" {
   bucket = aws_s3_bucket.documents.id
@@ -108,6 +114,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "documents" {
 ```
 
 **Encryption in Transit**:
+
 - Use HTTPS for all API endpoints
 - Enable SSL/TLS for data transfer
 - Use VPC endpoints where possible
@@ -117,6 +124,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "documents" {
 ### Lambda Optimization
 
 **Memory and Timeout Settings**:
+
 ```hcl
 resource "aws_lambda_function" "document_processor" {
   memory_size = 1024  # Adjust based on workload
@@ -131,6 +139,7 @@ resource "aws_lambda_function" "document_processor" {
 ```
 
 **Connection Reuse**:
+
 ```python
 import boto3
 
@@ -146,6 +155,7 @@ def lambda_handler(event, context):
 ### Storage Optimization
 
 **S3 Lifecycle Policies**:
+
 ```hcl
 resource "aws_s3_bucket_lifecycle_configuration" "documents_lifecycle" {
   bucket = aws_s3_bucket.documents.id
@@ -172,6 +182,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "documents_lifecycle" {
 ### CloudWatch Configuration
 
 **Log Groups**:
+
 ```hcl
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   name              = "/aws/lambda/${var.environment}-idp-processor"
@@ -180,6 +191,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 ```
 
 **Alarms**:
+
 ```hcl
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_name          = "${var.environment}-lambda-errors"
@@ -200,12 +212,14 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 ### Deployment Process
 
 **Validation Steps**:
+
 1. Run `terraform plan` and review changes
 2. Test in development environment first
 3. Use gradual rollout for staging
 4. Monitor deployment metrics
 
 **Rollback Strategy**:
+
 ```bash
 # Keep previous state file versions
 terraform state pull > terraform.tfstate.backup
@@ -218,6 +232,7 @@ terraform apply -target=aws_lambda_function.processor \
 ### Documentation
 
 **Infrastructure Documentation**:
+
 - Document all custom configurations
 - Maintain architecture diagrams
 - Keep runbooks updated
@@ -226,6 +241,7 @@ terraform apply -target=aws_lambda_function.processor \
 ### Backup and Recovery
 
 **State File Backup**:
+
 ```hcl
 resource "aws_s3_bucket_versioning" "state_bucket_versioning" {
   bucket = aws_s3_bucket.terraform_state.id
@@ -236,6 +252,7 @@ resource "aws_s3_bucket_versioning" "state_bucket_versioning" {
 ```
 
 **Data Backup**:
+
 ```hcl
 resource "aws_dynamodb_table" "documents" {
   point_in_time_recovery {
@@ -249,6 +266,7 @@ resource "aws_dynamodb_table" "documents" {
 ### Infrastructure Testing
 
 **Validation**:
+
 ```bash
 # Validate Terraform configuration
 terraform validate
@@ -261,6 +279,7 @@ tfsec .
 ```
 
 **Integration Testing**:
+
 ```bash
 # Test deployment in staging
 terraform plan -var-file="staging.tfvars"
@@ -275,16 +294,19 @@ terraform apply -var-file="staging.tfvars"
 ### Common Issues
 
 **Permission Errors**:
+
 - Check IAM policies and roles
 - Verify service-linked roles exist
 - Review resource policies
 
 **Resource Limits**:
+
 - Check AWS service quotas
 - Monitor resource utilization
 - Request quota increases if needed
 
 **State Issues**:
+
 - Use `terraform refresh` to sync state
 - Import existing resources if needed
 - Handle state lock conflicts
@@ -292,12 +314,14 @@ terraform apply -var-file="staging.tfvars"
 ### Debugging Tools
 
 **Terraform Debugging**:
+
 ```bash
 export TF_LOG=DEBUG
 terraform apply
 ```
 
 **AWS CLI Debugging**:
+
 ```bash
 aws logs describe-log-groups --debug
 aws lambda get-function --function-name processor --debug
@@ -308,15 +332,18 @@ aws lambda get-function --function-name processor --debug
 ### Regular Tasks
 
 **Weekly**:
+
 - Review CloudWatch alarms and metrics
 - Update documentation as needed
 
 **Monthly**:
+
 - Review and update IAM permissions
 - Analyze performance metrics
 - Plan capacity adjustments
 
 **Quarterly**:
+
 - Security review and updates
 - Disaster recovery testing
 - Architecture review
@@ -324,6 +351,7 @@ aws lambda get-function --function-name processor --debug
 ### Updates and Patches
 
 **Terraform Updates**:
+
 ```bash
 # Update Terraform version
 terraform version
@@ -334,6 +362,7 @@ terraform init -upgrade
 ```
 
 **Lambda Runtime Updates**:
+
 ```hcl
 resource "aws_lambda_function" "processor" {
   runtime = "python3.11"  # Keep updated
@@ -343,6 +372,7 @@ resource "aws_lambda_function" "processor" {
 ---
 
 For more detailed information, see:
+
 - [Environment Setup](environment-setup.md)
 - [Monitoring Guide](monitoring.md)
 - [Troubleshooting Guide](troubleshooting.md)

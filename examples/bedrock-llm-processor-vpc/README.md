@@ -7,15 +7,18 @@ This example demonstrates how to deploy the GenAI IDP Accelerator with the Bedro
 This example creates:
 
 ### VPC Infrastructure
+
 - **VPC**: Custom VPC with configurable CIDR block (default: 10.0.0.0/16)
 - **Isolated Subnets**: 2 isolated subnets across different AZs for Lambda functions (no internet access)
 - **Route Tables**: Route tables for isolated subnets (no internet routes)
 
 ### Security Groups
+
 - **Lambda Security Group**: Allows outbound HTTPS traffic to VPC endpoints within the VPC CIDR
 - **VPC Endpoints Security Group**: Allows inbound HTTPS traffic from VPC resources (Lambda functions)
 
 ### VPC Endpoints
+
 - **S3 Gateway Endpoint**: Direct access to S3 without internet routing
 - **DynamoDB Interface Endpoint**: Private access to DynamoDB without internet routing
 - **Bedrock Interface Endpoints**: Private access to Amazon Bedrock services
@@ -31,6 +34,7 @@ This example creates:
 - **CodeBuild Interface Endpoint**: Private access to AWS CodeBuild
 
 ### Document Processing Components
+
 - **Bedrock LLM Processor**: Uses Claude models for document classification and extraction
 - **S3 Buckets**: Input, output, and working buckets for document processing
 - **Step Functions**: Orchestrates the document processing workflow
@@ -41,10 +45,12 @@ This example creates:
 Before deploying this example, ensure you have:
 
 ### Required Tools
+
 - **[Terraform](https://www.terraform.io/)**: Version 1.0 or later
 - **[AWS CLI](https://aws.amazon.com/cli/)**: Configured with appropriate credentials
 
 ### AWS Requirements
+
 - **AWS Account**: With appropriate permissions for VPC, Lambda, Bedrock, etc.
 - **Bedrock Model Access**: Enable access to required models in the AWS Console
 - **Service Quotas**: Ensure adequate quotas for Lambda, VPC endpoints, etc.
@@ -82,6 +88,7 @@ nano terraform.tfvars
 ```
 
 **Minimal configuration example**:
+
 ```hcl
 # terraform.tfvars
 region = "us-east-1"
@@ -129,18 +136,21 @@ terraform output
 You can either create a new VPC or use an existing one:
 
 #### Option 1: Create New VPC (Default)
+
 ```hcl
 # terraform.tfvars
 vpc_cidr = "10.0.0.0/16"
 ```
 
 This will create:
+
 - New VPC with specified CIDR
 - Isolated subnets across 2 AZs
 - Security groups for Lambda functions and VPC endpoints
 - All required VPC endpoints
 
 #### Option 2: Use Existing VPC
+
 ```hcl
 # terraform.tfvars
 vpc = {
@@ -151,6 +161,7 @@ vpc = {
 ```
 
 **Requirements for existing VPC:**
+
 - Subnets must be isolated (no internet access)
 - Security groups must allow HTTPS egress to VPC CIDR and AWS service IPs
 - VPC must have DNS resolution and DNS hostnames enabled
@@ -159,6 +170,7 @@ vpc = {
 **Note**: When using existing VPC, no VPC endpoints will be created. You must ensure your existing VPC has the required VPC endpoints configured.
 
 ### Model Configuration
+
 ```hcl
 # Use different models for different tasks
 classification_model_id = "us.amazon.nova-pro-v1:0"
@@ -167,6 +179,7 @@ summarization_model_id  = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 ```
 
 ### Feature Toggles
+
 ```hcl
 # Enable additional features
 enable_evaluation = true
@@ -214,16 +227,19 @@ enable_assessment = true
 ## Security Benefits
 
 ### Network Isolation
+
 - **Isolated Subnets**: Lambda functions run in isolated subnets with no internet access
 - **No NAT Gateways**: Eliminates potential internet-based attack vectors
 - **Security Groups**: Restrictive security groups controlling network traffic to VPC endpoints only
 
 ### VPC Endpoints
+
 - **S3 Gateway Endpoint**: Direct access to S3 without internet routing
 - **Interface Endpoints**: Private access to AWS services (Bedrock, Textract, CloudWatch, etc.)
 - **Reduced Attack Surface**: Eliminates internet routing for all AWS service calls
 
 ### Data Protection
+
 - **KMS Encryption**: All data encrypted at rest and in transit
 - **Private Communication**: Service-to-service communication stays within AWS network
 - **Network Monitoring**: VPC Flow Logs can be enabled for network monitoring
@@ -231,16 +247,19 @@ enable_assessment = true
 ## Cost Considerations
 
 ### VPC Endpoint Costs
+
 - **Interface Endpoints**: ~$7.20/month per interface endpoint (14 endpoints = ~$100.80/month)
 - **Gateway Endpoints**: S3 gateway endpoint is free
 - **Data Processing**: Interface endpoint data processing charges apply
 
 ### Cost Optimization Benefits
+
 - **No NAT Gateways**: Eliminates ~$45/month per NAT Gateway costs (saves ~$90/month for 2 AZs)
 - **No Internet Data Transfer**: Eliminates NAT Gateway data processing charges
 - **Reduced Attack Surface**: Lower security monitoring and incident response costs
 
 ### Cost Optimization Tips
+
 - **Single AZ**: Use single AZ for development to reduce interface endpoint costs
 - **Endpoint Policies**: Restrict VPC endpoint access to reduce data transfer costs
 - **Monitor Usage**: Use CloudWatch to monitor endpoint usage and optimize
@@ -248,6 +267,7 @@ enable_assessment = true
 ## Monitoring and Troubleshooting
 
 ### VPC-Specific Monitoring
+
 ```bash
 # Check VPC endpoints
 aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=<vpc-id>"
@@ -262,21 +282,27 @@ aws cloudwatch get-metric-statistics \
 ### Common VPC Issues
 
 #### 1. Lambda Timeout in Isolated VPC
+
 ```
 Error: Task timed out after X seconds
 ```
+
 **Solution**: Ensure all required VPC endpoints are configured and Lambda has access
 
 #### 2. VPC Endpoint DNS Resolution
+
 ```
 Error: Could not resolve hostname
 ```
+
 **Solution**: Ensure VPC has DNS resolution and DNS hostnames enabled
 
 #### 3. Security Group Rules
+
 ```
 Error: Connection timeout
 ```
+
 **Solution**: Verify security group allows outbound HTTPS (443) traffic to VPC CIDR
 
 ## Cleanup
@@ -292,14 +318,18 @@ terraform destroy
 ## Customization
 
 ### Custom VPC Configuration
+
 You can modify the VPC configuration by adjusting:
+
 - CIDR blocks for VPC and subnets
 - Number of availability zones
 - Additional VPC endpoints
 - Security group rules
 
 ### Integration with Existing VPC
+
 To use an existing VPC, modify the configuration to reference existing:
+
 - VPC ID
 - Subnet IDs
 - Security Group IDs
@@ -308,6 +338,7 @@ To use an existing VPC, modify the configuration to reference existing:
 ## Support
 
 For issues specific to VPC deployment:
+
 1. Check VPC Flow Logs for network connectivity issues
 2. Verify VPC endpoints are properly configured
 3. Ensure security group and NACL rules allow VPC endpoint traffic

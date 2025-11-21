@@ -12,17 +12,19 @@ This directory contains the documentation for the GenAI IDP Accelerator for Terr
 ### Setup
 
 1. **Install dependencies**:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 2. **Serve locally**:
+
    ```bash
    mkdocs serve
    ```
 
 3. **Open in browser**:
-   Navigate to http://127.0.0.1:8000
+   Navigate to <http://127.0.0.1:8000>
 
 ### Using Make
 
@@ -105,6 +107,7 @@ graph TB
     A[Document] --> B[Processing]
     B --> C[Results]
 ```
+
 ```
 
 ### Navigation
@@ -142,12 +145,14 @@ mkdocs build
 ### Deployment Options
 
 1. **Static hosting** (S3, Netlify, etc.):
+
    ```bash
    mkdocs build
    # Upload site/ directory contents
    ```
 
 2. **GitHub Pages**:
+
    ```bash
    mkdocs gh-deploy
    ```
@@ -227,21 +232,25 @@ See the [Contributing Guide](content/contributing/documentation.md) for detailed
 ### Common Issues
 
 **MkDocs not found**:
+
 ```bash
 pip install mkdocs
 ```
 
 **Theme not found**:
+
 ```bash
 pip install mkdocs-material
 ```
 
 **Plugin errors**:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 **Port already in use**:
+
 ```bash
 mkdocs serve -a 127.0.0.1:8001
 ```

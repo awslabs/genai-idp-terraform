@@ -71,7 +71,8 @@ classification:
 
 Despite its strengths in handling full-document context, this method has several limitations:
 
-**Context & Model Constraints:**: 
+**Context & Model Constraints:**:
+
 - Long documents can exceed the context window of smaller models, resulting in request failure.
 - Lengthy inputs may dilute the model’s focus, leading to inaccurate or inconsistent classifications.
 - Requires high-context models such as Amazon Nova Premier, which supports up to 1 million tokens. Smaller models are not suitable for this method.
@@ -216,6 +217,7 @@ Pattern 2 supports precise control over where document images are positioned wit
 ### How {DOCUMENT_IMAGE} Works
 
 **Without Placeholder (Default Behavior):**
+
 ```yaml
 classification:
   task_prompt: |
@@ -225,9 +227,11 @@ classification:
     
     Classify it as one of: {CLASS_NAMES_AND_DESCRIPTIONS}
 ```
+
 Images are automatically appended after the text content.
 
 **With Placeholder (Controlled Placement):**
+
 ```yaml
 classification:
   task_prompt: |
@@ -239,11 +243,13 @@ classification:
     
     Classify it as one of: {CLASS_NAMES_AND_DESCRIPTIONS}
 ```
+
 Images are inserted exactly where `{DOCUMENT_IMAGE}` appears in the prompt.
 
 ### Usage Examples
 
 **Image Before Text Analysis:**
+
 ```yaml
 task_prompt: |
   Look at this document image first:
@@ -258,6 +264,7 @@ task_prompt: |
 ```
 
 **Image in the Middle for Context:**
+
 ```yaml
 task_prompt: |
   You are classifying business documents. Here are the possible types:
@@ -458,6 +465,7 @@ YAML format provides significant token savings:
 ### Example Prompt Configurations
 
 **JSON-focused prompt:**
+
 ```yaml
 classification:
   system_prompt: |
@@ -467,6 +475,7 @@ classification:
 ```
 
 **YAML-focused prompt:**
+
 ```yaml
 classification:
   system_prompt: |

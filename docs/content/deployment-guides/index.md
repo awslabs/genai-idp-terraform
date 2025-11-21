@@ -5,9 +5,11 @@ This section provides comprehensive guides for deploying the GenAI IDP Accelerat
 ## Guide Overview
 
 ### [Environment Setup](environment-setup.md)
+
 **Purpose**: Configure different environments (dev, staging)
 
 **Topics Covered**:
+
 - Multi-environment architecture
 - Environment-specific configurations
 - State management strategies
@@ -16,9 +18,11 @@ This section provides comprehensive guides for deploying the GenAI IDP Accelerat
 **Best For**: Teams setting up multiple environments
 
 ### [Monitoring](monitoring.md)
+
 **Purpose**: Set up comprehensive monitoring and observability
 
 **Topics Covered**:
+
 - CloudWatch metrics and alarms
 - X-Ray distributed tracing
 - Custom dashboards and reports
@@ -27,9 +31,11 @@ This section provides comprehensive guides for deploying the GenAI IDP Accelerat
 **Best For**: Operations teams and system monitoring
 
 ### [Best Practices](best-practices.md)
+
 **Purpose**: Follow recommended practices for deployment and operations
 
 **Topics Covered**:
+
 - Security best practices
 - Performance optimization
 - Operational procedures
@@ -38,9 +44,11 @@ This section provides comprehensive guides for deploying the GenAI IDP Accelerat
 **Best For**: All deployments
 
 ### [Troubleshooting](troubleshooting.md)
+
 **Purpose**: Diagnose and resolve common deployment issues
 
 **Topics Covered**:
+
 - Permission and access errors
 - Resource limit issues
 - Performance problems
@@ -62,5 +70,3 @@ This section provides comprehensive guides for deploying the GenAI IDP Accelerat
 - [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/)
 - [Terraform Best Practices](https://www.terraform.io/docs/cloud/guides/recommended-practices/index.html)
 - [AWS Security Best Practices](https://aws.amazon.com/architecture/security-identity-compliance/)
-
-

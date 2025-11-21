@@ -5,6 +5,7 @@ This enhanced Terraform module creates and trains a SageMaker UDOP model using t
 ## Features
 
 ### 🚀 **Production-Ready Architecture**
+
 - **Docker Container Images**: Lambda functions with all dependencies included
 - **terraform-aws-modules/lambda**: Battle-tested Lambda deployment with best practices
 - **Pure Terraform Orchestration**: No CloudFormation dependencies
@@ -12,6 +13,7 @@ This enhanced Terraform module creates and trains a SageMaker UDOP model using t
 - **ECR Integration**: Automatic Docker image building and pushing
 
 ### 🔧 **Enhanced Capabilities**
+
 - **Automated Data Generation**: Downloads and processes RVL-CDIP dataset with Textract
 - **SageMaker Training**: Creates and manages training jobs with proper monitoring
 - **Training Completion Polling**: Pure Terraform polling mechanism for job completion
@@ -44,12 +46,14 @@ This enhanced Terraform module creates and trains a SageMaker UDOP model using t
 ## Prerequisites
 
 ### Required Tools
+
 - **Docker**: For building Lambda container images
 - **Terraform**: >= 1.0 with Docker provider support
 - **AWS CLI**: Configured with appropriate permissions
 - **Python 3.11**: For training status checking script
 
 ### AWS Permissions
+
 - **Lambda**: Create functions, invoke, manage container images
 - **ECR**: Create repositories, push/pull images
 - **SageMaker**: Create training jobs, manage models
@@ -231,21 +235,25 @@ terraform output training_status
 ## Training Process
 
 ### Phase 1: Docker Image Building (2-5 minutes)
+
 - Builds Lambda container images with all dependencies
 - Pushes images to ECR repositories
 - Handles dependency management automatically
 
 ### Phase 2: Data Generation (10-15 minutes)
+
 - Downloads RVL-CDIP dataset from Hugging Face
 - Processes 1,600 document images with AWS Textract
 - Stores processed data in S3 with proper structure
 
 ### Phase 3: Model Training (15-30 minutes)
+
 - Creates SageMaker training job with PyTorch framework
 - Uses ml.g5.12xlarge instance for GPU acceleration
 - Monitors training progress with comprehensive logging
 
 ### Phase 4: Completion Verification (1-2 minutes)
+
 - Polls training job status every 30 seconds
 - Verifies model artifacts are properly stored
 - Provides detailed completion status
@@ -289,6 +297,7 @@ aws ecr describe-images --repository-name $(terraform output -json ecr_repositor
 ### Common Issues
 
 #### 1. **Docker Build Failures**
+
 ```bash
 # Check Docker daemon
 docker info
@@ -301,6 +310,7 @@ aws ecr get-login-password --region us-east-1 | docker login --username AWS --pa
 ```
 
 #### 2. **Lambda Container Image Issues**
+
 ```bash
 # Test container locally
 docker run --rm -p 9000:8080 <image-name>:latest
@@ -310,6 +320,7 @@ aws lambda get-function --function-name <function-name>
 ```
 
 #### 3. **Training Job Failures**
+
 ```bash
 # Check training job details
 aws sagemaker describe-training-job --training-job-name <job-name>
@@ -321,16 +332,19 @@ aws sagemaker describe-training-job --training-job-name <job-name> --query 'Fail
 ### Performance Optimization
 
 #### 1. **Docker Image Optimization**
+
 - Use multi-stage builds to reduce image size
 - Leverage Docker layer caching
 - Use .dockerignore to exclude unnecessary files
 
 #### 2. **Lambda Performance**
+
 - Increase memory allocation for data processing
 - Use provisioned concurrency for consistent performance
 - Optimize Python code for Lambda environment
 
 #### 3. **Training Performance**
+
 - Use larger SageMaker instances for faster training
 - Implement distributed training for large datasets
 - Use Spot instances for cost optimization
@@ -338,12 +352,14 @@ aws sagemaker describe-training-job --training-job-name <job-name> --query 'Fail
 ## Cost Optimization
 
 ### Training Costs
+
 - **Docker Builds**: Free (local builds)
 - **ECR Storage**: ~$0.10/GB/month
 - **Lambda Execution**: ~$0.10-1.00 per training run
 - **SageMaker Training**: ~$3-5 per run (ml.g5.12xlarge)
 
 ### Optimization Strategies
+
 - Use ECR lifecycle policies to clean up old images
 - Implement training job scheduling for off-peak hours
 - Use SageMaker Spot instances when available
@@ -351,18 +367,21 @@ aws sagemaker describe-training-job --training-job-name <job-name> --query 'Fail
 ## Production Considerations
 
 ### Security
+
 - ECR image scanning enabled by default
 - KMS encryption for all data at rest
 - IAM roles with least privilege principles
 - VPC endpoints for private connectivity (optional)
 
 ### Reliability
+
 - Comprehensive error handling in Lambda functions
 - Training job retry logic
 - CloudWatch monitoring and alerting
 - Backup strategies for model artifacts
 
 ### Scalability
+
 - Auto-scaling Lambda concurrency
 - Multiple ECR repositories for different models
 - Parallel training job support
@@ -380,6 +399,7 @@ If migrating from the simplified version:
 ## Support
 
 For issues and questions:
+
 - **Docker Issues**: Check Docker documentation and ECR guides
 - **Lambda Module**: Refer to terraform-aws-modules/lambda documentation
 - **SageMaker**: Use AWS SageMaker documentation and support

@@ -53,6 +53,7 @@ DocumentKnowledgeBaseModel:
 ```
 
 When the feature is enabled, the solution:
+
 - Creates necessary OpenSearch resources for document indexing
 - Configures API endpoints for querying the knowledge base
 - Adds the query interface to the Web UI

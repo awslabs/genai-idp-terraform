@@ -7,6 +7,7 @@ This example demonstrates how to deploy a complete document processing solution 
 The GenAI IDP Accelerator provides two main processors, each optimized for different use cases:
 
 ### **BDA Processor** (Bedrock Data Automation)
+
 - **Best for**: Standard document types with well-defined schemas
 - **Processing**: Managed service with built-in document understanding
 - **Configuration**: Schema-based with predefined document classes
@@ -15,6 +16,7 @@ The GenAI IDP Accelerator provides two main processors, each optimized for diffe
 - **Setup**: Requires manual BDA project creation in AWS Console
 
 ### **Bedrock LLM Processor** (This Example)
+
 - **Best for**: Custom document types requiring flexible extraction
 - **Processing**: Multi-stage pipeline with foundation models
 - **Configuration**: Fully customizable prompts and document classes
@@ -37,7 +39,9 @@ Choose the Bedrock LLM Processor when you need:
 This example includes several configuration files to help you get started:
 
 ### terraform.tfvars (Minimal Configuration)
+
 The minimal configuration file contains only the essential settings needed for deployment:
+
 - AWS region
 - Resource prefix for naming
 - Basic tags
@@ -45,7 +49,9 @@ The minimal configuration file contains only the essential settings needed for d
 This file is ready to use for a basic deployment with all default settings.
 
 ### terraform.tfvars.comprehensive (Full Configuration)
+
 A comprehensive example showing all available configuration options:
+
 - Model selection for different processing stages
 - Performance tuning parameters
 - Web UI customization options
@@ -55,6 +61,7 @@ A comprehensive example showing all available configuration options:
 Use this as a reference to customize your deployment.
 
 ### terraform.tfvars.example (Template)
+
 The original template file with detailed comments explaining each option.
 
 ## Quick Start
@@ -76,12 +83,14 @@ The Bedrock LLM processor provides a managed solution for extracting structured 
 ## Features
 
 ### 🚀 **Core Capabilities**
+
 - **Multi-stage Pipeline**: OCR → Classification → Extraction → Results Processing
 - **Foundation Model Integration**: Uses Nova and Claude models via Bedrock
 - **Real-time Status Tracking**: GraphQL API for monitoring document status
 - **Scalable Architecture**: Handles concurrent document processing
 
 ### 🔧 **Optional Features**
+
 - **Document Summarization**: AI-powered document summarization
 - **Evaluation Framework**: Baseline comparison for accuracy measurement
 - **Custom Configuration**: Configurable document classes and attributes
@@ -90,11 +99,13 @@ The Bedrock LLM processor provides a managed solution for extracting structured 
 ## Prerequisites
 
 ### 1. **AWS Account Setup**
+
 - AWS CLI configured with appropriate permissions
 - Terraform >= 1.0 installed
 - Access to Amazon Bedrock in your chosen region
 
 ### 2. **Bedrock Model Access**
+
 Before deploying, enable access to the required Bedrock models in the AWS Console:
 
 1. Navigate to Amazon Bedrock → Model access
@@ -108,18 +119,21 @@ Before deploying, enable access to the required Bedrock models in the AWS Consol
 ## Quick Start
 
 ### 1. **Clone and Navigate**
+
 ```bash
 git clone <repository-url>
 cd genaiic-idp-accelerator-terraform/examples/bedrock-llm-processor
 ```
 
 ### 2. **Configure Variables**
+
 ```bash
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with your specific values
 ```
 
 ### 3. **Deploy**
+
 ```bash
 terraform init
 terraform plan
@@ -127,6 +141,7 @@ terraform apply
 ```
 
 ### 4. **Test the Deployment**
+
 ```bash
 # Upload a test document
 aws s3 cp test-document.pdf s3://$(terraform output -raw buckets | jq -r '.input_bucket.bucket_name')/
@@ -140,6 +155,7 @@ curl -X POST $(terraform output -raw processing_environment | jq -r '.api.graphq
 ## Configuration Options
 
 ### **Basic Configuration**
+
 ```hcl
 # terraform.tfvars
 region = "us-east-1"
@@ -148,6 +164,7 @@ log_level = "INFO"
 ```
 
 ### **Feature Toggles**
+
 ```hcl
 # Enable/disable optional features
 enable_evaluation = true
@@ -156,6 +173,7 @@ max_processing_concurrency = 100
 ```
 
 ### **Model Configuration**
+
 ```hcl
 # Bedrock models for different functions
 classification_model_id = "us.amazon.nova-pro-v1:0"
@@ -165,6 +183,7 @@ evaluation_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 ```
 
 ### **Performance Tuning**
+
 ```hcl
 # Worker pool configuration
 classification_max_workers = 20
@@ -173,6 +192,7 @@ max_processing_concurrency = 100
 ```
 
 ### **Custom Document Classes**
+
 ```hcl
 custom_config = {
   notes = "Configuration for invoice processing"
@@ -212,6 +232,7 @@ custom_config = {
 ### **API Endpoints**
 
 #### **GraphQL API**
+
 ```bash
 # Get API endpoint
 GRAPHQL_URL=$(terraform output -raw processing_environment | jq -r '.api.graphql_url')
@@ -228,6 +249,7 @@ curl -X POST $GRAPHQL_URL \
 ```
 
 #### **Step Functions**
+
 ```bash
 # Get state machine ARN
 STATE_MACHINE_ARN=$(terraform output -raw bedrock_llm_processor | jq -r '.state_machine_arn')
@@ -294,6 +316,7 @@ aws stepfunctions list-executions --state-machine-arn $STATE_MACHINE_ARN
 ## Customization
 
 ### **Adding New Document Types**
+
 ```hcl
 custom_config = {
   classes = [
@@ -312,6 +335,7 @@ custom_config = {
 ```
 
 ### **Custom Processing Logic**
+
 1. Extend the Lambda functions in `assets/lambdas/`
 2. Update the Step Functions workflow in `assets/sfn/workflow.asl.json`
 3. Modify the configuration schema as needed
@@ -321,30 +345,37 @@ custom_config = {
 ### **Common Issues**
 
 #### **Model Access Denied**
+
 ```
 Error: AccessDeniedException: You don't have access to the model
 ```
+
 **Solution**: Enable model access in Bedrock console
 
 #### **Permission Errors**
+
 ```
 Error: AccessDenied
 ```
+
 **Solution**: Check IAM permissions for Bedrock, S3, and Lambda
 
 ### **Debugging Steps**
 
 1. **Check CloudWatch Logs**
+
    ```bash
    aws logs tail /aws/lambda/{function-name} --follow
    ```
 
 2. **Verify Step Functions Execution**
+
    ```bash
    aws stepfunctions describe-execution --execution-arn {execution-arn}
    ```
 
 3. **Test Individual Components**
+
    ```bash
    aws lambda invoke --function-name {function-name} --payload '{}' response.json
    ```
@@ -352,11 +383,13 @@ Error: AccessDenied
 ## Cost Optimization
 
 ### **Resource Sizing**
+
 - **Lambda Memory**: Adjust based on document size and processing complexity
 - **Concurrency Limits**: Set appropriate limits to control costs
 - **Model Selection**: Choose cost-effective models for your use case
 
 ### **Usage Patterns**
+
 - **Batch Processing**: Process documents in batches during off-peak hours
 - **Worker Pool Sizing**: Optimize worker pools based on throughput needs
 - **Reserved Capacity**: Consider reserved capacity for predictable workloads
@@ -364,11 +397,13 @@ Error: AccessDenied
 ## Security
 
 ### **Encryption**
+
 - **At Rest**: KMS encryption for S3, DynamoDB, and Lambda
 - **In Transit**: TLS encryption for all API calls
 - **Key Management**: Automatic key rotation enabled
 
 ### **Access Control**
+
 - **IAM Roles**: Least privilege access for all components
 - **API Security**: GraphQL API with appropriate authentication
 - **Model Access**: Controlled access to Bedrock models
@@ -386,6 +421,7 @@ terraform destroy
 ## Support
 
 For issues and questions:
+
 - Check the [troubleshooting section](#troubleshooting)
 - Review CloudWatch logs for detailed error information
 - Consult the main repository documentation

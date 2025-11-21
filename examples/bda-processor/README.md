@@ -17,6 +17,7 @@ The BDA processor provides a managed solution for extracting structured data fro
 ## Features
 
 ### 🚀 **Core Capabilities**
+
 - **Automated Document Processing**: Uses Bedrock Data Automation for extraction
 - **Web User Interface**: Upload documents and view results through a web browser
 - **User Authentication**: Secure access with Amazon Cognito
@@ -25,6 +26,7 @@ The BDA processor provides a managed solution for extracting structured data fro
 - **Scalable Architecture**: Handles concurrent document processing
 
 ### 🔧 **Optional Features**
+
 - **Document Summarization**: AI-powered document summarization
 - **Evaluation Framework**: Baseline comparison for accuracy measurement
 - **Custom Configuration**: Configurable document classes and attributes
@@ -35,6 +37,7 @@ The BDA processor provides a managed solution for extracting structured data fro
 ## Prerequisites
 
 ### 1. **AWS Account Setup**
+
 - AWS CLI configured with appropriate permissions
 - Terraform >= 1.0 installed
 - Access to Amazon Bedrock in your chosen region
@@ -42,6 +45,7 @@ The BDA processor provides a managed solution for extracting structured data fro
 **Note**: This example uses both the AWS and AWSCC (AWS Cloud Control) providers. The AWSCC provider is required for Bedrock Data Automation resources and will be automatically installed during `terraform init`.
 
 ### 2. **Bedrock Model Access**
+
 Before deploying, enable access to the required Bedrock models in the AWS Console:
 
 1. Navigate to Amazon Bedrock → Model access
@@ -51,9 +55,11 @@ Before deploying, enable access to the required Bedrock models in the AWS Consol
 3. Wait for approval (usually immediate for most models)
 
 ### 3. **Bedrock Data Automation Project**
+
 The Bedrock Data Automation project and blueprint are now **automatically created by Terraform**. No manual setup required!
 
 The example includes:
+
 - **Custom Blueprint**: Homeowners Insurance Application form schema (defined in `bda.tf`)
 - **BDA Project**: Configured with document, image, video, and audio processing (defined in `bda.tf`)
 - **Standard Output**: Markdown format with configurable extraction settings
@@ -63,12 +69,14 @@ The BDA resources are organized in a separate `bda.tf` file for better code orga
 ## Quick Start
 
 ### 1. **Clone and Navigate**
+
 ```bash
 git clone <repository-url>
 cd genaiic-idp-accelerator-terraform/examples/bda-processor
 ```
 
 ### 2. **Configure Variables**
+
 ```bash
 # Copy the example configuration
 cp terraform.tfvars.example terraform.tfvars
@@ -84,6 +92,7 @@ cp terraform.tfvars.example terraform.tfvars
 **Important**: The example now includes a complete Homeowners Insurance Application blueprint that matches the CDK sample. No manual BDA project creation is required!
 
 ### 3. **Deploy**
+
 ```bash
 terraform init
 terraform plan
@@ -91,6 +100,7 @@ terraform apply
 ```
 
 ### 4. **Test the Deployment**
+
 ```bash
 # Upload a test document
 aws s3 cp test-document.pdf s3://$(terraform output -raw buckets | jq -r '.input_bucket.bucket_name')/
@@ -107,6 +117,7 @@ aws stepfunctions list-executions --state-machine-arn $(terraform output -raw bd
 ## Configuration Options
 
 ### **Basic Configuration**
+
 ```hcl
 # terraform.tfvars
 region = "us-east-1"
@@ -115,6 +126,7 @@ log_level = "INFO"
 ```
 
 ### **Feature Toggles**
+
 ```hcl
 # Enable/disable optional features
 enable_evaluation = true
@@ -123,6 +135,7 @@ max_processing_concurrency = 100
 ```
 
 ### **Model Configuration**
+
 ```hcl
 # Bedrock models for different functions
 evaluation_model_id = "amazon.titan-text-express-v1"
@@ -130,6 +143,7 @@ summarization_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 ```
 
 ### **Custom Document Classes**
+
 ```hcl
 custom_config = {
   notes = "Configuration for invoice processing"
@@ -166,6 +180,7 @@ custom_config = {
 ### **API Endpoints**
 
 #### **GraphQL API**
+
 ```bash
 # Get API endpoint
 GRAPHQL_URL=$(terraform output -raw processing_environment | jq -r '.api.graphql_url')
@@ -182,6 +197,7 @@ curl -X POST $GRAPHQL_URL \
 ```
 
 #### **Direct Queue Access**
+
 ```bash
 # Send document directly to processing queue
 QUEUE_URL=$(terraform output -raw processing_environment | jq -r '.document_queue.queue_url')
@@ -191,11 +207,13 @@ aws sqs send-message --queue-url $QUEUE_URL --message-body '{"documentId": "test
 ### **Monitoring and Observability**
 
 #### **CloudWatch Metrics**
+
 - **Namespace**: `{prefix}-metrics`
 - **Key Metrics**: Processing duration, success rate, error count
 - **Dashboards**: Automatically created for monitoring
 
 #### **Step Functions**
+
 ```bash
 # Get state machine ARN
 STATE_MACHINE_ARN=$(terraform output -raw bda_processor | jq -r '.state_machine_arn')
@@ -205,6 +223,7 @@ aws stepfunctions list-executions --state-machine-arn $STATE_MACHINE_ARN
 ```
 
 #### **Lambda Functions**
+
 ```bash
 # View Lambda function logs
 aws logs tail /aws/lambda/{function-name} --follow
@@ -255,6 +274,7 @@ aws logs tail /aws/lambda/{function-name} --follow
 ## Customization
 
 ### **Adding New Document Types**
+
 ```hcl
 custom_config = {
   classes = [
@@ -274,11 +294,13 @@ custom_config = {
 ```
 
 ### **Custom Processing Logic**
+
 1. Extend the Lambda functions in `assets/lambdas/`
 2. Update the Step Functions workflow in `assets/sfn/workflow.asl.json`
 3. Modify the configuration schema as needed
 
 ### **Integration with External Systems**
+
 - **Webhooks**: Add webhook notifications in the completion Lambda
 - **Databases**: Integrate with external databases for metadata storage
 - **APIs**: Call external APIs for additional processing
@@ -288,36 +310,45 @@ custom_config = {
 ### **Common Issues**
 
 #### **Model Access Denied**
+
 ```
 Error: AccessDeniedException: You don't have access to the model
 ```
+
 **Solution**: Enable model access in Bedrock console
 
 #### **Layer Build Failures**
+
 ```
 Error: Lambda layer build failed
 ```
+
 **Solution**: Set `force_layer_rebuild = true` and re-apply
 
 #### **Permission Errors**
+
 ```
 Error: AccessDenied
 ```
+
 **Solution**: Check IAM permissions for Bedrock, S3, and Lambda
 
 ### **Debugging Steps**
 
 1. **Check CloudWatch Logs**
+
    ```bash
    aws logs tail /aws/lambda/{function-name} --follow
    ```
 
 2. **Verify Step Functions Execution**
+
    ```bash
    aws stepfunctions describe-execution --execution-arn {execution-arn}
    ```
 
 3. **Test Individual Components**
+
    ```bash
    aws lambda invoke --function-name {function-name} --payload '{}' response.json
    ```
@@ -325,11 +356,13 @@ Error: AccessDenied
 ## Cost Optimization
 
 ### **Resource Sizing**
+
 - **Lambda Memory**: Adjust based on document size and processing complexity
 - **Concurrency Limits**: Set appropriate limits to control costs
 - **Log Retention**: Use shorter retention periods for development
 
 ### **Usage Patterns**
+
 - **Batch Processing**: Process documents in batches during off-peak hours
 - **Lifecycle Policies**: Set S3 lifecycle policies for automatic cleanup
 - **Reserved Capacity**: Consider reserved capacity for predictable workloads
@@ -337,11 +370,13 @@ Error: AccessDenied
 ## Security
 
 ### **Encryption**
+
 - **At Rest**: KMS encryption for S3, DynamoDB, and Lambda
 - **In Transit**: TLS encryption for all API calls
 - **Key Management**: Automatic key rotation enabled
 
 ### **Access Control**
+
 - **IAM Roles**: Least privilege access for all components
 - **VPC Integration**: Optional VPC deployment for network isolation
 - **API Security**: GraphQL API with appropriate authentication
@@ -359,6 +394,7 @@ terraform destroy
 ## Support
 
 For issues and questions:
+
 - Check the [troubleshooting section](#troubleshooting)
 - Review CloudWatch logs for detailed error information
 - Consult the main repository documentation

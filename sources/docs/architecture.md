@@ -88,6 +88,7 @@ For detailed information about configuration capabilities, see [configuration.md
 ## Current Patterns
 
 ### Pattern 1: Bedrock Data Automation (BDA)
+
 Packet or Media processing with Bedrock Data Automation (BDA)
 
 ![Pattern 1 Architecture](../images/IDP-Pattern1-BDA.drawio.png)
@@ -96,16 +97,18 @@ Packet or Media processing with Bedrock Data Automation (BDA)
 For detailed information about Pattern 1, see [pattern-1.md](./pattern-1.md).
 
 ### Pattern 2: Textract + Bedrock
+
 OCR → Bedrock Classification (page-level or holistic) → Bedrock Extraction
 
 ![Pattern 2 Architecture](../images/IDP-Pattern2-Bedrock.drawio.png)
 *Pattern 2 combines Amazon Textract for OCR and AWS Bedrock for classification and extraction tasks, supporting both page-level and holistic classification methods.*
 
-For detailed information about Pattern 2, see [pattern-2.md](./pattern-2.md). 
+For detailed information about Pattern 2, see [pattern-2.md](./pattern-2.md).
 
 This pattern also supports few-shot examples for classification and extraction. For details on implementing few-shot examples, see [few-shot-examples.md](./few-shot-examples.md).
 
 ### Pattern 3: Textract + UDOP + Bedrock
+
 OCR → UDOP Classification (SageMaker) → Bedrock Extraction
 
 ![Pattern 3 Architecture](../images/IDP-Pattern3-UDOP.drawio.png)
@@ -237,7 +240,7 @@ The solution includes a comprehensive evaluation system:
 
 1. **Baseline Data**: Ground truth data stored in the evaluation baseline bucket
 2. **Automatic Evaluation**: When enabled, each processed document is automatically evaluated against baseline data if available
-3. **Metrics**: 
+3. **Metrics**:
    - Extraction accuracy for key-value pairs
    - Classification accuracy across document types
    - Summarization quality assessment

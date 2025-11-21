@@ -32,6 +32,7 @@ Configuration changes are validated and applied immediately, with rollback capab
 Key parameters that can be configured during CloudFormation deployment:
 
 ### General Parameters
+
 - `AdminEmail`: Administrator email for web UI access
 - `AllowedSignUpEmailDomain`: Optional domain(s) allowed for web UI user signup
 - `MaxConcurrentWorkflows`: Control concurrent document processing (default: 100)
@@ -44,12 +45,14 @@ Key parameters that can be configured during CloudFormation deployment:
 - `CloudFrontAllowedGeos`: Optional geographic restrictions for UI access
 
 ### Pattern Selection
+
 - `IDPPattern`: Select processing pattern:
   - Pattern1: Packet or Media processing with Bedrock Data Automation (BDA)
   - Pattern2: Packet processing with Textract and Bedrock
   - Pattern3: Packet processing with Textract, SageMaker(UDOP), and Bedrock
 
 ### Pattern-Specific Parameters
+
 - **Pattern 1 (BDA)**
   - `Pattern1BDAProjectArn`: Optional existing Bedrock Data Automation project ARN
   - `Pattern1Configuration`: Configuration preset to use
@@ -64,6 +67,7 @@ Key parameters that can be configured during CloudFormation deployment:
   - `Pattern3Configuration`: Configuration preset to use
 
 ### Optional Features
+
 - `IsSummarizationEnabled`: Enable/disable document summarization (default: true)
 - `EvaluationBaselineBucketName`: Optional existing bucket for ground truth data
 - `EvaluationAutoEnabled`: Enable automatic accuracy evaluation (default: true)
@@ -110,6 +114,7 @@ The solution supports Amazon Bedrock Guardrails for content safety and complianc
 ### How Guardrails Work
 
 Guardrails provide:
+
 - **Content Filtering**: Block harmful, inappropriate, or sensitive content
 - **Topic Restrictions**: Prevent processing of specific topic areas
 - **Data Protection**: Redact or block personally identifiable information (PII)
@@ -118,12 +123,14 @@ Guardrails provide:
 ### Configuring Guardrails
 
 Guardrails are configured with two CloudFormation parameters:
+
 - `BedrockGuardrailId`: The ID (not name) of an existing Bedrock Guardrail
 - `BedrockGuardrailVersion`: The version of the guardrail to use (e.g., "DRAFT" or "1")
 
 This applies guardrails to all Bedrock model interactions, including:
+
 - Document extraction (all patterns)
-- Document summarization (all patterns) 
+- Document summarization (all patterns)
 - Document classification (Pattern 2 only)
 - Knowledge base queries (if enabled)
 
@@ -186,6 +193,7 @@ The solution provides multiple ways to track document processing status:
 ### Using the Web UI
 
 The web UI dashboard provides a real-time view of document processing status, including:
+
 - Document status (queued, processing, completed, failed)
 - Processing time
 - Classification results

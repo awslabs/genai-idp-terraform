@@ -8,11 +8,13 @@ This guide walks you through setting up different environments for the GenAI IDP
 
 **Purpose**: Testing and development work
 **Characteristics**:
+
 - Lower resource limits
 - Reduced redundancy
 - Simplified monitoring
 
 **Configuration**:
+
 ```hcl
 # terraform/environments/dev/terraform.tfvars
 environment = "dev"
@@ -36,12 +38,14 @@ log_retention_days = 7
 
 **Purpose**: Testing and validation environment
 **Characteristics**:
+
 - Full feature testing
 - Performance validation
 - Security testing
 - Complete monitoring setup
 
 **Configuration**:
+
 ```hcl
 # terraform/environments/staging/terraform.tfvars
 environment = "staging"
@@ -66,6 +70,7 @@ log_retention_days = 30
 ### VPC Setup
 
 **New VPC** (Recommended):
+
 ```hcl
 # Network configuration
 create_vpc = true
@@ -81,6 +86,7 @@ single_nat_gateway = false  # One per AZ for HA
 ```
 
 **Existing VPC**:
+
 ```hcl
 # Use existing VPC
 create_vpc = false
@@ -94,6 +100,7 @@ public_subnet_ids = ["subnet-abcdef12", "subnet-21fedcba"]
 ### Security Groups
 
 **Default Security Groups**:
+
 ```hcl
 # Lambda security group
 lambda_security_group_rules = [
@@ -125,6 +132,7 @@ api_gateway_security_group_rules = [
 ### S3 Bucket Setup
 
 **Development**:
+
 ```hcl
 s3_bucket_configuration = {
   versioning = {
@@ -155,6 +163,7 @@ s3_bucket_configuration = {
 ```
 
 **Staging**:
+
 ```hcl
 s3_bucket_configuration = {
   versioning = {
@@ -196,6 +205,7 @@ s3_bucket_configuration = {
 ### DynamoDB Configuration
 
 **Development**:
+
 ```hcl
 dynamodb_configuration = {
   billing_mode = "PAY_PER_REQUEST"
@@ -211,6 +221,7 @@ dynamodb_configuration = {
 ```
 
 **Staging**:
+
 ```hcl
 dynamodb_configuration = {
   billing_mode   = "PROVISIONED"
@@ -243,6 +254,7 @@ dynamodb_configuration = {
 ### IAM Roles and Policies
 
 **Least Privilege Principle**:
+
 ```hcl
 # Lambda execution role
 lambda_execution_role_policies = [
@@ -282,6 +294,7 @@ resource "aws_iam_policy" "lambda_custom_policy" {
 ### KMS Key Management
 
 **Environment-Specific Keys**:
+
 ```hcl
 # KMS key for S3 encryption
 resource "aws_kms_key" "s3_key" {
@@ -321,6 +334,7 @@ resource "aws_kms_key" "s3_key" {
 ### CloudWatch Configuration
 
 **Log Groups**:
+
 ```hcl
 # Lambda log groups
 resource "aws_cloudwatch_log_group" "lambda_logs" {
@@ -334,6 +348,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 ```
 
 **Alarms**:
+
 ```hcl
 # Error rate alarm
 resource "aws_cloudwatch_metric_alarm" "lambda_error_rate" {
@@ -358,6 +373,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_error_rate" {
 ### X-Ray Tracing
 
 **Configuration**:
+
 ```hcl
 # Enable X-Ray tracing
 lambda_tracing_config = {
@@ -385,12 +401,14 @@ resource "aws_xray_sampling_rule" "idp_sampling" {
 ### Development to Staging
 
 **Validation Checklist**:
+
 - [ ] All tests pass
 - [ ] Security scan completed
 - [ ] Performance benchmarks met
 - [ ] Documentation updated
 
 **Promotion Process**:
+
 ```bash
 # 1. Tag the release
 git tag -a v1.2.3 -m "Release v1.2.3"
@@ -413,6 +431,7 @@ terraform apply
 ### State File Backup
 
 **S3 Backend Configuration**:
+
 ```hcl
 terraform {
   backend "s3" {
@@ -431,6 +450,7 @@ terraform {
 ### Data Backup
 
 **Automated Backups**:
+
 ```hcl
 # DynamoDB backup
 resource "aws_dynamodb_table" "documents" {

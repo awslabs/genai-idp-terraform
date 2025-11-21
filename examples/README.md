@@ -13,6 +13,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 ## 📁 Available Examples
 
 ### 1. **Bedrock LLM Processor** (`bedrock-llm-processor/`)
+
 **Best for**: Flexible document processing with foundation models
 
 - **Processing**: Multi-stage pipeline with Claude/Nova models
@@ -21,6 +22,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Customization**: Complete control over processing logic
 
 **Key Features**:
+
 - ✅ Web UI with CloudFront distribution
 - ✅ Knowledge Base integration for RAG
 - ✅ Assessment functions for quality measurement
@@ -29,6 +31,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - ✅ Configurable model selection (Claude, Nova)
 
 ### 2. **BDA Processor** (`bda-processor/`)
+
 **Best for**: Standard document types with well-defined schemas
 
 - **Processing**: Managed service with built-in document understanding
@@ -37,6 +40,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Customization**: Schema-based with predefined document classes
 
 **Key Features**:
+
 - ✅ Bedrock Data Automation integration
 - ✅ Web UI for document management
 - ✅ Evaluation against baseline documents
@@ -44,6 +48,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - ✅ Configurable document schemas
 
 ### 3. **SageMaker UDOP Processor** (`sagemaker-udop-processor/`)
+
 **Best for**: Specialized document processing with custom models
 
 - **Processing**: Fine-tuned UDOP models for classification + Bedrock for extraction
@@ -52,6 +57,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Customization**: Custom model training and deployment
 
 **Key Features**:
+
 - ✅ SageMaker endpoint deployment with auto-scaling
 - ✅ Custom UDOP model integration
 - ✅ Assessment functions for quality measurement
@@ -60,6 +66,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - ✅ GPU-optimized instance types
 
 ### 4. **Processing Environment** (`processing-environment/`)
+
 **Best for**: Core infrastructure without processors
 
 - **Purpose**: Demonstrates the core processing environment module
@@ -67,6 +74,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Use Case**: Building custom processors or understanding core components
 
 ### 5. **Processing Environment API** (`processing-environment-api/`)
+
 **Best for**: Standalone API deployment
 
 - **Purpose**: Demonstrates the decoupled API module
@@ -74,6 +82,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Use Case**: Adding API functionality to existing processing environments
 
 ### 6. **Core Tables** (`core-tables/`)
+
 **Best for**: Shared DynamoDB tables
 
 - **Purpose**: Demonstrates shared table deployment
@@ -81,6 +90,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 - **Use Case**: Multi-processor deployments with shared state
 
 ### 7. **User Identity Standalone** (`user-identity-standalone/`)
+
 **Best for**: Authentication infrastructure
 
 - **Purpose**: Demonstrates user identity management
@@ -90,24 +100,28 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 ## 🎯 New Features in All Examples
 
 ### **Assessment Functions** 🔍
+
 - **Purpose**: Document quality assessment and validation
 - **Models**: Configurable Bedrock models (Claude Haiku recommended)
 - **Usage**: Set `enable_assessment = true` in terraform.tfvars (defaults to `false`)
 - **Benefits**: Real-time quality scoring and feedback
 
 ### **Evaluation Functions** 📊
+
 - **Purpose**: Compare processing results against baseline documents
 - **Models**: Configurable Bedrock models for evaluation
 - **Usage**: Set `enable_evaluation = true` and provide baseline bucket (defaults to `false`)
 - **Benefits**: Accuracy measurement and performance tracking
 
 ### **Reporting Environment** 📈
+
 - **Purpose**: Analytics and metrics storage in Parquet format
 - **Components**: S3 bucket, Glue database, 4 analytical tables
 - **Usage**: Set `enable_reporting = true` in terraform.tfvars (defaults to `false`)
 - **Benefits**: Athena-ready analytics, cost tracking, performance metrics
 
 ### **Enhanced Monitoring** 📋
+
 - **CloudWatch Dashboards**: Comprehensive metrics and alarms
 - **Custom Metrics**: Processing time, accuracy, cost per document
 - **Log Aggregation**: Centralized logging with configurable retention
@@ -116,6 +130,7 @@ This directory contains comprehensive examples demonstrating how to deploy the G
 ## 🔧 Configuration Guide
 
 ### **Basic Configuration**
+
 ```hcl
 # terraform.tfvars
 region = "us-east-1"
@@ -132,6 +147,7 @@ evaluation_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
 ```
 
 ### **Advanced Configuration**
+
 ```hcl
 # Performance tuning
 max_processing_concurrency = 100
@@ -151,11 +167,13 @@ enable_geo_restriction  = false
 ## 📋 Prerequisites
 
 ### **AWS Requirements**
+
 - AWS CLI configured with appropriate permissions
 - Terraform >= 1.0 installed
 - Docker installed (for Lambda layer building)
 
 ### **Bedrock Model Access**
+
 **⚠️ Important**: Enable model access in AWS Console before deployment:
 
 1. Navigate to **Amazon Bedrock** → **Model access**
@@ -166,7 +184,9 @@ enable_geo_restriction  = false
    - **Titan Text Express**: `amazon.titan-text-express-v1`
 
 ### **Service Quotas**
+
 Ensure adequate quotas for:
+
 - Lambda concurrent executions (recommended: 1000+)
 - Step Functions state machines (recommended: 100+)
 - SageMaker endpoints (for UDOP processor)
@@ -175,17 +195,20 @@ Ensure adequate quotas for:
 ## 🚀 Deployment Steps
 
 ### **1. Choose Your Example**
+
 ```bash
 cd examples/bedrock-llm-processor  # or your preferred example
 ```
 
 ### **2. Configure Variables**
+
 ```bash
 cp terraform.tfvars.example terraform.tfvars
 nano terraform.tfvars  # Edit with your values
 ```
 
 ### **3. Deploy Infrastructure**
+
 ```bash
 terraform init
 terraform plan
@@ -193,6 +216,7 @@ terraform apply
 ```
 
 ### **4. Access Your Deployment**
+
 ```bash
 # View outputs
 terraform output
@@ -208,6 +232,7 @@ terraform output
 When `enable_reporting = true`, you can query analytics data using Amazon Athena:
 
 ### **Document-Level Metrics**
+
 ```sql
 SELECT 
     processor_type,
@@ -220,6 +245,7 @@ GROUP BY processor_type;
 ```
 
 ### **Cost Analysis**
+
 ```sql
 SELECT 
     processor_type,
@@ -235,24 +261,31 @@ GROUP BY processor_type;
 ### **Common Issues**
 
 #### **Model Access Denied**
+
 ```
 Error: AccessDeniedException: You don't have access to the model
 ```
+
 **Solution**: Enable model access in Bedrock console
 
 #### **Insufficient Permissions**
+
 ```
 Error: User is not authorized to perform: bedrock:InvokeModel
 ```
+
 **Solution**: Ensure AWS credentials have required permissions
 
 #### **Resource Limits**
+
 ```
 Error: LimitExceededException: Rate exceeded
 ```
+
 **Solution**: Adjust `max_processing_concurrency` in configuration
 
 ### **Getting Help**
+
 - Check CloudWatch logs for detailed error information
 - Review module README files for specific guidance
 - Verify all prerequisites are met
@@ -261,6 +294,7 @@ Error: LimitExceededException: Rate exceeded
 ## 🎉 What's New
 
 ### **v0.3.8 Functional Parity**
+
 - ✅ **Assessment Functions**: Document quality measurement
 - ✅ **Enhanced Evaluation**: Baseline comparison with configurable models
 - ✅ **Reporting Environment**: Parquet-based analytics with Glue tables
@@ -270,7 +304,9 @@ Error: LimitExceededException: Rate exceeded
 - ✅ **Environment Variable Parity**: 100% CDK compatibility
 
 ### **Deployment Ready**
+
 All examples are now **production-ready** with:
+
 - Complete IAM permission sets
 - KMS encryption support
 - VPC deployment options

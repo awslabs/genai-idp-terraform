@@ -21,6 +21,7 @@ This example creates:
 ## IDP Common Layer Integration
 
 The example demonstrates the new architecture where:
+
 - The IDP common layer is created as a separate module
 - The processing environment depends on the external layer ARN
 - Lambda functions that use `idp_common` automatically get the layer attached:

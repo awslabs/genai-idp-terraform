@@ -97,6 +97,7 @@ For the sections functionality to work, your `Document` object must have:
 #### Data Processing
 
 **Schema Inference**: The method dynamically infers PyArrow schemas by analyzing the JSON data:
+
 - **Strings**: Mapped to `pa.string()`
 - **Integers**: Mapped to `pa.int64()`
 - **Floats**: Mapped to `pa.float64()`
@@ -129,6 +130,7 @@ For the sections functionality to work, your `Document` object must have:
 ```
 
 **Metadata Fields**: Each record includes the following metadata fields:
+
 - `section_id`: The unique identifier of the section
 - `document_id`: The document identifier
 - `section_classification`: The section's classification/type
@@ -175,6 +177,7 @@ reporting-bucket/
 ### File Naming Convention
 
 All files use a unique timestamp-based naming convention to prevent overwrites:
+
 - **Format**: `{escaped_doc_id}_{timestamp}_results.parquet`
 - **Timestamp**: `YYYYMMDD_HHMMSS_mmm` (includes milliseconds)
 - **Example**: `invoice-123_20240115_143052_123_results.parquet`

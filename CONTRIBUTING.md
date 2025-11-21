@@ -4,7 +4,7 @@ Welcome to the GenAI IDP Accelerator for Terraform repository! This document pro
 
 ## Code of Conduct
 
-This project adheres to the [Amazon Open Source Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to opensource-codeofconduct@amazon.com.
+This project adheres to the [Amazon Open Source Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to <opensource-codeofconduct@amazon.com>.
 
 ## Table of Contents
 
@@ -72,28 +72,33 @@ genaiic-idp-accelerator-terraform/
 ### Initial Setup
 
 1. **Clone Repository**:
+
    ```bash
    git clone <repository-url>
    cd genaiic-idp-accelerator-terraform
    ```
 
 2. **Choose Example**: Navigate to the appropriate example directory:
+
    ```bash
    cd examples/bedrock-llm-processor  # or bda-processor, sagemaker-udop-processor
    ```
 
 3. **Configure Variables**: Copy and modify the example configuration:
+
    ```bash
    cp terraform.tfvars.example terraform.tfvars
    # Edit terraform.tfvars with your specific values
    ```
 
 4. **Initialize Terraform**:
+
    ```bash
    terraform init
    ```
 
 5. **Plan and Apply**:
+
    ```bash
    terraform plan
    terraform apply
@@ -188,6 +193,7 @@ Each major module includes detailed contributor documentation:
 ### Local Testing
 
 1. **Terraform Validation**:
+
    ```bash
    terraform fmt -check
    terraform validate
@@ -195,6 +201,7 @@ Each major module includes detailed contributor documentation:
    ```
 
 2. **Module Testing**: Use example configurations to test modules:
+
    ```bash
    cd examples/bedrock-llm-processor
    terraform init
@@ -202,6 +209,7 @@ Each major module includes detailed contributor documentation:
    ```
 
 3. **Lambda Function Testing**: Use SAM CLI for local Lambda testing:
+
    ```bash
    sam local invoke FunctionName --env-vars env.json -e event.json
    ```
@@ -216,6 +224,7 @@ Each major module includes detailed contributor documentation:
 ### Automated Testing
 
 Consider implementing automated tests using tools like:
+
 - **Terratest**: For infrastructure testing
 - **pytest**: For Lambda function unit tests
 - **Checkov**: For security and compliance scanning
@@ -237,6 +246,7 @@ Consider implementing automated tests using tools like:
 ### Deployment Pipeline
 
 Consider implementing a CI/CD pipeline with:
+
 1. **Code Validation**: Terraform fmt, validate, and security scanning
 2. **Plan Review**: Automated plan generation and review
 3. **Staged Deployment**: Deploy to development, then staging, then production
@@ -344,6 +354,7 @@ Security is a top priority for this project. Please review our [Security Policy]
 - Compliance considerations
 
 **Important**: Never commit sensitive information such as:
+
 - AWS credentials or access keys
 - API keys or tokens
 - Passwords or secrets

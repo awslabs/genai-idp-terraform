@@ -17,6 +17,7 @@ The GenAI IDP Accelerator is a collection of Terraform modules that enables rapi
 ### What document formats are supported?
 
 The accelerator supports:
+
 - **PDFs** (text and image-based)
 - **Images** (JPEG, PNG, TIFF)
 - **Office documents** (Word, Excel, PowerPoint)
@@ -26,6 +27,7 @@ The accelerator supports:
 ### Which AWS regions are supported?
 
 The accelerator works in regions where all required services are available. Recommended regions include:
+
 - `us-east-1` (N. Virginia) - Best service availability
 - `us-west-2` (Oregon)
 - `eu-west-1` (Ireland)
@@ -40,6 +42,7 @@ The accelerator works in regions where all required services are available. Reco
 ### Can I customize the processing logic?
 
 Yes! The accelerator is designed to be highly customizable. You can:
+
 - Modify existing Lambda functions
 - Add custom processing steps
 - Integrate with external APIs
@@ -56,16 +59,19 @@ Yes! The accelerator is designed to be highly customizable. You can:
 ## Popular Topics
 
 ### Getting Started
+
 - [Prerequisites](../getting-started/prerequisites.md)
 - [Quick Start Guide](../getting-started/quick-start.md)
 - [First Deployment](deployment.md#first-deployment)
 
 ### Common Issues
+
 - [Permission Errors](troubleshooting.md#permission-errors)
 - [Resource Limits](troubleshooting.md#resource-limits)
 - [Deployment Failures](troubleshooting.md#deployment-failures)
 
 ### Customization
+
 - [Custom Processing Logic](general.md#custom-processing)
 - [Integration Options](general.md#integrations)
 
@@ -81,6 +87,7 @@ If your question isn't answered here:
 ## Contributing to FAQs
 
 Help improve this FAQ by:
+
 - Suggesting new questions based on your experience
 - Providing better answers to existing questions
 - Sharing solutions to problems you've encountered

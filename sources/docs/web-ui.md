@@ -106,6 +106,7 @@ To run the web UI locally for development:
 
 1. Navigate to the `/ui` directory
 2. Create a `.env` file using the `WebUITestEnvFile` output from the CloudFormation stack:
+
 ```
 REACT_APP_USER_POOL_ID=<value>
 REACT_APP_USER_POOL_CLIENT_ID=<value>
@@ -114,6 +115,7 @@ REACT_APP_APPSYNC_GRAPHQL_URL=<value>
 REACT_APP_AWS_REGION=<value>
 REACT_APP_SETTINGS_PARAMETER=<value>
 ```
+
 3. Install dependencies: `npm install`
 4. Start the development server: `npm run start`
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
@@ -149,6 +151,7 @@ The solution includes AWS WAF integration to protect your AppSync API:
 - **Lambda service access**: The solution automatically maintains a WAF IPSet with current AWS Lambda service IP ranges to ensure Lambda functions can always access the AppSync API even when IP restrictions are enabled
 
 When configuring the WAF:
+
 - IP ranges must be in valid CIDR notation (e.g., `192.168.1.0/24`)
 - Multiple ranges should be comma-separated
 - The WAF is only enabled when the parameter is set to something other than the default `0.0.0.0/0`

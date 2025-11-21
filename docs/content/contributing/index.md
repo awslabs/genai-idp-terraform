@@ -5,35 +5,45 @@ We welcome contributions to the GenAI IDP Accelerator for Terraform! This guide 
 ## Ways to Contribute
 
 ### Bug Reports
+
 Help us improve by reporting bugs you encounter:
+
 - Use the issue template
 - Provide detailed reproduction steps
 - Include relevant logs and error messages
 - Specify your environment details
 
 ### Feature Requests
+
 Suggest new features or improvements:
+
 - Describe the use case and problem
 - Explain the proposed solution
 - Consider backward compatibility
 - Provide examples if possible
 
 ### Code Contributions
+
 Contribute code improvements:
+
 - Bug fixes
 - New modules or features
 - Performance optimizations
 - Security enhancements
 
 ### Documentation
+
 Help improve documentation:
+
 - Fix typos and errors
 - Add missing information
 - Create new guides and examples
 - Improve existing content
 
 ### Testing
+
 Enhance testing coverage:
+
 - Add unit tests
 - Create integration tests
 - Test in different environments
@@ -75,6 +85,7 @@ git checkout -b fix/issue-description
 ### 4. Make Changes
 
 Follow our development guidelines:
+
 - [Development Guide](development.md)
 - [Testing Guide](testing.md)
 - [Documentation Guide](documentation.md)
@@ -107,6 +118,7 @@ terraform plan
 ### Code Standards
 
 #### Terraform Code Style
+
 ```hcl
 # Use consistent formatting
 resource "aws_s3_bucket" "example" {
@@ -131,6 +143,7 @@ variable "document_processing_timeout" {
 ```
 
 #### File Organization
+
 ```
 modules/
 ├── module-name/
@@ -145,7 +158,9 @@ modules/
 ### Documentation Standards
 
 #### Module Documentation
+
 Each module must include:
+
 - Clear description and purpose
 - Usage examples
 - Variable documentation
@@ -153,6 +168,7 @@ Each module must include:
 - Requirements and dependencies
 
 #### Code Comments
+
 ```hcl
 # Create S3 bucket for document storage with encryption enabled
 # This bucket will store incoming documents and trigger processing
@@ -169,11 +185,13 @@ resource "aws_s3_bucket" "documents" {
 ### Testing Requirements
 
 #### Module Testing
+
 - All modules must have basic validation tests
 - Examples must be tested and working
 - Integration tests for complex workflows
 
 #### Example Testing
+
 ```bash
 # Each example should include a test script
 #!/bin/bash
@@ -228,6 +246,7 @@ echo "Test completed successfully!"
 ### Merge Request Guidelines
 
 #### Title Format
+
 ```
 type(scope): brief description
 
@@ -238,6 +257,7 @@ docs(guides): update deployment guide for security
 ```
 
 #### Description Template
+
 ```markdown
 ## Description
 Brief description of changes
@@ -282,6 +302,7 @@ We follow the [AWS Open Source Code of Conduct](https://aws.github.io/code-of-co
 ## Recognition
 
 Contributors are recognized through:
+
 - Contributor list in README
 - Release notes acknowledgments
 - Community highlights
@@ -305,6 +326,7 @@ Contributors are recognized through:
 ### Versioning
 
 We follow [Semantic Versioning](https://semver.org/):
+
 - **MAJOR**: Breaking changes
 - **MINOR**: New features (backward compatible)
 - **PATCH**: Bug fixes (backward compatible)

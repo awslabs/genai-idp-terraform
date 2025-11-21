@@ -197,6 +197,7 @@ pre-commit run --all-files
 ### Common Issues
 
 #### Terraform Provider Download Issues
+
 ```bash
 # Clear provider cache
 rm -rf .terraform
@@ -204,6 +205,7 @@ terraform init
 ```
 
 #### AWS Credentials Issues
+
 ```bash
 # Verify credentials
 aws sts get-caller-identity
@@ -213,6 +215,7 @@ aws configure list
 ```
 
 #### Permission Issues
+
 Ensure your AWS user/role has the required permissions listed in [Prerequisites](prerequisites.md).
 
 ### Getting Help

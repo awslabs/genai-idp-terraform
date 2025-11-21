@@ -4,7 +4,8 @@
 
 **Error:** `ACCESS_DENIED: Service role does not allow AWS CodeBuild to create Amazon CloudWatch Logs log streams`
 
-**Root Cause:** 
+**Root Cause:**
+
 - CodeBuild project was not explicitly configured with a CloudWatch log group
 - IAM policy had wildcard permissions but CodeBuild couldn't create log streams in the default log group
 
@@ -13,6 +14,7 @@
 ### 1. Added CloudWatch Log Group
 
 **File: `main.tf`**
+
 ```hcl
 # CloudWatch log group for CodeBuild
 resource "aws_cloudwatch_log_group" "codebuild_log_group" {
@@ -28,6 +30,7 @@ resource "aws_cloudwatch_log_group" "codebuild_log_group" {
 ### 2. Updated CodeBuild Project Configuration
 
 **File: `main.tf`**
+
 ```hcl
 resource "aws_codebuild_project" "lambda_layers_build" {
   # ... existing configuration ...
@@ -47,11 +50,13 @@ resource "aws_codebuild_project" "lambda_layers_build" {
 ### 3. Enhanced IAM Policy
 
 **File: `main.tf`**
+
 - Added `data "aws_caller_identity" "current" {}` for account ID
 - Updated IAM policy to use specific log group ARNs instead of wildcard
 - More secure and explicit permissions
 
 **Before:**
+
 ```hcl
 {
   Effect = "Allow"
@@ -65,6 +70,7 @@ resource "aws_codebuild_project" "lambda_layers_build" {
 ```
 
 **After:**
+
 ```hcl
 {
   Effect = "Allow"
@@ -83,19 +89,23 @@ resource "aws_codebuild_project" "lambda_layers_build" {
 ## Benefits
 
 ### ✅ **Fixed Access Denied Error**
+
 - CodeBuild can now successfully create log streams
 - Explicit log group configuration prevents permission issues
 
 ### ✅ **Improved Security**
+
 - More specific IAM permissions (principle of least privilege)
 - No wildcard permissions for CloudWatch logs
 
 ### ✅ **Better Observability**
+
 - Explicit log group with configurable retention (14 days)
 - Proper tagging for resource management
 - Predictable log group naming
 
 ### ✅ **Consistent Behavior**
+
 - Deterministic log group creation
 - No dependency on CodeBuild's default logging behavior
 
@@ -104,6 +114,7 @@ resource "aws_codebuild_project" "lambda_layers_build" {
 The fix can be tested by:
 
 1. **Deploy the example:**
+
    ```bash
    cd examples/processing-environment
    terraform init
@@ -127,11 +138,13 @@ The fix can be tested by:
 If you have existing deployments that are failing with the CloudWatch logs error:
 
 1. **Update the module:**
+
    ```bash
    git pull  # Get the latest changes
    ```
 
 2. **Plan the changes:**
+
    ```bash
    terraform plan
    # You should see:
@@ -141,6 +154,7 @@ If you have existing deployments that are failing with the CloudWatch logs error
    ```
 
 3. **Apply the fix:**
+
    ```bash
    terraform apply
    ```

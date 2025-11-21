@@ -23,7 +23,7 @@ SPDX-License-Identifier: MIT-0
 
 A scalable, serverless solution for automated document processing and information extraction using AWS services. This system combines OCR capabilities with generative AI to convert unstructured documents into structured data at scale.
 
-https://github.com/user-attachments/assets/272b543b-e506-48ce-acc1-361422d22322
+<https://github.com/user-attachments/assets/272b543b-e506-48ce-acc1-361422d22322>
 
 White-glove customization, deployment, and integration support for production use cases is also available through [AWS Professional Services](https://aws.amazon.com/professional-services/).
 
@@ -49,6 +49,7 @@ White-glove customization, deployment, and integration support for production us
 The solution uses a modular architecture with nested CloudFormation stacks to support multiple document processing patterns while maintaining common infrastructure for queueing, tracking, and monitoring.
 
 Current patterns include:
+
 - Pattern 1: Packet or Media processing with Bedrock Data Automation (BDA)
 - Pattern 2: OCR → Bedrock Classification (page-level or holistic) → Bedrock Extraction
 - Pattern 3: OCR → UDOP Classification (SageMaker) → Bedrock Extraction
@@ -91,6 +92,7 @@ After deployment, you can quickly process a document and view results:
 See the [Deployment Guide](./docs/deployment.md#testing-the-solution) for more detailed testing instructions.
 
 IMPORTANT: If you have not previously done so, you must [request access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) to the following Amazon Bedrock models:
+
 - Amazon: All Nova models, plus Titan Text Embeddings V2
 - Anthropic: Claude 3.x models, Claude 4.x models
 
@@ -102,18 +104,18 @@ To update an existing GenAIIDP stack to a new version:
 2. Select your existing stack
 3. Click "Update"
 4. Select "Replace current template"
-5. Enter the template URL: 
+5. Enter the template URL:
    - us-west-2: `https://s3.us-west-2.amazonaws.com/aws-ml-blog-us-west-2/artifacts/genai-idp/idp-main.yaml`
    - us-east-1: `https://s3.us-east-1.amazonaws.com/aws-ml-blog-us-east-1/artifacts/genai-idp/idp-main.yaml`
 6. Follow the prompts to update your stack, reviewing any parameter changes
 7. For detailed instructions, see the [Deployment Guide](./docs/deployment.md#updating-an-existing-stack)
 
 For testing, use these sample files:
-   - For Patterns 1 (BDA) and Pattern 2: Use [samples/lending_package.pdf](./samples/lending_package.pdf)
-   - For Pattern 3 (UDOP): Use [samples/rvl_cdip_package.pdf](./samples/rvl_cdip_package.pdf)
+
+- For Patterns 1 (BDA) and Pattern 2: Use [samples/lending_package.pdf](./samples/lending_package.pdf)
+- For Pattern 3 (UDOP): Use [samples/rvl_cdip_package.pdf](./samples/rvl_cdip_package.pdf)
 
 For detailed deployment and testing instructions, see the [Deployment Guide](./docs/deployment.md).
-
 
 ## Detailed Documentation
 

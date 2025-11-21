@@ -133,6 +133,7 @@ The assessment prompts support the following placeholders:
 The `{DOCUMENT_IMAGE}` placeholder enables precise control over image inclusion:
 
 #### Text-Only Assessment (Default)
+
 ```yaml
 task_prompt: |
   Assess extraction results based on document text and OCR confidence data:
@@ -143,6 +144,7 @@ task_prompt: |
 ```
 
 #### Multimodal Assessment
+
 ```yaml
 task_prompt: |
   Assess extraction results by analyzing both text and visual document content:
@@ -170,6 +172,7 @@ The assessment service supports three types of attributes, each with a specific 
 For basic single-value extractions like dates, amounts, or names:
 
 **Configuration:**
+
 ```yaml
 attributes:
   - name: "StatementDate"
@@ -178,6 +181,7 @@ attributes:
 ```
 
 **Assessment Response:**
+
 ```json
 {
   "StatementDate": {
@@ -192,6 +196,7 @@ attributes:
 For nested object structures with multiple related fields:
 
 **Configuration:**
+
 ```yaml
 attributes:
   - name: "AccountDetails"
@@ -205,6 +210,7 @@ attributes:
 ```
 
 **Assessment Response:**
+
 ```json
 {
   "AccountDetails": {
@@ -225,6 +231,7 @@ attributes:
 For arrays of items, such as transactions in a bank statement:
 
 **Configuration:**
+
 ```yaml
 attributes:
   - name: "Transactions"
@@ -242,6 +249,7 @@ attributes:
 ```
 
 **Assessment Response:**
+
 ```json
 {
   "Transactions": [
@@ -385,6 +393,7 @@ The assessment feature supports flexible confidence threshold configuration to h
 ### Configuration Options
 
 #### Global Thresholds
+
 Set system-wide confidence requirements for all attributes:
 
 ```json
@@ -410,6 +419,7 @@ Set system-wide confidence requirements for all attributes:
 ```
 
 #### Per-Attribute Thresholds
+
 Override global settings for specific fields requiring different confidence levels:
 
 ```json
@@ -432,6 +442,7 @@ Override global settings for specific fields requiring different confidence leve
 ```
 
 #### Mixed Configuration
+
 Combine global defaults with attribute-specific overrides:
 
 ```json
@@ -484,6 +495,7 @@ Assessment results automatically appear in the web interface with enhanced visua
 The UI provides immediate confidence feedback through color-coded displays:
 
 #### Color Coding
+
 - 🟢 **Green**: Confidence meets or exceeds threshold (high confidence)
 - 🔴 **Red**: Confidence falls below threshold (requires review)
 - ⚫ **Black**: Confidence available but no threshold for comparison
@@ -491,6 +503,7 @@ The UI provides immediate confidence feedback through color-coded displays:
 #### Display Modes
 
 **1. With Threshold (Color-Coded)**
+
 ```
 YTDNetPay: 75000
 Confidence: 92.0% / Threshold: 95.0% [RED - Below Threshold]
@@ -500,6 +513,7 @@ Confidence: 85.0% / Threshold: 70.0% [GREEN - Above Threshold]
 ```
 
 **2. Confidence Only (Black Text)**
+
 ```
 EmployeeName: John Smith
 Confidence: 88.5% [BLACK - No Threshold Set]
@@ -511,17 +525,20 @@ When neither confidence nor threshold data is available, no confidence indicator
 ### Interface Coverage
 
 **1. Form View (JSONViewer)**
+
 - Color-coded confidence display in the editable form interface
 - Supports nested data structures (arrays, objects)
 - Real-time visual feedback during data editing
 
 **2. Visual Editor Modal**
+
 - Same confidence indicators in the document image overlay editor
 - Visual connection between form fields and document bounding boxes
 - Confidence display for deeply nested extraction results
 
 **3. Nested Data Support**
 Confidence indicators work with complex document structures:
+
 ```
 FederalTaxes[0]:
   ├── YTD: 2111.2 [Confidence: 67.6% / Threshold: 85.0% - RED]
@@ -616,6 +633,7 @@ For complex documents with many attributes or large lists (such as bank statemen
 ### When to Use Granular Assessment
 
 Consider granular assessment for:
+
 - **Documents with many attributes** (10+ simple attributes)
 - **Large list structures** (bank transactions, line items, etc.)
 - **Complex nested data** (multiple group attributes)
@@ -678,7 +696,9 @@ The granular assessment service automatically:
 ### Task Types
 
 #### Simple Batch Tasks
+
 Groups simple attributes together for efficient processing:
+
 ```yaml
 # Configuration with 10 simple attributes
 attributes:
@@ -691,7 +711,9 @@ attributes:
 ```
 
 #### Group Tasks
+
 Processes complex nested structures as single units:
+
 ```yaml
 # Each group becomes one focused task
 attributes:
@@ -704,7 +726,9 @@ attributes:
 ```
 
 #### List Item Tasks
+
 Assesses each list item individually for maximum accuracy:
+
 ```yaml
 # 100 transactions = 100 individual assessment tasks
 attributes:
@@ -720,6 +744,7 @@ attributes:
 ### Performance Tuning
 
 #### Batch Size Configuration
+
 ```yaml
 granular:
   simple_batch_size: 3    # Smaller = more accurate, larger = faster
@@ -728,7 +753,9 @@ granular:
 ```
 
 #### Model Selection
+
 Granular assessment works best with models supporting prompt caching:
+
 - `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (recommended)
 - `us.anthropic.claude-3-5-haiku-20241022-v1:0` (cost-effective)
 - `us.amazon.nova-lite-v1:0` or `us.amazon.nova-pro-v1:0`
@@ -813,7 +840,6 @@ The assessment feature implements several cost optimization techniques:
 5. **Configurable Image Dimensions**: Adjust image resolution to balance assessment quality and processing costs
 6. **Granular Assessment with Caching**: For complex documents, use granular assessment with prompt caching for 60-80% cost reduction
 
-
 ## Testing and Validation
 
 ### End-to-End Testing
@@ -829,6 +855,7 @@ jupyter notebook notebooks/examples/step4_assessment_granular.ipynb
 ```
 
 The notebooks demonstrate:
+
 - Document processing with assessment enabled
 - Confidence score interpretation
 - Integration with existing extraction workflows

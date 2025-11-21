@@ -5,6 +5,7 @@ This example demonstrates how to use Amazon Bedrock Data Automation (BDA) for pr
 ## Overview
 
 The BDA Processor example uses Amazon Bedrock Data Automation to provide:
+
 1. **Managed Processing** → Pre-built schemas for common document types
 2. **Enterprise Ready** → Enterprise-grade processing pipeline
 3. **Standardized Output** → Consistent data extraction formats
@@ -60,6 +61,7 @@ terraform apply
 ## Configuration Options
 
 ### Basic Configuration
+
 ```hcl
 # terraform.tfvars
 # Basic Configuration
@@ -103,6 +105,7 @@ tags = {
 ```
 
 ### Advanced Configuration
+
 ```hcl
 # Enhanced settings for production
 region = "us-east-1"
@@ -142,12 +145,14 @@ tags = {
 ## Features
 
 ### **Managed Processing**
+
 - Pre-built document schemas
 - Automatic data extraction
 - Standardized output formats
 - Enterprise-grade reliability
 
 ### **Document Types Supported**
+
 - Invoices and receipts
 - Forms and applications
 - Financial statements
@@ -155,12 +160,14 @@ tags = {
 - Healthcare records
 
 ### **Production Features**
+
 - High availability architecture
 - Automatic scaling
 - Error handling and retry logic
 - Comprehensive monitoring
 
 ### **Integration Ready**
+
 - GraphQL API for status tracking
 - Web UI for document management
 - S3 integration for document storage
@@ -183,6 +190,7 @@ graph TB
 ## Usage Workflow
 
 ### 1. Document Upload
+
 ```bash
 # Upload documents to the input bucket
 INPUT_BUCKET=$(terraform output -raw buckets | jq -r '.input_bucket.bucket_name')
@@ -190,13 +198,16 @@ aws s3 cp invoice.pdf s3://$INPUT_BUCKET/
 ```
 
 ### 2. Automatic Processing
+
 The BDA processor automatically:
+
 - Detects new documents
 - Applies appropriate schema
 - Extracts structured data
 - Stores results with metadata
 
 ### 3. Monitor Progress
+
 ```bash
 # Check processing status
 GRAPHQL_URL=$(terraform output -raw processing_environment | jq -r '.api.graphql_url')
@@ -206,6 +217,7 @@ curl -X POST $GRAPHQL_URL \
 ```
 
 ### 4. Retrieve Results
+
 ```bash
 # Download processed results
 OUTPUT_BUCKET=$(terraform output -raw buckets | jq -r '.output_bucket.bucket_name')
@@ -224,6 +236,7 @@ aws s3 cp s3://$OUTPUT_BUCKET/processed/ . --recursive
 ### 2. Configure Document Schemas
 
 Define the document types you want to process:
+
 - Invoice processing schema
 - Form extraction schema
 - Custom document types
@@ -235,6 +248,7 @@ Validate your BDA project works correctly before deploying the Terraform infrast
 ## Monitoring and Troubleshooting
 
 ### CloudWatch Metrics
+
 - BDA processing success/failure rates
 - Document processing latency
 - Error rates and types
@@ -242,30 +256,37 @@ Validate your BDA project works correctly before deploying the Terraform infrast
 ### Common Issues
 
 #### BDA Project Not Found
+
 ```
 Error: BDA project 'project-name' not found
 ```
+
 **Solution**: Verify BDA project exists and name is correct
 
 #### Schema Mismatch
+
 ```
 Error: Document doesn't match expected schema
 ```
+
 **Solution**: Review document format and BDA schema configuration
 
 #### Processing Delays
+
 **Symptoms**: Documents uploaded but not processed
 **Solution**: Check BDA project status and quotas
 
 ## Security Features
 
 ### Data Protection
+
 - End-to-end encryption
 - Secure document storage
 - Access logging and monitoring
 - Compliance-ready architecture
 
 ### Access Control
+
 - IAM-based permissions
 - Cognito user authentication
 - API-level security
@@ -276,12 +297,14 @@ Error: Document doesn't match expected schema
 ### When to Use BDA Processor
 
 **Choose BDA Processor when you need**:
+
 - Standard document types (invoices, forms, etc.)
 - Managed processing with minimal customization
 - Production-ready solution out of the box
 - Enterprise-grade reliability and support
 
 **Choose Bedrock LLM Processor when you need**:
+
 - Custom document types or processing logic
 - Full control over AI prompts and models
 - Flexible processing pipeline
@@ -290,12 +313,14 @@ Error: Document doesn't match expected schema
 ## Next Steps
 
 ### Production Deployment
+
 1. **Multi-Environment Setup**: Deploy to dev/staging/prod
 2. **Monitoring**: Set up comprehensive monitoring and alerting
 3. **Backup**: Implement backup and disaster recovery
 4. **Security**: Review and harden security configurations
 
 ### Integration
+
 1. **API Integration**: Connect with existing systems
 2. **Workflow Integration**: Integrate with business processes
 3. **Data Pipeline**: Set up data processing pipelines

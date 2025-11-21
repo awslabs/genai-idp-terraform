@@ -7,12 +7,15 @@ Common issues and solutions when using the GenAI IDP Accelerator.
 ### "AccessDenied" when deploying with Terraform
 
 **Symptoms**:
+
 ```
 Error: AccessDenied: User is not authorized to perform action
 ```
 
 **Solutions**:
+
 1. **Check IAM permissions**:
+
    ```bash
    aws sts get-caller-identity
    aws iam get-user
@@ -26,6 +29,7 @@ Error: AccessDenied: User is not authorized to perform action
    - API Gateway: Create/manage APIs
 
 3. **Use administrator access temporarily**:
+
    ```json
    {
      "Version": "2012-10-17",
@@ -42,11 +46,13 @@ Error: AccessDenied: User is not authorized to perform action
 ### "User is not authorized to invoke Bedrock model"
 
 **Symptoms**:
+
 ```
 Error: AccessDeniedException: Your account is not authorized to invoke this model
 ```
 
 **Solutions**:
+
 1. **Request model access**:
    - Go to Amazon Bedrock console
    - Navigate to "Model access"
@@ -57,6 +63,7 @@ Error: AccessDeniedException: Your account is not authorized to invoke this mode
    - Use supported regions like `us-east-1`, `us-west-2`
 
 3. **Verify model ARN**:
+
    ```hcl
    # Correct model ARN format
    model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
@@ -67,12 +74,15 @@ Error: AccessDeniedException: Your account is not authorized to invoke this mode
 ### "LimitExceededException" errors
 
 **Symptoms**:
+
 ```
 Error: LimitExceededException: Account has reached the maximum number of functions
 ```
 
 **Solutions**:
+
 1. **Check service quotas**:
+
    ```bash
    aws service-quotas get-service-quota \
      --service-code lambda \
@@ -85,6 +95,7 @@ Error: LimitExceededException: Account has reached the maximum number of functio
    - Submit increase request
 
 3. **Clean up unused resources**:
+
    ```bash
    # List unused Lambda functions
    aws lambda list-functions --query 'Functions[?LastModified<`2024-01-01`]'
@@ -93,12 +104,15 @@ Error: LimitExceededException: Account has reached the maximum number of functio
 ### "ThrottlingException" from AWS services
 
 **Symptoms**:
+
 ```
 Error: ThrottlingException: Rate exceeded
 ```
 
 **Solutions**:
+
 1. **Implement exponential backoff**:
+
    ```python
    import time
    import random
@@ -124,16 +138,19 @@ Error: ThrottlingException: Rate exceeded
 ### Terraform state lock conflicts
 
 **Symptoms**:
+
 ```
 Error: Error acquiring the state lock
 ```
 
 **Solutions**:
+
 1. **Wait for lock release**:
    - Another Terraform operation may be running
    - Wait 10-15 minutes for automatic release
 
 2. **Check lock status**:
+
    ```bash
    aws dynamodb get-item \
      --table-name terraform-locks \
@@ -141,6 +158,7 @@ Error: Error acquiring the state lock
    ```
 
 3. **Force unlock** (use carefully):
+
    ```bash
    terraform force-unlock LOCK_ID
    ```
@@ -148,17 +166,21 @@ Error: Error acquiring the state lock
 ### "Resource already exists" errors
 
 **Symptoms**:
+
 ```
 Error: ResourceAlreadyExistsException: Resource already exists
 ```
 
 **Solutions**:
+
 1. **Import existing resource**:
+
    ```bash
    terraform import aws_s3_bucket.documents existing-bucket-name
    ```
 
 2. **Use different resource names**:
+
    ```hcl
    resource "aws_s3_bucket" "documents" {
      bucket = "${var.environment}-idp-documents-${random_id.suffix.hex}"
@@ -174,12 +196,15 @@ Error: ResourceAlreadyExistsException: Resource already exists
 ### Lambda function timeouts
 
 **Symptoms**:
+
 ```
 Task timed out after 15.00 seconds
 ```
 
 **Solutions**:
+
 1. **Increase timeout**:
+
    ```hcl
    resource "aws_lambda_function" "processor" {
      timeout = 300  # 5 minutes
@@ -187,6 +212,7 @@ Task timed out after 15.00 seconds
    ```
 
 2. **Optimize function performance**:
+
    ```python
    # Initialize clients outside handler
    import boto3
@@ -200,6 +226,7 @@ Task timed out after 15.00 seconds
    ```
 
 3. **Increase memory allocation**:
+
    ```hcl
    resource "aws_lambda_function" "processor" {
      memory_size = 1024  # More memory = more CPU
@@ -209,16 +236,19 @@ Task timed out after 15.00 seconds
 ### "Document format not supported" errors
 
 **Symptoms**:
+
 ```
 Error: InvalidParameterException: Document format not supported
 ```
 
 **Solutions**:
+
 1. **Check supported formats**:
    - PDF, PNG, JPEG, TIFF only
    - Maximum file size: 10MB (sync), 500MB (async)
 
 2. **Validate file before processing**:
+
    ```python
    import os
    
@@ -238,11 +268,14 @@ Error: InvalidParameterException: Document format not supported
 ### Slow document processing
 
 **Symptoms**:
+
 - Long processing times
 - Frequent timeouts
 
 **Solutions**:
+
 1. **Optimize Lambda configuration**:
+
    ```hcl
    resource "aws_lambda_function" "processor" {
      memory_size = 2048  # Higher memory for better performance
@@ -251,6 +284,7 @@ Error: InvalidParameterException: Document format not supported
    ```
 
 2. **Implement parallel processing**:
+
    ```python
    import concurrent.futures
    
@@ -269,17 +303,21 @@ Error: InvalidParameterException: Document format not supported
 ### High memory usage
 
 **Symptoms**:
+
 ```
 Runtime.OutOfMemoryError: JavaScript heap out of memory
 ```
 
 **Solutions**:
+
 1. **Increase Lambda memory**:
+
    ```hcl
    memory_size = 3008  # Maximum available
    ```
 
 2. **Optimize memory usage**:
+
    ```python
    # Process documents in chunks
    def process_large_document(document_text):
@@ -300,11 +338,14 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
 ### VPC connectivity problems
 
 **Symptoms**:
+
 - Lambda functions can't reach AWS services
 - Timeout errors when calling APIs
 
 **Solutions**:
+
 1. **Check VPC configuration**:
+
    ```hcl
    # Ensure NAT Gateway for private subnets
    resource "aws_nat_gateway" "main" {
@@ -314,6 +355,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
    ```
 
 2. **Use VPC endpoints**:
+
    ```hcl
    resource "aws_vpc_endpoint" "s3" {
      vpc_id       = aws_vpc.main.id
@@ -322,6 +364,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
    ```
 
 3. **Check security groups**:
+
    ```hcl
    resource "aws_security_group" "lambda" {
      egress {
@@ -338,11 +381,14 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
 ### Inconsistent processing results
 
 **Symptoms**:
+
 - Different results for same document
 - Missing or incorrect extracted data
 
 **Solutions**:
+
 1. **Improve prompt consistency**:
+
    ```python
    CONSISTENT_PROMPT = """
    Extract the following information from this document:
@@ -356,6 +402,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
    ```
 
 2. **Implement validation**:
+
    ```python
    def validate_extraction_result(result):
        required_fields = ['type', 'date', 'amount', 'parties']
@@ -363,6 +410,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
    ```
 
 3. **Add error handling**:
+
    ```python
    def process_with_fallback(document):
        try:
@@ -381,6 +429,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
 ### How to debug Lambda functions
 
 1. **Enable detailed logging**:
+
    ```python
    import logging
    
@@ -394,6 +443,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
    ```
 
 2. **Use X-Ray tracing**:
+
    ```hcl
    resource "aws_lambda_function" "processor" {
      tracing_config {
@@ -410,6 +460,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
 ### How to trace API requests
 
 1. **Enable API Gateway logging**:
+
    ```hcl
    resource "aws_api_gateway_stage" "main" {
      xray_tracing_enabled = true
@@ -433,6 +484,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
    ```
 
 2. **Use correlation IDs**:
+
    ```python
    import uuid
    
@@ -453,6 +505,7 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
 ---
 
 For more troubleshooting help, see:
+
 - [Deployment Troubleshooting](../deployment-guides/troubleshooting.md)
 - [Monitoring Guide](../deployment-guides/monitoring.md)
 - [Best Practices](../deployment-guides/best-practices.md)

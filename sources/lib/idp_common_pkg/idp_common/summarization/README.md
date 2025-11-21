@@ -184,6 +184,7 @@ The service can handle any JSON structure returned by the model. You can use any
 ```
 
 Important considerations for the prompt template:
+
 1. Always request a valid JSON response format
 2. Specify the exact fields you want to include
 3. Include any formatting or style instructions directly in the prompt
@@ -215,6 +216,7 @@ The main advantage of this service is that it can work with any JSON structure r
 ### Summary Report
 
 When `store_results=True` (the default), the service generates a markdown summary report that is stored in S3 at the location:
+
 ```
 s3://{output_bucket}/{document.input_key}/summary/summary.md
 ```
@@ -247,6 +249,7 @@ Execution time: 1.25 seconds
 ```
 
 Special formatting is applied based on the data type:
+
 - Lists are formatted as bullet points
 - Dictionaries are formatted as nested sections
 - Strings are presented as-is
@@ -286,6 +289,7 @@ for section in document.sections:
 ```
 
 This approach:
+
 1. Processes each section separately using `process_document_section`
 2. Stores individual section summaries in S3
 3. Combines all section summaries into a comprehensive document summary
@@ -334,6 +338,7 @@ print(f"Summary Report URI: {document.summary_report_uri}")
 ```
 
 This approach:
+
 1. Combines text from all pages
 2. Generates a single summary for the entire document
 3. Stores the summary in S3
@@ -388,7 +393,7 @@ The `process_document_section` method allows you to generate summaries for speci
    - Extracts text from all pages in the section
    - Generates a summary using the Bedrock LLM
    - Stores the summary in S3 in both JSON and Markdown formats
-3. **Output**: 
+3. **Output**:
    - Updates the section's attributes with links to the summary files
    - Returns the updated Document object
 
@@ -402,12 +407,14 @@ The `process_document_section` method allows you to generate summaries for speci
 ### Storage Locations
 
 For a section with ID `section-id`, the summaries are stored at:
+
 - JSON: `s3://{output_bucket}/{document.input_key}/sections/{section_id}/summary.json`
 - Markdown: `s3://{output_bucket}/{document.input_key}/sections/{section_id}/summary.md`
 
 ### Section Attributes
 
 After processing, the section's attributes will contain:
+
 - `summary_uri`: S3 URI for the JSON summary
 - `summary_md_uri`: S3 URI for the Markdown summary
 

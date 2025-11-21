@@ -26,6 +26,7 @@ This solution is in experimental stage. While it implements security best practi
 The GenAI IDP Accelerator supports three different processing patterns, each optimized for specific use cases:
 
 ### Pattern 1: BDA Processor (Bedrock Data Automation)
+
 - **Best for**: Standard document types with well-defined schemas
 - **Processing**: Managed service with built-in document understanding
 - **Setup**: Requires existing BDA project configuration
@@ -33,12 +34,14 @@ The GenAI IDP Accelerator supports three different processing patterns, each opt
 - **Recent Updates**: Enhanced permissions for DynamoDB, SSM Parameter Store, and Bedrock Data Automation APIs
 
 ### Pattern 2: Bedrock LLM Processor
+
 - **Best for**: Custom document types requiring flexible extraction
 - **Processing**: Multi-stage pipeline with foundation models (Claude, Nova)
 - **Setup**: Fully automated deployment
 - **Customization**: Complete control over classification and extraction logic
 
 ### Pattern 3: SageMaker UDOP Processor
+
 - **Best for**: Specialized document processing with custom models
 - **Processing**: Fine-tuned UDOP models for classification + Bedrock for extraction
 - **Setup**: Requires trained UDOP model artifacts
@@ -73,17 +76,20 @@ Based on comprehensive security analysis and AWS best practices, the solution no
 **Note**: These security enhancements are still under development and not production-ready yet. Additional testing and validation are required before deploying to production environments.
 
 ### Enhanced IAM Permissions
+
 - **DynamoDB**: Full CRUD operations for tracking and configuration tables
 - **SSM Parameter Store**: Secure parameter management with GetParameter, PutParameter, and GetParametersByPath
 - **Bedrock Data Automation**: Complete API access including GetDataAutomationProject, ListDataAutomationProjects, GetBlueprint, and GetBlueprintRecommendation
 - **S3 Enhanced Permissions**: Full CRUD operations including DeleteObject and GetBucketLocation for comprehensive bucket management
 
 ### Conditional HITL (Human-in-the-Loop) Support
+
 - **Modular HITL Policies**: Separate conditional policies for Human-in-the-Loop functionality
 - **Optional BDA Metadata Table**: Configurable access to BDAMetadataTable based on deployment requirements
 - **Environment Variable Consistency**: Standardized CONFIGURATION_TABLE_NAME across all Lambda functions
 
 ### Security Architecture Improvements
+
 - **Least Privilege Access**: IAM policies follow principle of least privilege with specific resource ARNs
 - **Conditional Resource Access**: HITL functionality deployed only when required using Terraform for_each patterns
 - **Resource Separation**: Clear separation between core processing permissions and optional HITL permissions
@@ -93,11 +99,13 @@ Based on comprehensive security analysis and AWS best practices, the solution no
 Before deploying the solution, ensure you have:
 
 ### Required Tools
+
 - **[Terraform](https://www.terraform.io/)**: Version 1.0 or later
 - **[AWS CLI](https://aws.amazon.com/cli/)**: Configured with appropriate credentials
 - **[Docker](https://www.docker.com/)**: For building Lambda deployment packages (if needed)
 
 ### AWS Requirements
+
 - **AWS Account**: With appropriate permissions for all services used
 - **Bedrock Model Access**: Enable access to required models in the AWS Console
 - **Service Quotas**: Ensure adequate quotas for Lambda, Step Functions, etc.
@@ -148,6 +156,7 @@ nano terraform.tfvars
 ```
 
 **Minimal configuration example**:
+
 ```hcl
 # terraform.tfvars
 aws_region = "us-east-1"
@@ -193,18 +202,21 @@ terraform output
 Once deployed, you can process documents in several ways:
 
 #### 1. Web Interface (Recommended)
+
 - Navigate to the `web_ui_url` from your Terraform outputs
 - Upload documents through the drag-and-drop interface
 - Monitor processing status in real-time
 - View and download extraction results
 
 #### 2. Direct S3 Upload
+
 ```bash
 # Upload a document to trigger processing
 aws s3 cp my-document.pdf s3://your-input-bucket/
 ```
 
 #### 3. Programmatic Upload
+
 ```python
 import boto3
 
@@ -225,6 +237,7 @@ aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/your-prefix"
 ## Configuration Options
 
 ### Basic Configuration
+
 ```hcl
 # terraform.tfvars
 aws_region = "us-east-1"
@@ -240,6 +253,7 @@ classification_max_workers = 20
 ```
 
 ### Advanced Configuration
+
 ```hcl
 # Enable additional features
 enable_web_ui           = true
@@ -288,16 +302,19 @@ custom_config = {
 ## Security Features
 
 ### IAM Security Model
+
 - **Least Privilege**: All IAM policies follow the principle of least privilege
 - **Resource-Specific ARNs**: Policies reference specific resource ARNs rather than wildcards
 - **Conditional Access**: HITL functionality requires explicit configuration to enable
 
 ### Data Protection
+
 - **KMS Encryption**: All data encrypted at rest and in transit
 - **VPC Support**: Optional VPC deployment for network isolation
 - **Secure Parameter Management**: SSM Parameter Store for sensitive configuration
 
 ### Compliance & Monitoring
+
 - **CloudWatch Integration**: Comprehensive logging and monitoring
 - **AWS Config**: Resource compliance monitoring
 - **CloudTrail**: API call auditing and tracking
@@ -307,6 +324,7 @@ custom_config = {
 Before deploying this solution to production, consider implementing the following AWS best practices. These recommendations help ensure security, reliability, and cost optimization.
 
 ### Compute & Performance
+
 - **Lambda Concurrent Execution Limits**: Configure reserved concurrency for each Lambda function to prevent runaway costs and protect downstream services. This solution currently has 43 Lambda functions without configured limits.
 - **Lambda Dead Letter Queue (DLQ)**: Configure DLQ for Lambda functions to capture and analyze failed asynchronous invocations. This solution currently has 37 Lambda functions without configured DLQ.
 - **Lambda VPC Configuration**: Configure Lambda functions inside a VPC when accessing private resources. This solution currently has 10 Lambda functions without VPC configuration. Note: Only required for functions accessing VPC resources.
@@ -315,20 +333,24 @@ Before deploying this solution to production, consider implementing the followin
 - *(Additional recommendations will be added here)*
 
 ### Security & Encryption
+
 - **CodeBuild Encryption with CMK**: Configure CodeBuild projects to use customer-managed KMS keys for encrypting build artifacts, environment variables, and logs. This solution currently has 3 CodeBuild projects without CMK encryption.
 - **CloudWatch Log Group Encryption**: Configure CloudWatch Log Groups to use KMS encryption for log data at rest. This solution currently has 7 CloudWatch Log Groups without KMS encryption.
 - *(Additional recommendations will be added here)*
 
 ### Monitoring & Observability
+
 - **CloudWatch Alarms**: Set up alarms for critical metrics and error rates
 - **CloudWatch Log Retention**: Configure CloudWatch Log Groups with appropriate retention periods (minimum 1 year for production). This solution currently has 37 CloudWatch Log Groups without adequate retention.
 - *(Additional recommendations will be added here)*
 
 ### Cost Optimization
+
 - **Resource Tagging**: Implement comprehensive tagging strategy for cost allocation
 - *(Additional recommendations will be added here)*
 
 ### Reliability & Resilience
+
 - **Multi-AZ Deployment**: Deploy critical components across multiple availability zones
 - **CloudFront Origin Failover**: Configure CloudFront with origin groups for automatic failover to secondary origins. This solution currently has 1 CloudFront distribution without origin failover.
 - **CloudFront Geo Restriction**: Configure geo restrictions based on compliance and security requirements. This solution currently has 1 CloudFront distribution without geo restriction configured.
@@ -343,6 +365,7 @@ For detailed guidance on implementing these best practices, see the [AWS Best Pr
 This project includes comprehensive documentation built with Material for MkDocs, covering everything from getting started to advanced deployment scenarios.
 
 #### 🌐 Online Documentation
+
 - **GitHub Pages**: [https://awslabs.github.io/genai-idp-terraform/](https://awslabs.github.io/genai-idp-terraform/)
 - **Auto-deployed**: Updated automatically with each commit to main branch
 - **Mobile-friendly**: Responsive design for all devices
@@ -385,6 +408,7 @@ Visit [http://127.0.0.1:8000](http://127.0.0.1:8000) to view the documentation.
 ## Examples and Use Cases
 
 ### Example 1: Financial Document Processing
+
 ```bash
 cd examples/bedrock-llm-processor
 # Configure for financial documents (invoices, statements, forms)
@@ -392,6 +416,7 @@ cd examples/bedrock-llm-processor
 ```
 
 ### Example 2: Legal Document Analysis
+
 ```bash
 cd examples/bda-processor
 # Configure for standard legal documents
@@ -400,6 +425,7 @@ cd examples/bda-processor
 ```
 
 ### Example 3: Custom Document Classification
+
 ```bash
 cd examples/sagemaker-udop-processor
 # Deploy with fine-tuned UDOP model
@@ -411,27 +437,35 @@ cd examples/sagemaker-udop-processor
 ### Common Issues
 
 #### 1. Model Access Denied
+
 ```
 Error: AccessDeniedException: You don't have access to the model
 ```
+
 **Solution**: Enable model access in the Bedrock console (see Prerequisites)
 
 #### 2. Insufficient Permissions
+
 ```
 Error: User is not authorized to perform: bedrock:InvokeModel
 ```
+
 **Solution**: Ensure your AWS credentials have the required permissions
 
 #### 3. Resource Limits
+
 ```
 Error: LimitExceededException: Rate exceeded
 ```
+
 **Solution**: Adjust `max_processing_concurrency` in your configuration
 
 #### 4. HITL Configuration Issues
+
 ```
 Error: Access denied to BDA metadata table
 ```
+
 **Solution**: Ensure `bda_metadata_table_arn` is correctly configured if using HITL functionality
 
 ### Getting Help
@@ -454,7 +488,9 @@ We welcome contributions! Each module includes detailed contributor documentatio
 - **[Web UI](modules/web-ui/README.md)**: Frontend development guidance
 
 ### Security Contributions
+
 When contributing security-related changes:
+
 - Follow AWS security best practices
 - Use least privilege IAM policies
 - Include comprehensive testing for permission changes

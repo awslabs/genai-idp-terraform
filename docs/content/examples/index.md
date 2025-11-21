@@ -7,6 +7,7 @@ This section provides practical examples of how to use the GenAI IDP Accelerator
 These are complete document processing solutions that demonstrate different approaches to **Intelligent Document Processing**. Each pattern provides a full end-to-end implementation with all necessary components.
 
 ### [Bedrock LLM Processor](bedrock-llm-processor.md)
+
 **Complete E2E Solution**  
 **Deployment Time**: 15-20 minutes  
 **Based on**: [examples/bedrock-llm-processor/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/bedrock-llm-processor?ref_type=heads)
@@ -14,6 +15,7 @@ These are complete document processing solutions that demonstrate different appr
 **The flexible AI-powered document processing pattern** - Perfect for organizations needing custom document analysis with advanced AI capabilities and comprehensive analytics.
 
 **Complete solution includes**:
+
 - Multi-stage AI processing pipeline (classification, extraction, summarization)
 - Amazon Bedrock integration with Nova Pro and Claude models
 - Assessment functions for real-time quality measurement
@@ -32,11 +34,13 @@ These are complete document processing solutions that demonstrate different appr
 ✅ **Flexible Configuration**: Customizable config files with sensible defaults  
 
 **Configuration Options**:
+
 - **Default Configuration**: Uses pre-built lending package configuration
 - **Custom Configuration**: Specify your own config file with `config_file_path` variable
 - **Multiple Patterns**: Choose from lending, RVL-CDIP, or custom document patterns
 
 **Ideal for**:
+
 - Custom document processing workflows requiring flexibility
 - Organizations needing comprehensive quality measurement and analytics
 - Advanced prompt engineering and model customization
@@ -45,6 +49,7 @@ These are complete document processing solutions that demonstrate different appr
 ---
 
 ### [BDA Processor](bda-processor.md)
+
 **Complete E2E Solution**  
 **Deployment Time**: 15-20 minutes  
 **Based on**: [examples/bda-processor/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/bda-processor?ref_type=heads)
@@ -52,6 +57,7 @@ These are complete document processing solutions that demonstrate different appr
 **The managed document processing pattern** - Perfect for organizations processing standard document types with minimal configuration.
 
 **Complete solution includes**:
+
 - Amazon Bedrock Data Automation integration
 - Pre-built document schemas and templates
 - Managed processing pipeline with automatic scaling
@@ -60,6 +66,7 @@ These are complete document processing solutions that demonstrate different appr
 - Security best practices implementation
 
 **Ideal for**:
+
 - Standard document types (invoices, forms, contracts)
 - Organizations wanting managed solutions
 - Rapid deployment with minimal customization
@@ -68,6 +75,7 @@ These are complete document processing solutions that demonstrate different appr
 ---
 
 ### [SageMaker UDOP Processor](sagemaker-udop.md)
+
 **Complete E2E Solution**  
 **Deployment Time**: 25-35 minutes  
 **Based on**: [examples/sagemaker-udop-processor/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/sagemaker-udop-processor?ref_type=heads)
@@ -75,6 +83,7 @@ These are complete document processing solutions that demonstrate different appr
 **The specialized AI model pattern** - Perfect for organizations requiring highly accurate, custom-trained models for specific document types.
 
 **Complete solution includes**:
+
 - Amazon SageMaker endpoint deployment
 - Fine-tuned UDOP (Unified Document Understanding) model
 - Custom document classification and extraction
@@ -83,6 +92,7 @@ These are complete document processing solutions that demonstrate different appr
 - Specialized training and inference infrastructure
 
 **Ideal for**:
+
 - Specialized or complex document types
 - Organizations requiring custom model training
 - High-accuracy classification and extraction needs
@@ -93,69 +103,81 @@ These are complete document processing solutions that demonstrate different appr
 These examples provide individual components that can be combined to build custom solutions or extend the end-to-end patterns above.
 
 ### [Processing Environment](processing-environment.md)
+
 **Deployment Time**: 15-20 minutes  
 **Based on**: [examples/processing-environment/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/processing-environment?ref_type=heads)
 
 Core infrastructure setup without specific processors - perfect for building custom solutions.
 
 **What it includes**:
+
 - Core processing infrastructure
 - DynamoDB tables for tracking
 - GraphQL API for management
 - Foundation for custom processors
 
 **Use cases**:
+
 - Custom processor development
 - Infrastructure foundation
 - Modular deployments
 
 ### [Processing Environment API](processing-environment-api.md)
+
 **Deployment Time**: 10-15 minutes  
 **Based on**: [examples/processing-environment-api/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/processing-environment-api?ref_type=heads)
 
 Standalone API deployment for document processing management and monitoring.
 
 **What it includes**:
+
 - GraphQL API endpoints
 - Document status tracking
 - User authentication integration
 - API documentation
 
 **Use cases**:
+
 - API-first deployments
 - Integration with existing systems
 - Microservices architecture
 
 ### [User Identity Standalone](user-identity.md)
+
 **Deployment Time**: 5-10 minutes  
 **Based on**: [examples/user-identity-standalone/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/user-identity-standalone?ref_type=heads)
 
 Standalone user authentication and authorization setup using Amazon Cognito.
 
 **What it includes**:
+
 - Cognito User Pool
 - User Pool Client
 - Admin user setup
 - Domain configuration
 
 **Use cases**:
+
 - Authentication foundation
 - User management setup
 - Security infrastructure
 
 ### [Core Tables](core-tables.md)
+
 **Deployment Time**: 5-10 minutes  
 **Based on**: [examples/core-tables/](https://github.com/awslabs/genai-idp-terraform/tree/main/examples/core-tables?ref_type=heads)
 
 Essential DynamoDB tables for document tracking and configuration management.
 
 **What it includes**:
+
 - Document tracking table
 - Configuration table
 - Concurrency management table
 - Basic monitoring setup
 
 **Use cases**:
+
 - Infrastructure foundation
 - Custom implementations
 - Modular deployments
@@ -163,11 +185,13 @@ Essential DynamoDB tables for document tracking and configuration management.
 ## Repository Examples
 
 All examples are available in the repository at:
+
 ```
 genaiic-idp-accelerator-terraform/examples/
 ```
 
 Each example includes:
+
 - Complete Terraform configurations
 - Multiple configuration options (minimal, comprehensive, template)
 - Comprehensive README documentation
@@ -178,6 +202,7 @@ Each example includes:
 ### 1. Choose Your Pattern
 
 **For Complete Solutions**: Start with one of the **End-to-End Delivery Patterns** above
+
 - **Bedrock LLM Processor** - Most flexible, custom AI processing
 - **BDA Processor** - Fastest deployment, managed processing
 - **SageMaker UDOP** - Highest accuracy, specialized models

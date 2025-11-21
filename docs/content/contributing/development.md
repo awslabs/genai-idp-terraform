@@ -7,6 +7,7 @@ This guide covers the development workflow for contributing to the GenAI IDP Acc
 ### Prerequisites
 
 Before starting development, ensure you have:
+
 - **Terraform** (version 1.0+)
 - **AWS CLI** configured with appropriate permissions
 - **Git** for version control
@@ -16,12 +17,14 @@ Before starting development, ensure you have:
 ### Local Development Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/your-org/genaiic-idp-accelerator-terraform.git
    cd genaiic-idp-accelerator-terraform
    ```
 
 2. **Set up development environment**:
+
    ```bash
    # Create development workspace
    terraform workspace new dev
@@ -34,6 +37,7 @@ Before starting development, ensure you have:
    ```
 
 3. **Install development tools**:
+
    ```bash
    # Install pre-commit hooks
    pip install pre-commit
@@ -69,6 +73,7 @@ genaiic-idp-accelerator-terraform/
 ### Module Structure
 
 Each module follows this structure:
+
 ```
 modules/lambda-processor/
 ├── main.tf                  # Main resource definitions
@@ -84,6 +89,7 @@ modules/lambda-processor/
 ### Making Changes
 
 1. **Create a feature branch**:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -94,6 +100,7 @@ modules/lambda-processor/
    - Add tests where appropriate
 
 3. **Test your changes**:
+
    ```bash
    # Validate Terraform syntax
    terraform validate
@@ -109,6 +116,7 @@ modules/lambda-processor/
    ```
 
 4. **Test deployment**:
+
    ```bash
    # Plan deployment
    terraform plan -var-file="dev.tfvars"
@@ -125,6 +133,7 @@ modules/lambda-processor/
 #### Terraform Style Guide
 
 **Naming Conventions**:
+
 ```hcl
 # Use snake_case for resources and variables
 resource "aws_lambda_function" "document_processor" {
@@ -139,6 +148,7 @@ variable "lambda_memory_size" {
 ```
 
 **Resource Organization**:
+
 ```hcl
 # Group related resources together
 # Use consistent naming patterns
@@ -165,6 +175,7 @@ resource "aws_iam_role" "lambda_execution_role" {
 ```
 
 **Variable Definitions**:
+
 ```hcl
 variable "environment" {
   description = "Environment name (dev, staging)"
@@ -195,6 +206,7 @@ variable "lambda_config" {
 #### Documentation Standards
 
 **Module Documentation**:
+
 ```markdown
 # Lambda Processor Module
 
@@ -228,6 +240,7 @@ module "lambda_processor" {
 |------|-------------|------|---------|:--------:|
 | environment | Environment name | `string` | n/a | yes |
 | lambda_config | Lambda configuration | `object` | see below | no |
+
 ```
 
 ### Testing
@@ -248,6 +261,7 @@ terraform plan -var-file="../../examples/bedrock-llm-processor/terraform.tfvars"
 #### Integration Testing
 
 Create test scripts for end-to-end testing:
+
 ```bash
 #!/bin/bash
 # scripts/test-deployment.sh
@@ -281,6 +295,7 @@ terraform destroy -var-file="test.tfvars" -auto-approve
 #### Automated Testing
 
 Use GitHub Actions or similar for CI/CD:
+
 ```yaml
 # .github/workflows/test.yml
 name: Test
@@ -357,6 +372,7 @@ Brief description of changes made.
 ### Code Review Guidelines
 
 **For Reviewers**:
+
 - Check for security best practices
 - Verify resource naming consistency
 - Ensure proper error handling
@@ -364,6 +380,7 @@ Brief description of changes made.
 - Validate documentation updates
 
 **For Contributors**:
+
 - Respond to feedback promptly
 - Make requested changes
 - Update tests if needed
@@ -374,6 +391,7 @@ Brief description of changes made.
 ### Common Development Issues
 
 **Terraform State Issues**:
+
 ```bash
 # Refresh state
 terraform refresh
@@ -386,6 +404,7 @@ terraform state rm aws_s3_bucket.example
 ```
 
 **Provider Version Conflicts**:
+
 ```hcl
 terraform {
   required_providers {
@@ -398,6 +417,7 @@ terraform {
 ```
 
 **Module Path Issues**:
+
 ```hcl
 # Use relative paths for local modules
 module "lambda_processor" {
@@ -413,12 +433,14 @@ module "lambda_processor" {
 ### Development Tools
 
 **VS Code Extensions**:
+
 - HashiCorp Terraform
 - AWS Toolkit
 - GitLens
 - Prettier
 
 **Useful Commands**:
+
 ```bash
 # Format all Terraform files
 terraform fmt -recursive
@@ -438,6 +460,7 @@ terraform state list
 ### Versioning
 
 Follow semantic versioning (SemVer):
+
 - **MAJOR**: Breaking changes
 - **MINOR**: New features (backward compatible)
 - **PATCH**: Bug fixes
@@ -447,16 +470,19 @@ Follow semantic versioning (SemVer):
 1. **Update version numbers**
 2. **Update CHANGELOG.md**
 3. **Create Git tag**:
+
    ```bash
    git tag -a v1.2.0 -m "Release v1.2.0"
    git push origin v1.2.0
    ```
+
 4. **Create GitHub release**
 5. **Update documentation**
 
 ---
 
 For more information, see:
+
 - [Testing Guide](testing.md)
 - [Documentation Guide](documentation.md)
 - [Contributing Guidelines](index.md)

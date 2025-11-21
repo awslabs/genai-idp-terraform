@@ -9,12 +9,14 @@
 ## Problem Analysis
 
 ### Current Situation
+
 - IDP stack creates numerous IAM roles across main template and pattern templates
 - Organization has SCP requiring Permissions Boundary on all new IAM roles
 - Current templates don't support Permissions Boundary configuration
 - Blocking production deployment
 
 ### Affected Templates
+
 - **Main Template**: `template.yaml` - ~15 IAM roles
 - **Pattern 1**: `patterns/pattern-1/template.yaml` - ~8 IAM roles  
 - **Pattern 2**: `patterns/pattern-2/template.yaml` - ~6 roles
@@ -24,6 +26,7 @@
 ## Solution Design
 
 ### Approach: Parameterized Permissions Boundary
+
 1. **Add optional parameter** to main template for Permissions Boundary ARN
 2. **Conditionally apply boundary** to all IAM roles when provided
 3. **Maintain backward compatibility** for deployments without boundaries
@@ -32,6 +35,7 @@
 ### Implementation Plan
 
 #### Step 1: Main Template Updates (`template.yaml`)
+
 - Add `PermissionsBoundaryArn` parameter
 - Add `HasPermissionsBoundary` condition
 - Update all IAM role resources with conditional boundary
@@ -39,17 +43,20 @@
 - Update CloudFormation interface metadata
 
 #### Step 2: Pattern Template Updates
+
 - Add parameter to each pattern template
 - Update all IAM roles in patterns
 - Maintain consistency across all patterns
 
 #### Step 3: Options Template Updates
+
 - Update BDA lending project template
 - Update Bedrock KB template
 
 ### Key Implementation Details
 
 **Parameter Definition:**
+
 ```yaml
 PermissionsBoundaryArn:
   Type: String
@@ -59,11 +66,13 @@ PermissionsBoundaryArn:
 ```
 
 **Condition:**
+
 ```yaml
 HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
 ```
 
 **Role Update Pattern:**
+
 ```yaml
 SomeRole:
   Type: AWS::IAM::Role
@@ -73,12 +82,14 @@ SomeRole:
 ```
 
 ## Benefits
+
 - **SCP Compliance**: Satisfies organizational requirements
 - **Backward Compatible**: Existing deployments unaffected
 - **Flexible**: Works with any Permissions Boundary policy
 - **Comprehensive**: Covers all IAM roles across all components
 
 ## Next Steps
+
 1. Implement main template changes
 2. Update all pattern templates
 3. Update options templates

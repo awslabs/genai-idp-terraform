@@ -20,6 +20,7 @@ This example demonstrates how to use the User Identity module independently to c
 ## Required AWS Permissions
 
 The deploying user/role needs permissions for:
+
 - Cognito User Pool and Identity Pool management
 - IAM role and policy management
 - CloudWatch Logs (for Terraform state)
@@ -27,11 +28,13 @@ The deploying user/role needs permissions for:
 ## Usage
 
 1. **Copy the example configuration:**
+
    ```bash
    cp terraform.tfvars.example terraform.tfvars
    ```
 
 2. **Edit terraform.tfvars:**
+
    ```hcl
    # Required
    admin_email = "your-admin@example.com"
@@ -43,6 +46,7 @@ The deploying user/role needs permissions for:
    ```
 
 3. **Initialize and deploy:**
+
    ```bash
    terraform init
    terraform plan
@@ -56,15 +60,18 @@ The deploying user/role needs permissions for:
 ## Configuration Options
 
 ### Basic Configuration
+
 - `region`: AWS region for deployment
 - `prefix`: Prefix for resource names
 
 ### User Management
+
 - `admin_email`: Email for admin user (required)
 - `allowed_signup_email_domain`: Domains allowed for self-service signup
 - `allow_unauthenticated_identities`: Allow unauthenticated access (not recommended)
 
 ### Security
+
 - `deletion_protection`: Prevent accidental User Pool deletion (recommended)
 
 ## Outputs
@@ -72,11 +79,13 @@ The deploying user/role needs permissions for:
 The example provides several output formats:
 
 ### IUserIdentity Interface (for module integration)
+
 ```bash
 terraform output user_identity
 ```
 
 ### Individual Components
+
 ```bash
 terraform output user_pool
 terraform output user_pool_client
@@ -84,6 +93,7 @@ terraform output identity_pool
 ```
 
 ### Legacy Format (backward compatibility)
+
 ```bash
 terraform output user_pool_id
 terraform output user_pool_client_id
@@ -91,6 +101,7 @@ terraform output identity_pool_id
 ```
 
 ### Usage Instructions
+
 ```bash
 terraform output usage_instructions
 ```
@@ -111,12 +122,14 @@ module "web_ui" {
 ## Admin User Management
 
 If you provide an `admin_email`, the module will:
+
 1. Create an admin user with that email
 2. Create an "Admin" group with highest precedence
 3. Add the admin user to the admin group
 4. Send a temporary password via email
 
 The admin user will need to:
+
 1. Check their email for the temporary password
 2. Sign in and set a permanent password
 3. Complete any required profile information
@@ -132,6 +145,7 @@ The admin user will need to:
 ## Cleanup
 
 To remove all resources:
+
 ```bash
 terraform destroy
 ```

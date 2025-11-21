@@ -79,6 +79,7 @@ The extraction service supports precise control over where document images are p
 ### How {DOCUMENT_IMAGE} Works
 
 **Without Placeholder (Default Behavior):**
+
 ```yaml
 extraction:
   task_prompt: |
@@ -91,9 +92,11 @@ extraction:
     
     Respond with valid JSON.
 ```
+
 Images are automatically appended after the text content.
 
 **With Placeholder (Controlled Placement):**
+
 ```yaml
 extraction:
   task_prompt: |
@@ -109,11 +112,13 @@ extraction:
     
     Respond with valid JSON containing the extracted values.
 ```
+
 Images are inserted exactly where `{DOCUMENT_IMAGE}` appears in the prompt.
 
 ### Usage Examples
 
 **Visual-First Extraction:**
+
 ```yaml
 task_prompt: |
   You are extracting data from a {DOCUMENT_CLASS}. Here are the fields to find:
@@ -129,6 +134,7 @@ task_prompt: |
 ```
 
 **Image for Context and Verification:**
+
 ```yaml
 task_prompt: |
   Extract these fields from a {DOCUMENT_CLASS}:
@@ -144,6 +150,7 @@ task_prompt: |
 ```
 
 **Mixed Content Analysis:**
+
 ```yaml
 task_prompt: |
   You are processing a {DOCUMENT_CLASS} that may contain both text and visual elements like tables, stamps, or signatures.
@@ -283,6 +290,7 @@ pricing:
 ### Optimal CachePoint Placement
 
 For extraction tasks, place CachePoint tags to separate:
+
 1. **Static content** (system instructions, few-shot examples) - cacheable
 2. **Dynamic content** (document text, specific attributes) - not cacheable
 
@@ -514,6 +522,7 @@ YAML format provides significant token savings for extraction tasks:
 ### Example Prompt Configurations
 
 **JSON-focused extraction prompt:**
+
 ```yaml
 extraction:
   system_prompt: |
@@ -529,6 +538,7 @@ extraction:
 ```
 
 **YAML-focused extraction prompt:**
+
 ```yaml
 extraction:
   system_prompt: |
@@ -546,6 +556,7 @@ extraction:
 ### Complex Data Structure Examples
 
 **JSON format for nested extraction:**
+
 ```json
 {
   "vendor_info": {
@@ -568,6 +579,7 @@ extraction:
 ```
 
 **Equivalent YAML format (more compact):**
+
 ```yaml
 vendor_info:
   name: ACME Corporation
@@ -603,11 +615,13 @@ The extraction service uses the new `extract_structured_data_from_text()` functi
 For a typical invoice extraction with 10 fields:
 
 **JSON format (traditional):**
+
 ```json
 {"invoice_number": "INV-2024-001", "invoice_date": "2024-03-15", "vendor_name": "ACME Corp", "total_amount": "1,234.56", "tax_amount": "123.45", "subtotal": "1,111.11", "due_date": "2024-04-15", "payment_terms": "Net 30", "customer_name": "John Smith", "customer_address": "456 Oak Ave, City, State 67890"}
 ```
 
 **YAML format (more efficient):**
+
 ```yaml
 invoice_number: INV-2024-001
 invoice_date: 2024-03-15

@@ -187,6 +187,7 @@ This package uses a unified Document-based approach across all services:
 4. Large results (like extraction attributes) are stored in S3 with only URIs in the Document
 
 Key benefits:
+
 - Consistency across all services
 - Simplified data flow in serverless functions
 - Better resource usage with the focused document pattern
