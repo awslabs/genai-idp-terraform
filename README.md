@@ -500,7 +500,7 @@ This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE
 
 ## Additional Resources
 
-- **[AWS CDK Version](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)**: Original CDK implementation
+- **[AWS CDK Version](https://github.com/cdklabs/genai-idp)**: CDK implementation
 - **[Terraform Documentation](https://www.terraform.io/docs)**: Terraform best practices
 - **[AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)**: Bedrock service documentation
 - **[Amazon Textract Documentation](https://docs.aws.amazon.com/textract/)**: OCR service documentation
