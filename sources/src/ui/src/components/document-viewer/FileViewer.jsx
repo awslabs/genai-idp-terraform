@@ -70,6 +70,8 @@ const FileViewer = ({ objectKey }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [viewMethod, setViewMethod] = useState('presigned'); // 'presigned' or 'content'
+  const [imageError, setImageError] = useState(false);
+  const [imageErrorUrl, setImageErrorUrl] = useState('');
 
   // Fetch file contents via GraphQL API and process special file types
   const fetchFileContents = async (s3Url) => {
@@ -169,6 +171,14 @@ const FileViewer = ({ objectKey }) => {
     }
   };
 
+  // Reset image error state when presigned URL changes
+  React.useEffect(() => {
+    if (presignedUrl) {
+      setImageError(false);
+      setImageErrorUrl('');
+    }
+  }, [presignedUrl]);
+
   React.useEffect(() => {
     generateUrl();
   }, [objectKey]);
@@ -241,37 +251,51 @@ const FileViewer = ({ objectKey }) => {
     }
     // For image files, display them inline using img tag
     if (fileType === 'image') {
+      const handleImageError = () => {
+        setImageError(true);
+        setImageErrorUrl(presignedUrl);
+      };
+
       return (
         <Box className="document-container" padding={{ top: 's' }}>
           <Box textAlign="center">
-            <img
-              src={presignedUrl}
-              alt="Document preview"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '800px',
-                height: 'auto',
-                objectFit: 'contain',
-              }}
-              onError={(e) => {
-                // On error, replace the image with a download link
-                const container = e.target.parentElement;
-                container.innerHTML = `
-                  <div style="padding: 48px;">
-                    <h3>🖼️ Image Document</h3>
-                    <p>Unable to display this image.</p>
-                    <p>
-                      <a href="${presignedUrl}" target="_blank" rel="noopener noreferrer" 
-                         style="display: inline-block; padding: 12px 24px; background-color: #0073bb; 
-                                color: white; text-decoration: none; border-radius: 4px; 
-                                font-weight: bold; margin: 10px;">
-                        📥 Download Image
-                      </a>
-                    </p>
-                  </div>
-                `;
-              }}
-            />
+            {!imageError ? (
+              <img
+                src={presignedUrl}
+                alt="Document preview"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '800px',
+                  height: 'auto',
+                  objectFit: 'contain',
+                }}
+                onError={handleImageError}
+              />
+            ) : (
+              <Box padding="xl">
+                <h3>🖼️ Image Document</h3>
+                <p>Unable to display this image.</p>
+                <p>
+                  <a
+                    href={imageErrorUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block',
+                      padding: '12px 24px',
+                      backgroundColor: '#0073bb',
+                      color: 'white',
+                      textDecoration: 'none',
+                      borderRadius: '4px',
+                      fontWeight: 'bold',
+                      margin: '10px',
+                    }}
+                  >
+                    📥 Download Image
+                  </a>
+                </p>
+              </Box>
+            )}
           </Box>
         </Box>
       );

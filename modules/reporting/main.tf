@@ -34,6 +34,7 @@ resource "random_string" "suffix" {
 }
 
 # Glue table for document-level evaluation metrics
+# Partition structure: date=YYYY-MM-DD format with partition projection enabled
 resource "aws_glue_catalog_table" "document_evaluations_table" {
   name          = "document_evaluations"
   database_name = var.reporting_database_name
@@ -42,36 +43,20 @@ resource "aws_glue_catalog_table" "document_evaluations_table" {
   table_type = "EXTERNAL_TABLE"
 
   parameters = {
-    "classification"            = "parquet"
-    "compressionType"           = "gzip"
-    "typeOfData"                = "file"
-    "projection.enabled"        = "true"
-    "projection.year.type"      = "integer"
-    "projection.year.range"     = "2020,2030"
-    "projection.month.type"     = "integer"
-    "projection.month.range"    = "1,12"
-    "projection.day.type"       = "integer"
-    "projection.day.range"      = "1,31"
-    "storage.location.template" = "s3://${local.reporting_bucket_name}/evaluation_metrics/document_metrics/year=$${year}/month=$${month}/day=$${day}/"
+    "classification"                = "parquet"
+    "compressionType"               = "gzip"
+    "typeOfData"                    = "file"
+    "projection.enabled"            = tostring(var.enable_partition_projection)
+    "projection.date.type"          = "date"
+    "projection.date.format"        = "yyyy-MM-dd"
+    "projection.date.range"         = "2024-01-01,2030-12-31"
+    "projection.date.interval"      = "1"
+    "projection.date.interval.unit" = "DAYS"
+    "storage.location.template"     = "s3://${local.reporting_bucket_name}/evaluation_metrics/document_metrics/date=$${date}/"
   }
 
   partition_keys {
-    name = "year"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "month"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "day"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "document"
+    name = "date"
     type = "string"
   }
 
@@ -157,6 +142,7 @@ resource "aws_glue_catalog_table" "document_evaluations_table" {
 }
 
 # Glue table for section-level evaluation metrics
+# Partition structure: date=YYYY-MM-DD format with partition projection enabled
 resource "aws_glue_catalog_table" "section_evaluations_table" {
   name          = "section_evaluations"
   database_name = var.reporting_database_name
@@ -165,36 +151,20 @@ resource "aws_glue_catalog_table" "section_evaluations_table" {
   table_type = "EXTERNAL_TABLE"
 
   parameters = {
-    "classification"            = "parquet"
-    "compressionType"           = "gzip"
-    "typeOfData"                = "file"
-    "projection.enabled"        = "true"
-    "projection.year.type"      = "integer"
-    "projection.year.range"     = "2020,2030"
-    "projection.month.type"     = "integer"
-    "projection.month.range"    = "1,12"
-    "projection.day.type"       = "integer"
-    "projection.day.range"      = "1,31"
-    "storage.location.template" = "s3://${local.reporting_bucket_name}/evaluation_metrics/section_metrics/year=$${year}/month=$${month}/day=$${day}/"
+    "classification"                = "parquet"
+    "compressionType"               = "gzip"
+    "typeOfData"                    = "file"
+    "projection.enabled"            = tostring(var.enable_partition_projection)
+    "projection.date.type"          = "date"
+    "projection.date.format"        = "yyyy-MM-dd"
+    "projection.date.range"         = "2024-01-01,2030-12-31"
+    "projection.date.interval"      = "1"
+    "projection.date.interval.unit" = "DAYS"
+    "storage.location.template"     = "s3://${local.reporting_bucket_name}/evaluation_metrics/section_metrics/date=$${date}/"
   }
 
   partition_keys {
-    name = "year"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "month"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "day"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "document"
+    name = "date"
     type = "string"
   }
 
@@ -270,6 +240,7 @@ resource "aws_glue_catalog_table" "section_evaluations_table" {
 }
 
 # Glue table for attribute-level evaluation metrics
+# Partition structure: date=YYYY-MM-DD format with partition projection enabled
 resource "aws_glue_catalog_table" "attribute_evaluations_table" {
   name          = "attribute_evaluations"
   database_name = var.reporting_database_name
@@ -278,36 +249,20 @@ resource "aws_glue_catalog_table" "attribute_evaluations_table" {
   table_type = "EXTERNAL_TABLE"
 
   parameters = {
-    "classification"            = "parquet"
-    "compressionType"           = "gzip"
-    "typeOfData"                = "file"
-    "projection.enabled"        = "true"
-    "projection.year.type"      = "integer"
-    "projection.year.range"     = "2020,2030"
-    "projection.month.type"     = "integer"
-    "projection.month.range"    = "1,12"
-    "projection.day.type"       = "integer"
-    "projection.day.range"      = "1,31"
-    "storage.location.template" = "s3://${local.reporting_bucket_name}/evaluation_metrics/attribute_metrics/year=$${year}/month=$${month}/day=$${day}/"
+    "classification"                = "parquet"
+    "compressionType"               = "gzip"
+    "typeOfData"                    = "file"
+    "projection.enabled"            = tostring(var.enable_partition_projection)
+    "projection.date.type"          = "date"
+    "projection.date.format"        = "yyyy-MM-dd"
+    "projection.date.range"         = "2024-01-01,2030-12-31"
+    "projection.date.interval"      = "1"
+    "projection.date.interval.unit" = "DAYS"
+    "storage.location.template"     = "s3://${local.reporting_bucket_name}/evaluation_metrics/attribute_metrics/date=$${date}/"
   }
 
   partition_keys {
-    name = "year"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "month"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "day"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "document"
+    name = "date"
     type = "string"
   }
 
@@ -418,6 +373,7 @@ resource "aws_glue_catalog_table" "attribute_evaluations_table" {
 }
 
 # Glue table for metering data
+# Partition structure: date=YYYY-MM-DD format with partition projection enabled
 resource "aws_glue_catalog_table" "metering_table" {
   name          = "metering"
   database_name = var.reporting_database_name
@@ -426,36 +382,20 @@ resource "aws_glue_catalog_table" "metering_table" {
   table_type = "EXTERNAL_TABLE"
 
   parameters = {
-    "classification"            = "parquet"
-    "compressionType"           = "gzip"
-    "typeOfData"                = "file"
-    "projection.enabled"        = "true"
-    "projection.year.type"      = "integer"
-    "projection.year.range"     = "2020,2030"
-    "projection.month.type"     = "integer"
-    "projection.month.range"    = "1,12"
-    "projection.day.type"       = "integer"
-    "projection.day.range"      = "1,31"
-    "storage.location.template" = "s3://${local.reporting_bucket_name}/metering/year=$${year}/month=$${month}/day=$${day}/"
+    "classification"                = "parquet"
+    "compressionType"               = "gzip"
+    "typeOfData"                    = "file"
+    "projection.enabled"            = tostring(var.enable_partition_projection)
+    "projection.date.type"          = "date"
+    "projection.date.format"        = "yyyy-MM-dd"
+    "projection.date.range"         = "2024-01-01,2030-12-31"
+    "projection.date.interval"      = "1"
+    "projection.date.interval.unit" = "DAYS"
+    "storage.location.template"     = "s3://${local.reporting_bucket_name}/metering/date=$${date}/"
   }
 
   partition_keys {
-    name = "year"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "month"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "day"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "document"
+    name = "date"
     type = "string"
   }
 
@@ -499,6 +439,16 @@ resource "aws_glue_catalog_table" "metering_table" {
     }
 
     columns {
+      name = "unit_cost"
+      type = "double"
+    }
+
+    columns {
+      name = "estimated_cost"
+      type = "double"
+    }
+
+    columns {
       name = "processor_type"
       type = "string"
     }
@@ -534,6 +484,170 @@ resource "aws_glue_catalog_table" "metering_table" {
     }
   }
 }
+
+
+# Glue Crawler Schedule Mapping
+locals {
+  crawler_schedule_map = {
+    "manual" = null
+    "15min"  = "cron(0/15 * * * ? *)"
+    "hourly" = "cron(0 * * * ? *)"
+    "daily"  = "cron(0 1 * * ? *)"
+  }
+  crawler_schedule_expression = local.crawler_schedule_map[var.crawler_schedule]
+}
+
+# Glue Security Configuration for Crawler
+resource "aws_glue_security_configuration" "document_sections_crawler_security" {
+  name = "${var.name_prefix}-document-sections-crawler-security-${random_string.suffix.result}"
+
+  encryption_configuration {
+    s3_encryption {
+      s3_encryption_mode = var.encryption_key_arn != null ? "SSE-KMS" : "SSE-S3"
+      kms_key_arn        = var.encryption_key_arn
+    }
+
+    cloudwatch_encryption {
+      cloudwatch_encryption_mode = var.encryption_key_arn != null ? "SSE-KMS" : "DISABLED"
+      kms_key_arn                = var.encryption_key_arn
+    }
+
+    job_bookmarks_encryption {
+      job_bookmarks_encryption_mode = var.encryption_key_arn != null ? "CSE-KMS" : "DISABLED"
+      kms_key_arn                   = var.encryption_key_arn
+    }
+  }
+}
+
+# IAM Role for Glue Crawler
+resource "aws_iam_role" "document_sections_crawler_role" {
+  name = "${var.name_prefix}-doc-sections-crawler-role-${random_string.suffix.result}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "glue.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+# Attach AWS Glue Service Role managed policy
+resource "aws_iam_role_policy_attachment" "crawler_glue_service_role" {
+  role       = aws_iam_role.document_sections_crawler_role.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSGlueServiceRole"
+}
+
+# IAM Policy for Crawler S3 Access
+resource "aws_iam_policy" "document_sections_crawler_s3_policy" {
+  name = "${var.name_prefix}-doc-sections-crawler-s3-${random_string.suffix.result}"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          var.reporting_bucket_arn,
+          "${var.reporting_bucket_arn}/document_sections/*"
+        ]
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "crawler_s3_policy_attachment" {
+  role       = aws_iam_role.document_sections_crawler_role.name
+  policy_arn = aws_iam_policy.document_sections_crawler_s3_policy.arn
+}
+
+# IAM Policy for Crawler KMS Access (if encryption key is provided)
+resource "aws_iam_policy" "document_sections_crawler_kms_policy" {
+  count = var.encryption_key_arn != null ? 1 : 0
+  name  = "${var.name_prefix}-doc-sections-crawler-kms-${random_string.suffix.result}"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = var.encryption_key_arn
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "crawler_kms_policy_attachment" {
+  count      = var.encryption_key_arn != null ? 1 : 0
+  role       = aws_iam_role.document_sections_crawler_role.name
+  policy_arn = aws_iam_policy.document_sections_crawler_kms_policy[0].arn
+}
+
+# Glue Crawler for Document Sections
+# The crawler discovers document section tables automatically created by the save_reporting_data Lambda.
+# Table naming convention:
+#   - All table names are lowercase
+#   - Document section tables follow the pattern: document_sections_{section_type}
+#   - Section types with dashes are converted to underscores (e.g., "bank-statement" -> "document_sections_bank_statement")
+#   - Section types with spaces are converted to underscores (e.g., "W2 Form" -> "document_sections_w2_form")
+# Partition structure: date=YYYY-MM-DD format
+resource "aws_glue_crawler" "document_sections_crawler" {
+  name          = "${var.name_prefix}-document-sections-crawler-${random_string.suffix.result}"
+  database_name = var.reporting_database_name
+  role          = aws_iam_role.document_sections_crawler_role.arn
+  description   = "Crawler to discover document section tables in the reporting bucket with conservative schema handling"
+
+  security_configuration = aws_glue_security_configuration.document_sections_crawler_security.name
+
+  s3_target {
+    path = "s3://${local.reporting_bucket_name}/document_sections/"
+  }
+
+  schema_change_policy {
+    update_behavior = "UPDATE_IN_DATABASE"
+    delete_behavior = "LOG"
+  }
+
+  # Table prefix follows lowercase naming convention
+  # Tables will be named: document_sections_{section_type_lowercase_with_underscores}
+  table_prefix = "document_sections_"
+
+  configuration = jsonencode({
+    Version = 1.0
+    CrawlerOutput = {
+      Partitions = { AddOrUpdateBehavior = "InheritFromTable" }
+      Tables     = { AddOrUpdateBehavior = "MergeNewColumns" }
+    }
+    Grouping             = { TableLevelConfiguration = 3 }
+    CreatePartitionIndex = true
+  })
+
+  # Only set schedule if not manual
+  schedule = local.crawler_schedule_expression
+
+  tags = var.tags
+}
+
+
 # Lambda function for saving reporting data
 resource "aws_lambda_function" "save_reporting_data" {
   function_name = "${var.name_prefix}-save-reporting-data-${random_string.suffix.result}"

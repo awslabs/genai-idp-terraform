@@ -248,7 +248,58 @@
         "enabled": {
           "type": "boolean",
           "description": "Enable document quality assessment",
-          "default": false
+          "default": false,
+          "order": 0
+        },
+        "granular": {
+          "type": "object",
+          "sectionLabel": "Granular Assessment Configuration",
+          "description": "Configure granular assessment for improved accuracy and scalability with large documents",
+          "order": 1,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable granular assessment approach. When enabled, assessments are broken down into smaller, focused tasks for better accuracy and performance.",
+              "default": true,
+              "order": 0
+            },
+            "max_workers": {
+              "type": "integer",
+              "description": "Maximum number of parallel workers for concurrent assessment tasks. Higher values increase throughput but consume more resources.",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 4,
+              "order": 1,
+              "dependsOn": {
+                "field": "enabled",
+                "value": true
+              }
+            },
+            "simple_batch_size": {
+              "type": "integer",
+              "description": "Number of simple attributes to group together in each assessment task. Smaller batches provide more focused assessments.",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 3,
+              "order": 2,
+              "dependsOn": {
+                "field": "enabled",
+                "value": true
+              }
+            },
+            "list_batch_size": {
+              "type": "integer",
+              "description": "Number of list items to process in each assessment task. Usually 1 for best accuracy, can be increased for speed.",
+              "minimum": 1,
+              "maximum": 5,
+              "default": 1,
+              "order": 3,
+              "dependsOn": {
+                "field": "enabled",
+                "value": true
+              }
+            }
+          }
         },
         "model": {
           "type": "object",

@@ -104,7 +104,7 @@ resource "aws_iam_role_policy_attachment" "queue_sender_policy_attachment" {
 
 # Add KMS permissions if key is provided
 resource "aws_iam_policy" "queue_sender_kms_policy" {
-  for_each    = toset(["enabled"])
+  for_each    = var.enable_encryption ? toset(["enabled"]) : toset([])
   name        = "idp-queue-sender-kms-policy-${random_string.suffix.result}"
   description = "KMS policy for QueueSender Lambda Function"
 
@@ -124,7 +124,7 @@ resource "aws_iam_policy" "queue_sender_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "queue_sender_kms_attachment" {
-  for_each   = toset(["enabled"])
+  for_each   = var.enable_encryption ? toset(["enabled"]) : toset([])
   role       = aws_iam_role.queue_sender_role.name
   policy_arn = aws_iam_policy.queue_sender_kms_policy["enabled"].arn
 }
@@ -270,7 +270,7 @@ resource "aws_iam_role_policy_attachment" "workflow_tracker_policy_attachment" {
 
 # Add KMS permissions if key is provided
 resource "aws_iam_policy" "workflow_tracker_kms_policy" {
-  for_each    = local.key != null ? toset(["enabled"]) : toset([])
+  for_each    = var.enable_encryption ? toset(["enabled"]) : toset([])
   name        = "idp-workflow-tracker-kms-policy-${random_string.suffix.result}"
   description = "KMS policy for WorkflowTracker Lambda Function"
 
@@ -290,7 +290,7 @@ resource "aws_iam_policy" "workflow_tracker_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "workflow_tracker_kms_attachment" {
-  for_each   = local.key != null ? toset(["enabled"]) : toset([])
+  for_each   = var.enable_encryption ? toset(["enabled"]) : toset([])
   role       = aws_iam_role.workflow_tracker_role.name
   policy_arn = aws_iam_policy.workflow_tracker_kms_policy["enabled"].arn
 }
@@ -381,7 +381,7 @@ resource "aws_iam_role_policy_attachment" "lookup_function_policy_attachment" {
 
 # Add KMS permissions if key is provided
 resource "aws_iam_policy" "lookup_function_kms_policy" {
-  for_each    = local.key != null ? toset(["enabled"]) : toset([])
+  for_each    = var.enable_encryption ? toset(["enabled"]) : toset([])
   name        = "idp-lookup-function-kms-policy-${random_string.suffix.result}"
   description = "KMS policy for LookupFunction Lambda Function"
 
@@ -401,7 +401,7 @@ resource "aws_iam_policy" "lookup_function_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "lookup_function_kms_attachment" {
-  for_each   = local.key != null ? toset(["enabled"]) : toset([])
+  for_each   = var.enable_encryption ? toset(["enabled"]) : toset([])
   role       = aws_iam_role.lookup_function_role.name
   policy_arn = aws_iam_policy.lookup_function_kms_policy["enabled"].arn
 }
@@ -467,7 +467,7 @@ resource "aws_iam_role_policy_attachment" "update_configuration_policy_attachmen
 
 # Add KMS permissions if key is provided
 resource "aws_iam_policy" "update_configuration_kms_policy" {
-  for_each    = local.key != null ? toset(["enabled"]) : toset([])
+  for_each    = var.enable_encryption ? toset(["enabled"]) : toset([])
   name        = "idp-update-configuration-kms-policy-${random_string.suffix.result}"
   description = "KMS policy for UpdateConfiguration Lambda Function"
 
@@ -487,7 +487,7 @@ resource "aws_iam_policy" "update_configuration_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "update_configuration_kms_attachment" {
-  for_each   = local.key != null ? toset(["enabled"]) : toset([])
+  for_each   = var.enable_encryption ? toset(["enabled"]) : toset([])
   role       = aws_iam_role.update_configuration_role.name
   policy_arn = aws_iam_policy.update_configuration_kms_policy["enabled"].arn
 }

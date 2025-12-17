@@ -13,7 +13,7 @@ locals {
   )
 
   # Extract user_pool_id from user_pool_arn
-  # ARN format: arn:aws:cognito-idp:region:account-id:userpool/user_pool_id
+  # ARN format: arn:{partition}:cognito-idp:region:account-id:userpool/user_pool_id
   user_pool_id = local.user_pool_arn != null ? split("/", local.user_pool_arn)[1] : null
 
   user_pool_client_id = var.user_identity != null ? var.user_identity.user_pool_client_id : (
@@ -93,15 +93,16 @@ locals {
   # IAM policy condition for authenticated user permissions - moved to user identity section above
 
   # Extract resource names from ARNs
-  input_bucket_name  = element(split(":", var.input_bucket_arn), 5)
-  output_bucket_name = element(split(":", var.output_bucket_arn), 5)
+  input_bucket_name   = element(split(":", var.input_bucket_arn), 5)
+  output_bucket_name  = element(split(":", var.output_bucket_arn), 5)
+  working_bucket_name = element(split(":", var.working_bucket_arn), 5)
 
   # Optional bucket names
   logging_bucket_name             = var.web_ui.logging_enabled ? element(split(":", var.web_ui.logging_bucket_arn), 5) : null
   evaluation_baseline_bucket_name = var.evaluation.enabled ? element(split(":", var.evaluation.baseline_bucket_arn), 5) : null
-  reporting_bucket_name           = var.reporting.enabled && var.reporting.bucket_arn != null ? try(regex("arn:aws:s3:::([^/]+)", var.reporting.bucket_arn)[0], "") : ""
+  reporting_bucket_name           = var.reporting.enabled && var.reporting.bucket_arn != null ? try(regex("arn:(aws|aws-us-gov):s3:::([^/]+)", var.reporting.bucket_arn)[1], "") : ""
   web_ui_reporting_bucket_name    = local.reporting_bucket_name
-  web_ui_evaluation_bucket_name   = var.evaluation.enabled && var.evaluation.baseline_bucket_arn != null ? try(regex("arn:aws:s3:::([^/]+)", var.evaluation.baseline_bucket_arn)[0], "") : ""
+  web_ui_evaluation_bucket_name   = var.evaluation.enabled && var.evaluation.baseline_bucket_arn != null ? try(regex("arn:(aws|aws-us-gov):s3:::([^/]+)", var.evaluation.baseline_bucket_arn)[1], "") : ""
 }
 
 #

@@ -2,10 +2,10 @@
     SPDX-License-Identifier: Apache-2.0 */
 
 :root {
-    --amplify-primary-color: #ababab;
-    --amplify-primary-tint: #3f6060;
-    --amplify-primary-shade: #2dba89;
-    --amplify-background-color: #fafafa;
+    --amplify-primary-color: #0073bb;
+    --amplify-primary-tint: #005a9f;
+    --amplify-primary-shade: #4da6d9;
+    --amplify-background-color: #f8f9fa;
     --amplify-text-xxs: 0.75rem;
     --amplify-text-xs: 0.81rem;
     --amplify-text-sm: 1.2rem;

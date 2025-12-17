@@ -84,3 +84,51 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+# Pattern-2 HITL Variables
+variable "enable_pattern2_hitl" {
+  description = "Enable HITL support for Pattern-2 workflows"
+  type        = bool
+  default     = false
+}
+
+variable "hitl_confidence_threshold" {
+  description = "Confidence threshold below which HITL review is triggered (0-100)"
+  type        = number
+  default     = 80
+
+  validation {
+    condition     = var.hitl_confidence_threshold >= 0 && var.hitl_confidence_threshold <= 100
+    error_message = "hitl_confidence_threshold must be between 0 and 100."
+  }
+}
+
+variable "tracking_table_name" {
+  description = "Name of the DynamoDB tracking table for HITL tokens"
+  type        = string
+  default     = ""
+}
+
+variable "tracking_table_arn" {
+  description = "ARN of the DynamoDB tracking table for HITL tokens"
+  type        = string
+  default     = ""
+}
+
+variable "working_bucket_name" {
+  description = "Name of the S3 working bucket for document processing"
+  type        = string
+  default     = ""
+}
+
+variable "working_bucket_arn" {
+  description = "ARN of the S3 working bucket for document processing"
+  type        = string
+  default     = ""
+}
+
+variable "state_machine_arn" {
+  description = "ARN of the Step Functions state machine for Pattern-2 workflow"
+  type        = string
+  default     = ""
+}

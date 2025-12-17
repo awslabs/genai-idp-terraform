@@ -73,3 +73,16 @@ output "lambda_functions" {
     # } : null
   }
 }
+
+output "process_changes_resolver" {
+  description = "Process Changes Resolver Lambda function details (Edit Sections feature)"
+  value = local.edit_sections_enabled ? {
+    name = aws_lambda_function.process_changes_resolver[0].function_name
+    arn  = aws_lambda_function.process_changes_resolver[0].arn
+  } : null
+}
+
+output "edit_sections_enabled" {
+  description = "Whether the Edit Sections feature is enabled"
+  value       = local.edit_sections_enabled
+}

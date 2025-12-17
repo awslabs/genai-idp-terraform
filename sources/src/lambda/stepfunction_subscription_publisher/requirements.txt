@@ -1,2 +1,0 @@
-aws-requests-auth==0.4.3
-requests==2.32.4

@@ -255,6 +255,7 @@ class TestClassificationService:
         assert result.classification.doc_type == "invoice"
         assert result.classification.confidence == 1.0
         assert result.classification.metadata["metering"] == {"tokens": 100}
+        assert result.classification.metadata["document_boundary"] == "continue"
         assert result.image_uri == "s3://bucket/image.jpg"
         assert result.text_uri == "s3://bucket/text.txt"
 
@@ -801,3 +802,34 @@ class TestClassificationService:
         assert result.pages["1"].classification == "invoice"
         assert result.pages["2"].classification == "receipt"
         assert result.pages["3"].classification == "receipt"
+
+    def test_group_consecutive_pages_with_boundary(self, service):
+        """Pages with boundary flag start new sections even with same doc type."""
+        results = [
+            PageClassification(
+                page_id="1",
+                classification=DocumentClassification(
+                    doc_type="invoice",
+                    metadata={"document_boundary": "start"},
+                ),
+            ),
+            PageClassification(
+                page_id="2",
+                classification=DocumentClassification(
+                    doc_type="invoice",
+                    metadata={"document_boundary": "continue"},
+                ),
+            ),
+            PageClassification(
+                page_id="3",
+                classification=DocumentClassification(
+                    doc_type="invoice",
+                    metadata={"document_boundary": "start"},
+                ),
+            ),
+        ]
+
+        sections = service._group_consecutive_pages(results)
+        assert len(sections) == 2
+        assert [p.page_id for p in sections[0].pages] == ["1", "2"]
+        assert [p.page_id for p in sections[1].pages] == ["3"]

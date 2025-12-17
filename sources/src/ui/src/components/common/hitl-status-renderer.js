@@ -13,7 +13,15 @@ export const renderHitlStatus = (item) => {
     return 'N/A';
   }
 
-  // Check for completed status first - prioritize hitlCompleted field over hitlStatus
+  // Check for failed status first (handle both "Failed" and "FAILED")
+  if (
+    item.hitlStatus &&
+    (item.hitlStatus.toLowerCase() === 'failed' || item.hitlStatus === 'Failed' || item.hitlStatus === 'FAILED')
+  ) {
+    return 'A2I Review Failed';
+  }
+
+  // Check for completed status
   if (item.hitlCompleted || (item.hitlStatus && item.hitlStatus.toLowerCase() === 'completed')) {
     return 'A2I Review Completed';
   }

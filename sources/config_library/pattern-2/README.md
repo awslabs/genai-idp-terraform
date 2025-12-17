@@ -24,26 +24,26 @@ Pattern 2 supports multiple OCR backends, each with different implications for t
 
 ### Textract Backend (Default - Recommended)
 
-- **Best for**: Standard workflows, when assessment is enabled
-- **Assessment Impact**: Full assessment capability with granular confidence scores
+- **Best for**: Production workflows, when assessment is enabled
+- **Assessment Impact**: ✅ Full assessment capability with granular confidence scores
 - **Text Confidence Data**: Rich confidence information for each text block
 - **Cost**: Standard Textract pricing
 
 ### Bedrock Backend (LLM-based OCR)
 
 - **Best for**: Challenging documents where traditional OCR fails
-- **Assessment Impact**: Assessment disabled - no confidence data available
+- **Assessment Impact**: ❌ Assessment disabled - no confidence data available
 - **Text Confidence Data**: Empty (no confidence scores from LLM OCR)
 - **Cost**: Bedrock LLM inference costs
 
 ### None Backend (Image-only)
 
 - **Best for**: Custom OCR integration, image-only workflows
-- **Assessment Impact**: Assessment disabled - no OCR text available
+- **Assessment Impact**: ❌ Assessment disabled - no OCR text available
 - **Text Confidence Data**: Empty
 - **Cost**: No OCR costs
 
-> **Assessment Recommendation**: Use Textract backend (default) when assessment functionality is required. Bedrock and None backends eliminate assessment capability due to lack of confidence data.
+> ⚠️ **Assessment Recommendation**: Use Textract backend (default) when assessment functionality is required. Bedrock and None backends eliminate assessment capability due to lack of confidence data.
 
 ## Text Confidence Data and Assessment Integration
 

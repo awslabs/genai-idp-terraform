@@ -5,19 +5,67 @@
 Data models for document classification.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class DocumentType:
-    """Document type definition with name and description."""
+    """Document type definition with name, description, and optional regex patterns."""
 
     type_name: str
     """The name of the document type."""
 
     description: str
     """Description of the document type."""
+
+    document_name_regex: Optional[str] = None
+    """Optional regex pattern to match against document ID/name. When matched, all pages are classified as this type (single-class configurations only)."""
+
+    document_page_content_regex: Optional[str] = None
+    """Optional regex pattern to match against page content text. When matched during multi-modal page-level classification, the page is classified as this type."""
+
+    # Private compiled regex patterns (not included in init)
+    _compiled_name_regex: Optional[re.Pattern] = field(default=None, init=False)
+    """Compiled regex pattern for document name matching."""
+
+    _compiled_content_regex: Optional[re.Pattern] = field(default=None, init=False)
+    """Compiled regex pattern for page content matching."""
+
+    def __post_init__(self):
+        """Compile regex patterns after initialization."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Compile document name regex
+        if self.document_name_regex:
+            try:
+                self._compiled_name_regex = re.compile(self.document_name_regex)
+                logger.debug(
+                    f"Compiled document name regex for class '{self.type_name}': {self.document_name_regex}"
+                )
+            except re.error as e:
+                logger.error(
+                    f"Invalid document name regex pattern for class '{self.type_name}': {self.document_name_regex} - Error: {e}"
+                )
+                self._compiled_name_regex = None
+
+        # Compile document page content regex
+        if self.document_page_content_regex:
+            try:
+                self._compiled_content_regex = re.compile(
+                    self.document_page_content_regex
+                )
+                logger.debug(
+                    f"Compiled page content regex for class '{self.type_name}': {self.document_page_content_regex}"
+                )
+            except re.error as e:
+                logger.error(
+                    f"Invalid page content regex pattern for class '{self.type_name}': {self.document_page_content_regex} - Error: {e}"
+                )
+                self._compiled_content_regex = None
 
 
 @dataclass

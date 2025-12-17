@@ -70,6 +70,22 @@ type ConfigurationResponse @aws_cognito_user_pools @aws_iam {
   Custom: AWSJSON
 }
 
+type DiscoveryJobList @aws_cognito_user_pools @aws_iam {
+  DiscoveryJobs: [DiscoveryJobListItem]
+  nextToken: String
+}
+
+type DiscoveryJobListItem @aws_cognito_user_pools @aws_iam {
+  jobId: ID!
+  documentKey: String
+  groundTruthKey: String
+  status: String!
+  createdAt: String
+  updatedAt: String
+  errorMessage: String
+
+}
+
 input CreateDocumentInput {
   ObjectKey: ID
   ObjectStatus: String
@@ -86,6 +102,13 @@ type PresignedUrlResponse @aws_cognito_user_pools {
   presignedUrl: String!
   objectKey: String!
   usePostMethod: String!
+}
+type DisPresignedUrlResponse @aws_cognito_user_pools {
+  presignedUrl: String!
+  objectKey: String!
+  usePostMethod: String!
+  groundTruthObjectKey: String
+  groundTruthPresignedUrl: String
 }
 
 input UpdateDocumentInput {
@@ -134,6 +157,20 @@ type CopyToBaselineResponse @aws_cognito_user_pools {
   message: String
 }
 
+type ProcessChangesResponse @aws_cognito_user_pools {
+  success: Boolean!
+  message: String
+  processingJobId: String
+}
+
+input ModifiedSectionInput {
+  sectionId: String!
+  classification: String!
+  pageIds: [Int!]!
+  isNew: Boolean
+  isDeleted: Boolean
+}
+
 type FileContentsResponse @aws_cognito_user_pools @aws_iam {
   content: String!
   contentType: String!
@@ -165,14 +202,49 @@ type StepFunctionExecutionResponse @aws_cognito_user_pools @aws_iam {
   steps: [StepFunctionExecutionStep]
 }
 
+type DiscoveryJob  @aws_cognito_user_pools @aws_iam  {
+  jobId: ID!
+  status: String!
+  errorMessage: String
+}
+
+type Agent @aws_cognito_user_pools @aws_iam {
+  agent_id: String!
+  agent_name: String!
+  agent_description: String!
+  sample_queries: [String]
+}
+
+type AgentJob @aws_cognito_user_pools @aws_iam {
+  jobId: ID!
+  status: String!  # "PENDING", "PROCESSING", "COMPLETED", "FAILED"
+  query: String!
+  agentIds: String  # JSON string containing list of agent IDs used
+  createdAt: AWSDateTime!
+  completedAt: AWSDateTime
+  result: String
+  error: String
+  agent_messages: String  # JSON string containing agent conversation messages
+}
+
+type AgentJobConnection @aws_cognito_user_pools @aws_iam {
+  items: [AgentJob]
+  nextToken: String
+}
+
 type Mutation  {
   createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
   updateDocument(input: UpdateDocumentInput!): Document @aws_iam
   deleteDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
   updateConfiguration(customConfig: AWSJSON!): Boolean @aws_cognito_user_pools
   uploadDocument(fileName: String!, contentType: String, prefix: String, bucket: String): PresignedUrlResponse! @aws_cognito_user_pools
+  uploadDiscoveryDocument(fileName: String!, contentType: String, prefix: String, bucket: String, groundTruthFileName: String): DisPresignedUrlResponse! @aws_cognito_user_pools
   copyToBaseline(objectKey: String!): CopyToBaselineResponse! @aws_cognito_user_pools
   reprocessDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
+  processChanges(objectKey: String!, modifiedSections: [ModifiedSectionInput!]!): ProcessChangesResponse! @aws_cognito_user_pools
+  updateAgentJobStatus(jobId: ID!, status: String!, userId: String!, result: String): Boolean @aws_iam
+  updateDiscoveryJobStatus(jobId: ID!, status: String!, errorMessage: String): DiscoveryJob @aws_iam
+  deleteAgentJob(jobId: ID!): Boolean @aws_cognito_user_pools
   publishStepFunctionExecutionUpdate(executionArn: String!, data: AWSJSON!): StepFunctionExecutionResponse @aws_iam
 }
 
@@ -183,9 +255,14 @@ type Query @aws_cognito_user_pools @aws_iam {
   listDocumentsDateShard(date: AWSDate, shard: Int): DocumentList 
   getFileContents(s3Uri: String!): FileContentsResponse
   getConfiguration: ConfigurationResponse
+  listDiscoveryJobs: DiscoveryJobList
   queryKnowledgeBase(input: String!, sessionId: String): String
-  chatWithDocument(s3Uri: String!, prompt: String!): String
+  chatWithDocument(s3Uri: String!, prompt: String!, history: AWSJSON!, modelId: String!): String
   getStepFunctionExecution(executionArn: String!): StepFunctionExecutionResponse
+  listAvailableAgents: [Agent] @aws_cognito_user_pools @aws_iam
+  submitAgentQuery(query: String!, agentIds: [String!]!): AgentJob @aws_cognito_user_pools
+  getAgentJobStatus(jobId: ID!): AgentJob @aws_cognito_user_pools
+  listAgentJobs(limit: Int, nextToken: String): AgentJobConnection @aws_cognito_user_pools
 }
 
 type Subscription @aws_cognito_user_pools @aws_iam {
@@ -193,8 +270,10 @@ type Subscription @aws_cognito_user_pools @aws_iam {
 	@aws_subscribe(mutations: ["createDocument"])
   onUpdateDocument: Document
     @aws_subscribe(mutations: ["updateDocument"])
-  onStepFunctionExecutionUpdate(executionArn: String!): StepFunctionExecutionResponse
-    @aws_subscribe(mutations: ["publishStepFunctionExecutionUpdate"])
+  onAgentJobComplete(jobId: ID!): Boolean
+    @aws_subscribe(mutations: ["updateAgentJobStatus"])
+  onDiscoveryJobStatusChange(jobId: ID!): DiscoveryJob
+    @aws_subscribe(mutations: ["updateDiscoveryJobStatus"])
 }
 
 schema {

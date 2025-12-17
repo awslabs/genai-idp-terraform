@@ -159,8 +159,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.error(f"Error getting Step Functions execution: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         # Return error in a format that can be displayed in the UI
+        execution_arn = 'Unknown'
+        if isinstance(event, dict):
+            if 'arguments' in event:
+                execution_arn = event['arguments'].get('executionArn', 'Unknown')
+            elif 'executionArn' in event:
+                execution_arn = event.get('executionArn', 'Unknown')
+        
         return {
-            'executionArn': event['arguments'].get('executionArn', 'Unknown'),
+            'executionArn': execution_arn,
             'status': 'ERROR',
             'error': f"Failed to retrieve execution details: {str(e)}",
             'steps': []
@@ -301,8 +308,8 @@ def parse_execution_history(events: List[Dict[str, Any]]) -> List[Dict[str, Any]
                     
         # Handle task failure events
         elif event_type == 'TaskFailed':
-            # Log the full event for debugging
-            logger.debug(f"Processing TaskFailed event: {json.dumps(event)}")
+            # Log basic failure info without full event serialization
+            logger.debug(f"Processing TaskFailed event ID: {event.get('id')}")
             
             step_name = find_step_name_for_failure_event(event, events, event_id_to_step)
             step_key = None

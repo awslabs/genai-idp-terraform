@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from idp_common import bedrock, image, metrics, s3, utils
-from idp_common.models import Document
-from idp_common.utils import extract_json_from_text
+from idp_common.models import Document, Status
+from idp_common.utils import check_token_limit, extract_json_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +93,16 @@ def _safe_float_conversion(value: Any, default: float = 0.0) -> float:
 class GranularAssessmentService:
     """Enhanced assessment service with granular, cached, and parallel processing."""
 
-    def __init__(self, region: str = None, config: Dict[str, Any] = None):
+    def __init__(
+        self, region: str = None, config: Dict[str, Any] = None, cache_table: str = None
+    ):
         """
         Initialize the granular assessment service.
 
         Args:
             region: AWS region for Bedrock
             config: Configuration dictionary
+            cache_table: Optional DynamoDB table name for caching assessment task results
         """
         self.config = config or {}
         self.region = (
@@ -125,6 +128,29 @@ class GranularAssessmentService:
         # Parallel processing is enabled when max_workers > 1
         self.enable_parallel = self.max_workers > 1
 
+        # Initialize caching for assessment tasks (similar to classification service)
+        self.cache_table_name = cache_table or os.environ.get("TRACKING_TABLE")
+        self.cache_table = None
+        if self.cache_table_name:
+            import boto3
+
+            dynamodb = boto3.resource("dynamodb", region_name=self.region)
+            self.cache_table = dynamodb.Table(self.cache_table_name)
+            logger.info(
+                f"Granular assessment caching enabled using table: {self.cache_table_name}"
+            )
+        else:
+            logger.info("Granular assessment caching disabled")
+
+        # Define throttling exceptions that should trigger retries
+        self.throttling_exceptions = [
+            "ThrottlingException",
+            "ProvisionedThroughputExceededException",
+            "ServiceQuotaExceededException",
+            "TooManyRequestsException",
+            "RequestLimitExceeded",
+        ]
+
         # Get model_id from config for logging
         model_id = self.config.get("model_id") or self.assessment_config.get("model")
         logger.info(f"Initialized granular assessment service with model {model_id}")
@@ -132,7 +158,8 @@ class GranularAssessmentService:
             f"Granular config: max_workers={self.max_workers}, "
             f"simple_batch_size={self.simple_batch_size}, "
             f"list_batch_size={self.list_batch_size}, "
-            f"parallel={self.enable_parallel}"
+            f"parallel={self.enable_parallel}, "
+            f"caching={'enabled' if self.cache_table else 'disabled'}"
         )
 
     def _get_class_attributes(self, class_label: str) -> List[Dict[str, Any]]:
@@ -695,11 +722,17 @@ class GranularAssessmentService:
 
             # Parse response into JSON
             assessment_data = {}
+            task_failed = False
+            error_messages = []
             try:
                 assessment_data = json.loads(extract_json_from_text(assessment_text))
             except Exception as e:
                 logger.error(
                     f"Error parsing assessment LLM output for task {task.task_id}: {e}"
+                )
+                task_failed = True
+                error_messages.append(
+                    f"Error parsing assessment LLM output for task {task.task_id}"
                 )
                 # Create default assessments
                 for attr_name in task.attributes:
@@ -720,6 +753,20 @@ class GranularAssessmentService:
                             "confidence_reason": f"Unable to parse assessment response for {attr_name} - default score assigned",
                         }
 
+            # Process bounding boxes automatically if bbox data is present
+            try:
+                logger.debug(
+                    f"Checking for bounding box data in granular assessment task {task.task_id}"
+                )
+                assessment_data = self._extract_geometry_from_assessment(
+                    assessment_data
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract geometry data for task {task.task_id}: {str(e)}"
+                )
+                # Continue with assessment even if geometry extraction fails
+
             # Check for confidence threshold alerts
             confidence_alerts = []
             self._check_confidence_alerts_for_task(
@@ -727,15 +774,24 @@ class GranularAssessmentService:
             )
 
             processing_time = time.time() - start_time
-
-            return AssessmentResult(
-                task_id=task.task_id,
-                success=True,
-                assessment_data=assessment_data,
-                confidence_alerts=confidence_alerts,
-                processing_time=processing_time,
-                metering=metering,
-            )
+            if task_failed:
+                return AssessmentResult(
+                    task_id=task.task_id,
+                    success=False,
+                    assessment_data=assessment_data,
+                    confidence_alerts=confidence_alerts,
+                    error_message=self._convert_error_list_to_string(error_messages),
+                    processing_time=processing_time,
+                )
+            else:
+                return AssessmentResult(
+                    task_id=task.task_id,
+                    success=True,
+                    assessment_data=assessment_data,
+                    confidence_alerts=confidence_alerts,
+                    processing_time=processing_time,
+                    metering=metering,
+                )
 
         except Exception as e:
             processing_time = time.time() - start_time
@@ -826,6 +882,197 @@ class GranularAssessmentService:
                                 "confidence_threshold": threshold,
                             }
                         )
+
+    def _get_cache_key(
+        self, document_id: str, workflow_execution_arn: str, section_id: str
+    ) -> str:
+        """
+        Generate cache key for assessment tasks.
+
+        Args:
+            document_id: Document ID
+            workflow_execution_arn: Workflow execution ARN
+            section_id: Section ID
+
+        Returns:
+            Cache key string
+        """
+        workflow_id = (
+            workflow_execution_arn.split(":")[-1]
+            if workflow_execution_arn
+            else "unknown"
+        )
+        return f"assesscache#{document_id}#{workflow_id}#{section_id}"
+
+    def _get_cached_assessment_tasks(
+        self, document_id: str, workflow_execution_arn: str, section_id: str
+    ) -> Dict[str, AssessmentResult]:
+        """
+        Retrieve cached assessment task results for a document section.
+
+        Args:
+            document_id: Document ID
+            workflow_execution_arn: Workflow execution ARN
+            section_id: Section ID
+
+        Returns:
+            Dictionary mapping task_id to cached AssessmentResult, empty dict if no cache
+        """
+        logger.info(
+            f"Attempting to retrieve cached assessment tasks for document {document_id} section {section_id}"
+        )
+
+        if not self.cache_table:
+            return {}
+
+        cache_key = self._get_cache_key(document_id, workflow_execution_arn, section_id)
+
+        try:
+            response = self.cache_table.get_item(Key={"PK": cache_key, "SK": "tasks"})
+
+            if "Item" not in response:
+                logger.info(
+                    f"No cache entry found for document {document_id} section {section_id}"
+                )
+                return {}
+
+            # Parse cached data from JSON
+            cached_data = response["Item"]
+            logger.debug(f"Cached data keys: {list(cached_data.keys())}")
+            task_results = {}
+
+            # Extract task results from JSON attribute
+            if "task_results" in cached_data:
+                try:
+                    import json
+
+                    task_data_list = json.loads(cached_data["task_results"])
+
+                    for task_data in task_data_list:
+                        task_id = task_data["task_id"]
+                        task_results[task_id] = AssessmentResult(
+                            task_id=task_id,
+                            success=task_data["success"],
+                            assessment_data=task_data["assessment_data"],
+                            confidence_alerts=task_data["confidence_alerts"],
+                            error_message=task_data.get("error_message"),
+                            processing_time=task_data.get("processing_time", 0.0),
+                            metering=task_data.get("metering"),
+                        )
+
+                    if task_results:
+                        logger.info(
+                            f"Retrieved {len(task_results)} cached assessment task results for document {document_id} section {section_id} (PK: {cache_key})"
+                        )
+
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"Failed to parse cached assessment task results JSON for document {document_id} section {section_id}: {e}"
+                    )
+
+            return task_results
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to retrieve cached assessment tasks for document {document_id} section {section_id}: {e}"
+            )
+            return {}
+
+    def _cache_successful_assessment_tasks(
+        self,
+        document_id: str,
+        workflow_execution_arn: str,
+        section_id: str,
+        task_results: List[AssessmentResult],
+    ) -> None:
+        """
+        Cache successful assessment task results to DynamoDB as a JSON-serialized list.
+
+        Args:
+            document_id: Document ID
+            workflow_execution_arn: Workflow execution ARN
+            section_id: Section ID
+            task_results: List of successful assessment task results
+        """
+        if not self.cache_table or not task_results:
+            return
+
+        cache_key = self._get_cache_key(document_id, workflow_execution_arn, section_id)
+
+        try:
+            # Filter out failed task results and prepare data for JSON serialization
+            successful_tasks = []
+            for task_result in task_results:
+                # Only cache successful tasks
+                if task_result.success:
+                    task_data = {
+                        "task_id": task_result.task_id,
+                        "success": task_result.success,
+                        "assessment_data": task_result.assessment_data,
+                        "confidence_alerts": task_result.confidence_alerts,
+                        "error_message": task_result.error_message,
+                        "processing_time": task_result.processing_time,
+                        "metering": task_result.metering,
+                    }
+                    successful_tasks.append(task_data)
+
+            if len(successful_tasks) == 0:
+                logger.debug(
+                    f"No successful assessment task results to cache for document {document_id} section {section_id}"
+                )
+                return
+
+            # Prepare item structure with JSON-serialized task results
+            import json
+            from datetime import datetime, timedelta, timezone
+
+            item = {
+                "PK": cache_key,
+                "SK": "tasks",
+                "cached_at": str(int(time.time())),
+                "document_id": document_id,
+                "workflow_execution_arn": workflow_execution_arn,
+                "section_id": section_id,
+                "task_results": json.dumps(successful_tasks),
+                "ExpiresAfter": int(
+                    (datetime.now(timezone.utc) + timedelta(days=1)).timestamp()
+                ),
+            }
+
+            # Store in DynamoDB using Table resource with JSON serialization
+            self.cache_table.put_item(Item=item)
+
+            logger.info(
+                f"Cached {len(successful_tasks)} successful assessment task results for document {document_id} section {section_id} (PK: {cache_key})"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to cache assessment task results for document {document_id} section {section_id}: {e}"
+            )
+
+    def _is_throttling_exception(self, exception: Exception) -> bool:
+        """
+        Check if an exception is a throttling-related error that should trigger retries.
+
+        Args:
+            exception: Exception to check
+
+        Returns:
+            True if exception indicates throttling, False otherwise
+        """
+        if hasattr(exception, "response") and "Error" in exception.response:
+            error_code = exception.response["Error"]["Code"]
+            return error_code in self.throttling_exceptions
+
+        # Check exception class name and message for throttling indicators
+        exception_name = type(exception).__name__
+        exception_message = str(exception).lower()
+
+        return exception_name in self.throttling_exceptions or any(
+            throttle_term.lower() in exception_message
+            for throttle_term in self.throttling_exceptions
+        )
 
     def _aggregate_assessment_results(
         self,
@@ -968,6 +1215,7 @@ class GranularAssessmentService:
                 logger.warning(
                     f"Failed to read text confidence data for page {page.page_id}: {str(e)}"
                 )
+                raise
 
         # Fallback: use raw OCR data if text confidence is not available (for backward compatibility)
         if page.raw_text_uri:
@@ -984,8 +1232,151 @@ class GranularAssessmentService:
                 logger.warning(
                     f"Failed to generate text confidence data for page {page.page_id}: {str(e)}"
                 )
-
+                raise
         return ""
+
+    def _convert_bbox_to_geometry(
+        self, bbox_coords: List[float], page_num: int
+    ) -> Dict[str, Any]:
+        """
+        Convert [x1,y1,x2,y2] coordinates to geometry format.
+
+        Args:
+            bbox_coords: List of 4 coordinates [x1, y1, x2, y2] in 0-1000 scale
+            page_num: Page number where the bounding box appears
+
+        Returns:
+            Dictionary in geometry format compatible with pattern-1 UI
+        """
+        if len(bbox_coords) != 4:
+            raise ValueError(f"Expected 4 coordinates, got {len(bbox_coords)}")
+
+        x1, y1, x2, y2 = bbox_coords
+
+        # Ensure coordinates are in correct order
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+
+        # Convert from normalized 0-1000 scale to 0-1
+        left = x1 / 1000.0
+        top = y1 / 1000.0
+        width = (x2 - x1) / 1000.0
+        height = (y2 - y1) / 1000.0
+
+        return {
+            "boundingBox": {"top": top, "left": left, "width": width, "height": height},
+            "page": page_num,
+        }
+
+    def _process_single_assessment_geometry(
+        self, attr_assessment: Dict[str, Any], attr_name: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Process geometry data for a single assessment (with confidence key).
+
+        Args:
+            attr_assessment: Single assessment dictionary with confidence data
+            attr_name: Name of attribute for logging
+
+        Returns:
+            Enhanced assessment with geometry converted to proper format
+        """
+        enhanced_attr = attr_assessment.copy()
+
+        # Check if this assessment includes bbox data
+        if "bbox" in attr_assessment or "page" in attr_assessment:
+            # Both bbox and page are required for valid geometry
+            if "bbox" in attr_assessment and "page" in attr_assessment:
+                try:
+                    bbox_coords = attr_assessment["bbox"]
+                    page_num = attr_assessment["page"]
+
+                    # Validate bbox coordinates
+                    if isinstance(bbox_coords, list) and len(bbox_coords) == 4:
+                        # Convert to geometry format
+                        geometry = self._convert_bbox_to_geometry(bbox_coords, page_num)
+                        enhanced_attr["geometry"] = [geometry]
+
+                        logger.debug(
+                            f"Converted bounding box for {attr_name}: {bbox_coords} -> geometry format"
+                        )
+                    else:
+                        logger.warning(
+                            f"Invalid bounding box format for {attr_name}: {bbox_coords}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to process bounding box for {attr_name}: {str(e)}"
+                    )
+                    raise
+            else:
+                # If only one of bbox/page exists, log a warning about incomplete data
+                if "bbox" in attr_assessment and "page" not in attr_assessment:
+                    logger.warning(
+                        f"Found bbox without page for {attr_name} - removing incomplete bbox data"
+                    )
+                elif "page" in attr_assessment and "bbox" not in attr_assessment:
+                    logger.warning(
+                        f"Found page without bbox for {attr_name} - removing incomplete page data"
+                    )
+
+            # Always remove raw bbox/page data from output (whether processed or incomplete)
+            enhanced_attr.pop("bbox", None)
+            enhanced_attr.pop("page", None)
+
+        return enhanced_attr
+
+    def _extract_geometry_from_assessment(
+        self, assessment_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Extract geometry data from assessment response and convert to proper format.
+        Now supports recursive processing of nested group attributes.
+
+        Args:
+            assessment_data: Dictionary containing assessment results from LLM
+
+        Returns:
+            Enhanced assessment data with geometry information converted to proper format
+        """
+        enhanced_assessment = {}
+
+        for attr_name, attr_assessment in assessment_data.items():
+            if isinstance(attr_assessment, dict):
+                # Check if this is a direct confidence assessment
+                if "confidence" in attr_assessment:
+                    # This is a direct assessment - process its geometry
+                    enhanced_assessment[attr_name] = (
+                        self._process_single_assessment_geometry(
+                            attr_assessment, attr_name
+                        )
+                    )
+                else:
+                    # This is a group attribute (no direct confidence) - recursively process nested attributes
+                    logger.debug(f"Processing group attribute: {attr_name}")
+                    enhanced_assessment[attr_name] = (
+                        self._extract_geometry_from_assessment(attr_assessment)
+                    )
+
+            elif isinstance(attr_assessment, list):
+                # Handle list attributes - process each item recursively
+                enhanced_list = []
+                for i, item_assessment in enumerate(attr_assessment):
+                    if isinstance(item_assessment, dict):
+                        # Recursively process each list item
+                        enhanced_item = self._extract_geometry_from_assessment(
+                            item_assessment
+                        )
+                        enhanced_list.append(enhanced_item)
+                    else:
+                        # Non-dict items pass through unchanged
+                        enhanced_list.append(item_assessment)
+                enhanced_assessment[attr_name] = enhanced_list
+            else:
+                # Other types pass through unchanged
+                enhanced_assessment[attr_name] = attr_assessment
+
+        return enhanced_assessment
 
     def process_document_section(self, document: Document, section_id: str) -> Document:
         """
@@ -998,6 +1389,15 @@ class GranularAssessmentService:
         Returns:
             Document: Updated Document object with assessment results appended to extraction results
         """
+        # Check if assessment is enabled in configuration
+        assessment_config = self.config.get("assessment", {})
+        from idp_common.utils import normalize_boolean_value
+
+        enabled = normalize_boolean_value(assessment_config.get("enabled", True))
+        if not enabled:
+            logger.info("Assessment is disabled via configuration")
+            return document
+
         # Validate input document
         if not document:
             logger.error("No document provided")
@@ -1167,69 +1567,209 @@ class GranularAssessmentService:
                 logger.warning(f"No assessment tasks created for section {section_id}")
                 return document
 
-            # Time the model invocations
-            request_start_time = time.time()
+            # Check for cached assessment task results
+            cached_task_results = self._get_cached_assessment_tasks(
+                document.id, document.workflow_execution_arn, section_id
+            )
+            all_task_results = list(cached_task_results.values())
+            combined_metering = {}
 
-            # Process tasks (parallel or sequential based on configuration)
-            if self.enable_parallel and len(tasks) > 1:
+            # Use thread-safe error collection (similar to classification service)
+            import threading
+
+            errors_lock = threading.Lock()
+            failed_task_exceptions = {}  # Store original exceptions for failed tasks
+
+            # Determine which tasks need processing
+            tasks_to_process = []
+            for task in tasks:
+                if task.task_id not in cached_task_results:
+                    tasks_to_process.append(task)
+                else:
+                    # Task already cached - merge its metering data
+                    cached_result = cached_task_results[task.task_id]
+                    if cached_result.metering:
+                        combined_metering = utils.merge_metering_data(
+                            combined_metering, cached_result.metering
+                        )
+
+            if tasks_to_process:
                 logger.info(
-                    f"Processing {len(tasks)} assessment tasks in parallel with {self.max_workers} workers"
+                    f"Found {len(cached_task_results)} cached assessment task results, processing {len(tasks_to_process)} remaining tasks"
                 )
 
-                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    # Submit all tasks
-                    future_to_task = {
-                        executor.submit(
-                            self._process_assessment_task,
-                            task,
-                            base_content,
-                            attributes,
-                            model_id,
-                            system_prompt,
-                            temperature,
-                            top_k,
-                            top_p,
-                            max_tokens,
-                        ): task
-                        for task in tasks
-                    }
+                # Time the model invocations
+                request_start_time = time.time()
 
-                    # Collect results
-                    results = []
-                    for future in as_completed(future_to_task):
-                        task = future_to_task[future]
-                        try:
-                            result = future.result()
-                            results.append(result)
-                        except Exception as e:
-                            logger.error(
-                                f"Task {task.task_id} generated an exception: {e}"
-                            )
-                            results.append(
-                                AssessmentResult(
+                # Process tasks (parallel or sequential based on configuration)
+                if self.enable_parallel and len(tasks_to_process) > 1:
+                    logger.info(
+                        f"Processing {len(tasks_to_process)} assessment tasks in parallel with {self.max_workers} workers"
+                    )
+
+                    with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                        # Submit all uncached tasks
+                        future_to_task = {
+                            executor.submit(
+                                self._process_assessment_task,
+                                task,
+                                base_content,
+                                attributes,
+                                model_id,
+                                system_prompt,
+                                temperature,
+                                top_k,
+                                top_p,
+                                max_tokens,
+                            ): task
+                            for task in tasks_to_process
+                        }
+
+                        # Collect results with enhanced error handling
+                        for future in as_completed(future_to_task):
+                            task = future_to_task[future]
+                            try:
+                                result = future.result()
+                                all_task_results.append(result)
+
+                                # Merge metering data
+                                if result.metering:
+                                    combined_metering = utils.merge_metering_data(
+                                        combined_metering, result.metering
+                                    )
+                            except Exception as e:
+                                # Capture exception details for later use
+                                error_msg = f"Error processing assessment task {task.task_id}: {str(e)}"
+                                logger.error(error_msg)
+                                with errors_lock:
+                                    document.errors.append(error_msg)
+                                    # Store the original exception for later analysis
+                                    failed_task_exceptions[task.task_id] = e
+
+                                # Create failed result
+                                failed_result = AssessmentResult(
                                     task_id=task.task_id,
                                     success=False,
                                     assessment_data={},
                                     confidence_alerts=[],
                                     error_message=str(e),
                                 )
-                            )
-            else:
-                logger.info(f"Processing {len(tasks)} assessment tasks sequentially")
-                results = []
-                for task in tasks:
-                    result = self._process_assessment_task(
-                        task,
-                        base_content,
-                        attributes,
-                        model_id,
-                        system_prompt,
-                        temperature,
-                        top_k,
-                        top_p,
-                        max_tokens,
+                                all_task_results.append(failed_result)
+                else:
+                    logger.info(
+                        f"Processing {len(tasks_to_process)} assessment tasks sequentially"
                     )
-                    results.append(result)
+                    request_start_time = time.time()
+
+                    for task in tasks_to_process:
+                        try:
+                            result = self._process_assessment_task(
+                                task,
+                                base_content,
+                                attributes,
+                                model_id,
+                                system_prompt,
+                                temperature,
+                                top_k,
+                                top_p,
+                                max_tokens,
+                            )
+                            all_task_results.append(result)
+
+                            # Merge metering data
+                            if result.metering:
+                                combined_metering = utils.merge_metering_data(
+                                    combined_metering, result.metering
+                                )
+                        except Exception as e:
+                            # Capture exception details for later use
+                            error_msg = f"Error processing assessment task {task.task_id}: {str(e)}"
+                            logger.error(error_msg)
+                            document.errors.append(error_msg)
+                            # Store the original exception for later analysis
+                            failed_task_exceptions[task.task_id] = e
+
+                            # Create failed result
+                            failed_result = AssessmentResult(
+                                task_id=task.task_id,
+                                success=False,
+                                assessment_data={},
+                                confidence_alerts=[],
+                                error_message=str(e),
+                            )
+                            all_task_results.append(failed_result)
+
+                # Store failed task exceptions in document metadata for caller to access
+                if failed_task_exceptions:
+                    logger.info(
+                        f"Processing {len(failed_task_exceptions)} failed assessment task exceptions for document {document.id} section {section_id}"
+                    )
+
+                    # Store the first throttling exception as the primary failure cause
+                    throttling_exceptions = {
+                        task_id: exc
+                        for task_id, exc in failed_task_exceptions.items()
+                        if self._is_throttling_exception(exc)
+                    }
+
+                    first_exception = next(iter(failed_task_exceptions.values()))
+                    primary_exception = (
+                        next(iter(throttling_exceptions.values()))
+                        if throttling_exceptions
+                        else first_exception
+                    )
+
+                    document.metadata = document.metadata or {}
+                    document.metadata["failed_assessment_tasks"] = {
+                        task_id: {
+                            "exception_type": type(exc).__name__,
+                            "exception_message": str(exc),
+                            "exception_class": exc.__class__.__module__
+                            + "."
+                            + exc.__class__.__name__,
+                            "is_throttling": self._is_throttling_exception(exc),
+                        }
+                        for task_id, exc in failed_task_exceptions.items()
+                    }
+                    # Store the primary exception for easy access by caller
+                    document.metadata["primary_exception"] = primary_exception
+
+                # Check for any failed tasks (both exceptions and unsuccessful results)
+                failed_results = [r for r in all_task_results if not r.success]
+                any_failures = bool(failed_task_exceptions or failed_results)
+
+                # Cache successful tasks only when there are failures (for retry optimization)
+                if any_failures:
+                    successful_results = [r for r in all_task_results if r.success]
+                    if successful_results:
+                        logger.info(
+                            f"Caching {len(successful_results)} successful assessment task results for document {document.id} section {section_id} due to {len(failed_results)} failed results + {len(failed_task_exceptions)} failed exceptions (retry scenario)"
+                        )
+                        self._cache_successful_assessment_tasks(
+                            document.id,
+                            document.workflow_execution_arn,
+                            section_id,
+                            successful_results,
+                        )
+                    else:
+                        logger.warning(
+                            f"No successful assessment task results to cache for document {document.id} section {section_id} - all tasks failed"
+                        )
+                else:
+                    # All new tasks succeeded - no need to cache since there won't be retries
+                    logger.info(
+                        f"All new assessment tasks succeeded for document {document.id} section {section_id} - skipping cache (no retry needed)"
+                    )
+            else:
+                logger.info(
+                    f"All {len(cached_task_results)} assessment task results found in cache"
+                )
+                request_start_time = (
+                    time.time()
+                )  # For consistency in timing calculations
+
+            # Use all_task_results instead of results for aggregation
+            results = all_task_results
 
             total_duration = time.time() - request_start_time
             logger.info(
@@ -1252,8 +1792,49 @@ class GranularAssessmentService:
             logger.info(
                 f"Assessment completed: {len(successful_tasks)}/{len(tasks)} tasks successful"
             )
+
+            # Handle failures - check if we should trigger state machine retries
             if failed_tasks:
-                logger.warning(f"Failed tasks: {[t.task_id for t in failed_tasks]}")
+                error_message = self._handle_parsing_errors(
+                    document, failed_tasks, document_text, extraction_results
+                )
+                if error_message:
+                    logger.error(f"Error: {error_message}")
+                    # Errors are to be analyzed
+                    # document.status = Status.FAILED
+                    # document.errors.append(error_message)
+
+                # Add task errors to document errors
+                task_errors = [t.error_message for t in failed_tasks if t.error_message]
+                if task_errors:
+                    error_msg = self._convert_error_list_to_string(task_errors)
+                    logger.error(f"Task Error: {error_msg}")
+                    # Errors are to be analyzed
+                    # document.status = Status.FAILED
+                    # document.errors.append(error_msg)
+
+                # Check if we should trigger state machine retries for throttling exceptions
+                # This mirrors the classification service pattern
+                if (
+                    hasattr(document, "metadata")
+                    and document.metadata
+                    and "primary_exception" in document.metadata
+                ):
+                    primary_exception = document.metadata["primary_exception"]
+                    if self._is_throttling_exception(primary_exception):
+                        logger.error(
+                            f"Re-raising throttling exception to trigger state machine retry: {type(primary_exception).__name__}"
+                        )
+                        # Update document status in AppSync before raising exception
+                        # (this will be handled by the Lambda function)
+
+                        # Re-raise the throttling exception to trigger state machine retries
+                        raise primary_exception
+                    else:
+                        logger.warning(
+                            f"Primary exception is not throttling-related: {type(primary_exception).__name__}. "
+                            f"Document will be marked as failed without retry."
+                        )
 
             # Update the existing extraction result with enhanced assessment data
             extraction_data["explainability_info"] = [enhanced_assessment_data]
@@ -1284,17 +1865,78 @@ class GranularAssessmentService:
             document.metering = utils.merge_metering_data(
                 document.metering, aggregated_metering or {}
             )
-
             t5 = time.time()
             logger.info(
                 f"Total granular assessment time for section {section_id}: {t5 - t0:.2f} seconds"
             )
-
         except Exception as e:
+            # Error is processed in the final results step
             error_msg = f"Error processing granular assessment for section {section_id}: {str(e)}"
             logger.error(error_msg)
+            document.status = Status.FAILED
             document.errors.append(error_msg)
-            raise
+
+            # Check if this is a throttling exception and populate metadata for retry handling
+            if self._is_throttling_exception(e):
+                logger.info(
+                    f"Populating metadata for throttling exception: {type(e).__name__}"
+                )
+                document.metadata = document.metadata or {}
+                document.metadata["failed_assessment_tasks"] = {
+                    "granular_processing": {
+                        "exception_type": type(e).__name__,
+                        "exception_message": str(e),
+                        "exception_class": e.__class__.__module__
+                        + "."
+                        + e.__class__.__name__,
+                        "is_throttling": True,
+                    }
+                }
+                document.metadata["primary_exception"] = e
+
+        # Additional check: if document status is FAILED and contains throttling errors,
+        # populate metadata even if no exceptions were thrown
+        if (
+            document.status == Status.FAILED
+            and document.errors
+            and not hasattr(document, "metadata")
+            or not document.metadata
+            or "failed_assessment_tasks" not in document.metadata
+        ):
+            # Check if any errors contain throttling keywords
+            throttling_keywords = [
+                "throttlingexception",
+                "provisionedthroughputexceededexception",
+                "servicequotaexceededexception",
+                "toomanyrequestsexception",
+                "requestlimitexceeded",
+                "too many tokens",
+                "please wait before trying again",
+                "reached max retries",
+            ]
+
+            has_throttling_error = False
+            throttling_error_msg = None
+            for error_msg in document.errors:
+                error_lower = str(error_msg).lower()
+                if any(keyword in error_lower for keyword in throttling_keywords):
+                    has_throttling_error = True
+                    throttling_error_msg = error_msg
+                    break
+
+            if has_throttling_error:
+                logger.info(
+                    f"Populating metadata for throttling error found in document.errors: {throttling_error_msg}"
+                )
+                document.metadata = document.metadata or {}
+                document.metadata["failed_assessment_tasks"] = {
+                    "document_level_error": {
+                        "exception_type": "ThrottlingError",
+                        "exception_message": throttling_error_msg,
+                        "exception_class": "DocumentLevelThrottlingError",
+                        "is_throttling": True,
+                    }
+                }
 
         return document
 
@@ -1321,3 +1963,59 @@ class GranularAssessmentService:
 
         logger.info(f"Completed granular assessment for document {document.id}")
         return document
+
+    def _handle_parsing_errors(
+        self,
+        document: Document,
+        failed_tasks: List[str],
+        document_text: str,
+        extraction_results: Dict,
+    ) -> Optional[str]:
+        """Handle multiple parsing errors with user-friendly messaging."""
+        # Check for token limit issues
+        token_warning = check_token_limit(
+            document_text, extraction_results, self.config
+        )
+        logger.info(f"Token Warning: {token_warning}")
+        error_count = len(failed_tasks)
+        base_msg = f"Assessment failed for {error_count} tasks. "
+        if token_warning:
+            return base_msg + token_warning
+        else:
+            return None
+
+    def is_parsing_error(self, error_message: str) -> bool:
+        """Check if an error message is related to parsing issues."""
+        parsing_errors = ["parsing"]
+        return any(error.lower() in error_message.lower() for error in parsing_errors)
+
+    def _convert_error_list_to_string(self, errors) -> str:
+        """Convert list of error messages to a single user-friendly string."""
+        if not errors:
+            return ""
+
+        # Handle single string input
+        if isinstance(errors, str):
+            return errors
+
+        # Ensure we have a list of strings
+        if not isinstance(errors, list):
+            return str(errors)
+
+        # Count different types of errors
+        parsing_errors = [e for e in errors if "parsing" in e.lower()]
+        other_errors = [e for e in errors if "parsing" not in e.lower()]
+
+        if len(parsing_errors) > 10:
+            # Too many parsing errors - summarize
+            return (
+                f"Multiple parsing errors occurred {len(parsing_errors)} parsing errors, "
+                f"{len(other_errors)} other errors. This suggests document complexity or token limit issues."
+            )
+        elif len(errors) > 5:
+            # Multiple errors - show first few and summarize
+            first_errors = "; ".join(errors[:1])
+            return f"{first_errors} and {len(errors) - 1} more errors"
+        else:
+            # Few errors - show all
+            return "; ".join(errors)

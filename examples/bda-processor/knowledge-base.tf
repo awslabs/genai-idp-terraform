@@ -252,7 +252,7 @@ resource "aws_iam_role_policy" "knowledge_base_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:aws:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base_embeddings_model_id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base_embeddings_model_id}"
         ]
       },
       {
@@ -290,7 +290,7 @@ resource "aws_bedrockagent_knowledge_base" "knowledge_base" {
 
   knowledge_base_configuration {
     vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:aws:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base_embeddings_model_id}"
+      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base_embeddings_model_id}"
     }
     type = "VECTOR"
   }
@@ -409,7 +409,7 @@ resource "aws_iam_role_policy" "knowledge_base_ingestion_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
       },
       {
         Effect = "Allow"

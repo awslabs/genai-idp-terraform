@@ -232,7 +232,7 @@ The evaluation module produces richly formatted Markdown reports with:
 
 2. **Performance Tables**:
    - Metrics tables with value ratings
-   - First-column status indicators (PASS/FAIL) for immediate identification of matches
+   - First-column status indicators (✅/❌) for immediate identification of matches
    - Detailed attribution of evaluation methods used for each field, including:
      - Method types (EXACT, FUZZY, HUNGARIAN, etc.)
      - Thresholds for fuzzy and semantic matching methods
@@ -323,8 +323,8 @@ The evaluation service automatically integrates with the assessment feature to d
 ```
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :---------------: | ----- | ------ | ------ |
-| PASS | invoice_number | INV-2024-001 | INV-2024-001 | 0.92 | 1.00 | EXACT | Exact match |
-| FAIL | vendor_name | ABC Corp | XYZ Inc | 0.75 | 0.00 | EXACT | Values do not match |
+| ✅ | invoice_number | INV-2024-001 | INV-2024-001 | 0.92 | 1.00 | EXACT | Exact match |
+| ❌ | vendor_name | ABC Corp | XYZ Inc | 0.75 | 0.00 | EXACT | Values do not match |
 ```
 
 ### Quality Analysis Benefits
@@ -529,13 +529,13 @@ The evaluation service provides detailed results for all flattened attributes:
 ```markdown
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :--------: | ----- | ------ | ------ |
-| PASS | Account Number | 1234567890 | 1234567890 | 0.95 | 1.00 | EXACT | Exact match |
-| PASS | Account Holder Address.Street Number | 123 | 123 | 0.95 | 1.00 | FUZZY (threshold: 0.9) | Exact match |
-| PASS | Account Holder Address.City | Seattle | Seattle | 0.88 | 1.00 | FUZZY (threshold: 0.9) | Exact match |
-| FAIL | Account Holder Address.State | WA | Washington | 0.82 | 0.00 | EXACT | Values do not match exactly |
-| PASS | Transactions[0].Date | 01/15/2024 | 01/15/2024 | 0.94 | 1.00 | FUZZY (threshold: 0.9) | Exact match |
-| PASS | Transactions[0].Amount | -4.50 | -4.50 | 0.92 | 1.00 | NUMERIC_EXACT | Exact numeric match |
-| PASS | Transactions[1].Description | ATM Withdrawal | ATM Cash | 0.87 | 0.85 | SEMANTIC (threshold: 0.7) | Semantically similar |
+| ✅ | Account Number | 1234567890 | 1234567890 | 0.95 | 1.00 | EXACT | Exact match |
+| ✅ | Account Holder Address.Street Number | 123 | 123 | 0.95 | 1.00 | FUZZY (threshold: 0.9) | Exact match |
+| ✅ | Account Holder Address.City | Seattle | Seattle | 0.88 | 1.00 | FUZZY (threshold: 0.9) | Exact match |
+| ❌ | Account Holder Address.State | WA | Washington | 0.82 | 0.00 | EXACT | Values do not match exactly |
+| ✅ | Transactions[0].Date | 01/15/2024 | 01/15/2024 | 0.94 | 1.00 | FUZZY (threshold: 0.9) | Exact match |
+| ✅ | Transactions[0].Amount | -4.50 | -4.50 | 0.92 | 1.00 | NUMERIC_EXACT | Exact numeric match |
+| ✅ | Transactions[1].Description | ATM Withdrawal | ATM Cash | 0.87 | 0.85 | SEMANTIC (threshold: 0.7) | Semantically similar |
 ```
 
 ### Benefits of Nested Structure Support

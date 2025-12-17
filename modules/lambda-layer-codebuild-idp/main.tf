@@ -115,7 +115,7 @@ resource "aws_s3_object" "requirements_source" {
 
 # IAM role for CodeBuild
 resource "aws_iam_role" "codebuild_role" {
-  name = "${var.layer_prefix}-codebuild-role-${random_string.layer_suffix.result}"
+  name = "${var.layer_prefix}-cb-role-${random_string.layer_suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

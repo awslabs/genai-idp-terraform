@@ -92,6 +92,7 @@ class SummarizationService:
         store_results: bool = True
     ) -> Document:
         # Process a Document object and update it with summary information
+        # Checks config.summarization.enabled first - returns early if disabled
         # Automatically detects whether to use section-based or whole document summarization
         # store_results parameter controls whether to create and store the markdown report
 ```
@@ -164,6 +165,7 @@ The service requires configuration with the following structure:
 ```json
 {
   "summarization": {
+    "enabled": true,
     "model": "us.amazon.nova-pro-v1:0",
     "temperature": 0,
     "top_k": 5,
@@ -171,6 +173,28 @@ The service requires configuration with the following structure:
     "task_prompt": "Summarize the following document:\n\n{DOCUMENT_TEXT}\n\nProvide your summary in JSON format with the following fields:\n- 'brief_summary': A brief 1-2 sentence overview\n- 'detailed_summary': A comprehensive summary with key points\n\nEnsure the response is valid JSON."
   }
 }
+```
+
+### Configuration Properties
+
+#### `enabled` (boolean)
+
+- **Purpose**: Controls whether summarization processing is performed
+- **Default**: `true` (for backward compatibility)
+- **Behavior**:
+  - `true`: Summarization processing proceeds normally
+  - `false`: Summarization is skipped entirely with minimal overhead
+
+**Cost Optimization**: When `enabled: false`, no LLM API calls are made, resulting in zero summarization costs.
+
+**Example - Disabling Summarization:**
+
+```yaml
+summarization:
+  enabled: false  # Disables all summarization processing
+  # Other properties can remain but will be ignored
+  model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  temperature: 0.0
 ```
 
 The service can handle any JSON structure returned by the model. You can use any field names in your prompt template:

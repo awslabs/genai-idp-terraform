@@ -393,6 +393,20 @@ class SummarizationService:
         Returns:
             Document: Updated Document object with summary and summarization_result
         """
+        # Check if summarization is enabled in configuration
+        summarization_config = self.config.get("summarization", {})
+        from idp_common.utils import normalize_boolean_value
+
+        enabled = normalize_boolean_value(summarization_config.get("enabled", True))
+        if not enabled:
+            logger.info(
+                f"Summarization is disabled in configuration for document {document.id}, skipping processing"
+            )
+            # Update document status to completed if not already failed
+            if document.status != Status.FAILED:
+                document.status = Status.COMPLETED
+            return document
+
         if not document.pages:
             logger.warning("Document has no pages to summarize")
             return self._update_document_status(
@@ -575,6 +589,16 @@ class SummarizationService:
                     content_type="application/json",
                 )
 
+                # Store the full text for chat
+                all_text = self._get_all_text(document)
+                fulltext_key = f"{document.input_key}/summary/fulltext.txt"
+                s3.write_content(
+                    content=all_text,
+                    bucket=output_bucket,
+                    key=fulltext_key,
+                    content_type="text/plain",
+                )
+
                 # Create and store the combined markdown summary
                 md_key = f"{document.input_key}/summary/summary.md"
 
@@ -639,6 +663,30 @@ class SummarizationService:
 
         return document
 
+    def _get_all_text(self, document: Document) -> str:
+        """
+        Retrieve all text content from a document's pages.
+
+        Args:
+            document: Document object to process
+
+        Returns:
+            str: Combined text content from all pages
+        """
+        all_text = ""
+        for page_id, page in sorted(document.pages.items()):
+            if page.parsed_text_uri:
+                try:
+                    page_text = s3.get_text_content(page.parsed_text_uri)
+                    all_text += f"<page-number>{page_id}</page-number>\n{page_text}\n\n"
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load text content from {page.parsed_text_uri}: {e}"
+                    )
+                    # Continue with other pages
+
+        return all_text
+
     def _process_document_as_whole(
         self, document: Document, store_results: bool = True
     ) -> Document:
@@ -659,19 +707,7 @@ class SummarizationService:
             start_time = time.time()
 
             # Combine text from all pages
-            all_text = ""
-            for page_id, page in sorted(document.pages.items()):
-                if page.parsed_text_uri:
-                    try:
-                        page_text = s3.get_text_content(page.parsed_text_uri)
-                        all_text += (
-                            f"<page-number>{page_id}</page-number>\n{page_text}\n\n"
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load text content from {page.parsed_text_uri}: {e}"
-                        )
-                        # Continue with other pages
+            all_text = self._get_all_text(document)
 
             if not all_text:
                 logger.warning("No text content found in document pages")
@@ -708,7 +744,7 @@ class SummarizationService:
                     content_type="application/json",
                 )
 
-                # Store the raw text
+                # Store the full text for chat
                 fulltext_key = f"{document.input_key}/summary/fulltext.txt"
                 s3.write_content(
                     content=all_text,

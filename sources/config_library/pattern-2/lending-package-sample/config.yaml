@@ -1,6 +1,5 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
 notes: Default settings for lending-package-sample configuration
 ocr:
   backend: "textract"  # Default to Textract for backward compatibility
@@ -914,15 +913,27 @@ classes:
         evaluation_method: LLM
         attributeType: group
 classification:
+  classificationMethod: multimodalPageLevelClassification
+  maxPagesForClassification: "ALL"
   image:
     target_height: ''
     target_width: ''
+  model: us.amazon.nova-pro-v1:0
+  temperature: '0.0'
   top_p: '0.1'
   max_tokens: '4096'
   top_k: '5'
+  system_prompt: >-
+    You are a multimodal document classification expert that analyzes business documents using both visual layout and textual content. Your task is to classify single-page documents into predefined categories based on their structural patterns, visual features, and text content. Your output must be valid JSON according to the requested format.
+
+    <variables>
+    <document-ocr-data>: OCR-extracted text content from the document page that provides textual information for classification
+    <document-image>: Visual representation of the document page that provides layout, formatting, and visual structure information
+    <document-types>: List of valid document types with their descriptions that the document must be classified into
+    </variables>
   task_prompt: >-
     <task-description>
-    Analyze the provided document using both its visual layout and textual content to determine its document type. You must classify it into exactly one of the predefined categories.
+    Analyze the provided document using both its visual layout and textual content to determine its document type and whether this page begins a new document or continues the previous one.
     </task-description>
 
     <document-types>
@@ -934,24 +945,16 @@ classification:
     1. Examine the visual layout: headers, logos, formatting, structure, and visual organization
     2. Analyze the textual content: key phrases, terminology, purpose, and information type
     3. Identify distinctive features that match the document type descriptions
-    4. Consider both visual and textual evidence together to determine the best match
-    5. CRITICAL: Only use document types explicitly listed in the <document-types> section
+    4. Decide if this page starts a new document (output "start") or continues the previous document (output "continue")
+    5. Consider both visual and textual evidence together to determine the best match
+    6. CRITICAL: Only use document types explicitly listed in the <document-types> section
     </classification-instructions>
 
-    <reasoning-guidelines>
-    When determining the document type:
-    - First identify the document's primary purpose and function
-    - Note specific visual elements (letterhead, forms, tables, signatures)
-    - Identify key textual indicators (terminology, phrases, structure)
-    - Consider the document's intended audience and use case
-    - Provide specific evidence from both visual and textual analysis
-    </reasoning-guidelines>
-
     <output-format>
-    Return your classification as valid JSON following this exact structure:
     {
       "classification_reason": "Detailed reasoning including specific visual and textual evidence that led to this classification",
-      "class": "exact_document_type_from_list"
+      "class": "exact_document_type_from_list",
+      "document_boundary": "start or continue"
     }
     </output-format>
 
@@ -968,22 +971,10 @@ classification:
     <final-instructions>
     Analyze the document above by:
     1. Applying the <classification-instructions> to examine both visual and textual features
-    2. Following the <reasoning-guidelines> to build your classification rationale
-    3. Selecting ONLY from document types in <document-types>
-    4. Providing clear reasoning with specific evidence before the classification
-    5. Outputting in the exact JSON format specified in <output-format>
+    2. Selecting ONLY from document types in <document-types>
+    3. Providing clear reasoning with specific evidence
+    4. Outputting in the exact JSON format specified in <output-format>
     </final-instructions>
-  temperature: '0.0'
-  model: us.amazon.nova-pro-v1:0
-  system_prompt: >-
-    You are a multimodal document classification expert that analyzes business documents using both visual layout and textual content. Your task is to classify single-page documents into predefined categories based on their structural patterns, visual features, and text content. Your output must be valid JSON according to the requested format.
-
-    <variables>
-    DOCUMENT_TEXT: OCR-extracted text content from the document page that provides textual information for classification
-    DOCUMENT_IMAGE: Visual representation of the document page that provides layout, formatting, and visual structure information
-    CLASS_NAMES_AND_DESCRIPTIONS: List of valid document types with their descriptions that the document must be classified into
-    </variables>
-  classificationMethod: multimodalPageLevelClassification
 extraction:
   image:
     target_width: ''
@@ -1082,6 +1073,7 @@ extraction:
   system_prompt: >-
     You are a document assistant. Respond only with JSON. Never make up data, only provide data found in the document being provided.
 summarization:
+  enabled: true
   top_p: '0.1'
   max_tokens: '4096'
   top_k: '5'
@@ -1143,6 +1135,8 @@ summarization:
   system_prompt: >-
     You are a document summarization expert who can analyze and summarize documents from various domains including medical, financial, legal, and general business documents. Your task is to create a summary that captures the key information, main points, and important details from the document. Your output must be in valid JSON format. \nSummarization Style: Balanced\\nCreate a balanced summary that provides a moderate level of detail. Include the main points and key supporting information, while maintaining the document's overall structure. Aim for a comprehensive yet concise summary.\n Your output MUST be in valid JSON format with markdown content. You MUST strictly adhere to the output format specified in the instructions.
 assessment:
+  enabled: true
+  validation_enabled: false
   image:
     target_height: ''
     target_width: ''
@@ -1158,127 +1152,144 @@ assessment:
   temperature: '0.0'
   model: us.amazon.nova-lite-v1:0
   system_prompt: >-
-    You are a document analysis assessment expert. Your task is to evaluate the confidence of extraction results by analyzing the source document evidence. Respond only with JSON containing confidence scores for each extracted attribute.
+    You are a document analysis assessment expert. Your role is to evaluate the confidence and accuracy of data extraction results by analyzing them against source documents.
+    
+    Provide accurate confidence scores for each assessment.
+    When bounding boxes are requested, provide precise coordinate locations where information appears in the document.
   task_prompt: >-
     <background>
-
-    You are an expert document analysis assessment system. Your task is to evaluate the confidence of extraction results for a document of class {DOCUMENT_CLASS}.
-
+    You are an expert document analysis assessment system. Your task is to evaluate the confidence of extraction results for a document of class {DOCUMENT_CLASS} and provide precise spatial localization for each field.
     </background>
 
-
     <task>
-
-    Analyze the extraction results against the source document and provide confidence assessments for each extracted attribute. Consider factors such as:
-
-    1. Text clarity and OCR quality in the source regions
-    2. Alignment between extracted values and document content
-    3. Presence of clear evidence supporting the extraction
-    4. Potential ambiguity or uncertainty in the source material
+    Analyze the extraction results against the source document and provide confidence assessments AND bounding box coordinates for each extracted attribute. Consider factors such as:
+    1. Text clarity and OCR quality in the source regions 
+    2. Alignment between extracted values and document content 
+    3. Presence of clear evidence supporting the extraction 
+    4. Potential ambiguity or uncertainty in the source material 
     5. Completeness and accuracy of the extracted information
-
+    6. Precise spatial location of each field in the document
     </task>
 
-
     <assessment-guidelines>
-
-    For each attribute, provide:
-    A confidence score between 0.0 and 1.0 where:
+    For each attribute, provide: 
+    - A confidence score between 0.0 and 1.0 where:
        - 1.0 = Very high confidence, clear and unambiguous evidence
        - 0.8-0.9 = High confidence, strong evidence with minor uncertainty
        - 0.6-0.7 = Medium confidence, reasonable evidence but some ambiguity
        - 0.4-0.5 = Low confidence, weak or unclear evidence
        - 0.0-0.3 = Very low confidence, little to no supporting evidence
+    - A clear explanation of the confidence reasoning
+    - Precise spatial coordinates where the field appears in the document
 
-    Guidelines:
-    - Base assessments on actual document content and OCR quality
-    - Consider both text-based evidence and visual/layout clues
-    - Account for OCR confidence scores when provided
-    - Be objective and specific in reasoning
+    Guidelines: 
+    - Base assessments on actual document content and OCR quality 
+    - Consider both text-based evidence and visual/layout clues 
+    - Account for OCR confidence scores when provided 
+    - Be objective and specific in reasoning 
     - If an extraction appears incorrect, score accordingly with explanation
-
+    - Provide tight, accurate bounding boxes around the actual text
     </assessment-guidelines>
 
+    <spatial-localization-guidelines>
+    For each field, provide bounding box coordinates:
+    - bbox: [x1, y1, x2, y2] coordinates in normalized 0-1000 scale
+    - page: Page number where the field appears (starting from 1)
+    
+    Coordinate system:
+    - Use normalized scale 0-1000 for both x and y axes
+    - x1, y1 = top-left corner of bounding box  
+    - x2, y2 = bottom-right corner of bounding box
+    - Ensure x2 > x1 and y2 > y1
+    - Make bounding boxes tight around the actual text content
+    - If a field spans multiple lines, create a bounding box that encompasses all relevant text
+    </spatial-localization-guidelines>
+
     <final-instructions>
+    Analyze the extraction results against the source document and provide confidence assessments with spatial localization. Return a JSON object with the following structure based on the attribute type:
 
-    Analyze the extraction results against the source document and provide confidence assessments. Return a JSON object with the following structure based on the attribute type:
-
-    For SIMPLE attributes:
+    For SIMPLE attributes: 
     {
       "simple_attribute_name": {
         "confidence": 0.85,
+        "bbox": [100, 200, 300, 250],
+        "page": 1
       }
     }
 
-    For GROUP attributes (nested object structure):
+    For GROUP attributes (nested object structure): 
     {
       "group_attribute_name": {
         "sub_attribute_1": {
           "confidence": 0.90,
+          "bbox": [150, 300, 250, 320],
+          "page": 1
         },
         "sub_attribute_2": {
           "confidence": 0.75,
+          "bbox": [150, 325, 280, 345],
+          "page": 1
         }
       }
     }
 
-    For LIST attributes (array of assessed items):
+    For LIST attributes (array of assessed items): 
     {
       "list_attribute_name": [
         {
           "item_attribute_1": {
             "confidence": 0.95,
+            "bbox": [100, 400, 200, 420],
+            "page": 1
           },
           "item_attribute_2": {
             "confidence": 0.88,
+            "bbox": [250, 400, 350, 420],
+            "page": 1
           }
         },
         {
           "item_attribute_1": {
             "confidence": 0.92,
+            "bbox": [100, 425, 200, 445],
+            "page": 1
           },
           "item_attribute_2": {
             "confidence": 0.70,
+            "bbox": [250, 425, 350, 445],
+            "page": 1
           }
         }
       ]
     }
 
-    IMPORTANT: 
-    - For LIST attributes like "Transactions", assess EACH individual item in the list separately
-    - Each transaction should be assessed as a separate object in the array
-    - Do NOT provide aggregate assessments for list items - assess each one individually
-    - Include assessments for ALL attributes present in the extraction results
+    IMPORTANT:  
+    - For LIST attributes like "Transactions", assess EACH individual item in the list separately with individual bounding boxes
+    - Each transaction should be assessed as a separate object in the array with its own spatial coordinates
+    - Do NOT provide aggregate assessments for list items - assess each one individually with precise locations
+    - Include assessments AND bounding boxes for ALL attributes present in the extraction results
     - Match the exact structure of the extracted data
-
+    - Provide page numbers for all bounding boxes (starting from 1)
     </final-instructions>
 
     <<CACHEPOINT>>
 
     <document-image>
-
     {DOCUMENT_IMAGE}
-
     </document-image>
 
     <ocr-text-confidence-results>
-
     {OCR_TEXT_CONFIDENCE}
-
     </ocr-text-confidence-results>
 
     <<CACHEPOINT>>
 
     <attributes-definitions>
-
     {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
-
     </attributes-definitions>
 
     <extraction-results>
-
     {EXTRACTION_RESULTS}
-
     </extraction-results>
 evaluation:
   llm_method:
@@ -1415,6 +1426,16 @@ pricing:
         price: '3.0E-7'
       - name: cacheWriteInputTokens
         price: '3.75E-6'
+  - name: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0:1m
+    units:
+      - name: inputTokens
+        price: '6.0E-6'
+      - name: outputTokens
+        price: '2.25E-5'
+      - name: cacheReadInputTokens
+        price: '6.0E-7'
+      - name: cacheWriteInputTokens
+        price: '7.5E-6'
   - name: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
     units:
       - name: inputTokens
@@ -1425,3 +1446,124 @@ pricing:
         price: '1.5E-6'
       - name: cacheWriteInputTokens
         price: '1.875E-5'
+  - name: bedrock/us.anthropic.claude-opus-4-1-20250805-v1:0
+    units:
+      - name: inputTokens
+        price: '1.5E-5'
+      - name: outputTokens
+        price: '7.5E-5'
+      - name: cacheReadInputTokens
+        price: '1.5E-6'
+      - name: cacheWriteInputTokens
+        price: '1.875E-5'
+  # AWS Lambda pricing (US East - N. Virginia)
+  - name: lambda/requests
+    units:
+      - name: invocations
+        price: '2.0E-7'       # $0.0000002 per request ($0.20 per 1M requests)
+  - name: lambda/duration  
+    units:
+      - name: gb_seconds
+        price: '1.66667E-5'   # $0.0000166667 per GB-second ($16.67 per 1M GB-seconds)
+discovery:
+  output_format:
+    sample_json: |-
+      {
+          "document_class" : "Form-1040",
+          "document_description" : "Brief summary of the document",
+          "groups" : [
+              {
+                  "name" : "PersonalInformation",
+                  "description" : "Personal information of Tax payer",
+                  "attributeType" : "group",
+                  "groupAttributes" : [
+                      {
+                          "name": "FirstName",
+                          "dataType" : "string",
+                          "description" : "First Name of Taxpayer"
+                      },
+                      {
+                          "name": "Age",
+                          "dataType" : "number",
+                          "description" : "Age of Taxpayer"
+                      }
+                  ]
+              },
+              {
+                  "name" : "Dependents",
+                  "description" : "Dependents of taxpayer",
+                  "attributeType" : "list",
+                  "listItemTemplate": {
+                      "itemAttributes" : [
+                          {
+                              "name": "FirstName",
+                              "dataType" : "string",
+                              "description" : "Dependent first name"
+                          },
+                          {
+                              "name": "Age",
+                              "dataType" : "number",
+                              "description" : "Dependent Age"
+                          }
+                      ]
+                  }
+              }
+          ]
+      }
+  with_ground_truth:
+    top_p: '0.1'
+    temperature: '1.0'
+    user_prompt: >-
+      This image contains unstructured data. Analyze the data line by line using the provided ground truth as reference.                        
+      <GROUND_TRUTH_REFERENCE>
+      {ground_truth_json}
+      </GROUND_TRUTH_REFERENCE>
+      Ground truth reference JSON has the fields we are interested in extracting from the document/image. Use the ground truth to optimize field extraction. Match field names, data types, and groupings from the reference.
+      Image may contain multiple pages, process all pages.
+      Extract all field names including those without values.
+      Do not change the group name and field name from ground truth in the extracted data json.
+      Add field_description field for every field which will contain instruction to LLM to extract the field data from the image/document. Add data_type field for every field. 
+      Add two fields document_class and document_description. 
+      For document_class generate a short name based on the document content like W4, I-9, Paystub. 
+      For document_description generate a description about the document in less than 50 words.
+      If the group repeats and follows table format, update the attributeType as "list".                         
+      Do not extract the values.
+      Format the extracted data using the below JSON format:
+      Format the extracted groups and fields using the below JSON format:
+        
+    model_id: us.amazon.nova-pro-v1:0
+    system_prompt: >-
+      You are an expert in processing forms. Extracting data from images and
+      documents. Use provided ground truth data as reference to optimize field
+      extraction and ensure consistency with expected document structure and
+      field definitions.
+    max_tokens: '10000'
+  without_ground_truth:
+    top_p: '0.1'
+    temperature: '1.0'
+    user_prompt: >-
+      This image contains forms data. Analyze the form line by line.
+      Image may contains multiple pages, process all the pages. 
+      Form may contain multiple name value pair in one line. 
+      Extract all the names in the form including the name value pair which doesn't have value. 
+      Organize them into groups, extract field_name, data_type and field description
+      Field_name should be less than 60 characters, should not have space use '-' instead of space.
+      field_description is a brief description of the field and the location of the field like box number or line number in the form and section of the form.
+      Field_name should be unique within the group.
+      Add two fields document_class and document_description. 
+      For document_class generate a short name based on the document content like W4, I-9, Paystub. 
+      For document_description generate a description about the document in less than 50 words. 
+
+      Group the fields based on the section they are grouped in the form. Group should have attributeType as "group".
+      If the group repeats and follows table format, update the attributeType as "list".
+      Do not extract the values.
+      Return the extracted data in JSON format.
+      Format the extracted data using the below JSON format:
+      Format the extracted groups and fields using the below JSON format:
+    model_id: us.amazon.nova-pro-v1:0
+    system_prompt: >-
+      You are an expert in processing forms. Extracting data from images and
+      documents. Analyze forms line by line to identify field names, data types,
+      and organizational structure. Focus on creating comprehensive blueprints
+      for document processing without extracting actual values.
+    max_tokens: '10000'

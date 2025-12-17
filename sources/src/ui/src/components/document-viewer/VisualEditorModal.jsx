@@ -97,11 +97,14 @@ const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, pan
           transformedOffsetY,
         });
       };
-
-      // Small delay to allow transforms to complete
-      const timeoutId = setTimeout(updateDimensions, 50);
-
-      return () => clearTimeout(timeoutId);
+      // Delay to allow transforms to complete
+      const timeoutId = setTimeout(updateDimensions, 150);
+      // Ensure accuracy after reset
+      const secondTimeoutId = setTimeout(updateDimensions, 300);
+      return () => {
+        clearTimeout(timeoutId);
+        clearTimeout(secondTimeoutId);
+      };
     }
     return undefined;
   }, [zoomLevel, panOffset, imageRef, page, currentPage]);
@@ -115,13 +118,14 @@ const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, pan
     return null;
   }
 
+  const padding = 5;
   const bbox = box.boundingBox;
 
   // Calculate position and size directly on the transformed image
-  const finalLeft = bbox.left * dimensions.transformedWidth + dimensions.transformedOffsetX;
-  const finalTop = bbox.top * dimensions.transformedHeight + dimensions.transformedOffsetY;
-  const finalWidth = bbox.width * dimensions.transformedWidth;
-  const finalHeight = bbox.height * dimensions.transformedHeight;
+  const finalLeft = bbox.left * dimensions.transformedWidth + dimensions.transformedOffsetX - padding;
+  const finalTop = bbox.top * dimensions.transformedHeight + dimensions.transformedOffsetY - padding;
+  const finalWidth = bbox.width * dimensions.transformedWidth + padding * 2;
+  const finalHeight = bbox.height * dimensions.transformedHeight + padding * 2;
 
   // Position the bounding box directly without additional transforms
   const style = {

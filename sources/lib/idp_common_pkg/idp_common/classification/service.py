@@ -7,6 +7,14 @@ Classification service for documents using LLMs or SageMaker UDOP models.
 This module provides a service for classifying documents using various backends:
 1. Bedrock LLMs with text and image support
 2. SageMaker UDOP models for multimodal document classification
+
+Classification methods:
+- multimodalPageLevelClassification: Page-by-page classification with document boundary detection
+  using a sequence segmentation approach similar to BIO (Begin-Inside-Outside) tagging.
+  Each page receives both a document type and a boundary indicator ("start" or "continue")
+  to enable accurate segmentation of multi-document packets.
+- textbasedHolisticClassification: Holistic document analysis for segment identification
+  across the entire document packet at once.
 """
 
 import json
@@ -129,6 +137,11 @@ class ClassificationService:
             "classificationMethod", self.MULTIMODAL_PAGE_LEVEL
         )
 
+        # Get max pages for classification (1 to ALL)
+        self.max_pages_for_classification = classification_config.get(
+            "maxPagesForClassification", "ALL"
+        )
+
         # Log classification method
         if self.classification_method == self.TEXTBASED_HOLISTIC:
             logger.info("Using textbased holistic packet classification method")
@@ -139,10 +152,12 @@ class ClassificationService:
                     f"Invalid classification method '{self.classification_method}', falling back to '{self.MULTIMODAL_PAGE_LEVEL}'"
                 )
                 self.classification_method = self.MULTIMODAL_PAGE_LEVEL
-            logger.info("Using multimodal page-level classification method")
+            logger.info(
+                "Using multimodal page-level classification method with document boundary detection"
+            )
 
     def _load_document_types(self) -> List[DocumentType]:
-        """Load document types from configuration."""
+        """Load document types from configuration with regex patterns."""
         doc_types = []
 
         # Get document types from config
@@ -152,6 +167,10 @@ class ClassificationService:
                 DocumentType(
                     type_name=class_obj.get("name", ""),
                     description=class_obj.get("description", ""),
+                    document_name_regex=class_obj.get("document_name_regex", None),
+                    document_page_content_regex=class_obj.get(
+                        "document_page_content_regex", None
+                    ),
                 )
             )
 
@@ -168,6 +187,413 @@ class ClassificationService:
             )
 
         return doc_types
+
+    def _check_document_name_regex(self, document: Document) -> Optional[str]:
+        """
+        Check if document name matches any class regex patterns.
+
+        Args:
+            document: Document object to check
+
+        Returns:
+            Matched class name if found, None otherwise
+        """
+        # Check document name against all class regex patterns
+        for doc_type in self.document_types:
+            if doc_type._compiled_name_regex and doc_type._compiled_name_regex.search(
+                document.id
+            ):
+                logger.info(
+                    f"Document name regex match: '{document.id}' matched pattern '{doc_type.document_name_regex}' for class '{doc_type.type_name}'"
+                )
+                return doc_type.type_name
+        return None
+
+    def _limit_pages_for_classification(self, document: Document) -> Document:
+        """
+        Limit the number of pages used for classification based on maxPagesForClassification setting.
+
+        Args:
+            document: Original document
+
+        Returns:
+            Document with limited pages for classification
+        """
+        if self.max_pages_for_classification == "ALL":
+            return document
+
+        try:
+            max_pages = int(self.max_pages_for_classification)
+            if max_pages <= 0:
+                logger.warning(
+                    f"Invalid maxPagesForClassification value: {max_pages}, using ALL pages"
+                )
+                return document
+
+            if len(document.pages) <= max_pages:
+                return document
+
+            # Get first N pages
+            sorted_page_ids = sorted(
+                document.pages.keys(),
+                key=lambda x: int(x) if x.isdigit() else float("inf"),
+            )
+            limited_page_ids = sorted_page_ids[:max_pages]
+
+            # Create limited document
+            limited_pages = {pid: document.pages[pid] for pid in limited_page_ids}
+            limited_document = Document(
+                id=document.id + f"_limited_{max_pages}",
+                pages=limited_pages,
+                status=document.status,
+                workflow_execution_arn=document.workflow_execution_arn,
+            )
+
+            logger.info(
+                f"Limited classification to first {max_pages} pages out of {len(document.pages)} total pages"
+            )
+            return limited_document
+
+        except ValueError:
+            logger.warning(
+                f"Invalid maxPagesForClassification value: {self.max_pages_for_classification}, using ALL pages"
+            )
+            return document
+
+    def _apply_limited_classification_to_all_pages(
+        self, original_document: Document, classified_document: Document
+    ) -> Document:
+        """
+        Apply classification results from limited pages to all pages in the original document.
+
+        Args:
+            original_document: Original document with all pages
+            classified_document: Document with classified limited pages
+
+        Returns:
+            Original document with classification applied to all pages
+        """
+        if not classified_document.sections:
+            logger.warning("No sections found in classified document")
+            return original_document
+
+        # Get the most common classification from the limited pages
+        classifications = {}
+        for section in classified_document.sections:
+            doc_type = section.classification
+            classifications[doc_type] = classifications.get(doc_type, 0) + len(
+                section.page_ids
+            )
+
+        # Use the most frequent classification
+        primary_classification = max(
+            classifications.keys(), key=lambda k: classifications[k]
+        )
+
+        # Apply to all pages in original document
+        for page_id, page in original_document.pages.items():
+            page.classification = primary_classification
+            page.confidence = 1.0  # High confidence for applied classification
+
+        # Create single section with all pages
+        section = self._create_section(
+            section_id="1",
+            doc_type=primary_classification,
+            pages=list(original_document.pages.keys()),
+        )
+        original_document.sections = [section]
+
+        # Transfer metering data from classified document to original document
+        if classified_document.metering:
+            original_document.metering = utils.merge_metering_data(
+                original_document.metering, classified_document.metering
+            )
+
+        # Transfer errors from classification
+        if classified_document.errors:
+            original_document.errors.extend(classified_document.errors)
+
+        # Transfer metadata from classification
+        if classified_document.metadata:
+            original_document.metadata.update(classified_document.metadata)
+
+        logger.info(
+            f"Applied classification '{primary_classification}' from {len(classified_document.pages)} pages to all {len(original_document.pages)} pages"
+        )
+        return original_document
+
+    def _classify_pages_multimodal(self, document: Document) -> Document:
+        """
+        Classify pages using multimodal page-level classification.
+        """
+        # Page-level classification with document boundary detection
+        t0 = time.time()
+        logger.info(
+            f"Classifying document with {len(document.pages)} pages using multimodal page-level classification with {self.backend} backend"
+        )
+
+        try:
+            # Check for cached page classifications
+            cached_page_classifications = self._get_cached_page_classifications(
+                document
+            )
+            all_page_results = list(cached_page_classifications.values())
+            combined_metering = {}
+            errors_lock = threading.Lock()  # Thread safety for error collection
+            failed_page_exceptions = {}  # Store original exceptions for failed pages
+
+            # Determine which pages need classification
+            pages_to_classify = {}
+            for page_id, page in document.pages.items():
+                if page_id not in cached_page_classifications:
+                    pages_to_classify[page_id] = page
+                else:
+                    # Update document with cached classification
+                    cached_result = cached_page_classifications[page_id]
+                    document.pages[
+                        page_id
+                    ].classification = cached_result.classification.doc_type
+                    document.pages[
+                        page_id
+                    ].confidence = cached_result.classification.confidence
+
+                    # Copy metadata (including boundary information) to the page
+                    if hasattr(document.pages[page_id], "metadata"):
+                        document.pages[
+                            page_id
+                        ].metadata = cached_result.classification.metadata
+                    else:
+                        # If the page doesn't have a metadata attribute, add it
+                        setattr(
+                            document.pages[page_id],
+                            "metadata",
+                            cached_result.classification.metadata,
+                        )
+
+                    # Merge cached metering data
+                    page_metering = cached_result.classification.metadata.get(
+                        "metering", {}
+                    )
+                    combined_metering = utils.merge_metering_data(
+                        combined_metering, page_metering
+                    )
+
+            if pages_to_classify:
+                logger.info(
+                    f"Found {len(cached_page_classifications)} cached page classifications, classifying {len(pages_to_classify)} remaining pages"
+                )
+
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    futures = {}
+
+                    # Start processing only uncached pages
+                    for page_id, page in pages_to_classify.items():
+                        future = executor.submit(
+                            self.classify_page,
+                            page_id=page_id,
+                            text_uri=page.parsed_text_uri,
+                            image_uri=page.image_uri,
+                            raw_text_uri=page.raw_text_uri,
+                        )
+                        futures[future] = page_id
+
+                    # Process results as they complete
+                    for future in as_completed(futures):
+                        page_id = futures[future]
+                        try:
+                            page_result = future.result()
+                            all_page_results.append(page_result)
+
+                            # Check if there was an error in the classification
+                            if "error" in page_result.classification.metadata:
+                                with errors_lock:
+                                    error_msg = f"Error classifying page {page_id}: {page_result.classification.metadata['error']}"
+                                    document.errors.append(error_msg)
+
+                            # Update the page in the document
+                            document.pages[
+                                page_id
+                            ].classification = page_result.classification.doc_type
+                            document.pages[
+                                page_id
+                            ].confidence = page_result.classification.confidence
+
+                            # Copy metadata (including boundary information) to the page
+                            if hasattr(document.pages[page_id], "metadata"):
+                                document.pages[
+                                    page_id
+                                ].metadata = page_result.classification.metadata
+                            else:
+                                # If the page doesn't have a metadata attribute, add it
+                                setattr(
+                                    document.pages[page_id],
+                                    "metadata",
+                                    page_result.classification.metadata,
+                                )
+
+                            # Merge metering data
+                            page_metering = page_result.classification.metadata.get(
+                                "metering", {}
+                            )
+                            combined_metering = utils.merge_metering_data(
+                                combined_metering, page_metering
+                            )
+                        except Exception as e:
+                            # Capture exception details in the document object instead of raising
+                            error_msg = f"Error classifying page {page_id}: {str(e)}"
+                            logger.error(error_msg)
+                            with errors_lock:
+                                document.errors.append(error_msg)
+                                # Store the original exception for later use
+                                failed_page_exceptions[page_id] = e
+
+                            # Mark page as unclassified on error
+                            if page_id in document.pages:
+                                document.pages[
+                                    page_id
+                                ].classification = "error (backoff/retry)"
+                                document.pages[page_id].confidence = 0.0
+
+                # Store failed page exceptions in document metadata for caller to access
+                if failed_page_exceptions:
+                    logger.info(
+                        f"Processing {len(failed_page_exceptions)} failed page exceptions for document {document.id}"
+                    )
+
+                    # Store the first encountered exception as the primary failure cause
+                    first_exception = next(iter(failed_page_exceptions.values()))
+                    document.metadata = document.metadata or {}
+                    document.metadata["failed_page_exceptions"] = {
+                        page_id: {
+                            "exception_type": type(exc).__name__,
+                            "exception_message": str(exc),
+                            "exception_class": exc.__class__.__module__
+                            + "."
+                            + exc.__class__.__name__,
+                        }
+                        for page_id, exc in failed_page_exceptions.items()
+                    }
+                    # Store the primary exception for easy access by caller
+                    document.metadata["primary_exception"] = first_exception
+
+                    # Cache successful page classifications (only when some pages fail - for retry scenarios)
+                    successful_results = [
+                        r
+                        for r in all_page_results
+                        if "error" not in r.classification.metadata
+                    ]
+                    if successful_results:
+                        logger.info(
+                            f"Caching {len(successful_results)} successful page classifications for document {document.id} due to {len(failed_page_exceptions)} failed pages (retry scenario)"
+                        )
+                        self._cache_successful_page_classifications(
+                            document, successful_results
+                        )
+                    else:
+                        logger.warning(
+                            f"No successful page classifications to cache for document {document.id} - all {len(failed_page_exceptions)} pages failed"
+                        )
+                else:
+                    # All pages succeeded - no need to cache since there won't be retries
+                    logger.info(
+                        f"All pages succeeded for document {document.id} - skipping cache (no retry needed)"
+                    )
+            else:
+                logger.info(
+                    f"All {len(cached_page_classifications)} page classifications found in cache"
+                )
+
+            # Group pages into sections only if we have results
+            document.sections = []
+            sorted_results = self._sort_page_results(all_page_results)
+
+            if sorted_results:
+                current_group = 1
+                current_type = sorted_results[0].classification.doc_type
+                current_pages = [sorted_results[0]]
+
+                for result in sorted_results[1:]:
+                    boundary = result.classification.metadata.get(
+                        "document_boundary", "continue"
+                    ).lower()
+                    if (
+                        result.classification.doc_type == current_type
+                        and boundary != "start"
+                    ):
+                        current_pages.append(result)
+                    else:
+                        # Create a new section with the current group of pages
+                        section = self._create_section(
+                            section_id=str(current_group),
+                            doc_type=current_type,
+                            pages=[p.page_id for p in current_pages],
+                        )
+                        document.sections.append(section)
+
+                        # Start a new group
+                        current_group += 1
+                        current_type = result.classification.doc_type
+                        current_pages = [result]
+
+                # Add the final section
+                section = self._create_section(
+                    section_id=str(current_group),
+                    doc_type=current_type,
+                    pages=[p.page_id for p in current_pages],
+                )
+                document.sections.append(section)
+
+            # Update document status and metering
+            document = self._update_document_status(document)
+            document.metering = utils.merge_metering_data(
+                document.metering, combined_metering
+            )
+
+            t1 = time.time()
+            logger.info(
+                f"Document classified with {len(document.sections)} sections in {t1 - t0:.2f} seconds"
+            )
+
+        except Exception as e:
+            error_msg = f"Error classifying all document pages: {str(e)}"
+            document = self._update_document_status(
+                document, success=False, error_message=error_msg
+            )
+            # Store the exception in metadata for caller to access
+            document.metadata = document.metadata or {}
+            document.metadata["primary_exception"] = e
+            # raise exception to enable client retries
+            raise
+
+        return document
+
+    def _check_page_content_regex(self, text_content: str) -> Optional[str]:
+        """
+        Check if page content matches any class regex patterns.
+
+        Args:
+            text_content: Page text content to check
+
+        Returns:
+            Matched class name if found, None otherwise
+        """
+        # Only apply page content regex for multi-modal page-level classification
+        if self.classification_method != self.MULTIMODAL_PAGE_LEVEL:
+            return None
+
+        if not text_content:
+            return None
+
+        for doc_type in self.document_types:
+            if (
+                doc_type._compiled_content_regex
+                and doc_type._compiled_content_regex.search(text_content)
+            ):
+                logger.info(
+                    f"Page content regex match: Content matched pattern '{doc_type.document_page_content_regex}' for class '{doc_type.type_name}'"
+                )
+                return doc_type.type_name
+        return None
 
     def _format_classes_list(self) -> str:
         """Format document classes as a simple list for the prompt."""
@@ -625,6 +1051,30 @@ class ClassificationService:
                 logger.warning(f"Failed to load image content from {image_uri}: {e}")
                 # Continue without image content
 
+        # Check for page content regex match (multi-modal page-level classification only)
+        if text_content:
+            regex_matched_class = self._check_page_content_regex(text_content)
+            if regex_matched_class:
+                logger.info(
+                    f"Page {page_id} classified as '{regex_matched_class}' based on content regex match. Skipping LLM classification."
+                )
+
+                # Create and return classification result with regex match
+                return PageClassification(
+                    page_id=page_id,
+                    classification=DocumentClassification(
+                        doc_type=regex_matched_class,
+                        confidence=1.0,  # High confidence for regex matches
+                        metadata={
+                            "regex_matched": True,
+                            "document_boundary": "continue",  # Default boundary
+                        },
+                    ),
+                    image_uri=image_uri,
+                    text_uri=text_uri,
+                    raw_text_uri=raw_text_uri,
+                )
+
         # Verify we have at least some content to classify
         if not text_content and not image_content:
             logger.warning(f"No content available for page {page_id}")
@@ -678,16 +1128,21 @@ class ClassificationService:
                 )
                 if isinstance(classification_data, dict):
                     doc_type = classification_data.get("class", "")
-                    logger.debug(
+                    document_boundary = classification_data.get(
+                        "document_boundary", "continue"
+                    )
+                    logger.info(
                         f"Parsed classification response as {detected_format}: {classification_data}"
                     )
                 else:
                     # If parsing failed, try to extract classification directly from text
                     doc_type = self._extract_class_from_text(classification_text)
+                    document_boundary = "continue"
             except Exception as e:
                 logger.warning(f"Failed to parse structured data from response: {e}")
                 # Try to extract classification directly from text
                 doc_type = self._extract_class_from_text(classification_text)
+                document_boundary = "continue"
 
             # Validate classification against known document types
             if not doc_type:
@@ -710,7 +1165,10 @@ class ClassificationService:
                 classification=DocumentClassification(
                     doc_type=doc_type,
                     confidence=1.0,  # Default confidence
-                    metadata={"metering": metering},
+                    metadata={
+                        "metering": metering,
+                        "document_boundary": str(document_boundary).lower(),
+                    },
                 ),
                 image_uri=image_uri,
                 text_uri=text_uri,
@@ -803,7 +1261,10 @@ class ClassificationService:
                     classification=DocumentClassification(
                         doc_type=doc_type,
                         confidence=1.0,  # Default confidence since SageMaker doesn't provide it
-                        metadata={"metering": metering},
+                        metadata={
+                            "metering": metering,
+                            "document_boundary": "continue",
+                        },
                     ),
                     image_uri=image_uri,
                     text_uri=text_uri,
@@ -1147,9 +1608,14 @@ class ClassificationService:
 
         The classification method is determined by the 'classificationMethod' setting:
         - multimodalPageLevelClassification (default): Uses page-by-page classification
-          that can leverage both text and image content
+          with sequence segmentation similar to BIO (Begin-Inside-Outside) tagging.
+          Each page receives both a document type and a boundary indicator:
+          * "start": Marks the beginning of a new document segment
+          * "continue": Indicates continuation of the current segment
+          This enables accurate segmentation of multi-document packets where multiple
+          documents of the same or different types may be combined in a single file.
         - textbasedHolisticClassification: Processes the entire document as a packet
-          to identify document segments across pages, using a holistic approach
+          to identify document segments across pages using a holistic approach.
 
         Args:
             document: Document object to classify and update
@@ -1164,6 +1630,33 @@ class ClassificationService:
                 success=False,
                 error_message="Document has no pages to classify",
             )
+
+        # Check for document name regex match (single-class configurations only)
+        regex_matched_class = self._check_document_name_regex(document)
+        if regex_matched_class:
+            logger.info(
+                f"Classifying all pages as '{regex_matched_class}' based on document name regex match. Skipping LLM classification."
+            )
+
+            # Set all pages to the regex-matched class
+            for page_id, page in document.pages.items():
+                page.classification = regex_matched_class
+                page.confidence = 1.0
+
+            # Create a single section containing all pages
+            page_ids = list(document.pages.keys())
+            section = self._create_section(
+                section_id="1",
+                doc_type=regex_matched_class,
+                pages=page_ids,
+                confidence=1.0,
+            )
+            document.sections = [section]
+
+            # Update document status
+            document = self._update_document_status(document)
+
+            return document
 
         # If there's only one document class defined, automatically classify all pages as that class
         # without calling any backend service
@@ -1192,6 +1685,35 @@ class ClassificationService:
 
             return document
 
+        # Check for limited page classification
+        if self.max_pages_for_classification != "ALL":
+            logger.info(
+                f"Using limited page classification: {self.max_pages_for_classification} pages"
+            )
+
+            # Create limited document for classification
+            limited_document = self._limit_pages_for_classification(document)
+
+            if limited_document.id != document.id:  # Pages were actually limited
+                # Classify the limited document
+                if self.classification_method == self.TEXTBASED_HOLISTIC:
+                    logger.info(
+                        f"Classifying limited document with {len(limited_document.pages)} pages using holistic packet method"
+                    )
+                    classified_limited = self.holistic_classify_document(
+                        limited_document
+                    )
+                else:
+                    classified_limited = self._classify_pages_multimodal(
+                        limited_document
+                    )
+
+                # Apply results to all pages in original document
+                document = self._apply_limited_classification_to_all_pages(
+                    document, classified_limited
+                )
+                return document
+
         # Use the appropriate classification method based on configuration
         if self.classification_method == self.TEXTBASED_HOLISTIC:
             logger.info(
@@ -1199,214 +1721,7 @@ class ClassificationService:
             )
             return self.holistic_classify_document(document)
 
-        # Default to page-by-page classification
-        t0 = time.time()
-        logger.info(
-            f"Classifying document with {len(document.pages)} pages using page-by-page method with {self.backend} backend"
-        )
-
-        try:
-            # Check for cached page classifications
-            cached_page_classifications = self._get_cached_page_classifications(
-                document
-            )
-            all_page_results = list(cached_page_classifications.values())
-            combined_metering = {}
-            errors_lock = threading.Lock()  # Thread safety for error collection
-            failed_page_exceptions = {}  # Store original exceptions for failed pages
-
-            # Determine which pages need classification
-            pages_to_classify = {}
-            for page_id, page in document.pages.items():
-                if page_id not in cached_page_classifications:
-                    pages_to_classify[page_id] = page
-                else:
-                    # Update document with cached classification
-                    cached_result = cached_page_classifications[page_id]
-                    document.pages[
-                        page_id
-                    ].classification = cached_result.classification.doc_type
-                    document.pages[
-                        page_id
-                    ].confidence = cached_result.classification.confidence
-
-                    # Merge cached metering data
-                    page_metering = cached_result.classification.metadata.get(
-                        "metering", {}
-                    )
-                    combined_metering = utils.merge_metering_data(
-                        combined_metering, page_metering
-                    )
-
-            if pages_to_classify:
-                logger.info(
-                    f"Found {len(cached_page_classifications)} cached page classifications, classifying {len(pages_to_classify)} remaining pages"
-                )
-
-                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    futures = {}
-
-                    # Start processing only uncached pages
-                    for page_id, page in pages_to_classify.items():
-                        future = executor.submit(
-                            self.classify_page,
-                            page_id=page_id,
-                            text_uri=page.parsed_text_uri,
-                            image_uri=page.image_uri,
-                            raw_text_uri=page.raw_text_uri,
-                        )
-                        futures[future] = page_id
-
-                    # Process results as they complete
-                    for future in as_completed(futures):
-                        page_id = futures[future]
-                        try:
-                            page_result = future.result()
-                            all_page_results.append(page_result)
-
-                            # Check if there was an error in the classification
-                            if "error" in page_result.classification.metadata:
-                                with errors_lock:
-                                    error_msg = f"Error classifying page {page_id}: {page_result.classification.metadata['error']}"
-                                    document.errors.append(error_msg)
-
-                            # Update the page in the document
-                            document.pages[
-                                page_id
-                            ].classification = page_result.classification.doc_type
-                            document.pages[
-                                page_id
-                            ].confidence = page_result.classification.confidence
-
-                            # Merge metering data
-                            page_metering = page_result.classification.metadata.get(
-                                "metering", {}
-                            )
-                            combined_metering = utils.merge_metering_data(
-                                combined_metering, page_metering
-                            )
-                        except Exception as e:
-                            # Capture exception details in the document object instead of raising
-                            error_msg = f"Error classifying page {page_id}: {str(e)}"
-                            logger.error(error_msg)
-                            with errors_lock:
-                                document.errors.append(error_msg)
-                                # Store the original exception for later use
-                                failed_page_exceptions[page_id] = e
-
-                            # Mark page as unclassified on error
-                            if page_id in document.pages:
-                                document.pages[
-                                    page_id
-                                ].classification = "error (backoff/retry)"
-                                document.pages[page_id].confidence = 0.0
-
-                # Store failed page exceptions in document metadata for caller to access
-                if failed_page_exceptions:
-                    logger.info(
-                        f"Processing {len(failed_page_exceptions)} failed page exceptions for document {document.id}"
-                    )
-
-                    # Store the first encountered exception as the primary failure cause
-                    first_exception = next(iter(failed_page_exceptions.values()))
-                    document.metadata = document.metadata or {}
-                    document.metadata["failed_page_exceptions"] = {
-                        page_id: {
-                            "exception_type": type(exc).__name__,
-                            "exception_message": str(exc),
-                            "exception_class": exc.__class__.__module__
-                            + "."
-                            + exc.__class__.__name__,
-                        }
-                        for page_id, exc in failed_page_exceptions.items()
-                    }
-                    # Store the primary exception for easy access by caller
-                    document.metadata["primary_exception"] = first_exception
-
-                    # Cache successful page classifications (only when some pages fail - for retry scenarios)
-                    successful_results = [
-                        r
-                        for r in all_page_results
-                        if "error" not in r.classification.metadata
-                    ]
-                    if successful_results:
-                        logger.info(
-                            f"Caching {len(successful_results)} successful page classifications for document {document.id} due to {len(failed_page_exceptions)} failed pages (retry scenario)"
-                        )
-                        self._cache_successful_page_classifications(
-                            document, successful_results
-                        )
-                    else:
-                        logger.warning(
-                            f"No successful page classifications to cache for document {document.id} - all {len(failed_page_exceptions)} pages failed"
-                        )
-                else:
-                    # All pages succeeded - no need to cache since there won't be retries
-                    logger.info(
-                        f"All pages succeeded for document {document.id} - skipping cache (no retry needed)"
-                    )
-            else:
-                logger.info(
-                    f"All {len(cached_page_classifications)} page classifications found in cache"
-                )
-
-            # Group pages into sections only if we have results
-            document.sections = []
-            sorted_results = self._sort_page_results(all_page_results)
-
-            if sorted_results:
-                current_group = 1
-                current_type = sorted_results[0].classification.doc_type
-                current_pages = [sorted_results[0]]
-
-                for result in sorted_results[1:]:
-                    if result.classification.doc_type == current_type:
-                        current_pages.append(result)
-                    else:
-                        # Create a new section with the current group of pages
-                        section = self._create_section(
-                            section_id=str(current_group),
-                            doc_type=current_type,
-                            pages=[p.page_id for p in current_pages],
-                        )
-                        document.sections.append(section)
-
-                        # Start a new group
-                        current_group += 1
-                        current_type = result.classification.doc_type
-                        current_pages = [result]
-
-                # Add the final section
-                section = self._create_section(
-                    section_id=str(current_group),
-                    doc_type=current_type,
-                    pages=[p.page_id for p in current_pages],
-                )
-                document.sections.append(section)
-
-            # Update document status and metering
-            document = self._update_document_status(document)
-            document.metering = utils.merge_metering_data(
-                document.metering, combined_metering
-            )
-
-            t1 = time.time()
-            logger.info(
-                f"Document classified with {len(document.sections)} sections in {t1 - t0:.2f} seconds"
-            )
-
-        except Exception as e:
-            error_msg = f"Error classifying all document pages: {str(e)}"
-            document = self._update_document_status(
-                document, success=False, error_message=error_msg
-            )
-            # Store the exception in metadata for caller to access
-            document.metadata = document.metadata or {}
-            document.metadata["primary_exception"] = e
-            # raise exception to enable client retries
-            raise
-
-        return document
+        return self._classify_pages_multimodal(document)
 
     def classify_pages(self, pages: Dict[str, Dict[str, Any]]) -> ClassificationResult:
         """
@@ -1509,13 +1824,24 @@ class ClassificationService:
         self, results: List[PageClassification]
     ) -> List[DocumentSection]:
         """
-        Group consecutive pages with the same classification into sections.
+        Group consecutive pages into sections using sequence segmentation.
+
+        This method implements the BIO-like tagging approach by examining both:
+        1. Document type (classification)
+        2. Document boundary indicator ("start" or "continue")
+
+        A new section is created when:
+        - The document type changes from one page to the next
+        - A page has boundary="start", indicating a new document begins
+
+        This enables accurate segmentation of multi-document packets where multiple
+        documents of the same type may appear consecutively.
 
         Args:
             results: List of page classification results
 
         Returns:
-            List of document sections
+            List of document sections with properly segmented page groups
         """
         sorted_results = self._sort_page_results(results)
         sections = []
@@ -1528,7 +1854,10 @@ class ClassificationService:
         current_pages = [sorted_results[0]]
 
         for result in sorted_results[1:]:
-            if result.classification.doc_type == current_type:
+            boundary = result.classification.metadata.get(
+                "document_boundary", "continue"
+            ).lower()
+            if result.classification.doc_type == current_type and boundary != "start":
                 current_pages.append(result)
             else:
                 # Create a section with the current group

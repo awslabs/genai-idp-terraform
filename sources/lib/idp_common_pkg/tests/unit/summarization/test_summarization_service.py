@@ -450,8 +450,8 @@ class TestSummarizationService:
             # Verify executor was used to process sections in parallel
             assert mock_executor_instance.submit.call_count == 2
 
-            # Verify write_content was called for combined results
-            assert mock_write_content.call_count == 2
+            # Verify write_content was called for combined results (JSON, fulltext, and markdown)
+            assert mock_write_content.call_count == 3
 
             # Verify document has summarization_result
             assert result.summarization_result is not None
@@ -529,3 +529,213 @@ class TestSummarizationService:
         )
         assert result2.status == Status.FAILED
         assert "Test error" in result2.errors
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_process_document_enabled_true(self, mock_invoke_model, sample_document):
+        """Test that summarization proceeds normally when enabled=true."""
+        config = {
+            "summarization": {
+                "enabled": True,
+                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a helpful assistant.",
+                "task_prompt": "Summarize: {DOCUMENT_TEXT}",
+            }
+        }
+
+        service = SummarizationService(region="us-west-2", config=config)
+
+        # Configure mock to return a valid response
+        mock_invoke_model.return_value = {
+            "response": {
+                "output": {
+                    "message": {"content": [{"text": '{"summary": "Test summary"}'}]}
+                }
+            },
+            "metering": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        # Mock S3 operations
+        with patch("idp_common.s3.get_text_content") as mock_get_text:
+            mock_get_text.side_effect = ["Page 1", "Page 2", "Page 3"]
+            with patch("idp_common.s3.write_content"):
+                with patch("idp_common.utils.merge_metering_data") as mock_merge:
+                    mock_merge.return_value = {"input_tokens": 100, "output_tokens": 50}
+
+                    # Remove sections to use whole document processing
+                    sample_document.sections = []
+
+                    result = service.process_document(sample_document)
+
+        # Verify that LLM was actually called (summarization proceeded)
+        mock_invoke_model.assert_called_once()
+
+        # Verify document has summarization results
+        assert result.summarization_result is not None
+        assert result.summary_report_uri is not None
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_process_document_enabled_false(self, mock_invoke_model, sample_document):
+        """Test that summarization is skipped when enabled=false."""
+        config = {
+            "summarization": {
+                "enabled": False,
+                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a helpful assistant.",
+                "task_prompt": "Summarize: {DOCUMENT_TEXT}",
+            }
+        }
+
+        service = SummarizationService(region="us-west-2", config=config)
+
+        # Set original status to something other than FAILED
+        original_status = Status.EXTRACTING
+        sample_document.status = original_status
+
+        result = service.process_document(sample_document)
+
+        # Verify that LLM was NOT called (summarization was skipped)
+        mock_invoke_model.assert_not_called()
+
+        # Verify document status was updated to COMPLETED
+        assert result.status == Status.COMPLETED
+
+        # Verify no summarization results were created
+        assert result.summarization_result is None
+        assert result.summary_report_uri is None
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_process_document_enabled_missing_defaults_to_true(
+        self, mock_invoke_model, sample_document
+    ):
+        """Test that summarization proceeds when enabled property is missing (defaults to true)."""
+        config = {
+            "summarization": {
+                # No 'enabled' property - should default to True
+                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a helpful assistant.",
+                "task_prompt": "Summarize: {DOCUMENT_TEXT}",
+            }
+        }
+
+        service = SummarizationService(region="us-west-2", config=config)
+
+        # Configure mock to return a valid response
+        mock_invoke_model.return_value = {
+            "response": {
+                "output": {
+                    "message": {"content": [{"text": '{"summary": "Test summary"}'}]}
+                }
+            },
+            "metering": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        # Mock S3 operations
+        with patch("idp_common.s3.get_text_content") as mock_get_text:
+            mock_get_text.side_effect = ["Page 1", "Page 2", "Page 3"]
+            with patch("idp_common.s3.write_content"):
+                with patch("idp_common.utils.merge_metering_data") as mock_merge:
+                    mock_merge.return_value = {"input_tokens": 100, "output_tokens": 50}
+
+                    # Remove sections to use whole document processing
+                    sample_document.sections = []
+
+                    result = service.process_document(sample_document)
+
+        # Verify that LLM was called (summarization proceeded by default)
+        mock_invoke_model.assert_called_once()
+
+        # Verify document has summarization results
+        assert result.summarization_result is not None
+        assert result.summary_report_uri is not None
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_process_document_enabled_false_preserves_failed_status(
+        self, mock_invoke_model, sample_document
+    ):
+        """Test that when enabled=false, FAILED status is preserved."""
+        config = {
+            "summarization": {
+                "enabled": False,
+                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a helpful assistant.",
+                "task_prompt": "Summarize: {DOCUMENT_TEXT}",
+            }
+        }
+
+        service = SummarizationService(region="us-west-2", config=config)
+
+        # Set document status to FAILED
+        sample_document.status = Status.FAILED
+
+        result = service.process_document(sample_document)
+
+        # Verify that LLM was NOT called
+        mock_invoke_model.assert_not_called()
+
+        # Verify document status remained FAILED (not changed to COMPLETED)
+        assert result.status == Status.FAILED
+
+    @patch("idp_common.bedrock.invoke_model")
+    @patch("idp_common.s3.get_text_content")
+    def test_process_document_section_respects_enabled_config(
+        self, mock_get_text, mock_invoke_model, sample_document
+    ):
+        """Test that process_document_section bypasses processing when enabled=false via process_document."""
+        config = {
+            "summarization": {
+                "enabled": False,
+                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a helpful assistant.",
+                "task_prompt": "Summarize: {DOCUMENT_TEXT}",
+            }
+        }
+
+        service = SummarizationService(region="us-west-2", config=config)
+
+        # Set original status
+        sample_document.status = Status.EXTRACTING
+
+        # Call process_document which should skip entirely
+        result = service.process_document(sample_document)
+
+        # Verify that neither bedrock nor S3 operations were called
+        mock_invoke_model.assert_not_called()
+        mock_get_text.assert_not_called()
+
+        # Verify document status was updated to COMPLETED
+        assert result.status == Status.COMPLETED
+
+    def test_process_document_no_pages(self, service, sample_document):
+        """Test processing document with no pages."""
+        # Configure with enabled=true to ensure we test the no-pages logic
+        config = {
+            "summarization": {
+                "enabled": True,
+                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a helpful assistant.",
+                "task_prompt": "Summarize: {DOCUMENT_TEXT}",
+            }
+        }
+
+        service = SummarizationService(region="us-west-2", config=config)
+
+        # Remove pages
+        sample_document.pages = {}
+
+        result = service.process_document(sample_document)
+
+        # Verify error was added and status set to FAILED
+        assert "Document has no pages to summarize" in result.errors
+        assert result.status == Status.FAILED

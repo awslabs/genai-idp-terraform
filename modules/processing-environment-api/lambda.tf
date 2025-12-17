@@ -671,3 +671,85 @@ resource "aws_appsync_resolver" "copy_to_baseline" {
   field       = "copyToBaseline"
   data_source = aws_appsync_datasource.copy_to_baseline_resolver["enabled"].name
 }
+
+# =============================================================================
+# EDIT SECTIONS FEATURE - PROCESS CHANGES RESOLVER
+# =============================================================================
+
+# Process Changes Resolver Lambda (for Edit Sections feature)
+data "archive_file" "process_changes_resolver_code" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  type        = "zip"
+  source_dir  = "${path.module}/../../sources/src/lambda/process_changes_resolver"
+  output_path = "${local.module_build_dir}/process-changes-resolver.zip_${random_id.build_id.hex}"
+
+  depends_on = [null_resource.create_module_build_dir]
+}
+
+resource "aws_lambda_function" "process_changes_resolver" {
+  count         = local.edit_sections_enabled ? 1 : 0
+  function_name = "ProcessChangesResolver-${random_string.suffix.result}"
+
+  filename         = data.archive_file.process_changes_resolver_code[0].output_path
+  source_code_hash = data.archive_file.process_changes_resolver_code[0].output_base64sha256
+
+  handler     = "index.handler"
+  runtime     = "python3.12"
+  timeout     = 60
+  memory_size = 512
+  role        = aws_iam_role.process_changes_resolver_role[0].arn
+  description = "Lambda function to process section changes via GraphQL API (Edit Sections feature)"
+
+  kms_key_arn = var.encryption_key_arn
+
+  layers = var.idp_common_layer_arn != null ? [var.idp_common_layer_arn] : []
+
+  environment {
+    variables = {
+      TRACKING_TABLE        = local.tracking_table_name
+      QUEUE_URL             = local.document_queue_url
+      DATA_RETENTION_IN_DAYS = tostring(var.data_retention_in_days)
+      WORKING_BUCKET        = local.working_bucket_name
+      INPUT_BUCKET          = local.input_bucket_name
+      OUTPUT_BUCKET         = local.output_bucket_name
+      APPSYNC_API_URL       = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+      LOG_LEVEL             = var.log_level
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.vpc_config != null ? [var.vpc_config] : []
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  tags = var.tags
+}
+
+# Process Changes Resolver Data Source
+resource "aws_appsync_datasource" "process_changes_resolver" {
+  count            = local.edit_sections_enabled ? 1 : 0
+  api_id           = aws_appsync_graphql_api.api.id
+  name             = "ProcessChangesResolverDataSource"
+  type             = "AWS_LAMBDA"
+  service_role_arn = aws_iam_role.appsync_lambda_role.arn
+
+  lambda_config {
+    function_arn = aws_lambda_function.process_changes_resolver[0].arn
+  }
+}
+
+# Process Changes Resolver
+resource "aws_appsync_resolver" "process_changes" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "processChanges"
+  data_source = aws_appsync_datasource.process_changes_resolver[0].name
+}

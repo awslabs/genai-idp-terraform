@@ -1,0 +1,13 @@
+<!--
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: MIT-0
+-->
+<?xml version="1.0" encoding="utf-8"?>
+<browserconfig>
+    <msapplication>
+        <tile>
+            <square150x150logo src="/logo192.png"/>
+            <TileColor>#0066cc</TileColor>
+        </tile>
+    </msapplication>
+</browserconfig>

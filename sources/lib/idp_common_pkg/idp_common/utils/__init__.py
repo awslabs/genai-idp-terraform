@@ -12,6 +12,9 @@ try:
 except ImportError:
     yaml = None
 
+# Import Lambda metering utility
+from .lambda_metering import calculate_lambda_metering
+
 logger = logging.getLogger(__name__)
 
 # Common backoff constants
@@ -89,7 +92,21 @@ def merge_metering_data(existing_metering: Dict[str, Any],
             for unit, value in metrics.items():
                 if service_api not in merged:
                     merged[service_api] = {}
-                merged[service_api][unit] = merged[service_api].get(unit, 0) + value
+                
+                # Convert both values to numbers to handle string vs int mismatch
+                try:
+                    existing_value = merged[service_api].get(unit, 0)
+                    # Handle both string and numeric values
+                    if isinstance(existing_value, str):
+                        existing_value = float(existing_value)
+                    if isinstance(value, str):
+                        value = float(value)
+                    
+                    merged[service_api][unit] = existing_value + value
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error converting metering values for {service_api}.{unit}: existing={merged[service_api].get(unit)}, new={value}, error={e}")
+                    # Fallback to new value if conversion fails
+                    merged[service_api][unit] = value
         else:
             logger.warning(f"Unexpected metering data format for {service_api}: {metrics}")
             
@@ -233,6 +250,28 @@ def extract_json_from_text(text: str) -> str:
     # If all strategies fail, return the original text
     logger.warning("Could not extract valid JSON, returning original text")
     return text
+
+
+def normalize_boolean_value(value: Any) -> bool:
+    """
+    Normalize a value to a boolean, handling string representations.
+
+    This function is useful for configuration values that may come as strings
+    (e.g., from JSON config files or environment variables) but need to be
+    treated as booleans.
+
+    Args:
+        value: Value to normalize (can be bool, str, or other)
+
+    Returns:
+        Boolean value
+    """
+    if isinstance(value, bool):
+        return value
+    elif isinstance(value, str):
+        return value.lower() in ("true", "1", "yes", "on")
+    else:
+        return bool(value)
 
 
 def extract_yaml_from_text(text: str) -> str:
@@ -580,3 +619,34 @@ def extract_structured_data_from_text(text: str, preferred_format: str = 'auto')
         # If both fail, return original text
         logger.warning("Could not parse as either JSON or YAML, returning original text")
         return text, 'unknown'
+
+def check_token_limit(document_text: str, extraction_results: Dict[str, Any], config: Dict[str, Any]) -> \
+Optional[str]:
+    """
+    Create token limit warning message based on the configured value of max_tokens
+
+    Args:
+        document_text: The document text content
+        extraction_results: Extraction results dictionary
+        config: Configuration dictionary containing model and assessment settings
+
+    Returns:
+        Error message based on the configured_max_tokens, None otherwise
+    """
+    # Information for logging and troubleshooting
+    assessment_config = config.get("assessment", {})
+    logger.info(f"assessment_config: {assessment_config}")
+    model_id = config.get("model_id") or assessment_config.get("model", "unknown")
+    logger.info(f"model_id: {model_id}")
+    configured_max_tokens = assessment_config.get("max_tokens")
+    logger.info(f"configured_max_tokens: {configured_max_tokens}")
+    estimated_tokens = (len(document_text) + len(str(extraction_results))) / 4
+    logger.info(f"Estimated tokens: {estimated_tokens}")
+    if configured_max_tokens and int(configured_max_tokens) < estimated_tokens:
+        return (
+            f"The max_tokens value of {configured_max_tokens} is too low for this document."
+        )
+    else:
+        logger.info(f"This document is configured with {int(configured_max_tokens)} max_tokens, "
+                    f" requires approximately {int(estimated_tokens)} tokens.")
+    return None

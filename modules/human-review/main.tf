@@ -231,3 +231,175 @@ resource "aws_ssm_parameter" "labeling_console_url" {
 
   tags = var.tags
 }
+
+# =============================================================================
+# Pattern-2 HITL Resources (conditionally created)
+# =============================================================================
+
+# Pattern-2 A2I Human Task UI Template
+resource "aws_sagemaker_human_task_ui" "pattern2_hitl_ui" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  human_task_ui_name = "${var.name_prefix}-pattern2-hitl-ui-${local.suffix}"
+
+  ui_template {
+    content = file("${path.module}/templates/pattern2-hitl-ui-template.html")
+  }
+
+  tags = var.tags
+}
+
+# Pattern-2 A2I Flow Definition
+resource "aws_sagemaker_flow_definition" "pattern2_hitl_flow" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  flow_definition_name = "${var.name_prefix}-pattern2-hitl-fd-${local.suffix}"
+  role_arn             = aws_iam_role.a2i_flow_definition_role.arn
+
+  human_loop_config {
+    human_task_ui_arn                     = aws_sagemaker_human_task_ui.pattern2_hitl_ui[0].arn
+    task_availability_lifetime_in_seconds = 864000 # 10 days
+    task_count                            = 1
+    task_description                      = "Review and correct document extraction results for Pattern-2 processing"
+    task_title                            = "Pattern-2 Document Review"
+    workteam_arn                          = var.private_workforce_arn
+  }
+
+  output_config {
+    s3_output_path = "s3://${local.output_bucket_name}/hitl-output/pattern2/"
+  }
+
+  tags = var.tags
+}
+
+# Pattern-2 HITL Wait Function
+module "pattern2_hitl_wait_function" {
+  source = "./functions/pattern2-hitl-wait"
+  count  = var.enable_pattern2_hitl ? 1 : 0
+
+  name_prefix                     = "${var.name_prefix}-p2-hitl-wait"
+  tracking_table_name             = var.tracking_table_name
+  tracking_table_arn              = var.tracking_table_arn
+  working_bucket_name             = var.working_bucket_name
+  working_bucket_arn              = var.working_bucket_arn
+  sagemaker_a2i_review_portal_url = try(aws_ssm_parameter.workforce_portal_url.value, "")
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+  encryption_key_arn = var.encryption_key_arn
+
+  vpc_subnet_ids         = var.vpc_subnet_ids
+  vpc_security_group_ids = var.vpc_security_group_ids
+
+  idp_common_layer_arn = var.idp_common_layer_arn
+  lambda_tracing_mode  = var.lambda_tracing_mode
+
+  tags = var.tags
+}
+
+# Pattern-2 HITL Process Function
+module "pattern2_hitl_process_function" {
+  source = "./functions/pattern2-hitl-process"
+  count  = var.enable_pattern2_hitl ? 1 : 0
+
+  name_prefix         = "${var.name_prefix}-p2-hitl-process"
+  tracking_table_name = var.tracking_table_name
+  tracking_table_arn  = var.tracking_table_arn
+  output_bucket_arn   = var.output_bucket_arn
+  state_machine_arn   = var.state_machine_arn
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+  encryption_key_arn = var.encryption_key_arn
+
+  vpc_subnet_ids         = var.vpc_subnet_ids
+  vpc_security_group_ids = var.vpc_security_group_ids
+
+  idp_common_layer_arn = var.idp_common_layer_arn
+  lambda_tracing_mode  = var.lambda_tracing_mode
+
+  tags = var.tags
+}
+
+# Pattern-2 HITL Status Update Function
+module "pattern2_hitl_status_update_function" {
+  source = "./functions/pattern2-hitl-status-update"
+  count  = var.enable_pattern2_hitl ? 1 : 0
+
+  name_prefix       = "${var.name_prefix}-p2-hitl-status"
+  output_bucket_arn = var.output_bucket_arn
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+  encryption_key_arn = var.encryption_key_arn
+
+  vpc_subnet_ids         = var.vpc_subnet_ids
+  vpc_security_group_ids = var.vpc_security_group_ids
+
+  idp_common_layer_arn = var.idp_common_layer_arn
+  lambda_tracing_mode  = var.lambda_tracing_mode
+
+  tags = var.tags
+}
+
+# EventBridge Rule for Pattern-2 A2I Status Changes
+resource "aws_cloudwatch_event_rule" "pattern2_hitl_status_change" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  name        = "${var.name_prefix}-p2-hitl-status-change-${local.suffix}"
+  description = "Capture A2I human loop status changes for Pattern-2 HITL"
+
+  event_pattern = jsonencode({
+    source      = ["aws.sagemaker"]
+    detail-type = ["SageMaker A2I HumanLoop Status Change"]
+    detail = {
+      flowDefinitionArn = [aws_sagemaker_flow_definition.pattern2_hitl_flow[0].arn]
+    }
+  })
+
+  tags = var.tags
+}
+
+# EventBridge Target for Pattern-2 HITL Process Function
+resource "aws_cloudwatch_event_target" "pattern2_hitl_process_target" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.pattern2_hitl_status_change[0].name
+  target_id = "pattern2-hitl-process"
+  arn       = module.pattern2_hitl_process_function[0].function_arn
+}
+
+# Lambda permission for EventBridge to invoke Pattern-2 HITL Process Function
+resource "aws_lambda_permission" "pattern2_hitl_process_eventbridge" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.pattern2_hitl_process_function[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.pattern2_hitl_status_change[0].arn
+}
+
+# SSM Parameter for Pattern-2 HITL confidence threshold
+resource "aws_ssm_parameter" "pattern2_hitl_confidence_threshold" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  name        = "/${var.name_prefix}/hitl/pattern2/confidence-threshold"
+  type        = "String"
+  value       = tostring(var.hitl_confidence_threshold)
+  description = "Confidence threshold for Pattern-2 HITL triggering"
+
+  tags = var.tags
+}
+
+# SSM Parameter for Pattern-2 Flow Definition ARN
+resource "aws_ssm_parameter" "pattern2_flow_definition_arn" {
+  count = var.enable_pattern2_hitl ? 1 : 0
+
+  name        = "/${var.name_prefix}/hitl/pattern2/flow-definition-arn"
+  type        = "String"
+  value       = aws_sagemaker_flow_definition.pattern2_hitl_flow[0].arn
+  description = "ARN of the Pattern-2 A2I Flow Definition"
+
+  tags = var.tags
+}

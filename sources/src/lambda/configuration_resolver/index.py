@@ -112,6 +112,57 @@ def deep_merge(target, source):
     
     return result
 
+def send_configuration_update_message(configuration_key: str, configuration_data: dict):
+    """
+    Send a message to the ConfigurationQueue to notify pattern-specific processors
+    about configuration updates.
+    
+    Args:
+        configuration_key (str): The configuration key that was updated ('Custom' or 'Default')
+        configuration_data (dict): The updated configuration data
+    """
+    try:
+        configuration_queue_url = os.environ.get("CONFIGURATION_QUEUE_URL")
+        if not configuration_queue_url:
+            logger.warning("CONFIGURATION_QUEUE_URL environment variable not set")
+            return
+        
+        sqs = boto3.client("sqs")
+        
+        # Create message payload
+        import datetime
+        message_body = {
+            "eventType": "CONFIGURATION_UPDATED",
+            "configurationKey": configuration_key,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "data": {
+                "configurationKey": configuration_key,
+            }
+        }
+        
+        # Send message to SQS
+        response = sqs.send_message(
+            QueueUrl=configuration_queue_url,
+            MessageBody=json.dumps(message_body),
+            MessageAttributes={
+                "eventType": {
+                    "StringValue": "CONFIGURATION_UPDATED",
+                    "DataType": "String"
+                },
+                "configurationKey": {
+                    "StringValue": configuration_key,
+                    "DataType": "String"
+                }
+            }
+        )
+        
+        logger.info(f"Configuration update message sent to queue. MessageId: {response.get('MessageId')}")
+        
+    except Exception as e:
+        logger.error(f"Error sending configuration update message: {str(e)}")
+        raise
+
+
 def handle_update_configuration(custom_config):
     """
     Handle the updateConfiguration GraphQL mutation
@@ -165,6 +216,7 @@ def handle_update_configuration(custom_config):
             )
             
             logger.info(f"Updated Default configuration and cleared Custom")
+            
         else:
             # Normal custom config update
             stringified_config = stringify_values(custom_config_obj)
@@ -177,6 +229,13 @@ def handle_update_configuration(custom_config):
             )
             
             logger.info(f"Updated Custom configuration")
+            
+            # Send configuration update message for Custom configuration
+            try:
+                send_configuration_update_message('Custom', custom_config_obj)
+            except Exception as sqs_error:
+                logger.warning(f"Failed to send configuration update message to queue: {sqs_error}")
+                # Don't fail the entire operation if queue message fails
         
         return True
         

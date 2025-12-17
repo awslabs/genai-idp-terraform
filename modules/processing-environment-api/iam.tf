@@ -1003,7 +1003,7 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:aws:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
         ]
       }] : []
     )
@@ -1319,3 +1319,261 @@ resource "aws_iam_role_policy_attachment" "upload_resolver_vpc_attachment" {
   policy_arn = aws_iam_policy.upload_resolver_vpc_policy[0].arn
 }
 
+
+
+# =============================================================================
+# EDIT SECTIONS FEATURE - PROCESS CHANGES RESOLVER IAM
+# =============================================================================
+
+# IAM Role for Process Changes Resolver Lambda
+resource "aws_iam_role" "process_changes_resolver_role" {
+  count = local.edit_sections_enabled ? 1 : 0
+  name  = "ProcessChangesResolverRole-${random_string.suffix.result}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+# CloudWatch Logs Policy
+resource "aws_iam_policy" "process_changes_resolver_logs_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "ProcessChangesResolverLogsPolicy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to write logs to CloudWatch"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+# DynamoDB Policy for tracking table
+resource "aws_iam_policy" "process_changes_resolver_dynamodb_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "ProcessChangesResolverDynamoDBPolicy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to access DynamoDB tracking table"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Effect = "Allow"
+        Resource = compact([
+          local.tracking_table_arn,
+          local.tracking_table_arn != null ? "${local.tracking_table_arn}/index/*" : null
+        ])
+      }
+    ]
+  })
+}
+
+# SQS Policy for document queue
+resource "aws_iam_policy" "process_changes_resolver_sqs_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "ProcessChangesResolverSQSPolicy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to send messages to SQS queue"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "sqs:SendMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Effect   = "Allow"
+        Resource = local.document_queue_arn
+      }
+    ]
+  })
+}
+
+# S3 Policy for input, output, and working buckets
+resource "aws_iam_policy" "process_changes_resolver_s3_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "ProcessChangesResolverS3Policy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to access S3 buckets"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = compact([
+          local.input_bucket_arn,
+          local.input_bucket_arn != null ? "${local.input_bucket_arn}/*" : null,
+          local.output_bucket_arn,
+          local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null,
+          local.working_bucket_arn,
+          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null
+        ])
+      }
+    ]
+  })
+}
+
+# KMS Policy
+resource "aws_iam_policy" "process_changes_resolver_kms_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "ProcessChangesResolverKMSPolicy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to use KMS key"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey"
+        ]
+        Effect   = "Allow"
+        Resource = local.encryption_key_arn
+      }
+    ]
+  })
+}
+
+# AppSync Policy for GraphQL mutations
+resource "aws_iam_policy" "process_changes_resolver_appsync_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "ProcessChangesResolverAppSyncPolicy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to access AppSync GraphQL API"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "appsync:GraphQL"
+        Effect   = "Allow"
+        Resource = "${aws_appsync_graphql_api.api.arn}/types/Mutation/*"
+      }
+    ]
+  })
+}
+
+# VPC Policy (if VPC is configured)
+resource "aws_iam_policy" "process_changes_resolver_vpc_policy" {
+  #checkov:skip=CKV_AWS_355:EC2 network interface operations require wildcard resource as ENIs are created dynamically by Lambda in VPC
+  #checkov:skip=CKV_AWS_290:EC2 network interface operations require wildcard resource as ENIs are created dynamically by Lambda in VPC
+  count       = local.edit_sections_enabled && var.vpc_config != null ? 1 : 0
+  name        = "ProcessChangesResolverVPCPolicy-${random_string.suffix.result}"
+  description = "Policy for Process Changes Resolver Lambda to access VPC"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Policy attachments
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_logs_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_logs_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_dynamodb_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_dynamodb_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_sqs_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_sqs_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_s3_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_s3_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_kms_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_kms_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_appsync_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_appsync_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "process_changes_resolver_vpc_attachment" {
+  count      = local.edit_sections_enabled && var.vpc_config != null ? 1 : 0
+  role       = aws_iam_role.process_changes_resolver_role[0].name
+  policy_arn = aws_iam_policy.process_changes_resolver_vpc_policy[0].arn
+}
+
+# AppSync permission to invoke Process Changes Resolver Lambda
+resource "aws_iam_policy" "appsync_invoke_process_changes_resolver_policy" {
+  count       = local.edit_sections_enabled ? 1 : 0
+  name        = "AppSyncInvokeProcessChangesResolverPolicy-${random_string.suffix.result}"
+  description = "Policy for AppSync to invoke the Process Changes Resolver Lambda"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "lambda:InvokeFunction"
+        Effect   = "Allow"
+        Resource = aws_lambda_function.process_changes_resolver[0].arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "appsync_invoke_process_changes_resolver_attachment" {
+  count      = local.edit_sections_enabled ? 1 : 0
+  role       = aws_iam_role.appsync_lambda_role.name
+  policy_arn = aws_iam_policy.appsync_invoke_process_changes_resolver_policy[0].arn
+}

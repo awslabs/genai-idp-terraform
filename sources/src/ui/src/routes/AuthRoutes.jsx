@@ -13,8 +13,16 @@ import useAppContext from '../contexts/app';
 
 import DocumentsRoutes from './DocumentsRoutes';
 import DocumentsQueryRoutes from './DocumentsQueryRoutes';
+import DocumentsAnalyticsRoutes from './DocumentsAnalyticsRoutes';
 
-import { DOCUMENTS_PATH, DEFAULT_PATH, LOGIN_PATH, LOGOUT_PATH, DOCUMENTS_KB_QUERY_PATH } from './constants';
+import {
+  DOCUMENTS_PATH,
+  DEFAULT_PATH,
+  LOGIN_PATH,
+  LOGOUT_PATH,
+  DOCUMENTS_KB_QUERY_PATH,
+  DOCUMENTS_ANALYTICS_PATH,
+} from './constants';
 
 const logger = new Logger('AuthRoutes');
 
@@ -43,6 +51,9 @@ const AuthRoutes = ({ redirectParam }) => {
         </Route>
         <Route path={DOCUMENTS_KB_QUERY_PATH}>
           <DocumentsQueryRoutes />
+        </Route>
+        <Route path={DOCUMENTS_ANALYTICS_PATH}>
+          <DocumentsAnalyticsRoutes />
         </Route>
         <Route>
           <Redirect to={DEFAULT_PATH} />

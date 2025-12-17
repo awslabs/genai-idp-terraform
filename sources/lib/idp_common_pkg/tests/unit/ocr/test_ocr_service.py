@@ -106,13 +106,19 @@ class TestOcrService:
             assert service.max_workers == 20
             assert service.dpi == 150  # Now defaults to 150
             assert service.enhanced_features is False
-            assert service.resize_config is None
+            # NEW: Default image sizing is now applied automatically
+            assert service.resize_config == {
+                "target_width": 951,
+                "target_height": 1268,
+            }
             assert service.preprocessing_config is None
 
             # Verify both Textract and S3 clients were created
             assert mock_client.call_count == 2
             mock_client.assert_any_call("textract", region_name="us-west-2", config=ANY)
-            mock_client.assert_any_call("s3")
+            mock_client.assert_any_call(
+                "s3", config=ANY
+            )  # Now includes config for connection pool
 
     def test_init_textract_with_enhanced_features(self):
         """Test initialization with enhanced Textract features."""
@@ -184,6 +190,105 @@ class TestOcrService:
             service = OcrService(resize_config=resize_config)
 
             assert service.resize_config == resize_config
+
+    def test_init_config_pattern_default_sizing(self):
+        """Test initialization with new config pattern applying default sizing."""
+        config = {"ocr": {"image": {"dpi": 200}}}  # No sizing specified
+
+        with patch("boto3.client"):
+            service = OcrService(config=config)
+
+            # Verify defaults are applied
+            assert service.resize_config == {
+                "target_width": 951,
+                "target_height": 1268,
+            }
+            assert service.dpi == 200
+
+    def test_init_config_pattern_explicit_sizing(self):
+        """Test initialization with explicit sizing overrides defaults."""
+        config = {
+            "ocr": {
+                "image": {
+                    "dpi": 150,
+                    "target_width": 800,
+                    "target_height": 600,
+                }
+            }
+        }
+
+        with patch("boto3.client"):
+            service = OcrService(config=config)
+
+            # Verify explicit configuration is used
+            assert service.resize_config == {
+                "target_width": 800,
+                "target_height": 600,
+            }
+            assert service.dpi == 150
+
+    def test_init_config_pattern_empty_strings_apply_defaults(self):
+        """Test initialization with empty strings applies defaults (same as no config)."""
+        config = {
+            "ocr": {
+                "image": {
+                    "dpi": 150,
+                    "target_width": "",
+                    "target_height": "",
+                }
+            }
+        }
+
+        with patch("boto3.client"):
+            service = OcrService(config=config)
+
+            # Verify defaults are applied (empty strings treated same as None)
+            assert service.resize_config == {
+                "target_width": 951,
+                "target_height": 1268,
+            }
+            assert service.dpi == 150
+
+    def test_init_config_pattern_partial_sizing(self):
+        """Test initialization with partial sizing configuration preserves existing behavior."""
+        config = {
+            "ocr": {
+                "image": {
+                    "dpi": 150,
+                    "target_width": 800,
+                    # target_height missing - should disable defaults
+                }
+            }
+        }
+
+        with patch("boto3.client"):
+            service = OcrService(config=config)
+
+            # Verify partial config disables defaults
+            assert service.resize_config is None
+            assert service.dpi == 150
+
+    def test_init_config_pattern_invalid_sizing_fallback(self):
+        """Test initialization with invalid sizing values falls back to defaults."""
+        config = {
+            "ocr": {
+                "image": {
+                    "dpi": 150,
+                    "target_width": "invalid",
+                    "target_height": "also_invalid",
+                }
+            }
+        }
+
+        with patch("boto3.client"):
+            service = OcrService(config=config)
+
+            # Verify fallback to defaults on invalid values
+            assert service.resize_config == {
+                "target_width": 951,
+                "target_height": 1268,
+            }
+            assert service.dpi == 150
 
     def test_init_with_preprocessing_config(self):
         """Test initialization with preprocessing configuration."""
@@ -642,10 +747,10 @@ class TestOcrService:
                     assert "Error extracting text" in result["text"]
 
     @patch("boto3.client")
-    @patch("idp_common.image.resize_image")
     @patch("fitz.Page")
+    @patch("fitz.Matrix")
     def test_process_single_page_with_resize_config(
-        self, mock_page, mock_resize_image, mock_boto_client, mock_textract_response
+        self, mock_matrix, mock_page, mock_boto_client, mock_textract_response
     ):
         """Test single page processing with resize configuration."""
         # Mock Textract client
@@ -653,10 +758,16 @@ class TestOcrService:
         mock_textract_client.detect_document_text.return_value = mock_textract_response
         mock_boto_client.return_value = mock_textract_client
 
-        # Mock page image extraction
+        # Mock page image extraction - resize is now done directly in _extract_page_image
         mock_page_obj = MagicMock()
+        mock_page_obj.rect = MagicMock()
+        mock_page_obj.rect.width = 2048  # Large original width
+        mock_page_obj.rect.height = 1536  # Large original height
+
         mock_pixmap = MagicMock()
-        mock_pixmap.tobytes.return_value = b"original_image_data"
+        mock_pixmap.width = 1024  # Resized width
+        mock_pixmap.height = 768  # Resized height
+        mock_pixmap.tobytes.return_value = b"resized_image_data"
         mock_page_obj.get_pixmap.return_value = mock_pixmap
 
         # Mock PDF document
@@ -664,8 +775,9 @@ class TestOcrService:
         mock_pdf_doc.load_page.return_value = mock_page_obj
         mock_pdf_doc.is_pdf = True
 
-        # Mock resize
-        mock_resize_image.return_value = b"resized_image_data"
+        # Mock the matrix transformation
+        mock_matrix_instance = MagicMock()
+        mock_matrix.return_value = mock_matrix_instance
 
         resize_config = {"target_width": 1024, "target_height": 768}
         service = OcrService(resize_config=resize_config)
@@ -675,10 +787,15 @@ class TestOcrService:
                 0, mock_pdf_doc, "output-bucket", "test-prefix"
             )
 
-            # Verify resize was called
-            mock_resize_image.assert_called_once_with(b"original_image_data", 1024, 768)
+            # Verify matrix transformation was used (new resize approach)
+            mock_matrix.assert_called_once()  # Matrix created for scaling
 
-            # Verify Textract was called with resized image
+            # Verify get_pixmap was called with matrix (direct resize)
+            mock_page_obj.get_pixmap.assert_called_once_with(
+                matrix=mock_matrix_instance
+            )
+
+            # Verify Textract was called with the directly-resized image
             mock_textract_client.detect_document_text.assert_called_once_with(
                 Document={"Bytes": b"resized_image_data"}
             )

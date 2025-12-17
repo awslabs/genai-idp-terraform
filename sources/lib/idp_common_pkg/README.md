@@ -19,7 +19,7 @@ This README provides a high-level overview of the package. For detailed document
 - [**Reporting**](idp_common/reporting/README.md): Analytics data storage and management
 - [**BDA**](idp_common/bda/README.md): Integration with Bedrock Data Automation
 
-## Components
+## ✨ Components
 
 ### Core Services
 
@@ -44,7 +44,7 @@ This README provides a high-level overview of the package. For detailed document
 - DynamoDB-based configuration management
 - Support for default and custom configuration merging
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Installation
 
@@ -119,7 +119,7 @@ appsync_service = appsync.DocumentAppSyncService()
 updated_document = appsync_service.update_document(document)
 ```
 
-## Handling Large Documents
+## 📦 Handling Large Documents
 
 The Document model includes automatic compression support for documents exceeding Step Functions payload limits (256KB):
 
@@ -146,7 +146,7 @@ response = {
 
 See the [Core Data Models documentation](idp_common/README.md) for more details on document compression features.
 
-## Configuration
+## ⚙️ Configuration
 
 The configuration module retrieves and merges configuration from DynamoDB:
 
@@ -177,7 +177,7 @@ pytest --junitxml=test-results.xml --cov=idp_common --cov-report=xml:coverage.xm
 pytest -xvs
 ```
 
-## Development Notes
+## 📝 Development Notes
 
 This package uses a unified Document-based approach across all services:
 

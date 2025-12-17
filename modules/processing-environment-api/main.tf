@@ -57,6 +57,13 @@ locals {
 
   # Knowledge Base Invokable
   knowledge_base_model_id = var.knowledge_base.model_id
+
+  # Edit Sections Feature
+  edit_sections_enabled = var.enable_edit_sections && var.working_bucket_arn != null && var.document_queue_url != null && var.document_queue_arn != null
+  working_bucket_arn    = var.working_bucket_arn
+  working_bucket_name   = var.working_bucket_arn != null ? element(split(":", var.working_bucket_arn), 5) : null
+  document_queue_url    = var.document_queue_url
+  document_queue_arn    = var.document_queue_arn
 }
 
 resource "random_string" "suffix" {

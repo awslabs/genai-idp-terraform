@@ -160,7 +160,7 @@ module "assets_bucket" {
 module "idp_common_layer" {
   source = "./modules/idp-common-layer"
 
-  layer_prefix             = "${local.name_prefix}-idp-common-layer"
+  layer_prefix             = "${local.name_prefix}-idp-layer"
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
   idp_common_extras        = local.idp_common_layer_extras
   force_rebuild            = var.force_rebuild_layers
@@ -212,6 +212,17 @@ module "human_review" {
   # Stack name for A2I resources
   stack_name = local.name_prefix
 
+  # Pattern-2 HITL configuration
+  enable_pattern2_hitl      = var.human_review.enable_pattern2_hitl
+  hitl_confidence_threshold = var.human_review.hitl_confidence_threshold
+
+  # Pattern-2 HITL dependencies (only needed when Pattern-2 HITL is enabled)
+  tracking_table_name = module.processing_environment.tracking_table_name
+  tracking_table_arn  = module.processing_environment.tracking_table_arn
+  working_bucket_name = local.working_bucket_name
+  working_bucket_arn  = var.working_bucket_arn
+  state_machine_arn   = var.bedrock_llm_processor != null ? try(module.bedrock_llm_processor[0].state_machine_arn, "") : ""
+
   tags = var.tags
 }
 
@@ -233,6 +244,7 @@ module "processing_environment" {
 
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
+  enable_encryption  = var.enable_encryption
 
   # Lambda layer
   idp_common_layer_arn = module.idp_common_layer.layer_arn
@@ -429,9 +441,10 @@ module "bedrock_llm_processor" {
 
   # Model configurations - pass model IDs directly for optional override
   # The processor will use config.yaml by default and override with these if provided
-  classification_model_id = var.bedrock_llm_processor.classification_model_id
-  extraction_model_id     = var.bedrock_llm_processor.extraction_model_id
-  evaluation_model_id     = var.evaluation.enabled ? var.evaluation.model_id : null
+  classification_model_id      = var.bedrock_llm_processor.classification_model_id
+  extraction_model_id          = var.bedrock_llm_processor.extraction_model_id
+  evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
+  max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
 
 
 
@@ -615,6 +628,10 @@ module "reporting" {
   log_retention_days = var.log_retention_days
   encryption_key_arn = var.encryption_key_arn
 
+  # Glue crawler configuration
+  crawler_schedule            = var.reporting.crawler_schedule
+  enable_partition_projection = var.reporting.enable_partition_projection
+
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
   vpc_security_group_ids = var.vpc_security_group_ids
@@ -662,6 +679,7 @@ module "processor_attachment" {
 
   # Encryption and layers
   encryption_key_arn   = var.encryption_key_arn
+  enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
   # Logging configuration

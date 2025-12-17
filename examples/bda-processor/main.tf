@@ -24,9 +24,6 @@ provider "opensearch" {
   healthcheck = false
 }
 
-# Data sources
-# Note: These are also defined in knowledge-base.tf but needed here for other resources
-
 # Create a random string for unique resource names
 resource "random_string" "suffix" {
   length  = 8
@@ -52,7 +49,7 @@ resource "aws_kms_key" "encryption_key" {
         Sid    = "Enable IAM User Permissions"
         Effect = "Allow"
         Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+          AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
         }
         Action   = "kms:*"
         Resource = "*"
@@ -73,7 +70,7 @@ resource "aws_kms_key" "encryption_key" {
         Resource = "*"
         Condition = {
           ArnEquals = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       }
@@ -405,6 +402,7 @@ module "genai_idp_accelerator" {
   output_bucket_arn  = aws_s3_bucket.output_bucket.arn
   working_bucket_arn = aws_s3_bucket.working_bucket.arn
   encryption_key_arn = aws_kms_key.encryption_key.arn
+  enable_encryption  = true
 
   # Evaluation configuration
   evaluation = var.enable_evaluation ? {

@@ -1,3 +1,7 @@
+/*
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: MIT-0
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { API, graphqlOperation, Logger } from 'aws-amplify';
@@ -168,7 +172,6 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
   useEffect(() => {
     if (visible && executionArn) {
       fetchStepFunctionExecution();
-      setupAutoRefresh();
     }
 
     return () => {
@@ -178,7 +181,7 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
         autoRefreshIntervalRef.current = null;
       }
     };
-  }, [executionArn, visible, autoRefreshEnabled]);
+  }, [executionArn, visible]);
 
   // Update auto-refresh when the toggle changes
   useEffect(() => {

@@ -82,3 +82,20 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+variable "crawler_schedule" {
+  description = "Schedule for the Glue crawler. Valid values: manual, 15min, hourly, daily"
+  type        = string
+  default     = "daily"
+
+  validation {
+    condition     = contains(["manual", "15min", "hourly", "daily"], var.crawler_schedule)
+    error_message = "crawler_schedule must be one of: manual, 15min, hourly, daily."
+  }
+}
+
+variable "enable_partition_projection" {
+  description = "Enable partition projection for Glue tables"
+  type        = bool
+  default     = true
+}

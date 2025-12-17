@@ -84,7 +84,7 @@ const GenAIIDPTopNavigation = () => {
                     {
                       id: 'source',
                       text: 'Source Code',
-                      href: 'https://gitlab.aws.dev/genaiic-reusable-assets/engagement-artifacts/genaiic-idp-accelerator',
+                      href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws',
                       external: true,
                       externalIconAriaLabel: ' (opens in new tab)',
                     },

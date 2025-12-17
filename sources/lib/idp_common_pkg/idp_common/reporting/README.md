@@ -11,7 +11,7 @@ The Reporting module provides comprehensive functionality for saving document pr
 
 ### SaveReportingData Class
 
-The `SaveReportingData` class is the main component of the reporting module. It provides methods to save different types of document data to a reporting bucket in Parquet format.
+The `SaveReportingData` class is the main component of the reporting module. It provides methods to save different types of document data to a reporting bucket in Parquet format, including automated cost calculation capabilities.
 
 ```python
 from idp_common.reporting import SaveReportingData
@@ -20,9 +20,35 @@ from idp_common.models import Document
 # Initialize the SaveReportingData class with a reporting bucket
 reporter = SaveReportingData(reporting_bucket="my-reporting-bucket")
 
+# Initialize with pricing configuration for cost calculation
+config = {
+    "pricing": [
+        {
+            "name": "bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0",
+            "units": [
+                {"name": "inputTokens", "price": "3.0e-6"},
+                {"name": "outputTokens", "price": "1.5e-5"}
+            ]
+        }
+    ]
+}
+reporter = SaveReportingData(
+    reporting_bucket="my-reporting-bucket",
+    database_name="my-glue-database",  # Optional for Glue table creation
+    config=config  # Optional for cost calculations
+)
+
 # Save specific data types for a document
-results = reporter.save(document, data_to_save=["evaluation_results"])
+results = reporter.save(document, data_to_save=["evaluation_results", "metering"])
 ```
+
+#### Constructor Parameters
+
+- **reporting_bucket** (str): S3 bucket name for storing reporting data
+- **database_name** (str, optional): AWS Glue database name for automatic table creation and updates
+- **config** (Dict[str, Any], optional): Configuration dictionary containing pricing data and other settings
+
+When `config` is provided with pricing information, the system automatically calculates unit costs and estimated costs for all metering data.
 
 ## Features
 
@@ -36,6 +62,178 @@ results = reporter.save(document, data_to_save=["evaluation_results"])
 - **Unique File Naming**: Timestamp-based filenames prevent overwrites when documents are reprocessed
 - **Error Handling**: Comprehensive error handling with detailed logging and graceful failure recovery
 - **AWS Athena Ready**: All data is immediately queryable through Amazon Athena with optimized partition pruning
+- **Cost Calculation**: Automated unit cost and estimated cost calculation for metering data based on configuration
+- **Pricing Configuration**: Dynamic loading and caching of pricing data from configuration sources
+- **Cost Analytics**: Enhanced metering data with cost information for detailed financial analysis
+
+## Cost Calculation Features
+
+The reporting module includes comprehensive cost calculation capabilities that automatically enhance metering data with cost information:
+
+### Pricing Configuration
+
+Pricing data is loaded from the configuration dictionary passed to the constructor. The configuration supports multiple services and units:
+
+```python
+config = {
+    "pricing": [
+        {
+            "name": "bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0",
+            "units": [
+                {"name": "inputTokens", "price": "3.0e-6"},
+                {"name": "outputTokens", "price": "1.5e-5"},
+                {"name": "cacheReadInputTokens", "price": "1.5e-6"},
+                {"name": "cacheWriteInputTokens", "price": "1.875e-5"}
+            ]
+        },
+        {
+            "name": "textract/analyze_document", 
+            "units": [
+                {"name": "pages", "price": "0.0015"}
+            ]
+        },
+        {
+            "name": "bedrock/us.amazon.nova-pro-v1:0",
+            "units": [
+                {"name": "inputTokens", "price": "8.0e-7"},
+                {"name": "outputTokens", "price": "3.2e-6"}
+            ]
+        }
+    ]
+}
+
+# Initialize with cost calculation enabled
+reporter = SaveReportingData(
+    reporting_bucket="my-reporting-bucket",
+    database_name="my-glue-database",
+    config=config
+)
+```
+
+### Cost Calculation Process
+
+1. **Configuration Loading**: Pricing data is loaded from the config dictionary and cached for performance
+2. **Service/Unit Matching**: System attempts exact match for service_api/unit combinations
+3. **Fuzzy Matching**: If exact match fails, uses partial matching for common patterns
+4. **Cost Calculation**: `estimated_cost = value × unit_cost` for each metering record
+5. **Fallback Handling**: Missing pricing defaults to $0.0 with warning logs
+
+### Enhanced Metering Schema
+
+When cost calculation is enabled, metering records include additional fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| unit_cost | double | Cost per unit in USD (e.g., $0.000003 per token) |
+| estimated_cost | double | Total calculated cost (value × unit_cost) |
+
+### Cost Calculation Methods
+
+The following methods support the cost calculation functionality:
+
+#### `_get_pricing_from_config() -> Dict[str, Dict[str, float]]`
+
+Loads and caches pricing data from the configuration dictionary.
+
+**Returns**: Dictionary mapping service names to unit costs
+
+**Example**:
+
+```python
+# Automatically called during metering data processing
+pricing_map = reporter._get_pricing_from_config()
+# Result: {
+#   "bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0": {
+#     "inputTokens": 0.000003,
+#     "outputTokens": 0.000015
+#   }
+# }
+```
+
+#### `_get_unit_cost(service_api: str, unit: str) -> float`
+
+Retrieves the unit cost for a specific service API and unit combination.
+
+**Parameters**:
+
+- `service_api`: The service identifier (e.g., "bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0")
+- `unit`: The unit of measurement (e.g., "inputTokens", "pages")
+
+**Returns**: Unit cost in USD, or 0.0 if not found
+
+**Example**:
+
+```python
+# Get cost per input token for Claude
+cost = reporter._get_unit_cost(
+    "bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0", 
+    "inputTokens"
+)
+# Result: 0.000003
+```
+
+#### `clear_pricing_cache()`
+
+Clears the cached pricing data to force reload from configuration.
+
+**Example**:
+
+```python
+# Clear cache after configuration update
+reporter.clear_pricing_cache()
+```
+
+#### `_create_or_update_metering_glue_table(schema: pa.Schema) -> bool`
+
+Creates or updates the AWS Glue table for metering data with the enhanced schema including cost fields.
+
+**Parameters**:
+
+- `schema`: PyArrow schema including unit_cost and estimated_cost columns
+
+**Returns**: True if table was created or updated, False otherwise
+
+### Cost Analysis Examples
+
+With cost calculation enabled, you can perform detailed cost analysis:
+
+```python
+from idp_common.reporting import SaveReportingData
+from idp_common.models import Document
+
+# Initialize with cost calculation
+config = {"pricing": [...]}  # Your pricing configuration
+reporter = SaveReportingData(
+    reporting_bucket="my-reporting-bucket",
+    config=config
+)
+
+# Process document with cost calculation
+document = Document.from_dict(document_data)
+results = reporter.save(document, data_to_save=["metering"])
+
+# The metering data now includes:
+# - unit_cost: Cost per token/page/operation
+# - estimated_cost: Total cost for each operation
+```
+
+### Performance Considerations
+
+- **Caching**: Pricing configuration is cached after first load to avoid repeated parsing
+- **Lazy Loading**: Pricing data is only loaded when first metering record is processed
+- **Memory Efficient**: Cache stores only processed pricing data, not raw configuration
+- **Error Handling**: Invalid pricing entries are skipped with warning logs
+
+### Cost Calculation Logging
+
+The system provides detailed logging for cost calculation operations:
+
+```
+INFO - Found 15 pricing entries in configuration
+INFO - Successfully loaded 45 pricing entries from configuration  
+INFO - Using partial match for bedrock/claude-3/inputTokens: bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0/inputTokens = $0.000003
+WARNING - No unit cost mapping found for service_api='custom/service', unit='unknown_unit'. Using $0.0
+```
 
 ## Supported Data Types
 
@@ -202,11 +400,24 @@ The reporting module is designed to work seamlessly with AWS Glue and Amazon Ath
 
 ### Automatic Table Creation
 
-AWS Glue tables are automatically created via CloudFormation with the following features:
+The reporting module provides two types of automatic table creation:
 
-- **Predefined Tables**: `document_evaluations`, `section_evaluations`, `attribute_evaluations`, and `metering` tables
-- **Dynamic Tables**: Document sections tables are automatically discovered by AWS Glue Crawler
-- **Partition Projection**: All tables use partition projection for efficient querying
+#### Predefined Tables (CloudFormation)
+
+- **Evaluation Tables**: `document_evaluations`, `section_evaluations`, `attribute_evaluations`
+- **Metering Table**: `metering`
+- Created during stack deployment via CloudFormation
+
+#### Dynamic Section Tables (Runtime)
+
+When processing documents with new section types, the `SaveReportingData` class automatically:
+
+- **Creates New Tables**: Generates a Glue table for each unique section type (e.g., `document_sections_invoice`, `document_sections_w2`)
+- **Updates Schemas**: Adds new columns when new fields are detected in extraction results
+- **Configures Partitions**: Sets up partition projection for efficient date-based queries
+- **Normalizes Names**: Converts section types to lowercase for S3 path consistency (e.g., "W2" → "w2")
+
+This automatic table creation eliminates manual table management and ensures data is immediately queryable in Athena.
 
 ### Partition Projection Configuration
 

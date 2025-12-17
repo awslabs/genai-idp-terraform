@@ -3,7 +3,7 @@
 #
 # IAM Role for Queue Processor Lambda Function
 resource "aws_iam_role" "queue_processor_role" {
-  name = "${var.name}-queue-processor-role-${random_string.suffix.result}"
+  name = "${var.name}-qp-role-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -109,7 +109,7 @@ resource "aws_iam_role_policy_attachment" "queue_processor_custom_policy" {
 
 # KMS permissions (only if encryption key is provided)
 resource "aws_iam_policy" "queue_processor_kms_policy" {
-  count       = var.encryption_key_arn != null ? 1 : 0
+  count       = var.enable_encryption ? 1 : 0
   name        = "${var.name}-queue-processor-kms-policy-${random_string.suffix.result}"
   description = "KMS policy for Queue Processor Lambda Function"
 
@@ -151,7 +151,7 @@ resource "aws_iam_policy" "queue_processor_kms_policy" {
 
 # Attach KMS policy to the role
 resource "aws_iam_role_policy_attachment" "queue_processor_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
+  count      = var.enable_encryption ? 1 : 0
   role       = aws_iam_role.queue_processor_role.name
   policy_arn = aws_iam_policy.queue_processor_kms_policy[0].arn
 }

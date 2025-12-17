@@ -30,3 +30,13 @@ output "metering_table_name" {
   description = "Name of the metering Glue table"
   value       = aws_glue_catalog_table.metering_table.name
 }
+
+output "document_sections_crawler_name" {
+  description = "Name of the document sections Glue crawler"
+  value       = aws_glue_crawler.document_sections_crawler.name
+}
+
+output "document_sections_crawler_arn" {
+  description = "ARN of the document sections Glue crawler"
+  value       = aws_glue_crawler.document_sections_crawler.arn
+}

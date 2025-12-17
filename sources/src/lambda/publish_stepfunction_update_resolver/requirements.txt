@@ -1,0 +1,1 @@
+# No additional dependencies required - uses only standard library and boto3

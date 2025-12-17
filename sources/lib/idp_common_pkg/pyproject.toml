@@ -8,14 +8,14 @@ exclude = ["build", "build.*", "*build", "*build.*", "*.build", "*.build.*", "**
 
 [project]
 name = "idp_common"
-version = "0.3.9"
+version = "0.3.13"
 description = "Common utilities for GenAI IDP Accelerator patterns"
 authors = [
     {name = "AWS", email = "noreply@amazon.com"}
 ]
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.9,<3.14"
 dependencies = [
-    "boto3==1.39.4",  # Core dependency for AWS services
+    "boto3==1.39.7",  # Core dependency for AWS services
 ]
 readme = "README.md"
 classifiers = [
@@ -88,6 +88,13 @@ appsync = [
     "requests==2.32.4",
 ]
 
+# Agents module dependencies
+agents = [
+    "strands-agents>=1.0.0",
+    "strands-agents-tools>=0.2.2",
+    "bedrock-agentcore>=0.1.1" # Specifically for the code interpreter tool
+]
+
 # Document service factory dependencies (includes both appsync and dynamodb support)
 # This includes all dependencies needed for both backends
 docs_service = [
@@ -121,6 +128,7 @@ all = [
     "pyarrow==20.0.0",
     "openpyxl==3.1.5",
     "python-docx==1.2.0",
+    "strands-agents>=1.0.0",
     # "s3fs==2023.12.2" - - disabled till we fix package dependencies
 ]
 

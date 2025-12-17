@@ -7,6 +7,7 @@ import { Authenticator, ThemeProvider, useAuthenticator } from '@aws-amplify/ui-
 import '@aws-amplify/ui-react/styles.css';
 
 import { AppContext } from './contexts/app';
+import { AnalyticsProvider } from './contexts/analytics';
 import useAwsConfig from './hooks/use-aws-config';
 import useCurrentSessionCreds from './hooks/use-current-session-creds';
 
@@ -41,9 +42,11 @@ const AppContent = () => {
   return (
     <div className="App">
       <AppContext.Provider value={appContextValue}>
-        <HashRouter>
-          <Routes />
-        </HashRouter>
+        <AnalyticsProvider>
+          <HashRouter>
+            <Routes />
+          </HashRouter>
+        </AnalyticsProvider>
       </AppContext.Provider>
     </div>
   );

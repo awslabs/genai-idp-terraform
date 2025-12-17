@@ -138,6 +138,16 @@
             "type": "string",
             "description": "Class description. Instruct LLM how to identify the class from the context provided in the classification prompt."
           },
+          "document_name_regex": {
+            "type": "string",
+            "description": "Optional regex pattern to match against document ID/name. When matched, all pages will be classified as this class type without LLM processing. Use only when all pages should be the same class.",
+            "order": 2.5
+          },
+          "document_page_content_regex": {
+            "type": "string",
+            "description": "Optional regex pattern to match against page content text. When matched during multi-modal page-level classification, the page will be classified as this class type without LLM processing.",
+            "order": 2.6
+          },
           "examples": {
             "type": "array",
             "description": "Class few-shot examples",
@@ -282,38 +292,44 @@
           "enum": ["multimodalPageLevelClassification", "textbasedHolisticClassification"],
           "order": 2
         },
+        "maxPagesForClassification": {
+          "type": "string",
+          "description": "Number of pages to use for classification [When set to a number, forces the entire document to be assigned a single class]",
+          "enum": ["ALL", "1", "2", "3", "5", "10"],
+          "order": 3
+        },
         "temperature": {
           "type": "number",
           "minimum": 0,
           "maximum": 1,
           "description": "Sampling temperature",
-          "order": 3
+          "order": 4
         },
         "top_k": {
           "type": "integer",
           "minimum": 1,
           "description": "Sampling Top K",
-          "order": 4
+          "order": 5
         },
         "top_p": {
           "type": "number",
           "description": "Sampling Top P",
-          "order": 5
+          "order": 6
         },
         "max_tokens": {
           "type": "number",
           "description": "Max tokens",
-          "order": 6
+          "order": 7
         },
         "system_prompt": {
           "type": "string",
           "description": "System prompt",
-          "order": 7
+          "order": 8
         },
         "task_prompt": {
           "type": "string",
           "description": "Task prompt - include placeholders {CLASS_NAMES_AND_DESCRIPTIONS} (replaced with the class names and descriptions for all specified classes), {FEW_SHOT_EXAMPLES} (replaced by classPrompt and image data from examples in class definitions), {DOCUMENT_TEXT} (replaced by the OCR output), and for multi-modal classification {DOCUMENT_IMAGE} (replaced by the page image attachment). Optionally use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.",
-          "order": 8
+          "order": 9
         }
       }
     },
@@ -401,11 +417,17 @@
       "type": "object",
       "sectionLabel": "Assessment Inference",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable document assessment. When disabled, the assessment step will be skipped during processing.",
+          "default": true,
+          "order": 0
+        },
         "image": {
           "type": "object",
           "sectionLabel": "Image Processing Settings",
           "description": "Configure image resolution and processing options for for image attachments in assessment",
-          "order": 0,
+          "order": 1,
           "properties": {
             "target_width": {
               "type": "number",
@@ -427,7 +449,7 @@
           "type": "object",
           "sectionLabel": "Granular Assessment Configuration",
           "description": "Configure granular assessment for improved accuracy and scalability with large documents",
-          "order": 1,
+          "order": 2,
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -478,7 +500,7 @@
           "description": "Default confidence threshold for all attributes (0.0 to 1.0). If an attribute doesn't have its own threshold, this default will be used for confidence threshold alerts.",
           "minimum": 0,
           "maximum": 1,
-          "order": 2
+          "order": 3
         },
         "model": {
           "type": "string",
@@ -493,39 +515,39 @@
             "us.anthropic.claude-sonnet-4-20250514-v1:0",
             "us.anthropic.claude-opus-4-20250514-v1:0"
           ],
-          "order": 3
+          "order": 4
         },
         "temperature": {
           "type": "number",
           "description": "Sampling temperature",
-          "order": 4
+          "order": 5
         },
         "top_k": {
           "type": "number",
           "description": "Sampling Top K",
-          "order": 5
+          "order": 6
         },
         "top_p": {
           "type": "number",
           "description": "Sampling Top P",
-          "order": 6
+          "order": 7
         },
         "max_tokens": {
           "type": "number",
           "description": "Max tokens",
-          "order": 7
+          "order": 8
         },
         "system_prompt": {
           "type": "string",
           "format": "textarea",
           "description": "System prompt",
-          "order": 8
+          "order": 9
         },
         "task_prompt": {
           "type": "string",
           "format": "textarea",
           "description": "Task prompt - supports placeholders {DOCUMENT_TEXT} (markdown text), {OCR_TEXT_CONFIDENCE} (OCR text blocks with confidence), {DOCUMENT_CLASS}, {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}, {EXTRACTION_RESULTS}, {GRANULAR_CONTEXT} and {DOCUMENT_IMAGE}. Use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.",
-          "order": 9
+          "order": 10
         }
       }
     },
@@ -534,6 +556,12 @@
       "type": "object",
       "sectionLabel": "Summarization Inference",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable document summarization. When disabled, the summarization step will be skipped during processing.",
+          "default": true,
+          "order": 0
+        },
         "model": {
           "type": "string",
           "description": "Bedrock model ID",

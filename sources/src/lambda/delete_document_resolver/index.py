@@ -6,6 +6,7 @@ import boto3
 import json
 import logging
 from typing import List
+from robust_list_deletion import delete_list_entries_robust
 
 # Configure logging
 logger = logging.getLogger()
@@ -21,13 +22,18 @@ def handler(event, context):
     
     try:
         object_keys: List[str] = event['arguments']['objectKeys']
+        
+        # Validate input
+        if not object_keys or not isinstance(object_keys, list):
+            raise ValueError("objectKeys must be a non-empty list")
+        
         tracking_table = dynamodb.Table(os.environ['TRACKING_TABLE_NAME'])
         input_bucket = os.environ['INPUT_BUCKET']
         output_bucket = os.environ['OUTPUT_BUCKET']
         
         logger.info(f"Preparing to delete {len(object_keys)} documents: {object_keys}")
-        logger.info(f"Using tracking table: {os.environ['TRACKING_TABLE_NAME']}")
-        logger.info(f"Input bucket: {input_bucket}, Output bucket: {output_bucket}")
+        logger.debug(f"Using tracking table: {os.environ['TRACKING_TABLE_NAME']}")
+        logger.debug(f"Input bucket: {input_bucket}, Output bucket: {output_bucket}")
 
         deleted_count = 0
         # Delete each document and its associated data
@@ -53,20 +59,6 @@ def handler(event, context):
             except Exception as e:
                 logger.error(f"Error getting document metadata: {str(e)}")
                 # Continue with deletion process even if this part fails
-            
-            # Delete the document record
-            if document_metadata:
-                logger.info(f"Deleting document record with PK={doc_pk}, SK=none from tracking table")
-                try:
-                    tracking_table.delete_item(
-                        Key={
-                            'PK': doc_pk,
-                            'SK': 'none'
-                        }
-                    )
-                    logger.info(f"Successfully deleted document record from tracking table")
-                except Exception as e:
-                    logger.error(f"Error deleting document record from tracking table: {str(e)}")
             
             # Delete from input bucket
             try:
@@ -100,58 +92,31 @@ def handler(event, context):
             except Exception as e:
                 logger.error(f"Error deleting from output bucket: {str(e)}")
 
-            # Delete from list entries
+            # Delete from list entries using robust deletion strategy
             try:
-                # If we have the document metadata, extract the times needed to construct the list PK
-                # Prefer QueuedTime, but fallback to InitialEventTime if needed
-                event_time = None
-                if document_metadata:
-                    if 'QueuedTime' in document_metadata and document_metadata['QueuedTime']:
-                        event_time = document_metadata['QueuedTime']
-                        logger.info(f"Using QueuedTime for list key construction: {event_time}")
-                    elif 'InitialEventTime' in document_metadata and document_metadata['InitialEventTime']:
-                        event_time = document_metadata['InitialEventTime']
-                        logger.info(f"QueuedTime not found, using InitialEventTime instead: {event_time}")
-                    
-                if event_time:
-                    # Format is typically ISO: 2023-01-01T12:34:56Z
-                    date_part = event_time.split('T')[0]  # e.g., 2023-01-01
-                    hour_part = event_time.split('T')[1].split(':')[0]  # e.g., 12
-                    
-                    # Construct list entry format based on date shard - 6 shards per day
-                    hours_in_shard = 24 / 6  # 4 hours per shard
-                    shard = int(int(hour_part) / hours_in_shard)
-                    shard_str = f"{shard:02d}"  # Format with leading zero for single digits
-                    
-                    # Use the actual format from the database
-                    list_pk = f"list#{date_part}#s#{shard_str}"
-                    list_sk = f"ts#{event_time}#id#{object_key}"
-                    
-                    logger.info(f"Constructed list entry key: PK={list_pk}, SK={list_sk}")
-                    
-                    logger.info(f"Attempting to delete list entry")
-                    
-                    try:
-                        logger.info(f"Deleting list entry with PK={list_pk}, SK={list_sk}")
-                        result = tracking_table.delete_item(
-                            Key={
-                                'PK': list_pk,
-                                'SK': list_sk
-                            },
-                            ReturnValues='ALL_OLD'
-                        )
-                        if 'Attributes' in result:
-                            logger.info(f"Successfully deleted list entry: {result['Attributes']}")
-                        else:
-                            logger.warning(f"No list entry found with PK={list_pk}, SK={list_sk}")
-                    except Exception as e:
-                        logger.error(f"Error deleting list entry: {str(e)}")
+                logger.info(f"Attempting robust list entry deletion for {object_key}")
+                deletion_success = delete_list_entries_robust(tracking_table, object_key, document_metadata)
+                
+                if deletion_success:
+                    logger.info(f"Successfully deleted list entries for {object_key}")
                 else:
-                    logger.warning(f"Cannot delete list entries - no time information available for {object_key}")
-                    if document_metadata:
-                        logger.debug(f"Available metadata fields: {list(document_metadata.keys())}")
+                    logger.warning(f"No list entries were found/deleted for {object_key}")
             except Exception as e:
-                logger.error(f"Error deleting list entry: {str(e)}")
+                logger.error(f"Error in robust list entry deletion: {str(e)}")
+            
+            # Finally, delete the document record from tracking table
+            if document_metadata:
+                logger.info(f"Deleting document record with PK={doc_pk}, SK=none from tracking table")
+                try:
+                    tracking_table.delete_item(
+                        Key={
+                            'PK': doc_pk,
+                            'SK': 'none'
+                        }
+                    )
+                    logger.info(f"Successfully deleted document record from tracking table")
+                except Exception as e:
+                    logger.error(f"Error deleting document record from tracking table: {str(e)}")
             
             deleted_count += 1
             logger.info(f"Completed deletion process for document: {object_key}")

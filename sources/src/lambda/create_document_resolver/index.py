@@ -6,7 +6,7 @@ import boto3
 import json
 import logging
 from decimal import Decimal
-import datetime
+from robust_list_deletion import delete_list_entries_robust, calculate_shard
 
 # Configure logging
 logger = logging.getLogger()
@@ -28,8 +28,18 @@ def handler(event, context):
     try:
         # Extract input data from full AppSync context
         input_data = event['arguments']['input']
-        object_key = input_data['ObjectKey']
-        queued_time = input_data['QueuedTime']
+        
+        # Validate required input fields
+        if not input_data:
+            raise ValueError("Input data is required")
+        
+        object_key = input_data.get('ObjectKey')
+        queued_time = input_data.get('QueuedTime')
+        
+        if not object_key or not isinstance(object_key, str):
+            raise ValueError("ObjectKey must be a non-empty string")
+        if not queued_time or not isinstance(queued_time, str):
+            raise ValueError("QueuedTime must be a non-empty string")
         
         logger.info(f"Processing document: {object_key}, QueuedTime: {queued_time}")
         
@@ -57,52 +67,22 @@ def handler(event, context):
             logger.error(f"Error checking for existing document: {str(e)}")
             # Continue with creation process even if this check fails
         
-        # If existing document found, delete its list entry
-        if existing_doc and 'QueuedTime' in existing_doc:
+        # If existing document found, delete its list entry using robust deletion
+        if existing_doc:
             try:
-                old_time = existing_doc['QueuedTime']
-                logger.info(f"Deleting list entry for existing document with QueuedTime: {old_time}")
+                logger.info(f"Attempting robust deletion of list entries for existing document: {object_key}")
+                deletion_success = delete_list_entries_robust(tracking_table, object_key, existing_doc)
                 
-                # Calculate shard ID for the old list entry
-                old_date = old_time.split('T')[0]  # e.g., 2023-01-01
-                old_hour = int(old_time.split('T')[1].split(':')[0])  # e.g., 12
-                
-                # Calculate shard (6 shards per day = 4 hours each)
-                shards_in_day = 6
-                hours_in_shard = 24 / shards_in_day
-                old_shard = int(old_hour / hours_in_shard)
-                old_shard_str = f"{old_shard:02d}"  # Format with leading zero
-                
-                old_list_pk = f"list#{old_date}#s#{old_shard_str}"
-                old_list_sk = f"ts#{old_time}#id#{object_key}"
-                
-                logger.info(f"Deleting list entry with PK={old_list_pk}, SK={old_list_sk}")
-                result = tracking_table.delete_item(
-                    Key={
-                        'PK': old_list_pk,
-                        'SK': old_list_sk
-                    },
-                    ReturnValues='ALL_OLD'
-                )
-                
-                if 'Attributes' in result:
-                    logger.info(f"Successfully deleted list entry: {json.dumps(result['Attributes'], cls=DecimalEncoder)}")
+                if deletion_success:
+                    logger.info(f"Successfully deleted existing list entries for {object_key}")
                 else:
-                    logger.warning(f"No list entry found to delete with PK={old_list_pk}, SK={old_list_sk}")
+                    logger.warning(f"No existing list entries found/deleted for {object_key}")
             except Exception as e:
-                logger.error(f"Error deleting list entry: {str(e)}")
+                logger.error(f"Error in robust list entry deletion: {str(e)}")
                 # Continue with creation process even if deletion fails
         
-        # Calculate shard ID for new list entry
-        date_part = queued_time.split('T')[0]  # e.g., 2023-01-01
-        hour_part = int(queued_time.split('T')[1].split(':')[0])  # e.g., 12
-        
-        # Calculate shard (6 shards per day = 4 hours each)
-        shards_in_day = 6
-        hours_in_shard = 24 / shards_in_day
-        shard = int(hour_part / hours_in_shard)
-        shard_str = f"{shard:02d}"  # Format with leading zero
-        
+        # Calculate shard ID for new list entry using shared utility
+        date_part, shard_str = calculate_shard(queued_time)
         list_pk = f"list#{date_part}#s#{shard_str}"
         list_sk = f"ts#{queued_time}#id#{object_key}"
         

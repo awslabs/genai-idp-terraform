@@ -39,9 +39,9 @@ variable "user_identity" {
 
   validation {
     condition = var.user_identity == null || (
-      can(regex("^arn:aws:cognito-idp:[^:]+:[^:]+:userpool/.+$", var.user_identity.user_pool_arn))
+      can(regex("^arn:(aws|aws-us-gov):cognito-idp:[^:]+:[^:]+:userpool/.+$", var.user_identity.user_pool_arn))
     )
-    error_message = "When user_identity is provided, user_pool_arn must be a valid Cognito User Pool ARN in the format: arn:aws:cognito-idp:region:account-id:userpool/user_pool_id"
+    error_message = "When user_identity is provided, user_pool_arn must be a valid Cognito User Pool ARN in the format: arn:aws:cognito-idp:region:account-id:userpool/user_pool_id (or arn:aws-us-gov for GovCloud)"
   }
 
   validation {
@@ -66,8 +66,8 @@ variable "input_bucket_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:s3:::[^/]+$", var.input_bucket_arn))
-    error_message = "input_bucket_arn must be a valid S3 bucket ARN in the format: arn:aws:s3:::bucket-name"
+    condition     = can(regex("^arn:(aws|aws-us-gov):s3:::[^/]+$", var.input_bucket_arn))
+    error_message = "input_bucket_arn must be a valid S3 bucket ARN in the format: arn:aws:s3:::bucket-name (or arn:aws-us-gov for GovCloud)"
   }
 }
 
@@ -76,8 +76,8 @@ variable "output_bucket_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:s3:::[^/]+$", var.output_bucket_arn))
-    error_message = "output_bucket_arn must be a valid S3 bucket ARN in the format: arn:aws:s3:::bucket-name"
+    condition     = can(regex("^arn:(aws|aws-us-gov):s3:::[^/]+$", var.output_bucket_arn))
+    error_message = "output_bucket_arn must be a valid S3 bucket ARN in the format: arn:aws:s3:::bucket-name (or arn:aws-us-gov for GovCloud)"
   }
 }
 
@@ -86,8 +86,8 @@ variable "working_bucket_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:s3:::[^/]+$", var.working_bucket_arn))
-    error_message = "working_bucket_arn must be a valid S3 bucket ARN in the format: arn:aws:s3:::bucket-name"
+    condition     = can(regex("^arn:(aws|aws-us-gov):s3:::[^/]+$", var.working_bucket_arn))
+    error_message = "working_bucket_arn must be a valid S3 bucket ARN in the format: arn:aws:s3:::bucket-name (or arn:aws-us-gov for GovCloud)"
   }
 }
 
@@ -96,9 +96,15 @@ variable "encryption_key_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:kms:[^:]+:[^:]+:key/.+$", var.encryption_key_arn))
-    error_message = "encryption_key_arn must be a valid KMS key ARN in the format: arn:aws:kms:region:account-id:key/key-id"
+    condition     = can(regex("^arn:(aws|aws-us-gov):kms:[^:]+:[^:]+:key/.+$", var.encryption_key_arn))
+    error_message = "encryption_key_arn must be a valid KMS key ARN in the format: arn:aws:kms:region:account-id:key/key-id (or arn:aws-us-gov for GovCloud)"
   }
+}
+
+variable "enable_encryption" {
+  description = "Whether encryption is enabled. Set to true when providing encryption_key_arn. This is needed to avoid Terraform plan-time unknown value issues."
+  type        = bool
+  default     = true
 }
 
 #
@@ -168,8 +174,9 @@ variable "data_tracking_retention_days" {
 variable "bedrock_llm_processor" {
   description = "Configuration for Bedrock LLM processor"
   type = object({
-    classification_model_id = optional(string, null)
-    extraction_model_id     = optional(string, null)
+    classification_model_id      = optional(string, null)
+    extraction_model_id          = optional(string, null)
+    max_pages_for_classification = optional(string, "ALL")
     summarization = optional(object({
       enabled  = optional(bool, true)
       model_id = optional(string, null)
@@ -178,6 +185,14 @@ variable "bedrock_llm_processor" {
     config            = any
   })
   default = null
+
+  validation {
+    condition = var.bedrock_llm_processor == null || (
+      try(var.bedrock_llm_processor.max_pages_for_classification, "ALL") == "ALL" ||
+      can(tonumber(try(var.bedrock_llm_processor.max_pages_for_classification, "ALL")))
+    )
+    error_message = "max_pages_for_classification must be 'ALL' or a numeric value."
+  }
 }
 
 variable "bda_processor" {
@@ -235,12 +250,16 @@ variable "evaluation" {
 variable "reporting" {
   description = "Configuration for reporting and analytics functionality"
   type = object({
-    enabled       = optional(bool, false)
-    bucket_arn    = optional(string)
-    database_name = optional(string)
+    enabled                     = optional(bool, false)
+    bucket_arn                  = optional(string)
+    database_name               = optional(string)
+    crawler_schedule            = optional(string, "daily")
+    enable_partition_projection = optional(bool, true)
   })
   default = {
-    enabled = false
+    enabled                     = false
+    crawler_schedule            = "daily"
+    enable_partition_projection = true
   }
 
   validation {
@@ -250,6 +269,11 @@ variable "reporting" {
     )
     error_message = "When reporting.enabled is true, bucket_arn and database_name are required."
   }
+
+  validation {
+    condition     = contains(["manual", "15min", "hourly", "daily"], var.reporting.crawler_schedule)
+    error_message = "crawler_schedule must be one of: manual, 15min, hourly, daily."
+  }
 }
 
 #
@@ -258,14 +282,18 @@ variable "reporting" {
 variable "human_review" {
   description = "Configuration for human review functionality in document processing"
   type = object({
-    enabled               = optional(bool, false)
-    user_group_name       = optional(string)
-    user_pool_id          = optional(string)
-    private_workforce_arn = optional(string)
-    workteam_name         = optional(string)
+    enabled                   = optional(bool, false)
+    user_group_name           = optional(string)
+    user_pool_id              = optional(string)
+    private_workforce_arn     = optional(string)
+    workteam_name             = optional(string)
+    enable_pattern2_hitl      = optional(bool, false)
+    hitl_confidence_threshold = optional(number, 80)
   })
   default = {
-    enabled = false
+    enabled                   = false
+    enable_pattern2_hitl      = false
+    hitl_confidence_threshold = 80
   }
 
   validation {
@@ -276,6 +304,11 @@ variable "human_review" {
       var.human_review.workteam_name != null
     )
     error_message = "When human_review.enabled is true, user_group_name, user_pool_id, private_workforce_arn, and workteam_name are required."
+  }
+
+  validation {
+    condition     = var.human_review.hitl_confidence_threshold >= 0 && var.human_review.hitl_confidence_threshold <= 100
+    error_message = "hitl_confidence_threshold must be between 0 and 100."
   }
 }
 

@@ -23,6 +23,16 @@ output "output_bucket_arn" {
   value       = var.output_bucket_arn
 }
 
+output "working_bucket_name" {
+  description = "Name of the S3 bucket used for working files during document processing"
+  value       = local.working_bucket_name
+}
+
+output "working_bucket_arn" {
+  description = "ARN of the S3 bucket used for working files during document processing"
+  value       = var.working_bucket_arn
+}
+
 # Table outputs
 output "configuration_table_name" {
   description = "Name of the DynamoDB table that stores configuration settings"

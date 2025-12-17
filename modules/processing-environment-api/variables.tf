@@ -266,3 +266,43 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+# =============================================================================
+# EDIT SECTIONS FEATURE VARIABLES
+# =============================================================================
+
+variable "enable_edit_sections" {
+  description = "Whether to enable the Edit Sections feature for selective reprocessing"
+  type        = bool
+  default     = false
+}
+
+variable "working_bucket_arn" {
+  description = "ARN of the S3 bucket for working files (required for Edit Sections feature)"
+  type        = string
+  default     = null
+}
+
+variable "document_queue_url" {
+  description = "URL of the SQS queue for document processing (required for Edit Sections feature)"
+  type        = string
+  default     = null
+}
+
+variable "document_queue_arn" {
+  description = "ARN of the SQS queue for document processing (required for Edit Sections feature)"
+  type        = string
+  default     = null
+}
+
+variable "data_retention_in_days" {
+  description = "Data retention period in days for processed documents"
+  type        = number
+  default     = 7
+}
+
+variable "idp_common_layer_arn" {
+  description = "ARN of the IDP Common Lambda layer (required for Edit Sections feature)"
+  type        = string
+  default     = null
+}

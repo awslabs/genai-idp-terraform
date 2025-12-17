@@ -15,7 +15,9 @@ import useGraphQlApi from '../../hooks/use-graphql-api';
 import DocumentList from '../document-list';
 import DocumentDetails from '../document-details';
 import DocumentsQueryLayout from '../document-kb-query-layout';
+import DocumentsAgentsLayout from '../document-agents-layout/DocumentsAgentsLayout';
 import UploadDocumentPanel from '../upload-document';
+import DiscoveryPanel from '../discovery/DiscoveryPanel';
 import { appLayoutLabels } from '../common/labels';
 
 import Navigation from './navigation';
@@ -25,7 +27,7 @@ import SplitPanel from './documents-split-panel';
 import ConfigurationLayout from '../configuration-layout';
 
 import { DOCUMENT_LIST_SHARDS_PER_DAY, PERIODS_TO_LOAD_STORAGE_KEY } from '../document-list/documents-table-config';
-import { UPLOAD_DOCUMENT_PATH } from '../../routes/constants';
+import { UPLOAD_DOCUMENT_PATH, DISCOVERY_PATH } from '../../routes/constants';
 
 import useAppContext from '../../contexts/app';
 
@@ -120,11 +122,17 @@ const GenAIIDPLayout = () => {
             <Route path={`${path}/query`}>
               <DocumentsQueryLayout />
             </Route>
+            <Route path={`${path}/agents`}>
+              <DocumentsAgentsLayout />
+            </Route>
             <Route path={`${path}/config`}>
               <ConfigurationLayout />
             </Route>
             <Route path={UPLOAD_DOCUMENT_PATH}>
               <UploadDocumentPanel />
+            </Route>
+            <Route path={DISCOVERY_PATH}>
+              <DiscoveryPanel />
             </Route>
             <Route path={`${path}/:objectKey`}>
               <DocumentDetails />

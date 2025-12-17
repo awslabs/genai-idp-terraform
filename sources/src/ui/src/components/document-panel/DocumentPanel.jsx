@@ -19,11 +19,11 @@ import './DocumentPanel.css';
 import DocumentViewers from '../document-viewers/DocumentViewers';
 import SectionsPanel from '../sections-panel';
 import PagesPanel from '../pages-panel';
-// import ChatPanel from '../chat-panel';
-import { StepFunctionFlowViewer } from '../step-function-flow';
+import ChatPanel from '../chat-panel';
 import useConfiguration from '../../hooks/use-configuration';
 import { getDocumentConfidenceAlertCount } from '../common/confidence-alerts-utils';
 import { renderHitlStatus } from '../common/hitl-status-renderer';
+import StepFunctionFlowViewer from '../step-function-flow/StepFunctionFlowViewer';
 // Uncomment the line below to enable debugging
 // import { debugDocumentStructure } from '../common/debug-utils';
 
@@ -526,7 +526,7 @@ export const DocumentPanel = ({ item, setToolsOpen, getDocumentDetailsFromIds, o
       />
       <SectionsPanel sections={item.sections} pages={item.pages} documentItem={item} mergedConfig={mergedConfig} />
       <PagesPanel pages={item.pages} />
-      {/* <ChatPanel objectKey={item.objectKey} /> */}
+      <ChatPanel objectKey={item.objectKey} />
 
       {/* Step Function Flow Viewer */}
       {item?.executionArn && (
