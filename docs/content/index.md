@@ -2,7 +2,7 @@
 
 Welcome to the GenAI **Intelligent Document Processing** (IDP) Accelerator for Terraform documentation. This accelerator provides a comprehensive set of Terraform modules and configurations to deploy **Intelligent Document Processing** solutions on AWS.
 
-[![Compatible with GenAI IDP version: 0.3.8](https://img.shields.io/badge/Compatible%20with%20GenAI%20IDP-0.3.8-brightgreen)](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/releases/tag/v0.3.8)
+[![Compatible with GenAI IDP version: 0.3.18](https://img.shields.io/badge/Compatible%20with%20GenAI%20IDP-0.3.18-brightgreen)](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/releases/tag/v0.3.18)
 ![Stability: Experimental](https://img.shields.io/badge/Stability-Experimental-important.svg)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 

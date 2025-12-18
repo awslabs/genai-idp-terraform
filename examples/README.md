@@ -204,12 +204,12 @@ When `enable_reporting = true`, you can query analytics data using Amazon Athena
 ### **Document-Level Metrics**
 
 ```sql
-SELECT 
+SELECT
     processor_type,
     AVG(accuracy) as avg_accuracy,
     AVG(f1_score) as avg_f1_score,
     COUNT(*) as document_count
-FROM document_evaluations 
+FROM document_evaluations
 WHERE year = 2024 AND month = 7
 GROUP BY processor_type;
 ```
@@ -217,11 +217,11 @@ GROUP BY processor_type;
 ### **Cost Analysis**
 
 ```sql
-SELECT 
+SELECT
     processor_type,
     SUM(cost_usd) as total_cost,
     AVG(processing_time_ms) as avg_processing_time
-FROM metering 
+FROM metering
 WHERE year = 2024 AND month = 7
 GROUP BY processor_type;
 ```
@@ -263,7 +263,7 @@ Error: LimitExceededException: Rate exceeded
 
 ## What's New
 
-### **v0.3.8 Functional Parity**
+### **v0.3.18 Functional Parity**
 
 - **Assessment Functions**: Document quality measurement
 - **Enhanced Evaluation**: Baseline comparison with configurable models

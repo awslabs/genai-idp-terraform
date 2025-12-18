@@ -9,7 +9,7 @@
  * existing infrastructure provided by the user.
  *
  * ## Modes of Operation
- * 
+ *
  * ### Full Infrastructure Mode (create_infrastructure = true)
  * - Creates S3 bucket for web app hosting
  * - Creates CloudFront distribution with security headers and WAF
@@ -80,7 +80,7 @@ locals {
     EvaluationBaselineBucket       = var.evaluation_baseline_bucket_name
     IDPPattern                     = var.idp_pattern
     ShouldUseDocumentKnowledgeBase = false
-    Version                        = "0.3.8"
+    Version                        = "0.3.18"
     StackName                      = var.display_name != null ? var.display_name : "${var.name_prefix}-processor"
     # Add other settings as needed
   }

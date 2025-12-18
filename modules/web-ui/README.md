@@ -1,3 +1,4 @@
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -13,11 +14,11 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.2.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | >= 3.1.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.13.1 |
 
 ## Modules
 
@@ -79,7 +80,8 @@ No modules.
 | <a name="input_evaluation_baseline_bucket_name"></a> [evaluation\_baseline\_bucket\_name](#input\_evaluation\_baseline\_bucket\_name) | Name of the evaluation baseline S3 bucket (extracted from evaluation baseline bucket ARN) | `string` | `""` | no |
 | <a name="input_idp_pattern"></a> [idp\_pattern](#input\_idp\_pattern) | IDP processing pattern name (mapped from processor type) | `string` | `""` | no |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket for input files | `string` | n/a | yes |
-| <a name="input_logging_bucket"></a> [logging\_bucket](#input\_logging\_bucket) | Optional S3 bucket for storing CloudFront and S3 access logs (only used when create\_infrastructure is true) | <pre>object({<br>    bucket_name = string<br>    bucket_arn  = string<br>  })</pre> | `null` | no |
+| <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
+| <a name="input_logging_bucket"></a> [logging\_bucket](#input\_logging\_bucket) | Optional S3 bucket for storing CloudFront and S3 access logs (only used when create\_infrastructure is true) | <pre>object({<br/>    bucket_name = string<br/>    bucket_arn  = string<br/>  })</pre> | `null` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource naming | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket for output files | `string` | n/a | yes |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix for resource names | `string` | n/a | yes |
@@ -88,7 +90,7 @@ No modules.
 | <a name="input_should_allow_sign_up_email_domain"></a> [should\_allow\_sign\_up\_email\_domain](#input\_should\_allow\_sign\_up\_email\_domain) | Controls whether the UI allows users to sign up with any email domain | `bool` | `false` | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | List of subnet IDs for network integration | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
-| <a name="input_user_identity"></a> [user\_identity](#input\_user\_identity) | The user identity management system that handles authentication and authorization | <pre>object({<br>    user_pool = object({<br>      user_pool_id  = string<br>      user_pool_arn = string<br>      endpoint      = string<br>    })<br>    user_pool_client = object({<br>      user_pool_client_id = string<br>    })<br>    identity_pool = object({<br>      identity_pool_id       = string<br>      authenticated_role_arn = string<br>    })<br>  })</pre> | n/a | yes |
+| <a name="input_user_identity"></a> [user\_identity](#input\_user\_identity) | The user identity management system that handles authentication and authorization | <pre>object({<br/>    user_pool = object({<br/>      user_pool_id  = string<br/>      user_pool_arn = string<br/>      endpoint      = string<br/>    })<br/>    user_pool_client = object({<br/>      user_pool_client_id = string<br/>    })<br/>    identity_pool = object({<br/>      identity_pool_id       = string<br/>      authenticated_role_arn = string<br/>    })<br/>  })</pre> | n/a | yes |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC for network integration | `string` | `null` | no |
 | <a name="input_waf_rate_limit"></a> [waf\_rate\_limit](#input\_waf\_rate\_limit) | Rate limit for WAF (requests per 5-minute period, only used when create\_infrastructure is true) | `number` | `2000` | no |
 | <a name="input_web_app_bucket_name"></a> [web\_app\_bucket\_name](#input\_web\_app\_bucket\_name) | Name of S3 bucket for hosting the web application (required when create\_infrastructure is false) | `string` | `null` | no |
@@ -105,3 +107,4 @@ No modules.
 | <a name="output_distribution"></a> [distribution](#output\_distribution) | The CloudFront distribution that serves the web application (when create\_infrastructure is true) |
 | <a name="output_settings_parameter"></a> [settings\_parameter](#output\_settings\_parameter) | SSM Parameter for Web UI settings |
 | <a name="output_web_ui_test_env_file"></a> [web\_ui\_test\_env\_file](#output\_web\_ui\_test\_env\_file) | Environment file content for local UI development |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
