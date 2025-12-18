@@ -1,3 +1,4 @@
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -12,10 +13,10 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.2.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 4.0.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | >= 3.1.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.26.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
 
 ## Modules
 
@@ -99,22 +100,26 @@
 | [archive_file.save_reporting_data_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.update_configuration_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.workflow_tracker_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_api"></a> [api](#input\_api) | Optional GraphQL API that is used to track processing status and results of documents | <pre>object({<br>    api_id           = string<br>    api_name         = optional(string)<br>    api_arn          = string<br>    graphql_url      = string<br>    realtime_url     = optional(string)<br>    api_key          = optional(string)<br>    lambda_functions = optional(any)<br>  })</pre> | `null` | no |
+| <a name="input_api"></a> [api](#input\_api) | Optional GraphQL API that is used to track processing status and results of documents | <pre>object({<br/>    api_id           = string<br/>    api_name         = optional(string)<br/>    api_arn          = string<br/>    graphql_url      = string<br/>    realtime_url     = optional(string)<br/>    api_key          = optional(string)<br/>    lambda_functions = optional(any)<br/>  })</pre> | `null` | no |
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the table that manages concurrency limits for document processing | `string` | `null` | no |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the optional DynamoDB table for storing configuration settings | `string` | `null` | no |
 | <a name="input_data_tracking_retention_days"></a> [data\_tracking\_retention\_days](#input\_data\_tracking\_retention\_days) | The retention period for document tracking data in days | `number` | `365` | no |
+| <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in for\_each/count. | `bool` | `false` | no |
 | <a name="input_enable_reporting"></a> [enable\_reporting](#input\_enable\_reporting) | Whether to enable the reporting environment for analytics and evaluation capabilities | `bool` | `false` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources in the document processing workflow | `string` | `null` | no |
-| <a name="input_evaluation_config"></a> [evaluation\_config](#input\_evaluation\_config) | Optional evaluation configuration for document processing quality assessment | <pre>object({<br>    baseline_bucket_arn  = string<br>    evaluation_model_arn = string<br>  })</pre> | `null` | no |
+| <a name="input_evaluation_config"></a> [evaluation\_config](#input\_evaluation\_config) | Optional evaluation configuration for document processing quality assessment | <pre>object({<br/>    baseline_bucket_arn  = string<br/>    evaluation_model_arn = string<br/>  })</pre> | `null` | no |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP common Lambda layer to use for functions that require idp\_common | `string` | n/a | yes |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket where source documents to be processed are stored | `string` | n/a | yes |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket for storing Lambda layers. If not provided, a new bucket will be created. | `string` | `""` | no |
+| <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | The log level for the document processing components | `string` | `"INFO"` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The retention period for CloudWatch logs generated by the document processing components in days | `number` | `7` | no |
 | <a name="input_metric_namespace"></a> [metric\_namespace](#input\_metric\_namespace) | The namespace for CloudWatch metrics emitted by the document processing system | `string` | n/a | yes |
@@ -160,3 +165,6 @@
 | <a name="output_vpc_subnet_ids"></a> [vpc\_subnet\_ids](#output\_vpc\_subnet\_ids) | List of subnet IDs for VPC configuration (if provided) |
 | <a name="output_workflow_tracker_function_arn"></a> [workflow\_tracker\_function\_arn](#output\_workflow\_tracker\_function\_arn) | ARN of the Lambda function that tracks workflow execution status |
 | <a name="output_workflow_tracker_function_name"></a> [workflow\_tracker\_function\_name](#output\_workflow\_tracker\_function\_name) | Name of the Lambda function that tracks workflow execution status |
+| <a name="output_working_bucket_arn"></a> [working\_bucket\_arn](#output\_working\_bucket\_arn) | ARN of the S3 bucket used for working files during document processing |
+| <a name="output_working_bucket_name"></a> [working\_bucket\_name](#output\_working\_bucket\_name) | Name of the S3 bucket used for working files during document processing |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -172,3 +172,61 @@ terraform destroy
 ### Getting Help
 
 Check the module documentation at `../../modules/user-identity/README.md` for detailed configuration options and troubleshooting guidance.
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 5.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.1 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+
+## Modules
+
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_user_identity"></a> [user\_identity](#module\_user\_identity) | ../../modules/user-identity | n/a |
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [aws_cognito_user.admin_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user) | resource |
+| [aws_cognito_user_group.admin_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_group) | resource |
+| [aws_cognito_user_in_group.admin_user_in_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_in_group) | resource |
+| [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Email address for the admin user | `string` | n/a | yes |
+| <a name="input_allow_unauthenticated_identities"></a> [allow\_unauthenticated\_identities](#input\_allow\_unauthenticated\_identities) | Allow unauthenticated identities in the Identity Pool | `bool` | `false` | no |
+| <a name="input_allowed_signup_email_domain"></a> [allowed\_signup\_email\_domain](#input\_allowed\_signup\_email\_domain) | Optional comma-separated list of allowed email domains for self-service signup | `string` | `""` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Enable deletion protection for the User Pool | `bool` | `true` | no |
+| <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix for resource names | `string` | `"idp-user-identity"` | no |
+| <a name="input_region"></a> [region](#input\_region) | AWS region for deployment | `string` | `"us-east-1"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | <pre>{<br/>  "Environment": "Development",<br/>  "ManagedBy": "Terraform",<br/>  "Project": "GenAI-IDP-Accelerator"<br/>}</pre> | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_admin_user"></a> [admin\_user](#output\_admin\_user) | Admin user details (if created) |
+| <a name="output_authenticated_role_arn"></a> [authenticated\_role\_arn](#output\_authenticated\_role\_arn) | ARN of the authenticated IAM role |
+| <a name="output_identity_pool"></a> [identity\_pool](#output\_identity\_pool) | Cognito Identity Pool details |
+| <a name="output_identity_pool_id"></a> [identity\_pool\_id](#output\_identity\_pool\_id) | ID of the Cognito Identity Pool |
+| <a name="output_usage_instructions"></a> [usage\_instructions](#output\_usage\_instructions) | Instructions for using the User Identity resources |
+| <a name="output_user_identity"></a> [user\_identity](#output\_user\_identity) | Complete user identity details following IUserIdentity interface |
+| <a name="output_user_pool"></a> [user\_pool](#output\_user\_pool) | Cognito User Pool details |
+| <a name="output_user_pool_client"></a> [user\_pool\_client](#output\_user\_pool\_client) | Cognito User Pool Client details |
+| <a name="output_user_pool_client_id"></a> [user\_pool\_client\_id](#output\_user\_pool\_client\_id) | ID of the Cognito User Pool Client |
+| <a name="output_user_pool_id"></a> [user\_pool\_id](#output\_user\_pool\_id) | ID of the Cognito User Pool |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

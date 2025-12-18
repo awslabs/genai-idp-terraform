@@ -1,3 +1,4 @@
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -12,10 +13,10 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.2.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 4.0.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | >= 3.1.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
 
 ## Modules
 
@@ -34,6 +35,7 @@ No modules.
 | [aws_cloudwatch_log_group.evaluation_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.queue_processor](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_iam_policy.evaluation_function_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.queue_processor_kms_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.queue_processor_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_role.evaluation_function_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.queue_processor_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -42,6 +44,7 @@ No modules.
 | [aws_iam_role_policy_attachment.evaluation_function_vpc_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.queue_processor_basic_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.queue_processor_custom_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.queue_processor_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.queue_processor_vpc_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_lambda_event_source_mapping.queue_processor_event_source](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_event_source_mapping) | resource |
 | [aws_lambda_function.evaluation_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
@@ -68,16 +71,18 @@ No modules.
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the DynamoDB table that manages concurrency limits for document processing | `string` | n/a | yes |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings | `string` | n/a | yes |
 | <a name="input_document_queue_arn"></a> [document\_queue\_arn](#input\_document\_queue\_arn) | ARN of the SQS queue that holds documents waiting to be processed | `string` | n/a | yes |
+| <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in for\_each/count. | `bool` | `false` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources in the document processing workflow | `string` | `null` | no |
-| <a name="input_evaluation_options"></a> [evaluation\_options](#input\_evaluation\_options) | Optional evaluation configuration | <pre>object({<br>    baseline_bucket_arn = string<br>    model_id            = string<br>  })</pre> | `null` | no |
+| <a name="input_evaluation_options"></a> [evaluation\_options](#input\_evaluation\_options) | Optional evaluation configuration | <pre>object({<br/>    baseline_bucket_arn = string<br/>    model_id            = string<br/>  })</pre> | `null` | no |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP common Lambda layer to use for functions that require idp\_common | `string` | n/a | yes |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket where source documents to be processed are stored | `string` | n/a | yes |
+| <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | The log level for document processing components | `string` | n/a | yes |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The retention period for CloudWatch logs generated by document processing components | `number` | `7` | no |
 | <a name="input_metric_namespace"></a> [metric\_namespace](#input\_metric\_namespace) | The namespace for CloudWatch metrics emitted by the document processing system | `string` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name prefix for resources | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket where processed documents and extraction results are stored | `string` | n/a | yes |
-| <a name="input_processor"></a> [processor](#input\_processor) | Processor configuration | <pre>object({<br>    state_machine_arn          = string<br>    max_processing_concurrency = number<br>  })</pre> | n/a | yes |
+| <a name="input_processor"></a> [processor](#input\_processor) | Processor configuration | <pre>object({<br/>    state_machine_arn          = string<br/>    max_processing_concurrency = number<br/>  })</pre> | n/a | yes |
 | <a name="input_queue_sender_function_arn"></a> [queue\_sender\_function\_arn](#input\_queue\_sender\_function\_arn) | ARN of the Lambda function that sends documents to the processing queue | `string` | n/a | yes |
 | <a name="input_queue_sender_function_name"></a> [queue\_sender\_function\_name](#input\_queue\_sender\_function\_name) | Name of the Lambda function that sends documents to the processing queue | `string` | n/a | yes |
 | <a name="input_s3_prefix"></a> [s3\_prefix](#input\_s3\_prefix) | Optional S3 prefix to filter documents for processing | `string` | `null` | no |
@@ -98,3 +103,4 @@ No modules.
 | <a name="output_queue_processor"></a> [queue\_processor](#output\_queue\_processor) | The Lambda function that processes documents from the queue |
 | <a name="output_s3_event_rule"></a> [s3\_event\_rule](#output\_s3\_event\_rule) | The EventBridge rule for S3 events |
 | <a name="output_workflow_state_change_rule"></a> [workflow\_state\_change\_rule](#output\_workflow\_state\_change\_rule) | The EventBridge rule for Step Functions state changes |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

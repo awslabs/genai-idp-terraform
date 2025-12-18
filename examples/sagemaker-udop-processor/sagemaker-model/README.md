@@ -119,31 +119,6 @@ resource "aws_sagemaker_model" "udop_classifier" {
 }
 ```
 
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| name_prefix | Prefix for resource names | `string` | n/a | yes |
-| kms_key_id | KMS key ID for encryption | `string` | n/a | yes |
-| max_epochs | Maximum number of epochs for training | `number` | `3` | no |
-| base_model | Base model to use for training | `string` | `"microsoft/udop-large"` | no |
-| retrain_model | Whether to retrain the model on each apply | `bool` | `false` | no |
-| tags | Tags to apply to resources | `map(string)` | `{}` | no |
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| model_data_bucket | S3 bucket name containing the trained model |
-| model_data_key | S3 object key for the trained model |
-| model_data_uri | Full S3 URI for the trained model |
-| training_job_name | Name of the SageMaker training job |
-| data_bucket_name | Name of the S3 bucket containing training data |
-| sagemaker_execution_role_arn | ARN of the SageMaker execution role |
-| training_status | Status of the training job completion |
-| lambda_functions | Lambda function details and ARNs |
-| ecr_repositories | ECR repository details |
-
 ## Enhanced Features
 
 ### 1. **Docker Container Images**
@@ -406,3 +381,89 @@ For issues and questions:
 - **Training Issues**: Check CloudWatch logs and SageMaker training job details
 
 This enhanced implementation provides a comprehensive foundation for SageMaker model training with Terraform, closely matching the capabilities of the original CDK implementation while maintaining pure Terraform architecture.
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 5.0 |
+| <a name="requirement_docker"></a> [docker](#requirement\_docker) | >= 3.0 |
+| <a name="requirement_external"></a> [external](#requirement\_external) | >= 2.0 |
+| <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0 |
+| <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.9 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
+| <a name="provider_docker"></a> [docker](#provider\_docker) | 3.6.2 |
+| <a name="provider_external"></a> [external](#provider\_external) | 2.3.5 |
+| <a name="provider_local"></a> [local](#provider\_local) | 2.6.1 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.13.1 |
+
+## Modules
+
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_generate_demo_data_lambda"></a> [generate\_demo\_data\_lambda](#module\_generate\_demo\_data\_lambda) | terraform-aws-modules/lambda/aws | ~> 7.0 |
+| <a name="module_sagemaker_train_is_complete_lambda"></a> [sagemaker\_train\_is\_complete\_lambda](#module\_sagemaker\_train\_is\_complete\_lambda) | terraform-aws-modules/lambda/aws | ~> 7.0 |
+| <a name="module_sagemaker_train_lambda"></a> [sagemaker\_train\_lambda](#module\_sagemaker\_train\_lambda) | terraform-aws-modules/lambda/aws | ~> 7.0 |
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [aws_ecr_repository.generate_demo_data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) | resource |
+| [aws_ecr_repository.sagemaker_train](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) | resource |
+| [aws_iam_role.sagemaker_execution_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy.sagemaker_execution_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy_attachment.sagemaker_execution_role_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_lambda_invocation.generate_demo_data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
+| [aws_lambda_invocation.sagemaker_train](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
+| [aws_s3_bucket.data_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket_public_access_block.data_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) | resource |
+| [aws_s3_bucket_server_side_encryption_configuration.data_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration) | resource |
+| [aws_s3_bucket_versioning.data_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_versioning) | resource |
+| [docker_image.generate_demo_data](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [docker_image.sagemaker_train](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [local_file.training_status_checker](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
+| [null_resource.push_generate_demo_data](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.push_sagemaker_train](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [random_string.request_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
+| [time_sleep.initial_wait](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
+| [time_sleep.model_upload_wait](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
+| [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
+| [external_external.training_status](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_base_model"></a> [base\_model](#input\_base\_model) | Base model to use for training | `string` | `"microsoft/udop-large"` | no |
+| <a name="input_kms_key_id"></a> [kms\_key\_id](#input\_kms\_key\_id) | KMS key ID for encryption | `string` | n/a | yes |
+| <a name="input_max_epochs"></a> [max\_epochs](#input\_max\_epochs) | Maximum number of epochs for training | `number` | `3` | no |
+| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource names | `string` | n/a | yes |
+| <a name="input_retrain_model"></a> [retrain\_model](#input\_retrain\_model) | Whether to retrain the model on each apply | `bool` | `false` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to resources | `map(string)` | `{}` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_data_bucket_name"></a> [data\_bucket\_name](#output\_data\_bucket\_name) | Name of the S3 bucket containing training data |
+| <a name="output_ecr_repositories"></a> [ecr\_repositories](#output\_ecr\_repositories) | ECR repository details |
+| <a name="output_lambda_functions"></a> [lambda\_functions](#output\_lambda\_functions) | Lambda function details |
+| <a name="output_model_data_bucket"></a> [model\_data\_bucket](#output\_model\_data\_bucket) | S3 bucket name containing the trained model |
+| <a name="output_model_data_key"></a> [model\_data\_key](#output\_model\_data\_key) | S3 object key for the trained model |
+| <a name="output_model_data_uri"></a> [model\_data\_uri](#output\_model\_data\_uri) | Full S3 URI for the trained model |
+| <a name="output_sagemaker_execution_role_arn"></a> [sagemaker\_execution\_role\_arn](#output\_sagemaker\_execution\_role\_arn) | ARN of the SageMaker execution role |
+| <a name="output_training_job_name"></a> [training\_job\_name](#output\_training\_job\_name) | Name of the SageMaker training job |
+| <a name="output_training_status"></a> [training\_status](#output\_training\_status) | Status of the training job completion |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

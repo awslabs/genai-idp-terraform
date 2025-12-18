@@ -1,3 +1,4 @@
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -9,7 +10,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
 
 ## Modules
 
@@ -36,10 +37,10 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_allowed_signup_email_domain"></a> [allowed\_signup\_email\_domain](#input\_allowed\_signup\_email\_domain) | Optional comma-separated list of allowed email domains for self-service signup | `string` | `""` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Enable deletion protection for the User Pool | `bool` | `true` | no |
-| <a name="input_identity_pool_options"></a> [identity\_pool\_options](#input\_identity\_pool\_options) | Configuration for the Identity Pool | <pre>object({<br>    identity_pool_name               = optional(string)<br>    allow_unauthenticated_identities = optional(bool, false)<br>    allow_classic_flow               = optional(bool, false)<br>  })</pre> | `{}` | no |
+| <a name="input_identity_pool_options"></a> [identity\_pool\_options](#input\_identity\_pool\_options) | Configuration for the Identity Pool | <pre>object({<br/>    identity_pool_name               = optional(string)<br/>    allow_unauthenticated_identities = optional(bool, false)<br/>    allow_classic_flow               = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource naming | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
-| <a name="input_user_pool"></a> [user\_pool](#input\_user\_pool) | Optional pre-existing Cognito User Pool to use for authentication. When not provided, a new User Pool will be created with standard settings. | <pre>object({<br>    user_pool_id  = string<br>    user_pool_arn = string<br>  })</pre> | `null` | no |
+| <a name="input_user_pool"></a> [user\_pool](#input\_user\_pool) | Optional pre-existing Cognito User Pool to use for authentication. When not provided, a new User Pool will be created with standard settings. | <pre>object({<br/>    user_pool_id  = string<br/>    user_pool_arn = string<br/>  })</pre> | `null` | no |
 
 ## Outputs
 
@@ -55,3 +56,4 @@ No modules.
 | <a name="output_user_pool_client_id"></a> [user\_pool\_client\_id](#output\_user\_pool\_client\_id) | ID of the Cognito User Pool Client |
 | <a name="output_user_pool_endpoint"></a> [user\_pool\_endpoint](#output\_user\_pool\_endpoint) | Endpoint of the Cognito User Pool |
 | <a name="output_user_pool_id"></a> [user\_pool\_id](#output\_user\_pool\_id) | ID of the Cognito User Pool |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

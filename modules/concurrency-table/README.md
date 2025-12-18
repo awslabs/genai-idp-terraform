@@ -1,3 +1,4 @@
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -9,7 +10,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 4.0.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
 
 ## Modules
 
@@ -43,3 +44,4 @@ No modules.
 | <a name="output_table_arn"></a> [table\_arn](#output\_table\_arn) | The ARN of the DynamoDB table |
 | <a name="output_table_id"></a> [table\_id](#output\_table\_id) | The ID of the DynamoDB table |
 | <a name="output_table_name"></a> [table\_name](#output\_table\_name) | The name of the DynamoDB table |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

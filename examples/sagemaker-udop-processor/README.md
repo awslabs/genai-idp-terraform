@@ -425,3 +425,120 @@ For issues, questions, or contributions:
 ## License
 
 This project is licensed under the Apache License 2.0. See the [LICENSE](../../LICENSE) file for details.
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 5.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.1 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.4.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+
+## Modules
+
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_genai_idp_accelerator"></a> [genai\_idp\_accelerator](#module\_genai\_idp\_accelerator) | ../.. | n/a |
+| <a name="module_sagemaker_model"></a> [sagemaker\_model](#module\_sagemaker\_model) | ./sagemaker-model | n/a |
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [aws_appautoscaling_policy.sagemaker_scaling_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appautoscaling_policy) | resource |
+| [aws_appautoscaling_target.sagemaker_target](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appautoscaling_target) | resource |
+| [aws_cognito_identity_pool.identity_pool](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_identity_pool) | resource |
+| [aws_cognito_identity_pool_roles_attachment.identity_pool_roles](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_identity_pool_roles_attachment) | resource |
+| [aws_cognito_user.admin_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user) | resource |
+| [aws_cognito_user_group.admin_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_group) | resource |
+| [aws_cognito_user_in_group.admin_user_in_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_in_group) | resource |
+| [aws_cognito_user_pool.user_pool](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_pool) | resource |
+| [aws_cognito_user_pool_client.user_pool_client](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_pool_client) | resource |
+| [aws_glue_catalog_database.reporting_database](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/glue_catalog_database) | resource |
+| [aws_iam_role.authenticated_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.sagemaker_model_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.unauthenticated_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy.sagemaker_model_kms_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.sagemaker_model_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy_attachment.sagemaker_model_execution_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_kms_alias.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
+| [aws_kms_key.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
+| [aws_s3_bucket.evaluation_baseline_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket.input_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket.output_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket.reporting_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket.working_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket_notification.input_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) | resource |
+| [aws_sagemaker_endpoint.udop_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sagemaker_endpoint) | resource |
+| [aws_sagemaker_endpoint_configuration.udop_endpoint_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sagemaker_endpoint_configuration) | resource |
+| [aws_sagemaker_model.udop_model](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sagemaker_model) | resource |
+| [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
+| [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Optional email address for the admin user. If provided, an admin user will be created in the Cognito User Pool. | `string` | `null` | no |
+| <a name="input_classifier_instance_type"></a> [classifier\_instance\_type](#input\_classifier\_instance\_type) | SageMaker instance type for the classifier endpoint | `string` | `"ml.g4dn.xlarge"` | no |
+| <a name="input_classifier_max_instance_count"></a> [classifier\_max\_instance\_count](#input\_classifier\_max\_instance\_count) | Maximum number of instances for the classifier endpoint | `number` | `4` | no |
+| <a name="input_classifier_min_instance_count"></a> [classifier\_min\_instance\_count](#input\_classifier\_min\_instance\_count) | Minimum number of instances for the classifier endpoint | `number` | `1` | no |
+| <a name="input_classifier_scale_in_cooldown_seconds"></a> [classifier\_scale\_in\_cooldown\_seconds](#input\_classifier\_scale\_in\_cooldown\_seconds) | Cooldown period after scaling in (seconds) for classifier | `number` | `300` | no |
+| <a name="input_classifier_scale_out_cooldown_seconds"></a> [classifier\_scale\_out\_cooldown\_seconds](#input\_classifier\_scale\_out\_cooldown\_seconds) | Cooldown period after scaling out (seconds) for classifier | `number` | `60` | no |
+| <a name="input_classifier_target_invocations_per_instance_per_minute"></a> [classifier\_target\_invocations\_per\_instance\_per\_minute](#input\_classifier\_target\_invocations\_per\_instance\_per\_minute) | Target invocations per instance per minute for classifier scaling | `number` | `20` | no |
+| <a name="input_config_file_path"></a> [config\_file\_path](#input\_config\_file\_path) | Path to the configuration YAML file for document processing | `string` | `"../../sources/config_library/pattern-3/rvl-cdip-package-sample/config.yaml"` | no |
+| <a name="input_data_tracking_retention_days"></a> [data\_tracking\_retention\_days](#input\_data\_tracking\_retention\_days) | The retention period for document tracking data in days | `number` | `365` | no |
+| <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | Enable GraphQL API for programmatic access and notifications | `bool` | `true` | no |
+| <a name="input_enable_assessment"></a> [enable\_assessment](#input\_enable\_assessment) | Enable assessment functionality for document quality assessment | `bool` | `false` | no |
+| <a name="input_enable_evaluation"></a> [enable\_evaluation](#input\_enable\_evaluation) | Enable evaluation functionality (simplified flag) | `bool` | `false` | no |
+| <a name="input_enable_reporting"></a> [enable\_reporting](#input\_enable\_reporting) | Enable reporting functionality (simplified flag) | `bool` | `false` | no |
+| <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encryption (will be created if not provided) | `string` | `null` | no |
+| <a name="input_evaluation_model_id"></a> [evaluation\_model\_id](#input\_evaluation\_model\_id) | Model ID for evaluation processing | `string` | `"anthropic.claude-3-sonnet-20240229-v1:0"` | no |
+| <a name="input_force_rebuild_layers"></a> [force\_rebuild\_layers](#input\_force\_rebuild\_layers) | Force rebuild of Lambda layers regardless of requirements changes | `bool` | `false` | no |
+| <a name="input_log_level"></a> [log\_level](#input\_log\_level) | The log level for the document processing components | `string` | `"INFO"` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The retention period for CloudWatch logs generated by the document processing components in days | `number` | `7` | no |
+| <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix to add to resource names | `string` | `"idp"` | no |
+| <a name="input_region"></a> [region](#input\_region) | AWS region to deploy resources | `string` | `"us-east-1"` | no |
+| <a name="input_sagemaker_endpoint_name"></a> [sagemaker\_endpoint\_name](#input\_sagemaker\_endpoint\_name) | Name of the SageMaker endpoint for UDOP processing (SageMaker UDOP processor only) | `string` | `"udop-endpoint"` | no |
+| <a name="input_summarization_enabled"></a> [summarization\_enabled](#input\_summarization\_enabled) | Enable document summarization for SageMaker UDOP processor | `bool` | `true` | no |
+| <a name="input_summarization_model_id"></a> [summarization\_model\_id](#input\_summarization\_model\_id) | Model ID for document summarization (SageMaker UDOP processor) | `string` | `"us.anthropic.claude-3-5-sonnet-20241022-v2:0"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
+| <a name="input_training_config"></a> [training\_config](#input\_training\_config) | Configuration for SageMaker model training | <pre>object({<br/>    max_epochs    = optional(number, 3)<br/>    base_model    = optional(string, "microsoft/udop-large")<br/>    retrain_model = optional(bool, false)<br/>  })</pre> | <pre>{<br/>  "base_model": "microsoft/udop-large",<br/>  "max_epochs": 3,<br/>  "retrain_model": false<br/>}</pre> | no |
+| <a name="input_web_ui"></a> [web\_ui](#input\_web\_ui) | Web UI configuration object | <pre>object({<br/>    enabled                    = optional(bool, true)<br/>    create_infrastructure      = optional(bool, true)<br/>    bucket_name                = optional(string, null)<br/>    cloudfront_distribution_id = optional(string, null)<br/>    logging_enabled            = optional(bool, false)<br/>    logging_bucket_arn         = optional(string, null)<br/>    enable_signup              = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "bucket_name": null,<br/>  "cloudfront_distribution_id": null,<br/>  "create_infrastructure": true,<br/>  "enable_signup": "",<br/>  "enabled": true,<br/>  "logging_bucket_arn": null,<br/>  "logging_enabled": false<br/>}</pre> | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_api"></a> [api](#output\_api) | GraphQL API details |
+| <a name="output_classifier"></a> [classifier](#output\_classifier) | SageMaker classifier endpoint details |
+| <a name="output_classifier_endpoint_arn"></a> [classifier\_endpoint\_arn](#output\_classifier\_endpoint\_arn) | ARN of the SageMaker classifier endpoint |
+| <a name="output_classifier_endpoint_name"></a> [classifier\_endpoint\_name](#output\_classifier\_endpoint\_name) | Name of the SageMaker classifier endpoint |
+| <a name="output_classifier_model_arn"></a> [classifier\_model\_arn](#output\_classifier\_model\_arn) | ARN of the SageMaker classifier model |
+| <a name="output_classifier_model_name"></a> [classifier\_model\_name](#output\_classifier\_model\_name) | Name of the SageMaker classifier model |
+| <a name="output_configuration_table_arn"></a> [configuration\_table\_arn](#output\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings |
+| <a name="output_encryption_key"></a> [encryption\_key](#output\_encryption\_key) | KMS key for encryption |
+| <a name="output_input_bucket"></a> [input\_bucket](#output\_input\_bucket) | S3 bucket for input documents |
+| <a name="output_model_training"></a> [model\_training](#output\_model\_training) | SageMaker model training details |
+| <a name="output_name_prefix"></a> [name\_prefix](#output\_name\_prefix) | Name prefix used for all resources |
+| <a name="output_output_bucket"></a> [output\_bucket](#output\_output\_bucket) | S3 bucket for processed output documents |
+| <a name="output_processor_type"></a> [processor\_type](#output\_processor\_type) | Type of document processor used |
+| <a name="output_queue_processor_arn"></a> [queue\_processor\_arn](#output\_queue\_processor\_arn) | ARN of the Lambda function that processes documents from the queue |
+| <a name="output_queue_sender_arn"></a> [queue\_sender\_arn](#output\_queue\_sender\_arn) | ARN of the Lambda function that sends documents to the processing queue |
+| <a name="output_step_function_arn"></a> [step\_function\_arn](#output\_step\_function\_arn) | ARN of the Step Functions state machine for document processing |
+| <a name="output_training_data_bucket"></a> [training\_data\_bucket](#output\_training\_data\_bucket) | S3 bucket containing training data and model artifacts |
+| <a name="output_user_identity"></a> [user\_identity](#output\_user\_identity) | User identity details |
+| <a name="output_web_ui"></a> [web\_ui](#output\_web\_ui) | Web UI details |
+| <a name="output_web_ui_url"></a> [web\_ui\_url](#output\_web\_ui\_url) | Web UI URL (if enabled) |
+| <a name="output_working_bucket"></a> [working\_bucket](#output\_working\_bucket) | S3 bucket for working files |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -1,3 +1,4 @@
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -14,12 +15,12 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.2 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
-| <a name="provider_local"></a> [local](#provider\_local) | >= 2.1 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1 |
-| <a name="provider_random"></a> [random](#provider\_random) | >= 3.1 |
-| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
+| <a name="provider_local"></a> [local](#provider\_local) | 2.6.1 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.13.1 |
 
 ## Modules
 
@@ -60,6 +61,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_force_rebuild"></a> [force\_rebuild](#input\_force\_rebuild) | Force rebuild of lambda layers regardless of requirements changes | `bool` | `false` | no |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket for storing Lambda layers. This is required and should be provided by the assets-bucket module. | `string` | n/a | yes |
+| <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource naming and lambda layers | `string` | n/a | yes |
 | <a name="input_requirements_files"></a> [requirements\_files](#input\_requirements\_files) | Map of function names to requirements file contents | `map(string)` | n/a | yes |
 | <a name="input_requirements_hash"></a> [requirements\_hash](#input\_requirements\_hash) | Hash of the requirements files to trigger rebuilds only when they change | `string` | `""` | no |
@@ -78,3 +80,4 @@ No modules.
 | <a name="output_layer_versions"></a> [layer\_versions](#output\_layer\_versions) | Version numbers of the created Lambda layers |
 | <a name="output_s3_bucket"></a> [s3\_bucket](#output\_s3\_bucket) | S3 bucket used for layer storage |
 | <a name="output_s3_bucket_arn"></a> [s3\_bucket\_arn](#output\_s3\_bucket\_arn) | ARN of the S3 bucket used for layer storage |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
