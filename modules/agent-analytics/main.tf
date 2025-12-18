@@ -207,13 +207,13 @@ resource "aws_lambda_function" "agent_processor" {
 
   environment {
     variables = {
-      LOG_LEVEL                = var.log_level
-      AGENT_TABLE              = aws_dynamodb_table.agent_jobs.name
-      APPSYNC_API_URL          = var.appsync_api_url
-      BEDROCK_MODEL_ID         = var.bedrock_model_id
-      ATHENA_WORKGROUP         = local.athena_workgroup
-      ATHENA_DATABASE          = var.reporting_database_name
-      ATHENA_RESULTS_BUCKET    = local.athena_results_bucket_name
+      LOG_LEVEL             = var.log_level
+      AGENT_TABLE           = aws_dynamodb_table.agent_jobs.name
+      APPSYNC_API_URL       = var.appsync_api_url
+      BEDROCK_MODEL_ID      = var.bedrock_model_id
+      ATHENA_WORKGROUP      = local.athena_workgroup
+      ATHENA_DATABASE       = var.reporting_database_name
+      ATHENA_RESULTS_BUCKET = local.athena_results_bucket_name
     }
   }
 

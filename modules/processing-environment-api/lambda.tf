@@ -706,14 +706,14 @@ resource "aws_lambda_function" "process_changes_resolver" {
 
   environment {
     variables = {
-      TRACKING_TABLE        = local.tracking_table_name
-      QUEUE_URL             = local.document_queue_url
+      TRACKING_TABLE         = local.tracking_table_name
+      QUEUE_URL              = local.document_queue_url
       DATA_RETENTION_IN_DAYS = tostring(var.data_retention_in_days)
-      WORKING_BUCKET        = local.working_bucket_name
-      INPUT_BUCKET          = local.input_bucket_name
-      OUTPUT_BUCKET         = local.output_bucket_name
-      APPSYNC_API_URL       = aws_appsync_graphql_api.api.uris["GRAPHQL"]
-      LOG_LEVEL             = var.log_level
+      WORKING_BUCKET         = local.working_bucket_name
+      INPUT_BUCKET           = local.input_bucket_name
+      OUTPUT_BUCKET          = local.output_bucket_name
+      APPSYNC_API_URL        = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+      LOG_LEVEL              = var.log_level
     }
   }
 
