@@ -221,11 +221,16 @@ def handler(event, context):
             output_data = json.loads(event['detail']['output'])
         
         # Get object key from document
+        # Handle both compressed format (document_id) and uncompressed format (id/input_key)
         try:
             if "document" in input_data:
-                object_key = input_data["document"]["document_id"]
+                doc = input_data["document"]
+                # Try compressed format first, then uncompressed formats
+                object_key = doc.get("document_id") or doc.get("id") or doc.get("input_key")
+                if not object_key:
+                    raise ValueError("Unable to find document_id, id, or input_key in document")
             else:
-                raise ValueError("Unable to find document_id in input")
+                raise ValueError("Unable to find document in input")
         except (KeyError, TypeError) as e:
             logger.error(f"Error extracting object_key from input: {e}")
             logger.error(f"Input data structure: {input_data}")
