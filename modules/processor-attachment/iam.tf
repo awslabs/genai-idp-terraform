@@ -83,6 +83,18 @@ resource "aws_iam_policy" "queue_processor_policy" {
         ]
         Resource = var.tracking_table_arn
       },
+      # S3 permissions for working bucket (document compression)
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject"
+        ]
+        Resource = [
+          var.working_bucket_arn,
+          "${var.working_bucket_arn}/*"
+        ]
+      },
       # AppSync permissions for GraphQL API
       {
         Effect = "Allow"

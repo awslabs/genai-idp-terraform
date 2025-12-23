@@ -63,6 +63,7 @@ resource "aws_lambda_function" "queue_processor" {
       MAX_CONCURRENT         = var.processor.max_processing_concurrency
       DOCUMENT_TRACKING_MODE = var.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL        = var.api_id != null ? var.api_graphql_url : ""
+      WORKING_BUCKET         = local.working_bucket_name
     }
   }
 
