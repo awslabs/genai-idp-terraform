@@ -54,7 +54,7 @@ resource "aws_lambda_function" "classification" {
   handler       = "index.handler"
   runtime       = "python3.12"
   timeout       = 900
-  memory_size   = 4096
+  memory_size   = 3008
 
   filename         = data.archive_file.classification_lambda.output_path
   source_code_hash = data.archive_file.classification_lambda.output_base64sha256
