@@ -576,7 +576,7 @@ resource "aws_iam_role_policy_attachment" "crawler_s3_policy_attachment" {
 
 # IAM Policy for Crawler KMS Access (if encryption key is provided)
 resource "aws_iam_policy" "document_sections_crawler_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
+  count = var.enable_encryption ? 1 : 0
   name  = "${var.name_prefix}-doc-sections-crawler-kms-${random_string.suffix.result}"
 
   policy = jsonencode({
@@ -597,7 +597,7 @@ resource "aws_iam_policy" "document_sections_crawler_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "crawler_kms_policy_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
+  count      = var.enable_encryption ? 1 : 0
   role       = aws_iam_role.document_sections_crawler_role.name
   policy_arn = aws_iam_policy.document_sections_crawler_kms_policy[0].arn
 }

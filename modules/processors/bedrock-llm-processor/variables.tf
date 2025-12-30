@@ -206,6 +206,12 @@ variable "enable_assessment" {
   default     = false
 }
 
+variable "enable_hitl" {
+  description = "Whether to enable Human-in-the-Loop (HITL) functionality for document review"
+  type        = bool
+  default     = false
+}
+
 variable "assessment_model_id" {
   description = "The Bedrock model ID to use for assessment (when assessment is enabled)"
   type        = string

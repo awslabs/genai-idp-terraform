@@ -182,6 +182,7 @@ variable "bedrock_llm_processor" {
       model_id = optional(string, null)
     }), { enabled = true, model_id = null })
     enable_assessment = optional(bool, false)
+    enable_hitl       = optional(bool, false)
     config            = any
   })
   default = null
@@ -357,6 +358,23 @@ variable "knowledge_base" {
   validation {
     condition     = var.knowledge_base.enabled == false || var.knowledge_base.knowledge_base_arn != null
     error_message = "When knowledge_base.enabled is true, knowledge_base_arn is required."
+  }
+}
+
+#
+# Agent Analytics Configuration
+#
+variable "agent_analytics" {
+  description = "Configuration for agent analytics functionality"
+  type = object({
+    enabled  = optional(bool, false)
+    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+  })
+  default = { enabled = false }
+
+  validation {
+    condition     = !var.agent_analytics.enabled || var.agent_analytics.model_id != null
+    error_message = "When agent_analytics.enabled is true, model_id must be provided."
   }
 }
 

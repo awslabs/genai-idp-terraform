@@ -215,10 +215,10 @@ resource "aws_lambda_function" "bda_completion" {
   source_code_hash = data.archive_file.bda_completion_code.output_base64sha256
 
   # Include both the function-specific layer (for boto3) and idp_common layer
-  layers = [
-    lookup(module.lambda_layers.layer_arns, "bda_completion_function"),
+  layers = compact([
+    contains(keys(module.lambda_layers.layer_arns), "bda_completion_function") ? lookup(module.lambda_layers.layer_arns, "bda_completion_function") : null,
     var.idp_common_layer_arn
-  ]
+  ])
 
   handler     = "index.handler"
   runtime     = "python3.12"
@@ -289,10 +289,10 @@ resource "aws_lambda_function" "process_results" {
   source_code_hash = data.archive_file.process_results_code.output_base64sha256
 
   # Include both the function-specific layer (for PyMuPDF + boto3) and idp_common layer
-  layers = [
-    lookup(module.lambda_layers.layer_arns, "processresults_function"),
+  layers = compact([
+    contains(keys(module.lambda_layers.layer_arns), "processresults_function") ? lookup(module.lambda_layers.layer_arns, "processresults_function") : null,
     var.idp_common_layer_arn
-  ]
+  ])
 
   handler     = "index.handler"
   runtime     = "python3.12"

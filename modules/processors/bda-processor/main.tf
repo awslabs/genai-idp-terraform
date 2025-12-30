@@ -90,20 +90,25 @@ locals {
 
 # Local function to filter out relative path references from requirements.txt
 locals {
-  # Function to clean requirements.txt content by removing lines with relative paths
+  # Filter out empty requirements files
   clean_requirements = {
     bda_invoke_function = fileexists("${path.module}/../../../sources/patterns/pattern-1/src/bda_invoke_function/requirements.txt") ? join("\n", [
       for line in split("\n", file("${path.module}/../../../sources/patterns/pattern-1/src/bda_invoke_function/requirements.txt")) :
-      line if !startswith(trimspace(line), "../") && !strcontains(line, "idp_common_pkg")
+      line if !can(regex("^\\s*\\.+/", line)) && !can(regex("idp_common_pkg", line)) && trimspace(line) != "" && !startswith(trimspace(line), "#")
     ]) : ""
     bda_completion_function = fileexists("${path.module}/../../../sources/patterns/pattern-1/src/bda_completion_function/requirements.txt") ? join("\n", [
       for line in split("\n", file("${path.module}/../../../sources/patterns/pattern-1/src/bda_completion_function/requirements.txt")) :
-      line if !startswith(trimspace(line), "../") && !strcontains(line, "idp_common_pkg")
+      line if !can(regex("^\\s*\\.+/", line)) && !can(regex("idp_common_pkg", line)) && trimspace(line) != "" && !startswith(trimspace(line), "#")
     ]) : ""
     processresults_function = fileexists("${path.module}/../../../sources/patterns/pattern-1/src/processresults_function/requirements.txt") ? join("\n", [
       for line in split("\n", file("${path.module}/../../../sources/patterns/pattern-1/src/processresults_function/requirements.txt")) :
-      line if !startswith(trimspace(line), "../") && !strcontains(line, "idp_common_pkg")
+      line if !can(regex("^\\s*\\.+/", line)) && !can(regex("idp_common_pkg", line)) && trimspace(line) != "" && !startswith(trimspace(line), "#")
     ]) : ""
+  }
+
+  # Filter out empty requirements files
+  requirements_files = {
+    for k, v in local.clean_requirements : k => v if trimspace(v) != "" && length(split("\n", trimspace(v))) > 0
   }
 }
 
@@ -114,13 +119,11 @@ module "lambda_layers" {
   name_prefix              = "bda-processor-${random_string.suffix.result}"
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
 
-  requirements_files = local.clean_requirements
+  requirements_files = local.requirements_files
 
   # Calculate hash of all cleaned requirements files to use as trigger
   requirements_hash = md5(join("", [
-    local.clean_requirements.bda_invoke_function,
-    local.clean_requirements.bda_completion_function,
-    local.clean_requirements.processresults_function
+    for k, v in local.requirements_files : v
   ]))
 
   # Don't force rebuild unless requirements change

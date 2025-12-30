@@ -267,6 +267,19 @@ variable "lambda_tracing_mode" {
   }
 }
 
+variable "agent_analytics" {
+  description = "Agent analytics configuration"
+  type = object({
+    enabled                            = bool
+    agent_request_handler_function_arn = optional(string)
+    agent_processor_function_arn       = optional(string)
+    list_available_agents_function_arn = optional(string)
+    agent_table_arn                    = optional(string)
+    agent_table_name                   = optional(string)
+  })
+  default = { enabled = false }
+}
+
 # =============================================================================
 # EDIT SECTIONS FEATURE VARIABLES
 # =============================================================================

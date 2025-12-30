@@ -282,6 +282,99 @@ resource "aws_cloudwatch_log_group" "assessment_lambda" {
   tags = local.common_tags
 }
 
+# HITL Wait Function (conditional)
+resource "aws_lambda_function" "hitl_wait" {
+  count = var.enable_hitl ? 1 : 0
+
+  function_name = "${local.name_prefix}-hitl-wait"
+  role          = aws_iam_role.hitl_wait_lambda[0].arn
+  handler       = "index.lambda_handler"
+  runtime       = "python3.12"
+  timeout       = 300
+  memory_size   = 512
+
+  filename         = data.archive_file.hitl_wait_lambda.output_path
+  source_code_hash = data.archive_file.hitl_wait_lambda.output_base64sha256
+
+  layers = [var.idp_common_layer_arn]
+
+  kms_key_arn = var.encryption_key_arn
+
+  environment {
+    variables = {
+      LOG_LEVEL                       = local.log_level
+      TRACKING_TABLE                  = local.tracking_table_name
+      WORKING_BUCKET                  = local.working_bucket_name
+      SAGEMAKER_A2I_REVIEW_PORTAL_URL = ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "hitl_wait_lambda" {
+  count = var.enable_hitl ? 1 : 0
+
+  name              = "/aws/lambda/${aws_lambda_function.hitl_wait[0].function_name}"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+
+  tags = local.common_tags
+}
+
+# HITL Status Update Function (conditional)
+resource "aws_lambda_function" "hitl_status_update" {
+  count = var.enable_hitl ? 1 : 0
+
+  function_name = "${local.name_prefix}-hitl-status-update"
+  role          = aws_iam_role.hitl_status_update_lambda[0].arn
+  handler       = "index.handler"
+  runtime       = "python3.12"
+  timeout       = 60
+  memory_size   = 256
+
+  filename         = data.archive_file.hitl_status_update_lambda.output_path
+  source_code_hash = data.archive_file.hitl_status_update_lambda.output_base64sha256
+
+  kms_key_arn = var.encryption_key_arn
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "hitl_status_update_lambda" {
+  count = var.enable_hitl ? 1 : 0
+
+  name              = "/aws/lambda/${aws_lambda_function.hitl_status_update[0].function_name}"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+
+  tags = local.common_tags
+}
+
 # Lambda deployment packages
 # Generate unique build ID for this configuration
 
@@ -349,6 +442,22 @@ data "archive_file" "summarization_lambda" {
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/summarization_function"
   output_path = "${path.module}/summarization_function.zip"
+
+  depends_on = [null_resource.create_module_build_dir]
+}
+
+data "archive_file" "hitl_wait_lambda" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/hitl-wait-function"
+  output_path = "${path.module}/hitl_wait_function.zip"
+
+  depends_on = [null_resource.create_module_build_dir]
+}
+
+data "archive_file" "hitl_status_update_lambda" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/hitl-status-update-function"
+  output_path = "${path.module}/hitl_status_update_function.zip"
 
   depends_on = [null_resource.create_module_build_dir]
 }

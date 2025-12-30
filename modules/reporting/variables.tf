@@ -49,6 +49,12 @@ variable "encryption_key_arn" {
   default     = null
 }
 
+variable "enable_encryption" {
+  description = "Whether encryption is enabled. Use this instead of checking encryption_key_arn != null to avoid unknown value issues in for_each/count."
+  type        = bool
+  default     = false
+}
+
 variable "vpc_subnet_ids" {
   description = "List of subnet IDs for Lambda functions"
   type        = list(string)

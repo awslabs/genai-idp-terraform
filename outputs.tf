@@ -78,6 +78,18 @@ output "processor" {
   value       = lookup(local.processor_details, local.processor_type, null)
 }
 
+output "agent_analytics" {
+  description = "Agent analytics resources (if enabled)"
+  value = var.agent_analytics.enabled && var.reporting.enabled ? {
+    agent_table_name                   = module.agent_analytics[0].agent_table_name
+    agent_table_arn                    = module.agent_analytics[0].agent_table_arn
+    agent_request_handler_function_arn = module.agent_analytics[0].agent_request_handler_function_arn
+    agent_processor_function_arn       = module.agent_analytics[0].agent_processor_function_arn
+    list_available_agents_function_arn = module.agent_analytics[0].list_available_agents_function_arn
+    bedrock_model_id                   = module.agent_analytics[0].bedrock_model_id
+  } : null
+}
+
 output "processing_environment" {
   description = "Processing environment resources"
   value = {

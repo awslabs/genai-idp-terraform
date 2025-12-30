@@ -414,6 +414,9 @@ module "genai_idp_accelerator" {
     database_name = aws_glue_catalog_database.reporting_database[0].name
   } : { enabled = false }
 
+  # Agent Analytics configuration
+  agent_analytics = var.agent_analytics
+
   # Feature flags
   enable_api = var.enable_api
 

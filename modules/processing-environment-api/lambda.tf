@@ -320,51 +320,6 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
   tags = var.tags
 }
 
-# Publish Step Function Update Resolver Lambda
-data "archive_file" "publish_stepfunction_update_resolver_code" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/publish_stepfunction_update_resolver"
-  output_path = "${local.module_build_dir}/publish-stepfunction-update-resolver.zip_${random_id.build_id.hex}"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-resource "aws_lambda_function" "publish_stepfunction_update_resolver" {
-  function_name = "PublishStepFunctionUpdateResolver-${random_string.suffix.result}"
-
-  filename         = data.archive_file.publish_stepfunction_update_resolver_code.output_path
-  source_code_hash = data.archive_file.publish_stepfunction_update_resolver_code.output_base64sha256
-
-  handler     = "index.lambda_handler"
-  runtime     = "python3.12"
-  timeout     = 30
-  memory_size = 512
-  role        = aws_iam_role.publish_stepfunction_update_resolver_role.arn
-  description = "Lambda function to publish Step Function updates via GraphQL API"
-
-  kms_key_arn = var.encryption_key_arn
-
-  environment {
-    variables = {
-      TRACKING_TABLE_NAME = local.tracking_table_name
-    }
-  }
-
-  dynamic "vpc_config" {
-    for_each = var.vpc_config != null ? [var.vpc_config] : []
-    content {
-      subnet_ids         = vpc_config.value.subnet_ids
-      security_group_ids = vpc_config.value.security_group_ids
-    }
-  }
-
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = var.tags
-}
-
 # =============================================================================
 # KNOWLEDGE BASE FUNCTIONS
 # =============================================================================
@@ -548,18 +503,6 @@ resource "aws_appsync_datasource" "get_stepfunction_execution_resolver" {
   }
 }
 
-# Publish Step Function Update Resolver Data Source
-resource "aws_appsync_datasource" "publish_stepfunction_update_resolver" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "PublishStepFunctionUpdateResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.publish_stepfunction_update_resolver.arn
-  }
-}
-
 # Query Knowledge Base Resolver Data Source
 resource "aws_appsync_datasource" "query_knowledge_base_resolver" {
   for_each         = var.knowledge_base.enabled ? toset(["enabled"]) : toset([])
@@ -644,14 +587,6 @@ resource "aws_appsync_resolver" "get_stepfunction_execution" {
   type        = "Query"
   field       = "getStepFunctionExecution"
   data_source = aws_appsync_datasource.get_stepfunction_execution_resolver.name
-}
-
-# Publish Step Function Update Resolver
-resource "aws_appsync_resolver" "publish_stepfunction_update" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "publishStepFunctionExecutionUpdate"
-  data_source = aws_appsync_datasource.publish_stepfunction_update_resolver.name
 }
 
 # Query Knowledge Base Resolver

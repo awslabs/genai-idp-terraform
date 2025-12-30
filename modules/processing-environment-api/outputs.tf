@@ -63,10 +63,6 @@ output "lambda_functions" {
       name = aws_lambda_function.get_stepfunction_execution_resolver.function_name
       arn  = aws_lambda_function.get_stepfunction_execution_resolver.arn
     }
-    publish_stepfunction_update = {
-      name = aws_lambda_function.publish_stepfunction_update_resolver.function_name
-      arn  = aws_lambda_function.publish_stepfunction_update_resolver.arn
-    }
     # query_knowledge_base = var.knowledge_base != null ? {
     #   name = aws_lambda_function.query_knowledge_base_resolver[0].function_name
     #   arn  = aws_lambda_function.query_knowledge_base_resolver[0].arn

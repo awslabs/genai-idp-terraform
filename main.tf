@@ -342,6 +342,16 @@ module "processing_environment_api" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
+  # Agent Analytics configuration
+  agent_analytics = var.agent_analytics.enabled && var.reporting.enabled ? {
+    enabled                            = true
+    agent_request_handler_function_arn = module.agent_analytics[0].agent_request_handler_function_arn
+    agent_processor_function_arn       = module.agent_analytics[0].agent_processor_function_arn
+    list_available_agents_function_arn = module.agent_analytics[0].list_available_agents_function_arn
+    agent_table_arn                    = module.agent_analytics[0].agent_table_arn
+    agent_table_name                   = module.agent_analytics[0].agent_table_name
+  } : { enabled = false }
+
   tags = var.tags
 }
 
@@ -454,6 +464,7 @@ module "bedrock_llm_processor" {
   # Feature flags
   is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
   enable_assessment        = var.bedrock_llm_processor.enable_assessment
+  enable_hitl              = var.bedrock_llm_processor.enable_hitl
 
   # Optional: Summarization model configuration
   summarization_model_id = var.bedrock_llm_processor.summarization.enabled ? var.bedrock_llm_processor.summarization.model_id : null
@@ -610,6 +621,42 @@ resource "aws_iam_role_policy" "authenticated_user_permissions" {
 }
 
 #
+# Agent Analytics (Optional - requires reporting to be enabled)
+#
+module "agent_analytics" {
+  count  = var.agent_analytics.enabled && var.reporting.enabled ? 1 : 0
+  source = "./modules/agent-analytics"
+
+  name_prefix               = "${local.name_prefix}-agent-analytics"
+  reporting_database_name   = var.reporting.database_name
+  athena_workgroup_name     = null # Let agent analytics create its own workgroup
+  athena_results_bucket_arn = var.reporting.bucket_arn
+  reporting_bucket_arn      = var.reporting.bucket_arn
+  appsync_api_url           = var.enable_api ? module.processing_environment_api[0].graphql_url : ""
+  appsync_api_id            = var.enable_api ? module.processing_environment_api[0].api_id : ""
+  idp_common_layer_arn      = module.idp_common_layer.layer_arn
+  configuration_table_name  = module.processing_environment.configuration_table_name
+
+  # Shared assets bucket for Lambda layers
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+
+  # Configuration
+  bedrock_model_id       = var.agent_analytics.model_id
+  log_level              = var.log_level
+  log_retention_days     = var.log_retention_days
+  data_retention_days    = var.data_tracking_retention_days
+  encryption_key_arn     = var.encryption_key_arn
+  enable_encryption      = var.enable_encryption
+  lambda_tracing_mode    = var.lambda_tracing_mode
+
+  # VPC configuration
+  vpc_subnet_ids         = var.vpc_subnet_ids
+  vpc_security_group_ids = var.vpc_security_group_ids
+
+  tags = var.tags
+}
+
+#
 # Reporting (Optional)
 #
 module "reporting" {
@@ -627,6 +674,7 @@ module "reporting" {
   log_level          = var.log_level
   log_retention_days = var.log_retention_days
   encryption_key_arn = var.encryption_key_arn
+  enable_encryption  = var.enable_encryption
 
   # Glue crawler configuration
   crawler_schedule            = var.reporting.crawler_schedule

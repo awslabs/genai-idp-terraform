@@ -567,7 +567,7 @@ resource "aws_iam_policy" "summarization_bedrock_policy" {
           "bedrock:InvokeModel*"
         ]
         Effect   = "Allow"
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}::foundation-model/${var.summarization_model_id}"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.summarization_model_id}"
       }
     ]
   })

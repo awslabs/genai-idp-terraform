@@ -371,6 +371,7 @@ module "genai_idp_accelerator" {
       model_id = var.summarization_model_id
     }
     enable_assessment = var.enable_assessment
+    enable_hitl       = var.enable_hitl
     config            = local.config
   }
 
@@ -401,6 +402,9 @@ module "genai_idp_accelerator" {
     bucket_arn    = aws_s3_bucket.reporting_bucket[0].arn
     database_name = aws_glue_catalog_database.reporting_database[0].name
   } : { enabled = false }
+
+  # Agent Analytics configuration
+  agent_analytics = var.agent_analytics
 
   # Feature flags
   enable_api = var.enable_api
