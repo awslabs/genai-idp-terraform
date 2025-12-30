@@ -20,6 +20,25 @@ summarization_enabled = true
 enable_evaluation     = false
 enable_reporting      = false
 
+# Discovery Configuration
+discovery = {
+  enabled = false
+}
+
+# Chat with Document Configuration
+chat_with_document = {
+  enabled = false
+  # Optional: Add Bedrock Guardrail for content filtering
+  # guardrail_id_and_version = "your-guardrail-id:1"
+}
+
+# Example: To enable chat with document feature, use:
+# chat_with_document = {
+#   enabled = true
+#   # Optional: Add Bedrock Guardrail for content filtering
+#   # guardrail_id_and_version = "your-guardrail-id:1"
+# }
+
 # Knowledge Base Configuration
 enable_knowledge_base                = true
 knowledge_base_model_id              = "us.amazon.nova-pro-v1:0"

@@ -322,6 +322,7 @@ module "processing_environment_api" {
   # S3 bucket ARNs
   input_bucket_arn  = var.input_bucket_arn
   output_bucket_arn = var.output_bucket_arn
+  working_bucket_arn = var.working_bucket_arn
 
   # Optional: Evaluation baseline bucket
   evaluation_enabled             = var.evaluation.enabled
@@ -355,6 +356,12 @@ module "processing_environment_api" {
   # Discovery configuration
   discovery = var.discovery.enabled ? {
     enabled = true
+  } : { enabled = false }
+
+  # Chat with Document configuration
+  chat_with_document = var.chat_with_document.enabled ? {
+    enabled                  = true
+    guardrail_id_and_version = var.chat_with_document.guardrail_id_and_version
   } : { enabled = false }
 
   # IDP Common Layer ARN for discovery sub-module

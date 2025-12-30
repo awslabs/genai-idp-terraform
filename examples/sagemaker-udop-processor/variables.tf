@@ -126,6 +126,16 @@ variable "discovery" {
   default = { enabled = false }
 }
 
+# Chat with Document Configuration
+variable "chat_with_document" {
+  description = "Configuration for chat with document functionality"
+  type = object({
+    enabled                  = optional(bool, false)
+    guardrail_id_and_version = optional(string, null)
+  })
+  default = { enabled = false }
+}
+
 # SageMaker Model Training Configuration
 variable "training_config" {
   description = "Configuration for SageMaker model training"

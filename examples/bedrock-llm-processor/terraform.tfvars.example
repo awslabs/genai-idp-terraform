@@ -27,6 +27,18 @@ enable_assessment     = false
 enable_evaluation     = false
 enable_reporting      = false
 
+# Discovery Configuration
+discovery = {
+  enabled = false
+}
+
+# Chat with Document Configuration
+chat_with_document = {
+  enabled = false
+  # Optional: Add Bedrock Guardrail for content filtering
+  # guardrail_id_and_version = "your-guardrail-id:1"
+}
+
 # API Configuration
 enable_api = true
 

@@ -143,6 +143,11 @@ resource "aws_iam_policy" "appsync_lambda_policy" {
           var.agent_analytics.enabled && var.agent_analytics.agent_request_handler_function_arn != null && var.agent_analytics.list_available_agents_function_arn != null ? [
             var.agent_analytics.agent_request_handler_function_arn,
             var.agent_analytics.list_available_agents_function_arn
+          ] : [],
+          var.chat_with_document.enabled ? [module.chat_with_document[0].chat_with_document_resolver_function_arn] : [],
+          var.discovery.enabled ? [
+            module.discovery[0].discovery_upload_resolver_function_arn,
+            module.discovery[0].discovery_processor_function_arn
           ] : []
         )
       }

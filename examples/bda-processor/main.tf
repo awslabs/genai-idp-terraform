@@ -424,6 +424,9 @@ module "genai_idp_accelerator" {
   # Discovery configuration
   discovery = var.discovery
 
+  # Chat with Document configuration
+  chat_with_document = var.chat_with_document
+
   # Feature flags
   enable_api = var.enable_api
 

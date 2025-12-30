@@ -288,6 +288,15 @@ variable "discovery" {
   default = { enabled = false }
 }
 
+variable "chat_with_document" {
+  description = "Chat with Document functionality configuration"
+  type = object({
+    enabled                  = bool
+    guardrail_id_and_version = optional(string, null)
+  })
+  default = { enabled = false }
+}
+
 # =============================================================================
 # EDIT SECTIONS FEATURE VARIABLES
 # =============================================================================

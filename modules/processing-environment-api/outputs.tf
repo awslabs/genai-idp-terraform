@@ -92,3 +92,13 @@ output "discovery_bucket_arn" {
   description = "ARN of the discovery S3 bucket (if discovery is enabled)"
   value       = var.discovery.enabled ? module.discovery[0].discovery_bucket_arn : null
 }
+
+output "chat_with_document_function_name" {
+  description = "Name of the Chat with Document Lambda function (if chat is enabled)"
+  value       = var.chat_with_document.enabled ? module.chat_with_document[0].chat_with_document_resolver_function_name : null
+}
+
+output "chat_with_document_function_arn" {
+  description = "ARN of the Chat with Document Lambda function (if chat is enabled)"
+  value       = var.chat_with_document.enabled ? module.chat_with_document[0].chat_with_document_resolver_function_arn : null
+}
