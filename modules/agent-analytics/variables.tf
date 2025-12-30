@@ -42,10 +42,16 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "lambda_layers_bucket_arn" {
+  description = "ARN of the S3 bucket for storing Lambda layers. If not provided, a new bucket will be created."
+  type        = string
+  default     = null
+}
+
 variable "bedrock_model_id" {
   description = "Bedrock model ID for the analytics agent"
   type        = string
-  default     = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 }
 
 variable "log_level" {
@@ -82,6 +88,12 @@ variable "encryption_key_arn" {
   default     = null
 }
 
+variable "enable_encryption" {
+  description = "Whether encryption is enabled. Use this instead of checking encryption_key_arn != null to avoid unknown value issues in for_each/count."
+  type        = bool
+  default     = false
+}
+
 variable "vpc_subnet_ids" {
   description = "List of subnet IDs for Lambda functions"
   type        = list(string)
@@ -109,6 +121,11 @@ variable "point_in_time_recovery_enabled" {
   description = "Enable point-in-time recovery for DynamoDB tables"
   type        = bool
   default     = true
+}
+
+variable "configuration_table_name" {
+  description = "Name of the DynamoDB configuration table"
+  type        = string
 }
 
 variable "tags" {
