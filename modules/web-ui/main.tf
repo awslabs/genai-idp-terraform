@@ -76,6 +76,7 @@ locals {
   web_ui_settings = {
     InputBucket                    = local.input_bucket_name
     OutputBucket                   = local.output_bucket_name
+    DiscoveryBucket                = var.discovery_bucket_name
     ReportingBucket                = var.reporting_bucket_name
     EvaluationBaselineBucket       = var.evaluation_baseline_bucket_name
     IDPPattern                     = var.idp_pattern

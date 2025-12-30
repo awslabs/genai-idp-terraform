@@ -125,6 +125,15 @@ variable "agent_analytics" {
   }
 }
 
+# Discovery Configuration
+variable "discovery" {
+  description = "Configuration for document discovery functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
 # Configuration File Path
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"

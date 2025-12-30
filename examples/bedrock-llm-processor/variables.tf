@@ -109,6 +109,15 @@ variable "agent_analytics" {
   }
 }
 
+# Discovery Configuration
+variable "discovery" {
+  description = "Configuration for document discovery functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
 # Model Configuration
 variable "classification_model_id" {
   description = "Model ID for document classification (Bedrock LLM processor only)"

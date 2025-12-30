@@ -379,6 +379,17 @@ variable "agent_analytics" {
 }
 
 #
+# Discovery Configuration
+#
+variable "discovery" {
+  description = "Configuration for document discovery functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
+#
 # Lambda Configuration
 #
 variable "lambda_tracing_mode" {

@@ -117,6 +117,15 @@ variable "agent_analytics" {
   }
 }
 
+# Discovery Configuration
+variable "discovery" {
+  description = "Configuration for document discovery functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
 # SageMaker Model Training Configuration
 variable "training_config" {
   description = "Configuration for SageMaker model training"

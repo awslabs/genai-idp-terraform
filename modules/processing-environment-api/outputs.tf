@@ -82,3 +82,13 @@ output "edit_sections_enabled" {
   description = "Whether the Edit Sections feature is enabled"
   value       = local.edit_sections_enabled
 }
+
+output "discovery_bucket_name" {
+  description = "Name of the discovery S3 bucket (if discovery is enabled)"
+  value       = var.discovery.enabled ? module.discovery[0].discovery_bucket_name : null
+}
+
+output "discovery_bucket_arn" {
+  description = "ARN of the discovery S3 bucket (if discovery is enabled)"
+  value       = var.discovery.enabled ? module.discovery[0].discovery_bucket_arn : null
+}

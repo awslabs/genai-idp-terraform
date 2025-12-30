@@ -421,6 +421,9 @@ module "genai_idp_accelerator" {
   # Agent Analytics configuration
   agent_analytics = var.agent_analytics
 
+  # Discovery configuration
+  discovery = var.discovery
+
   # Feature flags
   enable_api = var.enable_api
 

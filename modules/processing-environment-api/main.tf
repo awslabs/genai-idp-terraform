@@ -72,6 +72,38 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
+# =============================================================================
+# Discovery Sub-module (Optional)
+# =============================================================================
+
+module "discovery" {
+  count  = var.discovery.enabled ? 1 : 0
+  source = "./discovery"
+
+  name_prefix              = "discovery-${random_string.suffix.result}"
+  input_bucket_arn         = local.input_bucket_arn
+  configuration_table_arn  = local.configuration_table_arn
+  appsync_api_url          = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
+  appsync_api_id           = aws_appsync_graphql_api.api.id
+  appsync_lambda_role_arn  = aws_iam_role.appsync_lambda_role.arn
+  appsync_dynamodb_role_arn = aws_iam_role.appsync_dynamodb_role.arn
+  idp_common_layer_arn     = var.idp_common_layer_arn
+  
+  # Configuration
+  log_level                       = var.log_level
+  log_retention_days              = var.log_retention_days
+  data_retention_days             = 365 # Default retention for discovery documents
+  encryption_key_arn              = local.encryption_key_arn
+  lambda_tracing_mode             = var.lambda_tracing_mode
+  point_in_time_recovery_enabled  = true
+
+  # VPC configuration
+  vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
+  vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
+
+  tags = var.tags
+}
+
 # AppSync GraphQL API
 resource "aws_appsync_graphql_api" "api" {
   name                = local.api_name

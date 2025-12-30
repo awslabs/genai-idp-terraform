@@ -352,6 +352,14 @@ module "processing_environment_api" {
     agent_table_name                   = module.agent_analytics[0].agent_table_name
   } : { enabled = false }
 
+  # Discovery configuration
+  discovery = var.discovery.enabled ? {
+    enabled = true
+  } : { enabled = false }
+
+  # IDP Common Layer ARN for discovery sub-module
+  idp_common_layer_arn = module.idp_common_layer.layer_arn
+
   tags = var.tags
 }
 
@@ -577,6 +585,9 @@ module "web_ui" {
   # Evaluation baseline bucket name (extracted from ARN)
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
+  # Discovery bucket name (if discovery is enabled)
+  discovery_bucket_name = var.discovery.enabled && var.enable_api ? module.processing_environment_api[0].discovery_bucket_name : null
+
   # IDP Pattern mapping (processor type to CloudFormation pattern names)
   idp_pattern = local.idp_pattern_mapping[local.processor_type]
 
@@ -641,13 +652,13 @@ module "agent_analytics" {
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
   # Configuration
-  bedrock_model_id       = var.agent_analytics.model_id
-  log_level              = var.log_level
-  log_retention_days     = var.log_retention_days
-  data_retention_days    = var.data_tracking_retention_days
-  encryption_key_arn     = var.encryption_key_arn
-  enable_encryption      = var.enable_encryption
-  lambda_tracing_mode    = var.lambda_tracing_mode
+  bedrock_model_id    = var.agent_analytics.model_id
+  log_level           = var.log_level
+  log_retention_days  = var.log_retention_days
+  data_retention_days = var.data_tracking_retention_days
+  encryption_key_arn  = var.encryption_key_arn
+  enable_encryption   = var.enable_encryption
+  lambda_tracing_mode = var.lambda_tracing_mode
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids

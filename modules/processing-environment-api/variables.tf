@@ -280,6 +280,14 @@ variable "agent_analytics" {
   default = { enabled = false }
 }
 
+variable "discovery" {
+  description = "Discovery workflow configuration"
+  type = object({
+    enabled = bool
+  })
+  default = { enabled = false }
+}
+
 # =============================================================================
 # EDIT SECTIONS FEATURE VARIABLES
 # =============================================================================

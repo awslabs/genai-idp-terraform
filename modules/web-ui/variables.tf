@@ -30,6 +30,12 @@ variable "evaluation_baseline_bucket_name" {
   default     = ""
 }
 
+variable "discovery_bucket_name" {
+  description = "Name of the discovery S3 bucket (if discovery is enabled)"
+  type        = string
+  default     = null
+}
+
 variable "idp_pattern" {
   description = "IDP processing pattern name (mapped from processor type)"
   type        = string
