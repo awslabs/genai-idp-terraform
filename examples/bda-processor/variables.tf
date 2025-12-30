@@ -110,6 +110,21 @@ variable "enable_reporting" {
   default     = false
 }
 
+# Agent Analytics Configuration
+variable "agent_analytics" {
+  description = "Configuration for agent analytics functionality"
+  type = object({
+    enabled  = optional(bool, false)
+    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+  })
+  default = { enabled = false }
+
+  validation {
+    condition     = !var.agent_analytics.enabled || var.agent_analytics.model_id != null
+    error_message = "When agent_analytics.enabled is true, model_id must be provided."
+  }
+}
+
 # Configuration File Path
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"

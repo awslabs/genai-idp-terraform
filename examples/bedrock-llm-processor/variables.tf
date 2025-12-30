@@ -94,6 +94,21 @@ variable "enable_reporting" {
   default     = false
 }
 
+# Agent Analytics Configuration
+variable "agent_analytics" {
+  description = "Configuration for agent analytics functionality"
+  type = object({
+    enabled  = optional(bool, false)
+    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+  })
+  default = { enabled = false }
+
+  validation {
+    condition     = !var.agent_analytics.enabled || var.agent_analytics.model_id != null
+    error_message = "When agent_analytics.enabled is true, model_id must be provided."
+  }
+}
+
 # Model Configuration
 variable "classification_model_id" {
   description = "Model ID for document classification (Bedrock LLM processor only)"
@@ -121,6 +136,12 @@ variable "summarization_model_id" {
 
 variable "enable_assessment" {
   description = "Enable assessment functionality"
+  type        = bool
+  default     = false
+}
+
+variable "enable_hitl" {
+  description = "Enable Human-in-the-Loop (HITL) functionality for document review"
   type        = bool
   default     = false
 }
