@@ -101,7 +101,6 @@ The assessment service supports runtime enable/disable control via the `enabled`
 **Cost Optimization**: When `enabled: false`, no LLM API calls are made, resulting in zero assessment costs.
 
 **Example - Disabling Assessment:**
-
 ```yaml
 assessment:
   enabled: false  # Disables all assessment processing
@@ -111,7 +110,6 @@ assessment:
 ```
 
 **Behavior When Disabled:**
-
 - Service immediately returns with logging: "Assessment is disabled via configuration"
 - No LLM API calls or S3 operations are performed
 - Document processing continues to completion
@@ -122,18 +120,15 @@ assessment:
 The assessment service supports the following placeholders in prompt templates:
 
 ### Standard Placeholders
-
 - `{DOCUMENT_TEXT}` - Parsed document text (markdown format)
 - `{DOCUMENT_CLASS}` - Document classification (e.g., "invoice", "contract")
 - `{ATTRIBUTE_NAMES_AND_DESCRIPTIONS}` - Formatted list of attributes to extract
 - `{EXTRACTION_RESULTS}` - JSON of extraction results to assess
 
 ### OCR Confidence Data
-
 - `{OCR_TEXT_CONFIDENCE}` - **NEW** - Optimized text confidence data with 80-90% token reduction
 
 ### Image Positioning
-
 - `{DOCUMENT_IMAGE}` - Placeholder for precise image positioning in multimodal prompts
 
 ## Text Confidence Data Integration
@@ -141,12 +136,10 @@ The assessment service supports the following placeholders in prompt templates:
 The assessment service automatically uses pre-generated text confidence data when available, providing significant performance and cost benefits:
 
 ### Automatic Data Source Selection
-
 1. **Primary**: Uses pre-generated `textConfidence.json` files from OCR processing
 2. **Fallback**: Generates text confidence data on-demand from raw OCR for backward compatibility
 
 ### Token Usage Optimization
-
 ```python
 # Traditional approach (high token usage)
 prompt = f"OCR Data: {raw_textract_response}"  # ~50,000 tokens
@@ -156,7 +149,6 @@ prompt = f"Text Confidence Data: {text_confidence_data}"  # ~5,000 tokens
 ```
 
 ### Data Format
-
 The text confidence data provides essential information in a minimal format:
 
 ```json
@@ -189,7 +181,6 @@ The assessment service now includes **automatic spatial localization** capabilit
 ### Example Assessment with Spatial Data
 
 **LLM Response (with bbox data):**
-
 ```json
 {
   "InvoiceNumber": {
@@ -210,7 +201,6 @@ The assessment service now includes **automatic spatial localization** capabilit
 ```
 
 **Automatic Conversion Output:**
-
 ```json
 {
   "InvoiceNumber": {
@@ -297,7 +287,6 @@ assessment:
 The service supports sophisticated multimodal prompts with precise image positioning:
 
 ### Image Placeholder Usage
-
 ```python
 task_prompt = """
 Analyze the extraction results for accuracy.
@@ -315,7 +304,6 @@ assess each extracted field:
 ```
 
 ### Automatic Image Handling
-
 - Supports both single and multiple document images
 - Automatically limits to 20 images per Bedrock constraints
 - Graceful fallback when images are unavailable
@@ -329,7 +317,6 @@ The assessment service supports three distinct attribute types, each requiring a
 For basic single-value extractions like dates, amounts, or names.
 
 **Configuration Example:**
-
 ```yaml
 attributes:
   - name: "InvoiceNumber"
@@ -341,7 +328,6 @@ attributes:
 ```
 
 **Expected Assessment Response:**
-
 ```json
 {
   "InvoiceNumber": {
@@ -360,7 +346,6 @@ attributes:
 For nested object structures with multiple related fields that are logically grouped together.
 
 **Configuration Example:**
-
 ```yaml
 attributes:
   - name: "VendorDetails"
@@ -376,7 +361,6 @@ attributes:
 ```
 
 **Expected Assessment Response:**
-
 ```json
 {
   "VendorDetails": {
@@ -401,7 +385,6 @@ attributes:
 For arrays of items where each item has the same structure, such as line items, transactions, or entries.
 
 **Configuration Example:**
-
 ```yaml
 attributes:
   - name: "LineItems"
@@ -421,7 +404,6 @@ attributes:
 ```
 
 **Expected Assessment Response:**
-
 ```json
 {
   "LineItems": [
@@ -470,19 +452,16 @@ attributes:
 The assessment service automatically handles each attribute type differently:
 
 **Simple Attributes:**
-
 - Expects a single confidence assessment object
 - Adds confidence threshold to the assessment data
 - Creates alerts for low confidence scores
 
 **Group Attributes:**
-
 - Processes each sub-attribute within the group independently
 - Applies confidence thresholds to each sub-attribute
 - Creates individual alerts for each sub-attribute that falls below threshold
 
 **List Attributes:**
-
 - Processes each array item separately (individual assessment per list item)
 - Applies the same confidence thresholds to all items in the list
 - Creates alerts using array notation (e.g., "LineItems[0].Description", "LineItems[1].Total")
@@ -635,19 +614,16 @@ Here's a comprehensive example showing all three attribute types in a single ass
 The assessment service includes comprehensive error handling:
 
 ### Parsing Failures
-
 - Automatic fallback to default confidence scores (0.5) when LLM response parsing fails
 - Detailed error logging for troubleshooting
 - Continued processing of other sections
 
 ### Data Source Fallbacks
-
 - Primary: Pre-generated text confidence files
 - Secondary: On-demand text confidence generation from raw OCR
 - Tertiary: Graceful degradation without OCR confidence data
 
 ### Template Validation
-
 - Validates required placeholders in prompt templates
 - Fallback to default prompts when template validation fails
 - Flexible placeholder enforcement for partial templates
@@ -682,19 +658,16 @@ def lambda_handler(event, context):
 ## Best Practices
 
 ### Prompt Design
-
 - Use `{OCR_TEXT_CONFIDENCE}` instead of raw OCR data for optimal token usage
 - Position `{DOCUMENT_IMAGE}` strategically in multimodal prompts
 - Include clear instructions for confidence scoring (0.0 to 1.0 scale)
 
 ### Configuration
-
 - Set appropriate temperature (0 for deterministic assessment)
 - Configure max_tokens based on expected response length
 - Use system prompts to establish assessment criteria
 
 ### Performance
-
 - Leverage pre-generated text confidence data for best performance
 - Monitor assessment timing and token usage through metering data
 - Consider image limits for large multi-page documents

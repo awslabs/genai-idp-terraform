@@ -244,7 +244,6 @@ The module recognizes these environment variables:
 ## Examples
 
 See `idp_common/dynamodb/example.py` for comprehensive usage examples including:
-
 - Basic service creation and usage
 - Factory pattern usage
 - Environment-based mode switching

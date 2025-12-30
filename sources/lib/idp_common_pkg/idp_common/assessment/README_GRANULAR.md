@@ -7,25 +7,21 @@ The Granular Assessment Service provides a more scalable and accurate approach t
 ## Key Benefits
 
 ### 1. **Improved Accuracy**
-
 - Smaller, focused prompts for each assessment task
 - Reduced complexity leads to better LLM performance
 - Individual attention to each attribute or list item
 
 ### 2. **Cost Optimization**
-
 - Leverages prompt caching to reduce token usage
 - Caches document content, images, and attribute definitions
 - Only varies the specific attributes being assessed
 
 ### 3. **Reduced Latency**
-
 - Parallel processing of independent assessment tasks
 - Configurable thread pool for concurrent execution
 - Maintains order for list items while processing in parallel
 
 ### 4. **Better Scalability**
-
 - Handles documents with hundreds of transactions or attributes
 - Adaptive batching based on attribute complexity
 - Configurable batch sizes for optimal performance
@@ -165,7 +161,6 @@ document = service.process_document_section(document, section_id)
 ### Model Selection
 
 The granular approach works best with models that support prompt caching:
-
 - `us.anthropic.claude-3-5-haiku-20241022-v1:0`
 - `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 - `us.amazon.nova-lite-v1:0`
@@ -180,7 +175,6 @@ The granular approach works best with models that support prompt caching:
 ### Cost Optimization
 
 With prompt caching enabled:
-
 - First assessment task pays full token cost
 - Subsequent tasks only pay for cache read + new content
 - Significant savings for documents with many attributes
@@ -190,14 +184,12 @@ With prompt caching enabled:
 ### Custom Metrics
 
 The granular service publishes additional metrics:
-
 - `InputDocumentsForGranularAssessment`
 - `InputDocumentPagesForGranularAssessment`
 
 ### Metadata
 
 Assessment results include additional metadata:
-
 ```json
 {
   "metadata": {
@@ -243,7 +235,6 @@ Assessment results include additional metadata:
 ## Example Results
 
 ### Original Approach
-
 ```json
 {
   "Account Number": {
@@ -260,7 +251,6 @@ Assessment results include additional metadata:
 ```
 
 ### Granular Approach
-
 ```json
 {
   "Account Number": {
@@ -297,7 +287,6 @@ Assessment results include additional metadata:
 ### Debugging
 
 Enable debug logging to see task creation and execution:
-
 ```python
 import logging
 logging.getLogger('idp_common.assessment.granular_service').setLevel(logging.DEBUG)

@@ -12,6 +12,7 @@ from botocore.config import Config
 from datasets import load_dataset
 from tqdm import tqdm
 
+from model_versions import get_model_revision
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -107,8 +108,11 @@ def process_and_save(data, idx, bucket_name, prefix, split, textract_client, s3_
 
 
 def load_data_from_huggingface(split):
-    """Loads dataset from Hugging Face."""
-    return load_dataset("jordyvl/rvl_cdip_100_examples_per_class", split=split)
+    """Loads dataset from Hugging Face with pinned revision for security."""
+    dataset_id = "jordyvl/rvl_cdip_100_examples_per_class"
+    revision = get_model_revision(dataset_id)
+    logger.info(f"Loading dataset {dataset_id} with pinned revision: {revision}")
+    return load_dataset(dataset_id, revision=revision, split=split)
 
 
 def metadata(client, data, bucket_name, prefix, split):

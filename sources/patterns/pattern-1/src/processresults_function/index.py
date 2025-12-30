@@ -673,7 +673,7 @@ def start_human_loop(
         FlowDefinitionArn = ssm.get_parameter(Name=f"/{os.environ.get('METRIC_NAMESPACE', 'IDP')}/FlowDefinitionArn")['Parameter']['Value']
         human_review_id = generate_random_string(2)
         response = a2i_runtime_client.start_human_loop(
-            HumanLoopName=f"review-bda-{execution_id}-{human_review_id}",
+            HumanLoopName=f"review-bda-{human_review_id}-{execution_id}-{record_number}-{page_id_num}",
             FlowDefinitionArn=FlowDefinitionArn,
             HumanLoopInput={"InputContent": json.dumps(human_loop_input)}
         )
@@ -825,6 +825,7 @@ def process_segments(
     
     now = datetime.datetime.now().isoformat()
     hitl_triggered = False
+    overall_hitl_triggered = False
 
     for record_number, segment in enumerate(segment_metadata, start=1):
         logger.info(f"Processing segment for execution id: {execution_id}")
@@ -901,6 +902,7 @@ def process_segments(
             if low_confidence:
                 hitl_triggered = low_confidence
                 metrics.put_metric('HITLTriggered', 1)
+                overall_hitl_triggered = True
                 for page_number in page_indices:
                     page_str = str(page_number)
                     key_values = pagespecific_details['key_value_details'].get(page_str, [])
@@ -929,6 +931,7 @@ def process_segments(
         else:
             if enable_hitl == 'true':
                 std_hitl = 'true'
+                # std_hitl = None # HITL for standard output blueprint match is disabled until we have option to choose Blueprint in A2I
             else:
                 std_hitl = None 
             # Process standard output if no custom output match
@@ -940,7 +943,8 @@ def process_segments(
             page_array = list(range(start_page, end_page + 1))
             item.update({
                 "page_array": page_array,
-                "hitl_triggered": std_hitl,
+                # "hitl_triggered": std_hitl,
+                "hitl_triggered": None,
                 "extraction_bp_name": "None",
                 "extracted_result": std_output
             })
@@ -950,31 +954,34 @@ def process_segments(
                 record_number=record_number,
                 bp_match=segment.get('custom_output_status'),
                 extraction_bp_name="None",
-                hitl_triggered=std_hitl,
+                # hitl_triggered=std_hitl,
+                hitl_triggered=None,
                 page_array=page_array,
                 review_portal_url=SAGEMAKER_A2I_REVIEW_PORTAL_URL
             )
             
-            hitl_triggered = std_hitl
-            if enable_hitl == 'true':
-                for page_number in range(start_page, end_page + 1):
-                    ImageUri = f"s3://{output_bucket}/{object_key}/pages/{page_number}/image.jpg"
-                    try:
-                        human_loop_response = start_human_loop(
-                            execution_id=execution_id,
-                            kv_pairs=[],
-                            source_image_uri=ImageUri,
-                            bounding_boxes=[],
-                            blueprintName="",
-                            bp_confidence=0.00,
-                            confidenceThreshold=confidence_threshold,
-                            page_id=page_number,
-                            page_indices=page_array,
-                            record_number=record_number
-                        )
-                        logger.info(f"Triggered human loop for page {page_number}: {human_loop_response}")
-                    except Exception as e:
-                        logger.error(f"Failed to start human loop for page {page_number}: {str(e)}")
+            # hitl_triggered = std_hitl
+            hitl_triggered = None
+            # if enable_hitl == 'true':
+            # # if std_hitl: # HITL for standard output blueprint match is disabled until we have option to choose Blueprint in A2I
+            #     for page_number in range(start_page, end_page + 1):
+            #         ImageUri = f"s3://{output_bucket}/{object_key}/pages/{page_number}/image.jpg"
+            #         try:
+            #             human_loop_response = start_human_loop(
+            #                 execution_id=execution_id,
+            #                 kv_pairs=[],
+            #                 source_image_uri=ImageUri,
+            #                 bounding_boxes=[],
+            #                 blueprintName="",
+            #                 bp_confidence=0.00,
+            #                 confidenceThreshold=confidence_threshold,
+            #                 page_id=page_number,
+            #                 page_indices=page_array,
+            #                 record_number=record_number
+            #             )
+            #             logger.info(f"Triggered human loop for page {page_number}: {human_loop_response}")
+            #         except Exception as e:
+            #             logger.error(f"Failed to start human loop for page {page_number}: {str(e)}")
         
         document.hitl_metadata.append(hitl_metadata)
 
@@ -985,7 +992,7 @@ def process_segments(
             except Exception as e:
                 logger.error(f"Error saving to DynamoDB: {str(e)}")
     
-    return document, hitl_triggered
+    return document, overall_hitl_triggered
 
 def handler(event, context):
     """
@@ -1136,7 +1143,7 @@ def handler(event, context):
                             execution_id,
                             document
                         )
-                        if hitl_result:
+                        if hitl_result or hitl_triggered== "true":
                             hitl_triggered = "true"
                 elif isinstance(output_metadata, dict):
                     for asset_id, asset in output_metadata.items():
@@ -1149,7 +1156,7 @@ def handler(event, context):
                             execution_id,
                             document
                         )
-                        if hitl_result:
+                        if hitl_result or hitl_triggered== "true":
                             hitl_triggered = "true"
                 else:
                     logger.error("Unexpected output_metadata format in job_metadata.json")

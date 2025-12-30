@@ -67,9 +67,9 @@ Parameters:
     Description: >-
       (Optional) ARN of an existing IAM Permissions Boundary policy to attach to all IAM roles.
       Required by some organizations with Service Control Policies (SCPs).
-      Format: arn:aws:iam::account-id:policy/policy-name
+      Format: arn:${AWS::Partition}:iam::account-id:policy/policy-name
       Leave blank if no Permissions Boundary is required.
-    AllowedPattern: "^(|arn:aws:iam::[0-9]{12}:policy/.+)$"
+    AllowedPattern: "^(|arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
 
 Conditions:
@@ -86,11 +86,11 @@ Resources:
           - Effect: Allow
             Principal:
               Service:
-                - sagemaker.amazonaws.com
+                - !Sub "sagemaker.${AWS::URLSuffix}"
             Action:
               - sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSageMakerFullAccess"
       Policies:
         - PolicyName: S3ModelAccess
           PolicyDocument:
@@ -103,15 +103,15 @@ Resources:
                 Resource:
                   - !Join 
                     - ''
-                    - - 'arn:aws:s3:::'
+                    - - !Sub 'arn:${AWS::Partition}:s3:::'
                       - !Select [2, !Split ["/", !Ref UDOPModelArtifactPath]]
                   - !Join 
                     - ''
-                    - - 'arn:aws:s3:::'
+                    - - !Sub 'arn:${AWS::Partition}:s3:::'
                       - !Select [2, !Split ["/", !Ref UDOPModelArtifactPath]]
                       - '/*'
-                  - !Sub 'arn:aws:s3:::${S3Bucket}'
-                  - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::${S3Bucket}'
+                  - !Sub 'arn:${AWS::Partition}:s3:::${S3Bucket}/*'
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -127,7 +127,7 @@ Resources:
     Properties:
       ExecutionRoleArn: !GetAtt UDOPExecutionRole.Arn
       PrimaryContainer:
-        Image: !Sub 763104351884.dkr.ecr.${AWS::Region}.amazonaws.com/pytorch-inference:2.1.0-gpu-py310
+        Image: !Sub "763104351884.dkr.ecr.${AWS::Region}.${AWS::URLSuffix}/pytorch-inference:2.1.0-gpu-py310"
         ModelDataUrl: !Ref UDOPModelArtifactPath
         Environment:
           SAGEMAKER_PROGRAM: inference.py
@@ -163,7 +163,7 @@ Resources:
       MaxCapacity: !Ref MaxInstanceCount
       MinCapacity: !Ref MinInstanceCount
       ResourceId: !Sub endpoint/${UDOPEndpoint.EndpointName}/variant/AllTraffic
-      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/sagemaker.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint
+      RoleARN: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/sagemaker.application-autoscaling.${AWS::URLSuffix}/AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint"
       ScalableDimension: sagemaker:variant:DesiredInstanceCount
       ServiceNamespace: sagemaker
 

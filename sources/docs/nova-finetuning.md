@@ -21,33 +21,25 @@ This guide provides comprehensive step-by-step instructions for fine-tuning Amaz
 ## Prerequisites
 
 ### AWS Setup
-
 Set up AWS CLI and credentials:
-
 ```bash
 aws configure
 ```
 
 ### Required Permissions
-
 Your AWS account needs permissions for:
-
 - Amazon Bedrock (fine-tuning and inference)
 - Amazon S3 (data storage and access)
 - AWS IAM (role creation and management)
 
 ### Required Python Packages
-
 Install the required packages:
-
 ```bash
 pip install boto3 pillow python-dotenv datasets tqdm
 ```
 
 ### Supported Model Types
-
 Currently supports Amazon Nova models:
-
 - Nova Lite (`amazon.nova-lite-v1:0`)
 - Nova Pro (`amazon.nova-pro-v1:0`)
 
@@ -106,18 +98,16 @@ python prepare_nova_finetuning_data.py \
     --split train
 ```
 
-#### Parameters
-
+#### Parameters:
 - `--bucket-name`: S3 bucket name for storing prepared data (required)
 - `--directory`: S3 directory prefix (default: nova-finetuning-data)
 - `--samples-per-label`: Number of samples per document class (default: 100)
 - `--dataset`: Hugging Face dataset name (default: chainyo/rvl-cdip)
 - `--validation-split`: Validation split ratio (default: 0.1)
 
-#### Examples
+#### Examples:
 
 **Basic dataset preparation:**
-
 ```bash
 python prepare_nova_finetuning_data.py \
     --bucket-name my-bucket \
@@ -126,7 +116,6 @@ python prepare_nova_finetuning_data.py \
 
 **Using a custom dataset:**
 It should have the similar structure of [RVL-CDIP](https://huggingface.co/datasets/chainyo/rvl-cdip)
-
 ```bash
 python prepare_nova_finetuning_data.py \
     --bucket-name my-bucket \
@@ -135,7 +124,6 @@ python prepare_nova_finetuning_data.py \
 ```
 
 **With custom prompts:**
-
 ```bash
 python prepare_nova_finetuning_data.py \
     --bucket-name my-bucket \
@@ -235,8 +223,7 @@ python create_finetuning_job.py \
     --batch-size 1
 ```
 
-#### Hyperparameter Guidelines
-
+#### Hyperparameter Guidelines:
 - **Epoch Count**: 1-5 (default: 2)
 - **Learning Rate**: 1e-6 to 1e-4 (default: 0.00001)
 - **Batch Size**: Typically 1 for Nova models
@@ -244,7 +231,6 @@ python create_finetuning_job.py \
 ### 2.5. Monitor Job Progress
 
 Check job status:
-
 ```bash
 python create_finetuning_job.py \
     --status-only \
@@ -252,7 +238,6 @@ python create_finetuning_job.py \
 ```
 
 Wait for completion with monitoring:
-
 ```bash
 python create_finetuning_job.py \
     --training-data-uri s3://my-bucket/data/train.jsonl \
@@ -266,7 +251,6 @@ python create_finetuning_job.py \
 ### 2.6. Job Results Location
 
 Fine-tuning results are stored at:
-
 ```
 s3://<output-bucket>/<job-name>/
 ├── training_artifacts/
@@ -277,7 +261,6 @@ s3://<output-bucket>/<job-name>/
 ```
 
 Job details are saved locally as JSON:
-
 ```json
 {
   "job_arn": "arn:aws:bedrock:us-east-1:123456789012:model-customization-job/...",
@@ -321,7 +304,6 @@ python create_provisioned_throughput.py \
 ### 3.4. Monitor Provisioning Status
 
 Check provisioning status:
-
 ```bash
 python create_provisioned_throughput.py \
     --status-only \
@@ -348,7 +330,6 @@ python create_provisioned_throughput.py --list-models
 ### 4.1. Single Image Inference
 
 **With base model:**
-
 ```bash
 python inference_example.py \
     --model-id us.amazon.nova-lite-v1:0 \
@@ -356,7 +337,6 @@ python inference_example.py \
 ```
 
 **With fine-tuned provisioned model:**
-
 ```bash
 python inference_example.py \
     --provisioned-model-arn arn:aws:bedrock:us-east-1:123456789012:provisioned-model/... \
@@ -366,7 +346,6 @@ python inference_example.py \
 ### 4.2. Batch Inference
 
 Process multiple images:
-
 ```bash
 python inference_example.py \
     --model-id us.amazon.nova-lite-v1:0 \
@@ -377,7 +356,6 @@ python inference_example.py \
 ### 4.3. Inference with Ground Truth
 
 Evaluate accuracy with known labels:
-
 ```bash
 python inference_example.py \
     --model-id us.amazon.nova-lite-v1:0 \
@@ -387,7 +365,6 @@ python inference_example.py \
 ```
 
 Ground truth file format (`labels.json`):
-
 ```json
 {
   "/path/to/image1.png": "invoice",
@@ -399,7 +376,6 @@ Ground truth file format (`labels.json`):
 ### 4.4. Model Comparison
 
 Compare base model with fine-tuned model:
-
 ```bash
 python inference_example.py \
     --provisioned-model-arn arn:aws:bedrock:us-east-1:123456789012:provisioned-model/... \
@@ -412,7 +388,6 @@ python inference_example.py \
 ### 4.5. Custom Prompts
 
 Use custom system and task prompts:
-
 ```bash
 python inference_example.py \
     --model-id us.amazon.nova-lite-v1:0 \
@@ -424,7 +399,6 @@ python inference_example.py \
 ### 4.6. Inference Parameters
 
 Fine-tune inference behavior:
-
 ```bash
 python inference_example.py \
     --model-id us.amazon.nova-lite-v1:0 \
@@ -528,19 +502,16 @@ Nova fine-tuning costs include:
 ### 6.2. Cost Optimization
 
 **Data Preparation:**
-
 - Start with smaller datasets (50-100 samples per class)
 - Use efficient image formats (PNG recommended)
 - Optimize hyperparameters to reduce training time
 
 **Provisioned Throughput:**
-
 - Start with 1 model unit for testing
 - Scale based on actual usage patterns
 - Delete provisioned throughput when not needed
 
 **Inference:**
-
 - Use efficient prompting to minimize token usage
 - Batch process multiple images when possible
 - Consider using base models for simple tasks
@@ -592,27 +563,23 @@ python create_provisioned_throughput.py \
 ### 8.1. Common Issues
 
 **Fine-tuning Job Fails:**
-
 - Check IAM role permissions for Bedrock and S3
 - Verify training data format (JSONL with correct schema)
 - Ensure S3 bucket accessibility from Bedrock service
 - Check hyperparameter ranges (epochs: 1-5, learning rate: 1e-6 to 1e-4)
 
 **Provisioned Throughput Creation Fails:**
-
 - Ensure fine-tuning job completed successfully
 - Verify model ID is correct (use job details file)
 - Check account limits for provisioned throughput
 
 **Inference Errors:**
-
 - Verify model ID/ARN is correct and accessible
 - Check image format and size (max 20MB)
 - Ensure proper AWS credentials and region configuration
 - Monitor CloudWatch logs for detailed error messages
 
 **Low Accuracy:**
-
 - Review training data quality and labeling consistency
 - Increase dataset size or improve class balance
 - Adjust hyperparameters (try lower learning rate)
@@ -621,7 +588,6 @@ python create_provisioned_throughput.py \
 ### 8.2. Debugging Tools
 
 **Enable verbose logging:**
-
 ```bash
 python inference_example.py \
     --model-id us.amazon.nova-lite-v1:0 \
@@ -630,7 +596,6 @@ python inference_example.py \
 ```
 
 **Check job logs:**
-
 ```bash
 python create_finetuning_job.py \
     --status-only \
@@ -638,7 +603,6 @@ python create_finetuning_job.py \
 ```
 
 **Monitor provisioning:**
-
 ```bash
 python create_provisioned_throughput.py \
     --status-only \
@@ -648,13 +612,11 @@ python create_provisioned_throughput.py \
 ### 8.3. Performance Issues
 
 **Slow Inference:**
-
 - Check provisioned throughput status (should be "InService")
 - Optimize image sizes and formats
 - Consider using multiple model units for higher throughput
 
 **High Costs:**
-
 - Monitor token usage per inference
 - Optimize prompts to reduce token count
 - Delete unused provisioned throughput
@@ -671,9 +633,9 @@ python create_provisioned_throughput.py \
 ### 9.2. Related Resources
 
 - **IDP Common Library**: `genaiic-idp-accelerator/lib/idp_common_pkg/`
-- **Notebooks**:
+- **Notebooks**: 
   - [Dataset Preparation](../notebooks/finetuning_dataset_prep.ipynb)
-  - [Fine-tuning Service Demo](../notebooks/finetuning_model_service_demo.ipynb)
+  - [Fine-tuning Service Demo](../notebooks/finetuning_model_service_demo.ipynb) 
   - [Model Evaluation](../notebooks/finetuning_model_document_classification_evaluation.ipynb)
 - **Python Scripts**:
   - `prepare_nova_finetuning_data.py`

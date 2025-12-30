@@ -245,7 +245,6 @@ type Mutation  {
   updateAgentJobStatus(jobId: ID!, status: String!, userId: String!, result: String): Boolean @aws_iam
   updateDiscoveryJobStatus(jobId: ID!, status: String!, errorMessage: String): DiscoveryJob @aws_iam
   deleteAgentJob(jobId: ID!): Boolean @aws_cognito_user_pools
-  publishStepFunctionExecutionUpdate(executionArn: String!, data: AWSJSON!): StepFunctionExecutionResponse @aws_iam
 }
 
 type Query @aws_cognito_user_pools @aws_iam {

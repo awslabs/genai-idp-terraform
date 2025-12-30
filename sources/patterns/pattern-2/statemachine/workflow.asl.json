@@ -90,18 +90,7 @@
                                 "BackoffRate": 2
                             }
                         ],
-                        "Next": "AssessmentChoice"
-                    },
-                    "AssessmentChoice": {
-                        "Type": "Choice",
-                        "QueryLanguage": "JSONata",
-                        "Choices": [
-                            {
-                                "Condition": "{% ${IsAssessmentEnabled} = true %}",
-                                "Next": "AssessmentStep"
-                            }
-                        ],
-                        "Default": "SectionComplete"
+                        "Next": "AssessmentStep"
                     },
                     "AssessmentStep": {
                         "Type": "Task",
@@ -150,7 +139,6 @@
                 "ExtractionResults.$": "$.ExtractionResults"
             },
             "ResultPath": "$.Result",
-            "OutputPath": "$.Result.document",
             "Retry": [
                 {
                     "ErrorEquals": [
@@ -169,25 +157,80 @@
                     "BackoffRate": 2
                 }
             ],
-            "Next": "SummarizationChoice"
+            "Next": "CheckHITLRequired"
         },
-        "SummarizationChoice": {
+        "CheckHITLRequired": {
             "Type": "Choice",
-            "QueryLanguage": "JSONata",
             "Choices": [
                 {
-                    "Condition": "{% ${IsSummarizationEnabled} = true %}",
-                    "Next": "SummarizationStep"
+                    "Variable": "$.Result.hitl_triggered",
+                    "BooleanEquals": true,
+                    "Next": "HITLReview"
                 }
             ],
-            "Default": "WorkflowComplete"
+            "Default": "SummarizationStep"
+        },
+        "HITLReview": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+            "Parameters": {
+                "FunctionName": "${HITLWaitFunctionArn}",
+                "Payload": {
+                    "taskToken.$": "$$.Task.Token",
+                    "Payload.$": "$"
+                }
+            },
+            "ResultPath": "$.HITLWaitResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException",
+                        "ServiceQuotaExceededException",
+                        "ThrottlingException",
+                        "ProvisionedThroughputExceededException",
+                        "RequestLimitExceeded"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "HITLStatusUpdate"
+        },
+        "HITLStatusUpdate": {
+            "Type": "Task",
+            "Resource": "${HITLStatusUpdateFunctionArn}",
+            "Parameters": {
+                "Result.$": "$.Result",
+                "HITLWaitResult.$": "$.HITLWaitResult"
+            },
+            "ResultPath": "$.HITLStatusResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException",
+                        "ServiceQuotaExceededException",
+                        "ThrottlingException",
+                        "ProvisionedThroughputExceededException",
+                        "RequestLimitExceeded"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "SummarizationStep"
         },
         "SummarizationStep": {
             "Type": "Task",
             "Resource": "${SummarizationLambdaArn}",
             "Parameters": {
                 "execution_arn.$": "$$.Execution.Id",
-                "document.$": "$"
+                "document.$": "$.Result.document"
             },
             "ResultPath": "$.Result",
             "OutputPath": "$.Result.document",

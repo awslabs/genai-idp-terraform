@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This template creates a CloudFormation Service Role for the IDP Accelerator solution. 
+  This role grants permissions to create, update, and delete IDP CloudFormation
+  stacks and their resources. It follows the principle of least privilege
+  by allowing only the necessary actions for stack management. This template also
+  creates a user permission policy that allows users to pass the CloudFormation
+  service role to CloudFormation. The iam:PassRole policy must be attached to
+  the user or role that will be using the CloudFormation Service Role in order
+  to successfully pass the role.
+
+Resources:
+  CloudFormationServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-CFServiceRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub 'cloudformation.${AWS::URLSuffix}'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudFormationPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:UpdateRole
+                  - iam:GetRole
+                  - iam:ListRoles
+                  - iam:CreatePolicy
+                  - iam:DeletePolicy
+                  - iam:GetPolicy
+                  - iam:ListPolicies
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:CreateServiceLinkedRole
+                  - iam:DeleteServiceLinkedRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:ListRoleTags
+                  - iam:PassRole
+                Resource: '*'
+        - PolicyName: IDPAcceleratorPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                  - kms:*
+                  - logs:*
+                  - cloudwatch:*
+                  - events:*
+                  - s3:*
+                  - dynamodb:*
+                  - bedrock:*
+                  - textract:*
+                  - sagemaker:*
+                  - states:*
+                  - apigateway:*
+                  - appsync:*
+                  - cognito-idp:*
+                  - cognito-identity:*
+                  - glue:*
+                  - aoss:*
+                  - cloudfront:*
+                  - wafv2:*
+                  - sns:*
+                  - sqs:*
+                  - ssm:*
+                  - secretsmanager:*
+                  - codebuild:*
+                  - application-autoscaling:*
+                  - scheduler:*
+                  - ec2:CreateVpc
+                  - ec2:DeleteVpc
+                  - ec2:DescribeVpcs
+                  - ec2:CreateSubnet
+                  - ec2:DeleteSubnet
+                  - ec2:DescribeSubnets
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteSecurityGroup
+                  - ec2:DescribeSecurityGroups
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ec2:DescribeTags
+                  - ec2:DescribeAvailabilityZones
+                Resource: '*'
+
+  PassRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${AWS::StackName}-PassRolePolicy'
+      Description: Policy to allow passing the IDP CloudFormation service role
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !GetAtt CloudFormationServiceRole.Arn
+
+Outputs:
+  ServiceRoleArn:
+    Description: ARN of the CloudFormation service role
+    Value: !GetAtt CloudFormationServiceRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceRoleArn'
+  PassRolePolicyArn:
+    Description: ARN of the PassRole policy for admins to assign to users
+    Value: !Ref PassRolePolicy
+    Export:
+      Name: !Sub '${AWS::StackName}-PassRolePolicyArn'

@@ -1,7 +1,6 @@
 # Athena Table Information
 
-## Overview
-
+## Overview 
 The solution creates several predefined tables in the Glue Data Catalog:
 
 1. Document Evaluations Table (document_evaluations)
@@ -33,6 +32,7 @@ In addition to the predefined tables, the solution also creates dynamic tables f
 * Common columns include: section_id, document_id, section_classification, section_confidence, timestamp
 * Additional columns are dynamically inferred from the JSON extraction results
 * Tables are partitioned by date (YYYY-MM-DD format)
+
 
 ## Evaluation Tables
 
@@ -115,11 +115,10 @@ The `metering` table captures detailed usage metrics for each document processin
 This table is partitioned by date (YYYY-MM-DD format).
 
 The metering table is particularly valuable for:
-
-* Cost analysis and allocation
-* Usage pattern identification
-* Resource optimization
-* Performance benchmarking across different document types and sizes
+- Cost analysis and allocation
+- Usage pattern identification
+- Resource optimization
+- Performance benchmarking across different document types and sizes
 
 ## Document Sections Tables
 
@@ -140,10 +139,9 @@ Document sections are stored in dynamically created tables based on the section 
 
 **Dynamic Data Columns:**
 The remaining columns are dynamically inferred from the JSON extraction results and vary by section type. Common patterns include:
-
-* Nested JSON objects are flattened using dot notation (e.g., `customer.name`, `customer.address.street`)
-* Arrays are converted to JSON strings
-* Primitive values (strings, numbers, booleans) are preserved as their native types
+- Nested JSON objects are flattened using dot notation (e.g., `customer.name`, `customer.address.street`)
+- Arrays are converted to JSON strings
+- Primitive values (strings, numbers, booleans) are preserved as their native types
 
 **Partitioning:**
 Each section type table is partitioned by date (YYYY-MM-DD format) for efficient querying.
@@ -153,7 +151,6 @@ Each section type table is partitioned by date (YYYY-MM-DD format) for efficient
 Here are some example queries to get you started:
 
 **Overall accuracy by document type:**
-
 ```sql
 SELECT 
   section_type, 
@@ -168,7 +165,6 @@ ORDER BY
 ```
 
 **Token usage by model:**
-
 ```sql
 SELECT 
   service_api, 
@@ -183,3 +179,4 @@ GROUP BY
 ORDER BY 
   total_tokens DESC;
 ```
+

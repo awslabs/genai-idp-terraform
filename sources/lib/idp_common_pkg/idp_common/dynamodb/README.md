@@ -17,7 +17,6 @@ This module is designed to replace AppSync dependencies in Lambda functions whil
 ### DynamoDBClient
 
 Low-level client for DynamoDB operations:
-
 - `put_item()` - Insert items
 - `update_item()` - Update existing items
 - `get_item()` - Retrieve items by key
@@ -28,7 +27,6 @@ Low-level client for DynamoDB operations:
 ### DocumentDynamoDBService
 
 High-level service for document operations:
-
 - `create_document()` - Create new documents with list partitioning
 - `update_document()` - Update existing documents
 - `get_document()` - Retrieve documents by object key
@@ -101,7 +99,6 @@ hourly_docs = service.list_documents_date_hour(
 The module maintains full compatibility with the existing AppSync schema:
 
 ### Document Table Structure
-
 - **PK**: `doc#{ObjectKey}` - Primary partition key
 - **SK**: `none` - Sort key (always "none" for documents)
 - **ObjectKey**: Document identifier
@@ -112,7 +109,6 @@ The module maintains full compatibility with the existing AppSync schema:
 - **TTL**: ExpiresAfter timestamp
 
 ### List Partition Structure
-
 - **PK**: `list#{date}#s#{shard}` - Time-based partition key
 - **SK**: `ts#{timestamp}#id#{ObjectKey}` - Sort key for chronological ordering
 - **ObjectKey**: Document identifier
@@ -144,7 +140,6 @@ The module uses these environment variables:
 To migrate from AppSync to direct DynamoDB:
 
 1. Replace imports:
-
    ```python
    # Old
    from idp_common.appsync import DocumentAppSyncService
@@ -154,7 +149,6 @@ To migrate from AppSync to direct DynamoDB:
    ```
 
 2. Update service initialization:
-
    ```python
    # Old
    service = DocumentAppSyncService(api_url=appsync_url)
@@ -164,7 +158,6 @@ To migrate from AppSync to direct DynamoDB:
    ```
 
 3. Method calls remain the same:
-
    ```python
    # These work with both services
    service.create_document(document)
@@ -182,7 +175,6 @@ To migrate from AppSync to direct DynamoDB:
 ## Logging
 
 The module provides detailed logging at DEBUG and INFO levels:
-
 - Operation success/failure
 - Performance metrics
 - Data conversion warnings

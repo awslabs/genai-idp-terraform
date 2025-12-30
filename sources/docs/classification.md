@@ -20,7 +20,69 @@ The solution supports multiple classification approaches that vary by pattern:
 
 Pattern 2 offers two main classification approaches, configured through different templates:
 
-#### Text-Based Holistic Classification (Default)
+#### MultiModal Page-Level Classification with Sequence Segmentation (default)
+
+- Classifies each page independently using both text and image data
+- **Uses sequence segmentation with BIO-like tagging for document boundary detection**
+- **Each page receives both a document type and a boundary indicator ("start" or "continue")**
+- **Automatically segments multi-document packets where multiple documents may be combined**
+- Works exceptionally well for complex document packets containing multiple documents of the same or different types
+- Supports optional few-shot examples to improve classification accuracy
+- Deployed when you select 'few_shot_example_with_multimodal_page_classification' during stack deployment
+- See the [few-shot-examples.md](./few-shot-examples.md) documentation for details on configuring examples
+
+##### Sequence Segmentation Approach
+
+The multimodal page-level classification implements a sophisticated sequence segmentation approach similar to BIO (Begin-Inside-Outside) tagging commonly used in NLP. This enables accurate segmentation of multi-document packets where a single file may contain multiple distinct documents.
+
+**How It Works:**
+
+Each page receives two pieces of information during classification:
+1. **Document Type**: The classification label (e.g., "invoice", "letter", "financial_statement")
+2. **Document Boundary**: A boundary indicator that signals document transitions:
+   - `"start"`: Indicates the beginning of a new document (similar to "Begin" in BIO)
+   - `"continue"`: Indicates continuation of the current document (similar to "Inside" in BIO)
+
+**Benefits of Sequence Segmentation:**
+
+- **Multi-Document Packet Support**: Accurately segments packets containing multiple documents
+- **Type-Aware Boundaries**: Detects when a new document of the same type begins
+- **Automatic Section Creation**: Pages are grouped into sections based on both type and boundaries
+- **Improved Accuracy**: Context-aware classification that considers document flow
+- **No Manual Splitting Required**: Eliminates the need to manually separate documents before processing
+
+**Example Segmentation:**
+
+Consider a packet with 6 pages containing two invoices and one letter:
+
+```
+Page 1: type="invoice", boundary="start"      → Section 1 (Invoice #1)
+Page 2: type="invoice", boundary="continue"   → Section 1 (Invoice #1)
+Page 3: type="letter", boundary="start"       → Section 2 (Letter)
+Page 4: type="letter", boundary="continue"    → Section 2 (Letter)
+Page 5: type="invoice", boundary="start"      → Section 3 (Invoice #2)
+Page 6: type="invoice", boundary="continue"   → Section 3 (Invoice #2)
+```
+
+The system automatically creates three sections, properly separating the two invoices despite them having the same document type.
+
+**Configuration for Boundary Detection:**
+
+The boundary detection is automatically included in the classification results. No special configuration is needed - the system will populate the `document_boundary` field in the metadata for each page:
+
+```json
+{
+  "page_id": "1",
+  "classification": {
+    "doc_type": "invoice",
+    "confidence": 0.95,
+    "metadata": {
+      "document_boundary": "start"  // New document begins
+    }
+  }
+}
+```
+#### Text-Based Holistic Classification
 
 - Analyzes entire document packets to identify logical boundaries
 - Identifies distinct document segments within multi-page documents
@@ -67,26 +129,17 @@ classification:
     </document-text>
   ```
 
-## Limitations of Text-Based Holistic Classification
+##### Limitations of Text-Based Holistic Classification
 
 Despite its strengths in handling full-document context, this method has several limitations:
 
-**Context & Model Constraints:**:
-
+**Context & Model Constraints:**: 
 - Long documents can exceed the context window of smaller models, resulting in request failure.
 - Lengthy inputs may dilute the model’s focus, leading to inaccurate or inconsistent classifications.
 - Requires high-context models such as Amazon Nova Premier, which supports up to 1 million tokens. Smaller models are not suitable for this method.
 - For more details on supported models and their context limits, refer to the [Amazon Bedrock Supported Models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html).
 
 **Scalability Challenges**: Not ideal for very large or visually complex document sets. In such cases, the Multi-Modal Page-Level Classification method is more appropriate.
-
-#### MultiModal Page-Level Classification with Few-Shot Examples
-
-- Classifies each page independently using both text and image data
-- Works well for single-page documents or clearly distinct multi-page documents
-- Supports optional few-shot examples to improve classification accuracy
-- Deployed when you select 'few_shot_example_with_multimodal_page_classification' during stack deployment
-- See the [few-shot-examples.md](./few-shot-examples.md) documentation for details on configuring examples
 
 ### Pattern 3: UDOP-Based Classification
 
@@ -95,7 +148,54 @@ Despite its strengths in handling full-document context, this method has several
 - Performs multi-modal page-level classification (classifies each page based on OCR data and page image)
 - Not configurable inside the GenAIIDP solution
 
+## Choosing Between Classification Methods
+
+When deciding between Text-Based Holistic Classification and MultiModal Page-Level Classification with Sequence Segmentation, consider these factors:
+
+### Use Text-Based Holistic Classification When:
+- Documents have clear logical boundaries based on content
+- Text context spans multiple pages and requires understanding the full document
+- You have access to high-context models (e.g., Amazon Nova Premier)
+- Document packets are relatively small (within model context limits)
+- Visual elements are less important than textual continuity
+
+### Use MultiModal Page-Level Classification with Sequence Segmentation When:
+- **Document packets contain multiple documents of the same type** (e.g., multiple invoices)
+- **Visual layout and image content are important for classification**
+- **You need to process very large document packets** that might exceed context limits
+- **Documents have clear visual boundaries** (headers, footers, different layouts)
+- **You want to leverage both text and image information** for better accuracy
+- **Processing speed is important** (parallel page processing is possible)
+
+### Comparison Table
+
+| Feature | Text-Based Holistic | MultiModal Page-Level with Sequence Segmentation |
+|---------|-------------------|--------------------------------------------------|
+| Context Awareness | Full document context | Page-level with boundary detection |
+| Multi-document Packets | Good | Excellent (handles same-type documents) |
+| Visual Processing | Text only | Text + Images |
+| Model Requirements | High-context models | Standard models |
+| Processing Speed | Sequential | Can be parallelized |
+| Boundary Detection | Content-based | BIO-like tagging |
+| Large Documents | Limited by context | No practical limit |
+
 ## Customizing Classification in Pattern 2
+
+### Configuration Settings
+
+#### Page Limit Configuration
+
+Control how many pages are used for classification:
+
+```yaml
+classification:
+  maxPagesForClassification: "ALL"  # Default: use all pages
+  # Or: "1", "2", "3", etc. - use only first N pages
+```
+
+**Important**: When set to a number (e.g., `"3"`), only the first N pages are classified, but the result is applied to ALL pages in the document. This forces the entire document to be assigned a single class with one section.
+
+### Prompt Components
 
 In Pattern 2, you can customize classification behavior through various prompt components:
 
@@ -217,7 +317,6 @@ Pattern 2 supports precise control over where document images are positioned wit
 ### How {DOCUMENT_IMAGE} Works
 
 **Without Placeholder (Default Behavior):**
-
 ```yaml
 classification:
   task_prompt: |
@@ -227,11 +326,9 @@ classification:
     
     Classify it as one of: {CLASS_NAMES_AND_DESCRIPTIONS}
 ```
-
 Images are automatically appended after the text content.
 
 **With Placeholder (Controlled Placement):**
-
 ```yaml
 classification:
   task_prompt: |
@@ -243,13 +340,11 @@ classification:
     
     Classify it as one of: {CLASS_NAMES_AND_DESCRIPTIONS}
 ```
-
 Images are inserted exactly where `{DOCUMENT_IMAGE}` appears in the prompt.
 
 ### Usage Examples
 
 **Image Before Text Analysis:**
-
 ```yaml
 task_prompt: |
   Look at this document image first:
@@ -264,7 +359,6 @@ task_prompt: |
 ```
 
 **Image in the Middle for Context:**
-
 ```yaml
 task_prompt: |
   You are classifying business documents. Here are the possible types:
@@ -465,7 +559,6 @@ YAML format provides significant token savings:
 ### Example Prompt Configurations
 
 **JSON-focused prompt:**
-
 ```yaml
 classification:
   system_prompt: |
@@ -475,7 +568,6 @@ classification:
 ```
 
 **YAML-focused prompt:**
-
 ```yaml
 classification:
   system_prompt: |
@@ -500,11 +592,148 @@ The classification service uses the new `extract_structured_data_from_text()` fu
 - Handles malformed content gracefully
 - Returns both parsed data and detected format for logging
 
+## Regex-Based Classification for Performance Optimization
+
+Pattern 2 now supports optional regex-based classification that can provide significant performance improvements and cost savings by bypassing LLM calls when document patterns are recognized.
+
+### Document Name Regex (All Pages Same Class)
+
+When you want all pages of a document to be classified as the same class, you can use document name regex to instantly classify entire documents based on their filename or ID:
+
+```yaml
+classes:
+  - name: Payslip
+    description: "Employee wage statement showing earnings and deductions"
+    document_name_regex: "(?i).*(payslip|paystub|salary|wage).*"
+    attributes:
+      - name: EmployeeName
+        description: "Name of the employee"
+        attributeType: simple
+```
+
+**Benefits:**
+- **Instant Classification**: Entire document classified without any LLM calls
+- **Massive Performance Gains**: ~100-1000x faster than LLM classification
+- **Zero Token Usage**: Complete elimination of API costs for matched documents
+- **Deterministic Results**: Consistent classification for known patterns
+
+**When document ID matches the pattern:**
+- All pages are immediately classified as the matching class
+- Single section is created containing all pages
+- No backend service calls are made
+- Info logging confirms regex match
+
+### Page Content Regex (Multi-Modal Page-Level Classification)
+
+For multi-class configurations using page-level classification, you can use page content regex to classify individual pages based on text patterns:
+
+```yaml
+classification:
+  classificationMethod: multimodalPageLevelClassification
+
+classes:
+  - name: Invoice
+    description: "Business invoice document"
+    document_page_content_regex: "(?i)(invoice\\s+number|bill\\s+to|amount\\s+due)"
+    attributes:
+      - name: InvoiceNumber
+        description: "Invoice number"
+        attributeType: simple
+  - name: Payslip
+    description: "Employee wage statement"
+    document_page_content_regex: "(?i)(gross\\s+pay|net\\s+pay|employee\\s+id)"
+    attributes:
+      - name: EmployeeName
+        description: "Employee name"
+        attributeType: simple
+  - name: Other
+    description: "Documents that don't match specific patterns"
+    # No regex - will always use LLM
+    attributes: []
+```
+
+**Benefits:**
+- **Selective Performance Gains**: Pages matching patterns are classified instantly
+- **Mixed Processing**: Some pages use regex, others fall back to LLM
+- **Cost Optimization**: Reduced token usage proportional to regex matches
+- **Maintained Accuracy**: LLM fallback ensures all pages are properly classified
+
+**How it works:**
+- Each page's text content is checked against all class regex patterns
+- First matching pattern wins and classifies the page instantly
+- Pages with no matches use standard LLM classification
+- Results are seamlessly integrated into document sections
+
+### Regex Pattern Best Practices
+
+1. **Case-Insensitive Matching**: Always use `(?i)` flag
+   ```regex
+   (?i).*(invoice|bill).*  # Matches any case variation
+   ```
+
+2. **Flexible Whitespace**: Use `\\s+` for varying spaces/tabs
+   ```regex
+   (?i)(gross\\s+pay|net\\s+pay)  # Handles "gross pay", "gross  pay"
+   ```
+
+3. **Multiple Alternatives**: Use `|` for different terms
+   ```regex
+   (?i).*(payslip|paystub|salary|wage).*  # Any of these terms
+   ```
+
+4. **Balanced Specificity**: Specific enough to avoid false matches
+   ```regex
+   # Good: Specific to W2 forms
+   (?i)(form\\s+w-?2|wage\\s+and\\s+tax|employer\\s+identification)
+   
+   # Too broad: Could match many documents
+   (?i)(form|wage|tax)
+   ```
+
+### Performance Analysis
+
+Use `notebooks/examples/step2_classification_with_regex.ipynb` to:
+- Test regex patterns against your documents
+- Compare processing speeds (regex vs LLM)
+- Analyze cost savings through token usage reduction
+- Validate classification accuracy
+- Debug pattern matching behavior
+
+### Error Handling
+
+The regex system includes robust error handling:
+- **Invalid Patterns**: Compilation errors are logged, system falls back to LLM
+- **Runtime Failures**: Pattern matching errors default to LLM classification  
+- **Graceful Degradation**: Service continues working with invalid regex
+- **Comprehensive Logging**: Detailed logs for debugging pattern issues
+
+### Configuration Examples
+
+**Common Document Types:**
+```yaml
+classes:
+  # W2 Tax Forms
+  - name: W2
+    document_page_content_regex: "(?i)(form\\s+w-?2|wage\\s+and\\s+tax|social\\s+security)"
+    
+  # Bank Statements  
+  - name: Bank-Statement
+    document_page_content_regex: "(?i)(account\\s+number|statement\\s+period|beginning\\s+balance)"
+    
+  # Driver Licenses
+  - name: US-drivers-licenses
+    document_page_content_regex: "(?i)(driver\\s+license|state\\s+id|date\\s+of\\s+birth)"
+    
+  # Invoices
+  - name: Invoice
+    document_page_content_regex: "(?i)(invoice\\s+number|bill\\s+to|remit\\s+payment)"
+```
+
 ## Best Practices for Classification
 
 1. **Provide Clear Class Descriptions**: Include distinctive features and common elements
 2. **Use Few Shot Examples**: Include 2-3 diverse examples per class
-3. **Choose the Right Method**: Use page-level for simple documents, holistic for complex packets
+3. **Choose the Right Method**: Use page-level with sequence segmentation for multi-document packets, holistic for context-dependent documents
 4. **Balance Class Coverage**: Ensure all expected document types have classes
 5. **Monitor and Refine**: Use the evaluation framework to track classification accuracy
 6. **Consider Visual Elements**: Describe visual layout and design patterns in class descriptions
@@ -513,3 +742,12 @@ The classification service uses the new `extract_structured_data_from_text()` fu
 9. **Balance Quality vs Performance**: Higher resolution images provide better accuracy but consume more resources
 10. **Consider Output Format**: Use YAML prompts for token efficiency, especially with complex nested responses
 11. **Leverage Format Flexibility**: Take advantage of automatic format detection to optimize prompts for different use cases
+12. **Understand Boundary Indicators**: Review the `document_boundary` metadata to understand how documents are being segmented
+13. **Handle Multi-Document Packets**: Use sequence segmentation when processing files containing multiple documents of the same type
+14. **Test Segmentation Logic**: Verify that documents are correctly separated by reviewing section boundaries in the results
+15. **Consider Document Flow**: Ensure your document classes account for typical document structures (headers, body, footers)
+16. **Leverage BIO-like Tagging**: Take advantage of the automatic boundary detection to eliminate manual document splitting
+17. **Use Regex for Known Patterns**: Add regex patterns for document types with predictable content or naming conventions
+18. **Test Regex Thoroughly**: Validate regex patterns against diverse document samples before production use
+19. **Balance Regex Specificity**: Make patterns specific enough to avoid false matches but flexible enough to catch variations
+20. **Monitor Regex Performance**: Track how often regex patterns match vs fall back to LLM classification

@@ -29,7 +29,6 @@ The multimodal page-level classification method implements a sequence segmentati
 ### How It Works
 
 Each page receives two pieces of information:
-
 1. **Document Type**: The classification label (e.g., "invoice", "letter", "financial_statement")
 2. **Document Boundary**: A boundary indicator that signals document transitions:
    - `"start"`: Indicates the beginning of a new document (similar to "Begin" in BIO)
@@ -77,7 +76,6 @@ classes:
 ```
 
 **How it works:**
-
 - Works with any number of document classes defined in configuration
 - When document ID matches the regex pattern, all pages are classified as that class
 - Skips all LLM processing for massive performance gains
@@ -106,7 +104,6 @@ classes:
 ```
 
 **How it works:**
-
 - Only applies to multi-modal page-level classification method
 - Each page's text content is checked against all class regex patterns
 - First matching pattern wins and classifies the page instantly
@@ -133,19 +130,16 @@ classes:
 ### Performance Benefits
 
 **Speed Improvements:**
-
 - Regex matching is nearly instantaneous compared to LLM calls
 - Document name regex: ~100-1000x faster (entire document classified instantly)
 - Page content regex: ~10-50x faster per matched page
 
 **Cost Savings:**
-
 - Zero token usage for regex-matched classifications
 - No Bedrock/SageMaker API calls for matched patterns
 - Significant cost reduction for documents with recognizable patterns
 
 **Deterministic Results:**
-
 - Consistent classification results for pattern-matched documents
 - Eliminates LLM variability for known document types
 - Reliable classification for high-volume processing scenarios
@@ -153,25 +147,21 @@ classes:
 ### Best Practices for Regex Patterns
 
 1. **Case-Insensitive Matching**: Use `(?i)` flag for robust matching
-
    ```regex
    (?i).*(invoice|bill).*  # Matches "Invoice", "INVOICE", "bill", "BILL"
    ```
 
 2. **Flexible Whitespace**: Use `\\s+` for varying whitespace
-
    ```regex
    (?i)(gross\\s+pay|net\\s+pay)  # Matches "gross pay", "gross  pay", "GROSS PAY"
    ```
 
 3. **Multiple Alternatives**: Use `|` for different possible terms
-
    ```regex
    (?i).*(payslip|paystub|salary|wage).*  # Matches any of these terms
    ```
 
 4. **Specific Enough**: Balance specificity to avoid false matches
-
    ```regex
    # Good: Specific to payslips
    (?i)(gross\\s+pay|employee\\s+id|pay\\s+period)
@@ -220,7 +210,6 @@ for page_id, page in document.pages.items():
 ### Demonstration Notebook
 
 See `notebooks/examples/step2_classification_with_regex.ipynb` for interactive demonstrations of:
-
 - Document name regex classification
 - Page content regex classification  
 - Performance comparisons between regex and LLM methods
@@ -450,7 +439,6 @@ The classification service now supports optional DynamoDB caching to improve eff
 ### Configuration
 
 #### Via Constructor Parameter
-
 ```python
 from idp_common import classification, get_config
 
@@ -464,7 +452,6 @@ service = classification.ClassificationService(
 ```
 
 #### Via Environment Variable
-
 ```bash
 export CLASSIFICATION_CACHE_TABLE=classification-cache-table
 ```
@@ -492,7 +479,6 @@ The cache uses the following DynamoDB table structure:
   - `ExpiresAfter` (Number): TTL attribute for automatic cleanup (24 hours)
 
 #### Example DynamoDB Item
-
 ```json
 {
   "PK": "classcache#doc-123#arn:aws:states:us-east-1:123456789012:execution:MyWorkflow:abc-123",
@@ -576,7 +562,7 @@ except Exception as e:
 The Bedrock backend uses Amazon Bedrock LLMs to classify documents:
 
 - Supports multiple model options (Claude, Titan, etc.)
-- Works with both text and image content
+- Works with both text and image content 
 - Uses natural language understanding for classification
 - Configurable system prompts and parameters
 
@@ -642,31 +628,26 @@ Each few shot example includes:
 The `imagePath` field now supports multiple formats for maximum flexibility:
 
 **Single Image File (Original functionality)**:
-
 ```yaml
 imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
 ```
 
 **Local Directory with Multiple Images (New)**:
-
 ```yaml
 imagePath: "config_library/pattern-2/few_shot_example/example-images/"
 ```
 
 **S3 Prefix with Multiple Images (New)**:
-
 ```yaml
 imagePath: "s3://my-config-bucket/few-shot-examples/letter/"
 ```
 
 **Direct S3 Image URI**:
-
 ```yaml
 imagePath: "s3://my-config-bucket/few-shot-examples/letter/example1.jpg"
 ```
 
 When pointing to a directory or S3 prefix, the system automatically:
-
 - Discovers all image files with supported extensions (`.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.tif`, `.webp`)
 - Sorts them alphabetically by filename for consistent ordering
 - Includes each image as a separate content item in the few-shot examples
@@ -699,13 +680,11 @@ Using few shot examples provides several advantages:
 When creating few shot examples:
 
 #### 1. Quality over Quantity
-
 - Use 1-3 high-quality examples per document class
 - Ensure examples are representative of real-world documents
 - Include diverse examples that cover different variations
 
 #### 2. Clear and Complete Examples
-
 ```yaml
 # Good example - specific and complete
 attributesPrompt: |
@@ -723,7 +702,6 @@ attributesPrompt: |
 ```
 
 #### 3. Handle Null Values Appropriately
-
 ```yaml
 attributesPrompt: |
   expected attributes are:
@@ -733,7 +711,6 @@ attributesPrompt: |
 ```
 
 #### 4. Use Realistic Examples
-
 - Choose examples that represent typical documents in your use case
 - Include examples with both common and edge case scenarios
 - Ensure image quality is good and text is clearly readable
@@ -760,7 +737,6 @@ document = service.classify_document(document)
 ```
 
 The service automatically:
-
 1. Loads few shot examples from the configuration
 2. Includes them in classification prompts using the `{FEW_SHOT_EXAMPLES}` placeholder
 3. Formats examples appropriately for both classification and extraction tasks

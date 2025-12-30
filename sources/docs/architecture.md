@@ -40,7 +40,9 @@ The solution uses a modular architecture with nested CloudFormation stacks to su
 - Centralized monitoring and management across all patterns
 - Pattern-specific optimizations and configurations
 - Optional features that can be enabled across all patterns:
-  - Document summarization (controlled by `IsSummarizationEnabled` parameter)
+  - Document summarization (controlled by configuration `summarization.enabled` property)
+    - This feature also enables the "Chat with Document" functionality
+    - This feature does not use the Bedrock Knowledge Base but stores a full-text text file in S3
   - Document Knowledge Base (using Amazon Bedrock)
   - Automated accuracy evaluation against baseline data
 
@@ -88,7 +90,6 @@ For detailed information about configuration capabilities, see [configuration.md
 ## Current Patterns
 
 ### Pattern 1: Bedrock Data Automation (BDA)
-
 Packet or Media processing with Bedrock Data Automation (BDA)
 
 ![Pattern 1 Architecture](../images/IDP-Pattern1-BDA.drawio.png)
@@ -97,18 +98,16 @@ Packet or Media processing with Bedrock Data Automation (BDA)
 For detailed information about Pattern 1, see [pattern-1.md](./pattern-1.md).
 
 ### Pattern 2: Textract + Bedrock
-
 OCR → Bedrock Classification (page-level or holistic) → Bedrock Extraction
 
 ![Pattern 2 Architecture](../images/IDP-Pattern2-Bedrock.drawio.png)
 *Pattern 2 combines Amazon Textract for OCR and AWS Bedrock for classification and extraction tasks, supporting both page-level and holistic classification methods.*
 
-For detailed information about Pattern 2, see [pattern-2.md](./pattern-2.md).
+For detailed information about Pattern 2, see [pattern-2.md](./pattern-2.md). 
 
 This pattern also supports few-shot examples for classification and extraction. For details on implementing few-shot examples, see [few-shot-examples.md](./few-shot-examples.md).
 
 ### Pattern 3: Textract + UDOP + Bedrock
-
 OCR → UDOP Classification (SageMaker) → Bedrock Extraction
 
 ![Pattern 3 Architecture](../images/IDP-Pattern3-UDOP.drawio.png)
@@ -216,7 +215,7 @@ For detailed information about the Web UI, its features, and usage, see [web-ui.
 
 ### Document Summarization
 
-When enabled via the `IsSummarizationEnabled` parameter (default: true), the solution provides document summarization across all patterns:
+When enabled via the configuration `summarization.enabled` property (default: true), the solution provides document summarization across all patterns:
 
 - All patterns use a dedicated summarization step with Bedrock models
 - Summarization provides a concise overview of the document content
@@ -240,7 +239,7 @@ The solution includes a comprehensive evaluation system:
 
 1. **Baseline Data**: Ground truth data stored in the evaluation baseline bucket
 2. **Automatic Evaluation**: When enabled, each processed document is automatically evaluated against baseline data if available
-3. **Metrics**:
+3. **Metrics**: 
    - Extraction accuracy for key-value pairs
    - Classification accuracy across document types
    - Summarization quality assessment
@@ -277,6 +276,8 @@ The solution supports an optional post-processing Lambda hook integration:
   - Data analytics pipelines
   - Custom notification systems
 - Receives the document processing details and output location
+
+For comprehensive implementation guidance, use cases, and code examples, see [post-processing-lambda-hook.md](./post-processing-lambda-hook.md).
 
 ## Additional Documentation
 

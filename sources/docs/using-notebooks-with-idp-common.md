@@ -157,7 +157,6 @@ json.dump(config, open(output_data_dir / "config.json", "w"))
 ### Serialized Artifacts
 
 Each step produces:
-
 - **`document.json`**: Updated Document object with step results
 - **`config.json`**: Complete merged configuration  
 - **`environment.json`**: Environment settings and metadata
@@ -166,49 +165,42 @@ Each step produces:
 ## 🔬 Detailed Step Descriptions
 
 ### Step 0: Setup (`step0_setup.ipynb`)
-
 - **Purpose**: Initialize the Document object and prepare the processing environment
 - **Inputs**: PDF file path, configuration files
 - **Outputs**: Document object with pages and metadata
 - **Key Features**: Multi-page PDF support, metadata extraction
 
 ### Step 1: OCR (`step1_ocr.ipynb`)
-
 - **Purpose**: Extract text and analyze document structure using Amazon Textract
 - **Inputs**: Document object with PDF pages
 - **Outputs**: OCR results with text blocks, tables, and forms
 - **Key Features**: Textract API integration, feature selection, result caching
 
 ### Step 2: Classification (`step2_classification.ipynb`)
-
 - **Purpose**: Identify document types and create logical sections
 - **Inputs**: Document with OCR results
 - **Outputs**: Classified sections with confidence scores
 - **Key Features**: Multi-modal classification, few-shot prompting, custom classes
 
 ### Step 3: Extraction (`step3_extraction.ipynb`)
-
 - **Purpose**: Extract structured data from each classified section
 - **Inputs**: Document with classified sections
 - **Outputs**: Structured data for each section based on class definitions
 - **Key Features**: Class-specific extraction, JSON schema validation
 
 ### Step 4: Assessment (`step4_assessment.ipynb`)
-
 - **Purpose**: Evaluate extraction confidence and provide explainability
 - **Inputs**: Document with extraction results
 - **Outputs**: Confidence scores and reasoning for each extracted attribute
 - **Key Features**: Confidence assessment, hallucination detection, explainability
 
 ### Step 5: Summarization (`step5_summarization.ipynb`)
-
 - **Purpose**: Generate human-readable summaries of processing results
 - **Inputs**: Document with assessed extractions
 - **Outputs**: Section and document-level summaries in multiple formats
 - **Key Features**: Multi-format output (JSON, Markdown, HTML), customizable templates
 
 ### Step 6: Evaluation (`step6_evaluation.ipynb`)
-
 - **Purpose**: Comprehensive evaluation of pipeline performance and accuracy
 - **Inputs**: Document with complete processing results
 - **Outputs**: Evaluation reports, accuracy metrics, performance analysis
@@ -221,7 +213,6 @@ Each step produces:
 To add new document types or modify existing ones:
 
 1. **Edit `config/classes.yaml`**:
-
 ```yaml
 classes:
   new_document_type:
@@ -239,7 +230,6 @@ classes:
 To experiment with different AI models:
 
 1. **Edit relevant config files**:
-
 ```yaml
 # In config/extraction.yaml
 llm_method:
@@ -254,7 +244,6 @@ llm_method:
 To experiment with confidence thresholds:
 
 1. **Edit `config/assessment.yaml`**:
-
 ```yaml
 assessment:
   confidence_threshold: 0.7  # Lower threshold = more permissive
@@ -273,13 +262,11 @@ assessment:
 ### Common Issues
 
 1. **AWS Credentials**: Ensure proper AWS configuration
-
 ```bash
 aws configure list
 ```
 
 2. **Missing Dependencies**: Install required packages
-
 ```bash
 pip install boto3 jupyter ipython
 ```
@@ -287,7 +274,6 @@ pip install boto3 jupyter ipython
 3. **Memory Issues**: For large documents, consider processing sections individually
 
 4. **Configuration Errors**: Validate YAML syntax
-
 ```bash
 python -c "import yaml; yaml.safe_load(open('config/main.yaml'))"
 ```
@@ -295,7 +281,6 @@ python -c "import yaml; yaml.safe_load(open('config/main.yaml'))"
 ### Debug Mode
 
 Enable detailed logging in any notebook:
-
 ```python
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -304,7 +289,6 @@ logging.basicConfig(level=logging.DEBUG)
 ### Data Inspection
 
 Each step saves detailed results that can be inspected:
-
 ```python
 # Inspect intermediate results
 import json
@@ -318,7 +302,6 @@ with open("data/step3_extraction/extraction_summary.json") as f:
 ### Metrics Tracked
 
 Each step automatically tracks:
-
 - **Processing Time**: Total time for the step
 - **Throughput**: Pages per second
 - **Memory Usage**: Peak memory consumption
@@ -328,7 +311,6 @@ Each step automatically tracks:
 ### Performance Analysis
 
 The evaluation step provides comprehensive performance analysis:
-
 - Step-by-step timing breakdown
 - Bottleneck identification  
 - Resource utilization metrics
@@ -337,19 +319,16 @@ The evaluation step provides comprehensive performance analysis:
 ## 🔒 Security and Best Practices
 
 ### AWS Security
-
 - Use IAM roles with minimal required permissions
 - Enable CloudTrail for API logging
 - Store sensitive data in S3 with appropriate encryption
 
 ### Data Privacy
-
 - Documents are processed in your AWS account
 - No data is sent to external services (except configured AI models)
 - Temporary files are cleaned up automatically
 
 ### Configuration Management
-
 - Version control your configuration files
 - Use environment-specific configurations for different deployments
 - Document any custom modifications

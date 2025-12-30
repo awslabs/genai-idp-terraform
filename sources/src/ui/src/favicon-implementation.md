@@ -9,7 +9,6 @@ The GenAI IDP accelerator includes a comprehensive favicon implementation that p
 The favicon features a **blue background with a white "D"** representing "Document" processing, which aligns with the GenAI Intelligent Document Processing purpose.
 
 ### Design Specifications
-
 - **Primary Color**: Blue (#0066cc)
 - **Text Color**: White (#ffffff)
 - **Symbol**: "D" for Document
@@ -20,23 +19,19 @@ The favicon features a **blue background with a white "D"** representing "Docume
 The favicon implementation includes multiple formats for maximum compatibility:
 
 ### Core Favicon Files
-
 - `favicon.ico` - Main favicon in ICO format (16x16 and 32x32 pixels)
 - `favicon-16x16.png` - 16x16 PNG version
 - `favicon-32x32.png` - 32x32 PNG version
 
 ### Mobile and PWA Support
-
 - `apple-touch-icon.png` - 180x180 Apple Touch Icon for iOS devices
 - `logo192.png` - 192x192 PNG for PWA installations
 - `logo512.png` - 512x512 PNG for PWA installations
 
 ### Browser Configuration
-
 - `browserconfig.xml` - Configuration for Internet Explorer and Edge
 
 ### HTML Integration
-
 - `index.html` - Updated with comprehensive favicon links
 
 ## HTML Implementation
@@ -76,11 +71,9 @@ The implementation includes version parameters (`?v=4`) to ensure browsers load 
 ## Deployment
 
 ### Automatic Deployment
-
 When you deploy the GenAI IDP accelerator using the standard CloudFormation template, the favicon files are automatically included in the WebUI build process.
 
 ### Manual Updates
-
 If you need to update the favicon on existing deployments:
 
 1. The favicon files are automatically copied during the CodeBuild process
@@ -90,7 +83,6 @@ If you need to update the favicon on existing deployments:
 ## Customization
 
 ### Changing the Favicon
-
 To customize the favicon for your organization:
 
 1. **Replace the favicon files** in `src/ui/public/` with your custom designs
@@ -99,13 +91,11 @@ To customize the favicon for your organization:
 4. **Redeploy** the stack to apply changes
 
 ### Recommended Tools
-
 - **ImageMagick** - For converting between formats
 - **GIMP/Photoshop** - For creating custom designs
 - **Online favicon generators** - For quick conversions
 
 ### File Size Guidelines
-
 - Keep favicon files small (< 50KB each)
 - Use appropriate compression
 - Test across different browsers
@@ -113,17 +103,13 @@ To customize the favicon for your organization:
 ## Technical Details
 
 ### Build Process Integration
-
 The favicon files are located in `src/ui/public/` and are automatically:
-
 1. Copied to the build output by React's build process
 2. Uploaded to the S3 WebUI bucket by CodeBuild
 3. Served through CloudFront with proper caching headers
 
 ### Content Types
-
 The files are served with appropriate MIME types:
-
 - `.ico` files: `image/x-icon`
 - `.png` files: `image/png`
 - `.xml` files: `application/xml`
@@ -131,7 +117,6 @@ The files are served with appropriate MIME types:
 ## Troubleshooting
 
 ### Favicon Not Showing
-
 If the favicon doesn't appear:
 
 1. **Hard refresh** the browser (Ctrl+F5 or Cmd+Shift+R)
@@ -141,7 +126,6 @@ If the favicon doesn't appear:
 5. **Verify file accessibility** - test direct URL to favicon.ico
 
 ### Browser-Specific Issues
-
 - **Chrome**: May cache aggressively - use incognito mode for testing
 - **Firefox**: Clear cache through Settings → Privacy & Security
 - **Safari**: Use Develop menu → Empty Caches
@@ -150,7 +134,6 @@ If the favicon doesn't appear:
 ## Future Enhancements
 
 Potential improvements for future versions:
-
 - **SVG favicon support** for vector graphics
 - **Dark mode variants** for different themes
 - **Animated favicons** for status indicators
@@ -159,7 +142,6 @@ Potential improvements for future versions:
 ## Support
 
 For issues related to favicon implementation:
-
 1. Check browser developer tools for 404 errors
 2. Verify CloudFront distribution is serving files correctly
 3. Test with multiple browsers and devices

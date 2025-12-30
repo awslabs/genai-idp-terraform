@@ -56,7 +56,6 @@ This document outlines the AWS services used by the GenAI Intelligent Document P
 For organizations with Service Control Policies (SCPs) that mandate permissions boundaries on all IAM roles, the solution provides comprehensive support through the `PermissionsBoundaryArn` parameter. This optional parameter can be specified during deployment to attach a permissions boundary to all IAM roles (both explicit roles and implicit roles created by AWS SAM functions).
 
 **Usage:**
-
 ```bash
 aws cloudformation deploy \
   --template-file template.yaml \
@@ -71,7 +70,6 @@ When no permissions boundary is specified, roles deploy normally, ensuring backw
 Deploying this solution requires an IAM role/user with the following permissions:
 
 #### Essential Permissions
-
 * `cloudformation:*` - Create and manage CloudFormation stacks
 * `iam:*` - Create and manage IAM roles and policies
 * `lambda:*` - Create and configure Lambda functions
@@ -81,7 +79,7 @@ Deploying this solution requires an IAM role/user with the following permissions
 * `sqs:*` - Create and configure SQS queues
 * `events:*` - Create and configure EventBridge rules
 * `cloudfront:*` - Create and configure CloudFront distributions
-* `cognito-idp:*` - Create and configure Cognito user pools
+* `cognito-idp:*` - Create and configure Cognito user pools 
 * `cognito-identity:*` - Create and configure Cognito identity pools for AWS service access
 * `appsync:*` - Create and configure AppSync APIs
 * `logs:*` - Create and configure CloudWatch log groups
@@ -89,7 +87,6 @@ Deploying this solution requires an IAM role/user with the following permissions
 * `sns:*` - Create and configure SNS topics
 
 #### Pattern-Specific Permissions
-
 * `bedrock:*` - Create Bedrock resources (all patterns)
 * `sagemaker:*` - Create SageMaker endpoints (Pattern 3)
 * `opensearch:*` - Create OpenSearch domains (Knowledge Base feature)
@@ -101,7 +98,6 @@ Deploying this solution requires an IAM role/user with the following permissions
 The solution creates various IAM roles to run different components of the system. Key role scopes include:
 
 #### Document Processing Roles
-
 * **Queue Processing Role**:
   * `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:GetQueueAttributes`
   * `dynamodb:GetItem`, `dynamodb:PutItem`, `dynamodb:UpdateItem`
@@ -139,7 +135,6 @@ The solution creates various IAM roles to run different components of the system
   * `logs:*`
 
 #### Web UI & API Roles
-
 * **AppSync Service Role**:
   * `dynamodb:GetItem`, `dynamodb:Query`, `dynamodb:Scan`
   * `s3:GetObject`, `s3:PutObject`, `s3:ListBucket`
@@ -164,7 +159,6 @@ The solution creates various IAM roles to run different components of the system
   * `s3:ListBucket`, `s3:GetObject` (when using S3 data source)
 
 #### Monitoring & Evaluation Roles
-
 * **CloudWatch Dashboard Role**:
   * `cloudwatch:GetDashboard`, `cloudwatch:PutDashboard`
   * `logs:DescribeLogGroups`

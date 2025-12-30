@@ -1,0 +1,93 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Deploy demo Lambda function for GenAI IDP Custom Prompt Generator demonstration
+
+Parameters:
+  
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: >-
+      (Optional) ARN of an existing IAM Permissions Boundary policy to attach to the Lambda execution role.
+      Leave blank if no Permissions Boundary is required.
+    AllowedPattern: "^(|arn:aws[a-z-]*::iam::[0-9]{12}:policy/.+)$"
+    ConstraintDescription: Must be empty or a valid IAM policy ARN
+
+Conditions:
+  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+
+Resources:
+
+  DemoLambdaFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Demo function - does not require VPC access"
+          - id: W92
+            reason: "Demo function - does not require reserved concurrency as it scales based on demand"
+          - id: W58
+            reason: "Demo function - DLQ not required"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function as GraphQL handles retries"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      FunctionName: GENAIIDP-notebook-demo-extractor
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      CodeUri: ./
+      Handler: GENAIIDP-notebook-demo-extractor.lambda_handler
+      Runtime: python3.12
+      Timeout: 300
+      MemorySize: 512
+      Description: Demo Lambda function for GenAI IDP Custom Prompt Generator demonstration
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+      LoggingConfig:
+        LogGroup: !Ref DemoLambdaLogGroup
+      # Minimal permissions - only needs basic execution and logging
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+  DemoLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "Demo function - KMS CMK not required, but can be added by customer for production use cases"
+    # checkov:skip=CKV_AWS_158: "Demo function - KMS CMK not required, but can be added by customer for production use cases"
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/GENAIIDP-notebook-demo-extractor"
+      RetentionInDays: 7  # Short retention for demo purposes
+
+Outputs:
+  
+  DemoLambdaFunctionName:
+    Description: Name of the demo Lambda function
+    Value: !Ref DemoLambdaFunction
+    
+  DemoLambdaFunctionArn:
+    Description: ARN of the demo Lambda function (use this in your notebook config)
+    Value: !GetAtt DemoLambdaFunction.Arn
+    
+  DemoLambdaLogGroup:
+    Description: CloudWatch Log Group for monitoring demo Lambda execution
+    Value: !Ref DemoLambdaLogGroup
+    
+  UsageInstructions:
+    Description: How to use this Lambda in your IDP configuration
+    Value: !Sub |
+      Add this ARN to your extraction config:
+      extraction:
+        custom_prompt_lambda_arn: "${DemoLambdaFunction.Arn}"
+        
+  MonitoringLink:
+    Description: Direct link to CloudWatch logs for this function
+    Value: !Sub |
+      https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logsV2:log-groups/log-group/$252Faws$252Flambda$252FGENAIIDP-notebook-demo-extractor

@@ -6,7 +6,6 @@ SPDX-License-Identifier: MIT-0
 ## Table of Contents
 
 ### Part I: IDP Prompting Best Practices
-
 - [Introduction](#introduction)
 - [Class and Attribute Definitions](#class-and-attribute-definitions)
 - [Classification Prompt Customization](#classification-prompt-customization)
@@ -19,7 +18,6 @@ SPDX-License-Identifier: MIT-0
 - [Token Efficiency and Cost Optimization](#token-efficiency-and-cost-optimization)
 
 ### Part II: IDP Configuration Best Practices
-
 - [Configuration Architecture Overview](#configuration-architecture-overview)
 - [Advanced Image Processing](#advanced-image-processing)
 - [Assessment and Quality Assurance](#assessment-and-quality-assurance)
@@ -28,7 +26,6 @@ SPDX-License-Identifier: MIT-0
 - [Testing and Validation](#testing-and-validation)
 
 ### Shared Resources
-
 - [Common Patterns and Examples](#common-patterns-and-examples)
 
 ---
@@ -52,7 +49,6 @@ The IDP accelerator configuration system manages five primary prompt types:
 ### Prompting Philosophy
 
 Effective IDP prompting follows these core principles:
-
 - **Specificity over Generality**: Detailed descriptions outperform generic ones
 - **Evidence-Based Processing**: Always require document-based evidence
 - **Structured Output**: Enforce consistent JSON/YAML formatting
@@ -68,7 +64,6 @@ Document classes serve as the foundation for both classification and extraction.
 #### Clear, Distinctive Descriptions
 
 **Good Example (from lending-package-sample):**
-
 ```yaml
 classes:
   - name: Payslip
@@ -79,13 +74,11 @@ classes:
 ```
 
 **Why it works:**
-
 - Specific purpose and context
 - Key identifying features mentioned
 - Typical use case described
 
 **Poor Example:**
-
 ```yaml
 classes:
   - name: Document
@@ -112,7 +105,6 @@ Attributes define the structured data to extract from documents. Comprehensive a
 #### Specific Field Descriptions with Location Hints
 
 **Good Example:**
-
 ```yaml
 attributes:
   - name: YTDNetPay
@@ -124,7 +116,6 @@ attributes:
 ```
 
 **Enhanced Example with Location Hints:**
-
 ```yaml
 attributes:
   - name: invoice_number
@@ -136,7 +127,6 @@ attributes:
 #### Attribute Types and Their Use Cases
 
 **Simple Attributes** - Single value fields:
-
 ```yaml
 - name: PayDate
   description: >-
@@ -147,7 +137,6 @@ attributes:
 ```
 
 **Group Attributes** - Nested structured data:
-
 ```yaml
 - name: CompanyAddress
   groupAttributes:
@@ -168,7 +157,6 @@ attributes:
 ```
 
 **List Attributes** - Arrays of structured items:
-
 ```yaml
 - name: FederalTaxes
   listItemTemplate:
@@ -207,7 +195,6 @@ Negative prompting is a powerful technique for improving classification and extr
 #### When to Use Negative Prompting
 
 Use negative prompting in these scenarios:
-
 - **Similar Document Types**: When documents share visual or textual similarities but serve different purposes
 - **Confusing Attributes**: When multiple attributes might appear in similar locations or formats
 - **Common Misclassifications**: When evaluation shows consistent confusion between specific classes
@@ -216,7 +203,6 @@ Use negative prompting in these scenarios:
 #### Negative Prompting for Document Classes
 
 **Example 1: Invoice vs Purchase Order**
-
 ```yaml
 classes:
   - name: Invoice
@@ -235,7 +221,6 @@ classes:
 ```
 
 **Example 2: Medical Test Results vs Test Request Form**
-
 ```yaml
 classes:
   - name: Test-Results
@@ -254,7 +239,6 @@ classes:
 ```
 
 **Example 3: Clinical Notes vs Letter of Medical Necessity**
-
 ```yaml
 classes:
   - name: Clinical-Notes
@@ -276,7 +260,6 @@ classes:
 #### Negative Prompting for Attribute Definitions
 
 **Example 1: Employee Address vs Company Address**
-
 ```yaml
 attributes:
   - name: employee_address
@@ -297,7 +280,6 @@ attributes:
 ```
 
 **Example 2: Bill To vs Ship To Address**
-
 ```yaml
 attributes:
   - name: bill_to_address
@@ -318,7 +300,6 @@ attributes:
 ```
 
 **Example 3: Patient Name vs Physician Name**
-
 ```yaml
 attributes:
   - name: patient_name
@@ -342,7 +323,6 @@ attributes:
 #### Best Practices for Negative Prompting
 
 1. **Be Specific About Locations**
-
    ```yaml
    # Good - specific location hints
    description: >-
@@ -355,7 +335,6 @@ attributes:
    ```
 
 2. **Use Visual and Contextual Clues**
-
    ```yaml
    # Good - visual and contextual cues
    description: >-
@@ -365,7 +344,6 @@ attributes:
    ```
 
 3. **Highlight Key Differentiating Terms**
-
    ```yaml
    # Good - key terms highlighted
    description: >-
@@ -375,7 +353,6 @@ attributes:
    ```
 
 4. **Balance Positive and Negative Information**
-
    ```yaml
    # Good - balanced approach
    description: >-
@@ -386,7 +363,6 @@ attributes:
    ```
 
 5. **Address Common Confusion Points**
-
    ```yaml
    # Good - addresses known confusion
    description: >-
@@ -412,7 +388,6 @@ This approach analyzes entire document packages to identify logical document bou
 #### Key Components
 
 **System Prompt Design:**
-
 ```yaml
 system_prompt: >-
   You are a document classification expert who can analyze and classify multiple documents 
@@ -422,7 +397,6 @@ system_prompt: >-
 ```
 
 **Task Prompt Structure:**
-
 ```yaml
 task_prompt: >-
   <task-description>
@@ -451,7 +425,6 @@ task_prompt: >-
 ```
 
 **Key Features:**
-
 - Structured XML-like tags for organization
 - Clear boundary detection rules
 - Cache checkpoint placement for optimization
@@ -464,7 +437,6 @@ This approach classifies individual pages using both visual and textual informat
 #### Key Components
 
 **System Prompt Design:**
-
 ```yaml
 system_prompt: >-
   You are a multimodal document classification expert that analyzes business documents using 
@@ -474,7 +446,6 @@ system_prompt: >-
 ```
 
 **Task Prompt with Image Integration:**
-
 ```yaml
 task_prompt: >-
   <task-description>
@@ -507,7 +478,6 @@ task_prompt: >-
 ```
 
 **Key Features:**
-
 - Multi-modal analysis (visual + textual)
 - Step-by-step classification process
 - Image placement control with {DOCUMENT_IMAGE}
@@ -526,7 +496,6 @@ system_prompt: >-
 ```
 
 **Key Principles:**
-
 - Clear output format specification
 - Prohibition against data fabrication
 - Emphasis on document-based evidence
@@ -534,7 +503,6 @@ system_prompt: >-
 ### Task Prompt Structure
 
 **Comprehensive Example (from lending-package-sample):**
-
 ```yaml
 task_prompt: >-
   <background>
@@ -586,7 +554,6 @@ task_prompt: >-
 ### Handling Different Data Types
 
 **Checkboxes and Forms:**
-
 ```yaml
 9.B. For ambiguous or overlapping tick marks:
    - If a mark overlaps between two or more checkboxes, determine which option contains the majority of the mark
@@ -596,13 +563,11 @@ task_prompt: >-
 ```
 
 **Date Formatting:**
-
 ```yaml
 6. All dates should be in MM/DD/YYYY format
 ```
 
 **Numeric Data:**
-
 ```yaml
 7. Do not perform calculations or summations unless totals are explicitly given
 ```
@@ -610,7 +575,6 @@ task_prompt: >-
 ### Image Placement Strategy
 
 **Visual-First Approach:**
-
 ```yaml
 task_prompt: |
   First, examine the document layout and visual structure:
@@ -623,7 +587,6 @@ task_prompt: |
 ```
 
 **Verification Approach:**
-
 ```yaml
 task_prompt: |
   Document text (may contain OCR errors):
@@ -828,25 +791,21 @@ Each example includes four key components:
 The `imagePath` field supports multiple formats:
 
 **Single Image File:**
-
 ```yaml
 imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
 ```
 
 **Local Directory with Multiple Images:**
-
 ```yaml
 imagePath: "config_library/pattern-2/few_shot_example/example-images/"
 ```
 
 **S3 Prefix with Multiple Images:**
-
 ```yaml
 imagePath: "s3://my-config-bucket/few-shot-examples/letter/"
 ```
 
 **Direct S3 Image URI:**
-
 ```yaml
 imagePath: "s3://my-config-bucket/few-shot-examples/letter/example1.jpg"
 ```
@@ -856,7 +815,6 @@ imagePath: "s3://my-config-bucket/few-shot-examples/letter/example1.jpg"
 Few-shot examples are automatically integrated using the `{FEW_SHOT_EXAMPLES}` placeholder:
 
 **Classification with Few-Shot Examples:**
-
 ```yaml
 classification:
   task_prompt: |
@@ -875,7 +833,6 @@ classification:
 ```
 
 **Extraction with Few-Shot Examples:**
-
 ```yaml
 extraction:
   task_prompt: |
@@ -900,7 +857,6 @@ extraction:
    - Ensure examples have the required prompt fields
 
 2. **Provide Complete Attribute Sets**
-
    ```yaml
    # Good - shows all attributes with realistic values
    attributesPrompt: |
@@ -915,7 +871,6 @@ extraction:
    ```
 
 3. **Handle Null Values Explicitly**
-
    ```yaml
    attributesPrompt: |
      expected attributes are:
@@ -936,7 +891,6 @@ extraction:
 Cache checkpoints should separate static content from dynamic content:
 
 **Static Content (Cacheable):**
-
 - System instructions
 - Class definitions
 - Few-shot examples
@@ -944,7 +898,6 @@ Cache checkpoints should separate static content from dynamic content:
 - Processing guidelines
 
 **Dynamic Content (Not Cacheable):**
-
 - Document text
 - Document images
 - Specific extraction results
@@ -979,7 +932,6 @@ task_prompt: >-
 ### Cost Benefits
 
 For models supporting cache checkpoints:
-
 - **Initial Request**: Full token cost
 - **Subsequent Requests**: Cache read cost (typically 10x cheaper) + new content cost
 - **Typical Savings**: 60-90% cost reduction for repeated processing
@@ -989,25 +941,21 @@ For models supporting cache checkpoints:
 ### Temperature Settings
 
 **Classification (Deterministic):**
-
 ```yaml
 temperature: 0.0  # Consistent classification results
 ```
 
 **Extraction (Deterministic):**
-
 ```yaml
 temperature: 0.0  # Consistent data extraction
 ```
 
 **Assessment (Deterministic):**
-
 ```yaml
 temperature: 0.0  # Consistent confidence scoring
 ```
 
 **Summarization (Slightly Creative):**
-
 ```yaml
 temperature: 0.0  # Still deterministic for consistent summaries
 ```
@@ -1015,14 +963,12 @@ temperature: 0.0  # Still deterministic for consistent summaries
 ### Top-p and Top-k Configuration
 
 **Balanced Configuration:**
-
 ```yaml
 top_p: 0.1    # Focus on most likely tokens
 top_k: 5      # Consider top 5 candidates
 ```
 
 **Conservative Configuration:**
-
 ```yaml
 top_p: 0.05   # More focused selection
 top_k: 3      # Fewer candidates
@@ -1031,25 +977,21 @@ top_k: 3      # Fewer candidates
 ### Max Tokens Sizing
 
 **Classification:**
-
 ```yaml
 max_tokens: 4096  # Sufficient for classification responses
 ```
 
 **Extraction:**
-
 ```yaml
 max_tokens: 10000  # Larger for complex structured data
 ```
 
 **Assessment:**
-
 ```yaml
 max_tokens: 10000  # Detailed confidence explanations
 ```
 
 **Summarization:**
-
 ```yaml
 max_tokens: 4096   # Comprehensive summaries
 ```
@@ -1095,7 +1037,6 @@ YAML format provides significant token savings for all processing tasks:
 #### Example Prompt Configurations
 
 **JSON-focused extraction prompt:**
-
 ```yaml
 extraction:
   system_prompt: |
@@ -1108,7 +1049,6 @@ extraction:
 ```
 
 **YAML-focused extraction prompt (more efficient):**
-
 ```yaml
 extraction:
   system_prompt: |
@@ -1125,13 +1065,11 @@ extraction:
 For a typical invoice extraction with 10 fields:
 
 **JSON format (traditional):**
-
 ```json
 {"invoice_number": "INV-2024-001", "invoice_date": "2024-03-15", "vendor_name": "ACME Corp", "total_amount": "1,234.56", "tax_amount": "123.45", "subtotal": "1,111.11", "due_date": "2024-04-15", "payment_terms": "Net 30", "customer_name": "John Smith", "customer_address": "456 Oak Ave, City, State 67890"}
 ```
 
 **YAML format (more efficient):**
-
 ```yaml
 invoice_number: INV-2024-001
 invoice_date: 2024-03-15
@@ -1199,7 +1137,6 @@ The extraction and classification services support precise control over where do
 #### How {DOCUMENT_IMAGE} Works
 
 **Without Placeholder (Default Behavior):**
-
 ```yaml
 task_prompt: |
   Extract the following fields from this {DOCUMENT_CLASS} document:
@@ -1210,11 +1147,9 @@ task_prompt: |
   
   Respond with valid JSON.
 ```
-
 Images are automatically appended after the text content.
 
 **With Placeholder (Controlled Placement):**
-
 ```yaml
 task_prompt: |
   Extract the following fields from this {DOCUMENT_CLASS} document:
@@ -1228,13 +1163,11 @@ task_prompt: |
   
   Respond with valid JSON containing the extracted values.
 ```
-
 Images are inserted exactly where `{DOCUMENT_IMAGE}` appears in the prompt.
 
 #### Usage Examples
 
 **Visual-First Processing:**
-
 ```yaml
 task_prompt: |
   You are extracting data from a {DOCUMENT_CLASS}. Here are the fields to find:
@@ -1250,7 +1183,6 @@ task_prompt: |
 ```
 
 **Image for Context and Verification:**
-
 ```yaml
 task_prompt: |
   Extract these fields from a {DOCUMENT_CLASS}:
@@ -1344,9 +1276,7 @@ The Assessment feature provides automated confidence evaluation of document extr
 ### Standard vs Granular Assessment Configuration
 
 #### Standard Assessment Configuration
-
 For documents with moderate complexity:
-
 ```yaml
 assessment:
   model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -1355,9 +1285,7 @@ assessment:
 ```
 
 #### Granular Assessment Configuration
-
 For complex documents with many attributes or large lists:
-
 ```yaml
 assessment:
   model: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
@@ -1373,7 +1301,6 @@ assessment:
 ### When to Use Granular Assessment
 
 Consider granular assessment configuration for:
-
 - **Bank statements** with hundreds of transactions
 - **Documents with 10+ attributes** requiring individual attention
 - **Complex nested structures** (group and list attributes)
@@ -1479,7 +1406,6 @@ The framework supports multiple comparison methods:
 ### Baseline Data Configuration
 
 #### Baseline Bucket Structure Configuration
-
 ```
 baseline-bucket/
 ├── document1.pdf.json    # Baseline for document1.pdf
@@ -1549,11 +1475,11 @@ Configure from these supported models:
 - `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 - `us.anthropic.claude-sonnet-4-20250514-v1:0`
 - `us.anthropic.claude-opus-4-20250514-v1:0`
+- `us.anthropic.claude-opus-4-1-20250805-v1:0`
 
 #### When to Configure Bedrock OCR
 
 Configure Bedrock OCR for:
-
 - **Complex layouts** or mixed content types
 - **Handwritten or low-quality documents** where Textract struggles
 - **Domain-specific documents** requiring contextual understanding
@@ -1614,7 +1540,6 @@ Configuration management features:
 ### Performance Monitoring Configuration
 
 **Key Metrics to Configure:**
-
 - Classification accuracy thresholds
 - Extraction completeness targets
 - Confidence score distributions
@@ -1622,7 +1547,6 @@ Configuration management features:
 - Processing latency thresholds
 
 **Validation Configuration:**
-
 - Test with representative document sets
 - Configure baseline comparison thresholds
 - Set up failure pattern monitoring
@@ -1631,7 +1555,6 @@ Configuration management features:
 ### Common Configuration Pitfalls and Solutions
 
 **Pitfall: Incorrect Image Dimensions**
-
 ```yaml
 # Poor - fixed small dimensions
 image:
@@ -1645,7 +1568,6 @@ image:
 ```
 
 **Pitfall: Missing OCR Configuration**
-
 ```yaml
 # Poor - no OCR backend specified
 ocr:
@@ -1657,7 +1579,6 @@ ocr:
 ```
 
 **Pitfall: Inappropriate Assessment Configuration**
-
 ```yaml
 # Poor - assessment enabled for all documents
 assessment:
@@ -1678,7 +1599,6 @@ assessment:
 ### Standard Document Classes
 
 **Financial Documents:**
-
 ```yaml
 classes:
   - name: Payslip
@@ -1690,7 +1610,6 @@ classes:
 ```
 
 **Identification Documents:**
-
 ```yaml
 classes:
   - name: US-drivers-licenses
@@ -1700,7 +1619,6 @@ classes:
 ```
 
 **Business Documents:**
-
 ```yaml
 classes:
   - name: Homeowners-Insurance-Application
@@ -1710,7 +1628,6 @@ classes:
 ### Attribute Patterns
 
 **Simple Attributes:**
-
 ```yaml
 - name: date_field
   description: "Specific date with clear location hint and format requirement"
@@ -1719,7 +1636,6 @@ classes:
 ```
 
 **Complex Nested Structures:**
-
 ```yaml
 - name: address_group
   groupAttributes:
@@ -1731,7 +1647,6 @@ classes:
 ```
 
 **Dynamic Lists:**
-
 ```yaml
 - name: transaction_list
   listItemTemplate:
@@ -1745,7 +1660,6 @@ classes:
 ### Prompt Templates
 
 **Classification Template:**
-
 ```yaml
 system_prompt: "Classification expert with domain knowledge"
 task_prompt: >-
@@ -1756,7 +1670,6 @@ task_prompt: >-
 ```
 
 **Extraction Template:**
-
 ```yaml
 system_prompt: "Extraction expert with JSON output requirement"
 task_prompt: >-
@@ -1769,7 +1682,6 @@ task_prompt: >-
 ### Configuration Templates
 
 **Basic Configuration Template:**
-
 ```yaml
 # Core Processing Configuration
 ocr:
@@ -1785,7 +1697,6 @@ pricing: [Cost calculation parameters]
 ```
 
 **Advanced Configuration Template:**
-
 ```yaml
 # Advanced Processing Configuration
 ocr:

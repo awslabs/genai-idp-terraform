@@ -79,7 +79,7 @@
                     "Next": "HITLReview"
                 }
             ],
-            "Default": "SummarizationChoice"
+            "Default": "SummarizationStep"
         },
         "HITLReview": {
             "Type": "Task",
@@ -108,6 +108,12 @@
                     "BackoffRate": 2
                 }
             ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["HITLFailedException"],
+                    "Next": "HITLFailState"
+                }
+            ],
             "Next": "HITLStatusUpdate"
         },
         "HITLStatusUpdate": {
@@ -134,18 +140,7 @@
                     "BackoffRate": 2
                 }
             ],
-            "Next": "SummarizationChoice"
-        },
-        "SummarizationChoice": {
-            "Type": "Choice",
-            "QueryLanguage": "JSONata",
-            "Choices": [
-                {
-                    "Condition": "{% ${IsSummarizationEnabled} = true %}",
-                    "Next": "SummarizationStep"
-                }
-            ],
-            "Default": "WorkflowComplete"
+            "Next": "SummarizationStep"
         },
         "SummarizationStep": {
             "Type": "Task",
@@ -182,6 +177,11 @@
             "Type": "Fail",
             "Cause": "Data Automation Job Failed",
             "Error": "JobFailedException"
+        },
+        "HITLFailState": {
+            "Type": "Fail",
+            "Cause": "Human In The Loop Review Failed",
+            "Error": "HITLFailedException"
         }
     }
 }

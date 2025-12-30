@@ -15,6 +15,11 @@ from transformers import AutoProcessor
 from model import UDOPModel
 from utils import InferenceHelper
 
+# Import for secure model version management
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from model_versions import get_model_revision
+
 
 # Configure logging
 logging.basicConfig(
@@ -35,7 +40,15 @@ def model_fn(model_dir):
     )
     model.to(device) 
     model.eval()
-    processor = AutoProcessor.from_pretrained(model_id, apply_ocr=False)
+    # Load processor with pinned revision for security (addresses B615 finding)
+    revision = get_model_revision(model_id) if model_id in ["microsoft/udop-large"] else None
+    if revision:
+        logger.info(f"Loading processor for {model_id} with pinned revision: {revision}")
+        processor = AutoProcessor.from_pretrained(model_id, revision=revision, apply_ocr=False)
+    else:
+        # Fallback for custom models without managed versions
+        logger.info(f"Loading processor for {model_id} without revision pinning (not in managed list)")
+        processor = AutoProcessor.from_pretrained(model_id, apply_ocr=False)
     with open(os.path.join(model_dir, "validation_prompt.json"), 'r') as f:
         validation_prompt = json.load(f)['validation_prompt']
     logger.info("===== Model successfully loaded. =====")

@@ -111,10 +111,13 @@ def handler(event, context):
         # Create the job record in DynamoDB
         # Use a composite key with PK = "agent#{userId}" and SK = jobId
         # This follows the pattern used in the existing application
+        # Also populate GSI1 for querying jobs by user
         table = dynamodb.Table(AGENT_TABLE)
         job_record = {
             "PK": f"agent#{user_id}",
             "SK": job_id,
+            "GSI1PK": f"user#{user_id}",  # For GSI1 queries by user
+            "GSI1SK": created_at,         # Sort by creation time in GSI1
             "query": query,
             "agentIds": json.dumps(agent_ids),  # Store as JSON string
             "status": "PENDING",

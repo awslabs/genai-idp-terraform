@@ -13,17 +13,16 @@ Few-shot learning enhances AI model performance by providing concrete examples a
 
 ## Key Benefits
 
-- **Improved Accuracy**: Models understand document patterns and expected formats better through concrete examples
-- **Consistent Output**: Examples establish exact JSON structure and formatting standards
-- **Reduced Hallucination**: Examples reduce likelihood of made-up classification or attribute values
-- **Domain Adaptation**: Examples help models understand domain-specific terminology and conventions
-- **Better Edge Case Handling**: Visual examples clarify ambiguous cases that text descriptions might miss
-- **Cost Effectiveness with Caching**: Using prompt caching with few-shot examples can significantly reduce costs for repeated processing
+- **🎯 Improved Accuracy**: Models understand document patterns and expected formats better through concrete examples
+- **📏 Consistent Output**: Examples establish exact JSON structure and formatting standards
+- **🚫 Reduced Hallucination**: Examples reduce likelihood of made-up classification or attribute values
+- **🔧 Domain Adaptation**: Examples help models understand domain-specific terminology and conventions
+- **💡 Better Edge Case Handling**: Visual examples clarify ambiguous cases that text descriptions might miss
+- **💰 Cost Effectiveness with Caching**: Using prompt caching with few-shot examples can significantly reduce costs for repeated processing
 
 ## When to Use Few-Shot Examples
 
 Consider using few-shot examples when:
-
 - Your document types have subtle visual differences that are hard to describe in text
 - You need consistent attribute extraction formats across documents
 - You're working with domain-specific documents with specialized terminology
@@ -123,31 +122,26 @@ This ensures that examples are only used when they have the appropriate content 
 The `imagePath` field now supports multiple formats for maximum flexibility:
 
 **Single Image File (Original functionality)**:
-
 ```yaml
 imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
 ```
 
 **Local Directory with Multiple Images (New)**:
-
 ```yaml
 imagePath: "config_library/pattern-2/few_shot_example/example-images/"
 ```
 
 **S3 Prefix with Multiple Images (New)**:
-
 ```yaml
 imagePath: "s3://my-config-bucket/few-shot-examples/letter/"
 ```
 
 **Direct S3 Image URI**:
-
 ```yaml
 imagePath: "s3://my-config-bucket/few-shot-examples/letter/example1.jpg"
 ```
 
 When pointing to a directory or S3 prefix, the system automatically:
-
 - Discovers all image files with supported extensions (`.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.tif`, `.webp`)
 - Sorts them alphabetically by filename for consistent ordering
 - Includes each image as a separate content item in the few-shot examples
@@ -170,21 +164,18 @@ The system uses these environment variables for resolving relative paths:
 Few-shot examples in Pattern-2 support both multimodal and text-only approaches:
 
 **Multimodal Examples (Recommended)**:
-
 - Include both `imagePath` and text descriptions in prompts
 - Provide visual context alongside text explanations
 - Help models understand document layout and formatting
 - Most effective for complex document types
 
 **Text-Only Examples**:
-
 - Include sample document text (OCR output) within `classPrompt` or `attributesPrompt`
 - Useful when images are not available or for privacy-sensitive scenarios
 - Can demonstrate text patterns and content structure
 - Still provide significant accuracy improvements over no examples
 
 **Example with OCR Text Content**:
-
 ```yaml
 examples:
   - classPrompt: |
@@ -217,7 +208,6 @@ Pattern-2 uses few-shot examples differently for classification and extraction t
 ### Classification Process
 
 When classifying documents:
-
 - **Example Scope**: Uses examples from ALL document classes
 - **Purpose**: Help the model distinguish between different document types
 - **Content**: Uses `classPrompt` field from examples (with optional images)
@@ -227,7 +217,6 @@ When classifying documents:
 ### Extraction Process
 
 When extracting attributes from documents:
-
 - **Example Scope**: Uses examples ONLY from the specific document class being processed
 - **Purpose**: Show the expected attribute extraction format and values
 - **Content**: Uses `attributesPrompt` field from examples (with optional images)
@@ -351,7 +340,6 @@ classes:
 Ensure your classification and extraction task prompts include the `{FEW_SHOT_EXAMPLES}` placeholder and use `<<CACHEPOINT>>` for optimal performance. You can also use the `{DOCUMENT_IMAGE}` placeholder for precise image positioning:
 
 **Standard Few-Shot Configuration:**
-
 ```yaml
 classification:
   task_prompt: |
@@ -386,7 +374,6 @@ extraction:
 ```
 
 **Enhanced Configuration with Image Placement:**
-
 ```yaml
 classification:
   task_prompt: |
@@ -436,13 +423,11 @@ extraction:
 If using images, set up environment variables for image path resolution:
 
 **For Local Development:**
-
 ```bash
 export ROOT_DIR=/path/to/your/project/root
 ```
 
 **For S3 Deployment:**
-
 ```bash
 export CONFIGURATION_BUCKET=your-config-bucket-name
 ```
@@ -454,7 +439,6 @@ Using prompt caching with few-shot examples provides significant cost and perfor
 ### How Prompt Caching Works
 
 The `<<CACHEPOINT>>` delimiter splits your prompt into two parts:
-
 - **Static portion** (before CACHEPOINT): Class definitions, few-shot examples, instructions
 - **Dynamic portion** (after CACHEPOINT): The specific document being processed
 
@@ -507,7 +491,6 @@ task_prompt: |
    - Include typical variations within each document type
 
 2. **Include Required Prompt Fields**
-
    ```yaml
    # Good - includes both classPrompt and attributesPrompt for full functionality
    - classPrompt: "This is an example of the class 'invoice'"
@@ -524,7 +507,6 @@ task_prompt: |
    ```
 
 3. **Provide Complete Attribute Sets**
-
    ```yaml
    # Good - shows all attributes with realistic values
    attributesPrompt: |
@@ -545,7 +527,6 @@ task_prompt: |
    ```
 
 4. **Handle Null Values Explicitly**
-
    ```yaml
    attributesPrompt: |
      expected attributes are:
@@ -583,14 +564,12 @@ task_prompt: |
 ### Image vs Text-Only Considerations
 
 **When to Use Images**:
-
 - Complex layouts where visual structure matters
 - Documents with tables, forms, or specific formatting
 - When you have high-quality, clear document images available
 - Privacy and security allow image sharing
 
 **When to Use Text-Only**:
-
 - Privacy-sensitive environments where images cannot be shared
 - When working primarily with text content
 - Simple document layouts where visual structure is less important
@@ -616,7 +595,6 @@ task_prompt: |
 Use the provided test notebooks to validate your few-shot configuration:
 
 ### Classification Testing
-
 ```python
 # Test classification few-shot examples
 from idp_common.classification.service import ClassificationService
@@ -635,7 +613,6 @@ print(f"Loaded {len(examples)} example items for classification")
 ```
 
 ### Extraction Testing
-
 ```python
 # Test extraction few-shot examples for specific class
 from idp_common.extraction.service import ExtractionService
@@ -650,7 +627,6 @@ print(f"Loaded {len(examples)} example items for 'letter' class extraction")
 ## Performance Considerations
 
 ### Benefits
-
 - **Higher Accuracy**: Well-crafted examples typically improve accuracy by 10-30%
 - **Reduced Prompt Engineering**: Less time spent fine-tuning text descriptions
 - **Consistent Outputs**: Examples establish clear formatting standards
@@ -658,7 +634,6 @@ print(f"Loaded {len(examples)} example items for 'letter' class extraction")
 - **Cost Efficiency with Caching**: Prompt caching can reduce costs by 50-90% for repeated processing
 
 ### Trade-offs
-
 - **Increased Initial Token Usage**: Examples add to prompt length, increasing initial processing costs
 - **Processing Time**: Loading and including example images takes additional time (text-only examples are faster)
 - **Storage Requirements**: Example images need to be stored and accessible (not applicable for text-only)
@@ -677,7 +652,6 @@ print(f"Loaded {len(examples)} example items for 'letter' class extraction")
 ### Cache Performance Monitoring
 
 Monitor these metrics to ensure optimal cache usage:
-
 - **Cache hit rate**: Percentage of requests using cached content
 - **Cost reduction**: Compare costs with and without caching
 - **Processing latency**: Time savings from cached static content
@@ -688,21 +662,18 @@ Monitor these metrics to ensure optimal cache usage:
 ### Common Issues
 
 **Examples Not Loading**
-
 - Verify `{FEW_SHOT_EXAMPLES}` placeholder exists in task prompts
 - Check that examples are defined for the document classes being processed
 - Ensure examples have the required prompt fields (`classPrompt` for classification, `attributesPrompt` for extraction)
 - For image examples: Ensure image paths are correct and files exist
 
 **Examples Being Skipped**
-
 - Verify that examples have non-empty `classPrompt` field for classification tasks
 - Verify that examples have non-empty `attributesPrompt` field for extraction tasks
 - Check that the prompt field contains actual content, not just whitespace
 - Review the example processing rules described in this documentation
 
 **Images Not Found (If Using Images)**
-
 - Set `ROOT_DIR` environment variable for local development
 - Set `CONFIGURATION_BUCKET` for S3 deployment scenarios
 - Verify image file paths in configuration match actual file locations
@@ -711,26 +682,22 @@ Monitor these metrics to ensure optimal cache usage:
 - Consider using text-only examples if image access is problematic
 
 **Caching Not Working**
-
 - Ensure `<<CACHEPOINT>>` is properly placed in task prompts
 - Verify static content is before CACHEPOINT and dynamic content is after
 - Check that you're using supported Bedrock models with caching enabled
 
 **High Costs Despite Caching**
-
 - Verify cache hit rates are high (>80% for batch processing)
 - Ensure you're not changing static content frequently
 - Check that CACHEPOINT placement is optimal
 
 **Inconsistent Results**
-
 - Review example quality and ensure they're representative
 - Check that `attributesPrompt` format matches expected output exactly
 - Ensure examples cover the range of variations in your documents
 - For text examples: Verify OCR text samples are realistic and accurate
 
 **Poor Performance**
-
 - Add more diverse examples for problematic document classes
 - Improve example quality and accuracy
 - Ensure examples demonstrate proper null value handling
@@ -741,7 +708,6 @@ Monitor these metrics to ensure optimal cache usage:
 ### Complete Working Example with Caching
 
 See `config_library/pattern-2/few_shot_example/` for a complete working configuration that demonstrates:
-
 - Letter classification and extraction with 2 examples
 - Email classification and extraction with 1 example
 - Proper image path configuration
@@ -836,9 +802,9 @@ extraction:
     Document: {DOCUMENT_TEXT}
 ```
 
-### Optimized Configuration
+### Production-Ready Configuration
 
-For optimal caching:
+For production use with optimal caching:
 
 ```yaml
 classification:

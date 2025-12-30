@@ -19,6 +19,11 @@ from transformers import AutoProcessor
 from model import UDOPModel
 from utils import ClassificationDataset
 
+# Import for secure model version management
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from model_versions import get_model_revision
+
 
 def train(
     data_dir, model_dir, script_dir, output_dir, max_epochs, accumulate_grad_batches, 
@@ -30,7 +35,15 @@ def train(
         save_dir=os.path.join(output_dir, "tensorboard"),
         name="training_logs"
     )
-    processor = AutoProcessor.from_pretrained(base_model, apply_ocr=False)
+    # Load processor with pinned revision for security (addresses B615 finding)
+    revision = get_model_revision(base_model) if base_model in ["microsoft/udop-large"] else None
+    if revision:
+        print(f"Loading processor for {base_model} with pinned revision: {revision}")
+        processor = AutoProcessor.from_pretrained(base_model, revision=revision, apply_ocr=False)
+    else:
+        # Fallback for custom models without managed versions
+        print(f"Loading processor for {base_model} without revision pinning (not in managed list)")
+        processor = AutoProcessor.from_pretrained(base_model, apply_ocr=False)
     train_ds = ClassificationDataset(processor, data_dir, split="training")
     val_ds = ClassificationDataset(processor, data_dir, split="validation")
 

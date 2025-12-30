@@ -14,7 +14,6 @@ The OCR service is designed to process PDF documents and extract text using mult
 The service supports three OCR backends, each with different capabilities and use cases:
 
 ### 1. Textract Backend (Default - Recommended for Assessment)
-
 - **Technology**: AWS Textract OCR service
 - **Confidence Data**: ✅ Full granular confidence scores per text line (displayed as markdown table)
 - **Features**: Basic text detection + enhanced document analysis (tables, forms, signatures, layout)
@@ -22,7 +21,6 @@ The service supports three OCR backends, each with different capabilities and us
 - **Use Cases**: Standard document processing, when assessment is enabled, production workflows
 
 ### 2. Bedrock Backend (LLM-based OCR)
-
 - **Technology**: Amazon Bedrock LLMs (Claude, Nova) for text extraction
 - **Confidence Data**: ❌ No confidence data (displays "No confidence data available from LLM OCR")
 - **Features**: Advanced text understanding, better handling of challenging/degraded documents
@@ -30,7 +28,6 @@ The service supports three OCR backends, each with different capabilities and us
 - **Use Cases**: Challenging documents where traditional OCR fails, specialized text extraction needs
 
 ### 3. None Backend (Image-only)
-
 - **Technology**: No OCR processing
 - **Confidence Data**: ❌ No confidence data (displays "No OCR performed")
 - **Features**: Image extraction and storage only
@@ -132,12 +129,10 @@ The OCR service uses advanced memory optimization to prevent OutOfMemory errors 
 **Direct Size Extraction**: When resize configuration is provided (`target_width` and `target_height`), images are extracted directly at the target dimensions using PyMuPDF matrix transformations. This completely eliminates memory spikes from creating oversized images.
 
 **Example for Large Document:**
-
 - **Original approach**: Extract 7469×9623 (101MB) → Resize to 951×1268 (5MB) → Memory spike
 - **Optimized approach**: Extract directly at 951×1268 (5MB) → No memory spike
 
 **Preserved Logic**: The optimization maintains all existing resize behavior:
-
 - ✅ Never upscales images (only applies scaling when scale_factor < 1.0)
 - ✅ Preserves aspect ratio using `min(width_ratio, height_ratio)`
 - ✅ Handles edge cases (no config, images already smaller than targets)
@@ -146,11 +141,10 @@ The OCR service uses advanced memory optimization to prevent OutOfMemory errors 
 ### DPI Configuration
 
 The DPI (dots per inch) setting controls the base resolution when extracting images from PDF pages:
-
 - **Default**: 150 DPI (good balance of quality and file size)
 - **Range**: 72-300 DPI  
 - **Location**: `ocr.image.dpi` in the configuration
-- **Behavior**:
+- **Behavior**: 
   - Only applies to PDF files (image files maintain their original resolution)
   - Combined with resize configuration for optimal memory usage
   - Higher DPI = better quality but larger file sizes (use with resize config for large documents)
@@ -160,12 +154,12 @@ The DPI (dots per inch) setting controls the base resolution when extracting ima
 
 **Memory Considerations**: For large documents with high DPI settings, always configure `target_width` and `target_height` to prevent memory issues. The service will intelligently extract at the optimal size.
 
+
 ## Migration Guide
 
 To migrate from the old pattern to the new pattern:
 
 1. **In Lambda functions:**
-
    ```python
    # Old pattern
    features = [feature['name'] for feature in ocr_config.get("features", [])]
@@ -187,7 +181,6 @@ To migrate from the old pattern to the new pattern:
    ```
 
 2. **In notebooks:**
-
    ```python
    # Old pattern
    ocr_service = ocr.OcrService(
@@ -203,7 +196,6 @@ To migrate from the old pattern to the new pattern:
    ```
 
 The new pattern provides:
-
 - Cleaner, more consistent API across all IDP services
 - Easier configuration management
 - No need to extract individual parameters
@@ -227,7 +219,6 @@ For each page, the OCR service creates:
 The format varies by OCR backend:
 
 **Textract Backend (with confidence data):**
-
 ```json
 {
   "text": "| Text | Confidence |\n|------|------------|\n| WESTERN DARK FIRED TOBACCO GROWERS' ASSOCIATION | 99.4 |\n| 206 Maple Street | 91.4 |\n| Murray, KY 42071 | 98.7 |"
@@ -235,13 +226,11 @@ The format varies by OCR backend:
 ```
 
 The `text` field contains a markdown table with two columns:
-
 - **Text**: The extracted text content (with pipe characters escaped as `\|`)
 - **Confidence**: OCR confidence score rounded to 1 decimal point
 - Handwriting is indicated with "(HANDWRITING)" suffix in the text column
 
 **Bedrock Backend (no confidence data):**
-
 ```json
 {
   "text": "| Text | Confidence |\n|------|------------|\n| *No confidence data available from LLM OCR* | N/A |"
@@ -249,7 +238,6 @@ The `text` field contains a markdown table with two columns:
 ```
 
 **None Backend (no OCR):**
-
 ```json
 {
   "text": "| Text | Confidence |\n|------|------------|\n| *No OCR performed* | N/A |"
@@ -318,7 +306,6 @@ def handler(event, context):
 ## Roadmap
 
 ### Phase 1: Current Implementation (Basic Integration)
-
 - ✅ Basic OCR service with PyMuPDF for PDF processing
 - ✅ Support for Textract's text detection
 - ✅ Compatible with existing Pattern workflow
@@ -327,7 +314,6 @@ def handler(event, context):
 - ✅ Comprehensive error handling
 
 ### Phase 2: Enhanced Features
-
 - ✅ Support for table extraction and form recognition
 - ✅ Granular control of Textract feature types (TABLES, FORMS, SIGNATURES, LAYOUT)
 - ✅ Improved parsing for extracted tables and forms

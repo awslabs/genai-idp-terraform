@@ -1,0 +1,138 @@
+# Document Classes and Attributes Configuration with Regex Examples
+# This configuration demonstrates how to use the new regex-based classification features
+
+classes:
+  # Example 1: Single-class configuration with document name regex
+  - name: Payslip
+    description: >-
+      An employee wage statement showing earnings, deductions, taxes, and net pay for a specific pay period, 
+      typically issued by employers to document compensation details including gross pay, various tax withholdings, 
+      and year-to-date totals.
+    # Document name regex - only works with single-class configurations
+    # When document ID matches this pattern, all pages are instantly classified as Payslip
+    document_name_regex: "(?i).*(payslip|paystub|salary|wage|earnings).*"
+    attributes:
+      - name: YTDNetPay
+        description: >-
+          Year-to-date net pay amount representing cumulative take-home earnings after all deductions 
+          from the beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: PayPeriodStartDate
+        description: >-
+          The beginning date of the pay period covered by this payslip.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CurrentGrossPay
+        description: >-
+          The total earnings before any deductions for the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+
+  # Example 2: Multi-class configuration with page content regex
+  - name: W2
+    description: >-
+      An annual tax document provided by employers to employees reporting wages earned and 
+      taxes withheld during the tax year for federal and state income tax filing purposes.
+    # Page content regex - works with multi-modal page-level classification
+    # When page content matches this pattern, the page is instantly classified as W2
+    document_page_content_regex: "(?i)(form\\s+w-?2|wage\\s+and\\s+tax|employer\\s+identification|social\\s+security)"
+    attributes:
+      - name: employer_info
+        groupAttributes:
+          - name: employer_name
+            description: The legal name of the employing company or organization.
+            evaluation_method: EXACT
+          - name: ein
+            description: The federal Employer Identification Number of the company.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the employing organization including name and tax identification numbers.
+        evaluation_method: LLM
+        attributeType: group
+
+  - name: Bank-Statement
+    description: >-
+      A periodic financial document issued by banks detailing account activity, balances, 
+      and transactions over a specific time period.
+    # Page content regex for bank statements
+    document_page_content_regex: "(?i)(account\\s+number|account\\s+balance|statement\\s+period|beginning\\s+balance)"
+    attributes:
+      - name: account_number
+        description: >-
+          The unique identifier for the bank account, often partially masked for security purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_type
+        description: >-
+          The category of bank account such as checking, savings, money market, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+
+  - name: US-drivers-licenses  
+    description: >-
+      An official government-issued identification document that authorizes an individual to operate 
+      motor vehicles, containing personal information and driving privileges.
+    # Page content regex for driver's licenses
+    document_page_content_regex: "(?i)(driver\\s+license|state\\s+id|date\\s+of\\s+birth|license\\s+number)"
+    attributes:
+      - name: STATE_NAME
+        description: >-
+          The state or jurisdiction that issued the driver's license, typically shown as a 
+          two-letter state abbreviation.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: ID_NUMBER
+        description: >-
+          The unique driver's license identification number assigned by the issuing state.
+        evaluation_method: EXACT
+        attributeType: simple
+
+  - name: Invoice
+    description: >-
+      A commercial document issued by a seller to a buyer, indicating products, quantities, 
+      and agreed prices for products or services.
+    # Page content regex for invoices
+    document_page_content_regex: "(?i)(invoice\\s+number|bill\\s+to|amount\\s+due|invoice\\s+date|remit\\s+to)"
+    attributes:
+      - name: invoice_number
+        description: >-
+          The unique identifier assigned to this invoice for tracking and reference purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: total_amount
+        description: >-
+          The total amount due for payment as specified on the invoice.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+
+  - name: Other
+    description: >-
+      Documents that do not match any of the specific patterns above. This class has no regex 
+      patterns, so pages will always be classified using LLM processing.
+    # No regex patterns - will always use LLM classification
+    attributes:
+      - name: document_type
+        description: The general type or category of this document.
+        evaluation_method: EXACT
+        attributeType: simple
+
+# Regex Pattern Examples and Guidelines:
+#
+# Document Name Regex (single-class only):
+# - "(?i).*(payslip|paystub).*"        # Matches filenames containing payslip or paystub
+# - "(?i).*invoice.*"                  # Matches filenames containing invoice
+# - "(?i).*w-?2.*"                     # Matches W2, W-2, w2, w-2 in filename
+#
+# Page Content Regex (multi-modal page-level only):
+# - "(?i)(gross\\s+pay|net\\s+pay)"      # Matches payroll terminology with flexible spacing
+# - "(?i)(invoice\\s+number|bill\\s+to)" # Matches invoice-specific terms
+# - "(?i)(form\\s+w-?2|wage\\s+and\\s+tax)" # Matches W2 tax form content
+#
+# Best Practices:
+# 1. Use (?i) for case-insensitive matching
+# 2. Use \\s+ for flexible whitespace matching  
+# 3. Use | for alternation (multiple possible terms)
+# 4. Test patterns against diverse document samples
+# 5. Balance specificity - specific enough to avoid false matches, flexible enough to catch variations
+# 6. Monitor performance - track regex match rates vs LLM fallback usage

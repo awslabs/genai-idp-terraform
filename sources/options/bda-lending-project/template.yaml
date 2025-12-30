@@ -33,9 +33,9 @@ Parameters:
     Description: >-
       (Optional) ARN of an existing IAM Permissions Boundary policy to attach to all IAM roles.
       Required by some organizations with Service Control Policies (SCPs).
-      Format: arn:aws:iam::account-id:policy/policy-name
+      Format: arn:${AWS::Partition}:iam::account-id:policy/policy-name
       Leave blank if no Permissions Boundary is required.
-    AllowedPattern: "^(|arn:aws:iam::[0-9]{12}:policy/.+)$"
+    AllowedPattern: "^(|arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
 
 Conditions:
@@ -57,10 +57,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
+              Service: !Sub "lambda.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: BedrockDataAutomationAccess
@@ -92,6 +92,8 @@ Resources:
             reason: "This Lambda function does not require VPC access as it only interacts with AWS services via AWS APIs"
           - id: W92
             reason: "Function does not require concurrent execution limits as it is designed to scale based on demand"
+          - id: W58
+            reason: "DLQ not required for this function as StepFunctions will handle retries"
     # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
     # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
     # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"

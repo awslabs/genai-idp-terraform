@@ -26,7 +26,7 @@ Thank you for your interest in contributing to the GenAI Intelligent Document Pr
 
 This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
 For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq) or contact
-<opensource-codeofconduct@amazon.com> with any additional questions or comments.
+opensource-codeofconduct@amazon.com with any additional questions or comments.
 
 ## Getting Started
 
@@ -40,7 +40,6 @@ For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of
    - Docker
 
 2. **Fork and Clone the Repository**:
-
    ```bash
    git clone <repository-url> genaiic-idp-accelerator
    cd genaiic-idp-accelerator
@@ -57,7 +56,7 @@ Familiarize yourself with the project structure:
 - `config_library/`: Configuration templates for different processing patterns
 - `docs/`: Documentation files
 - `lib/idp_common_pkg/`: Core functionality library for IDP
-- `notebooks`: Notebooks demonstrating use of idp_common python package.
+- `notebooks`: Notebooks demonstrating use of idp_common python package. 
 - `patterns/`: Implementation of document processing patterns
 - `samples/`: Sample documents for testing
 - `scripts/`: Utility scripts for development, testing, and deployment
@@ -71,11 +70,10 @@ Familiarize yourself with the project structure:
 ### Branching Strategy
 
 1. Create a branch from `develop` for your work:
-
    ```bash
    git checkout -b feature/your-feature-name
    ```
-
+   
    Use prefixes like `feature/`, `fix/`, `docs/` to indicate the type of change.
 
 ### Making Changes
@@ -90,7 +88,6 @@ Familiarize yourself with the project structure:
 ### Testing Your Changes
 
 1. **Local Testing**:
-
    ```bash
    # Run Python unit tests
    pytest lib/idp_common_pkg/tests/
@@ -164,10 +161,10 @@ We provide issue templates to make this process easier:
 When filing an issue, please check existing open, or recently closed, issues to make sure somebody else hasn't already
 reported the issue. Please try to include as much information as you can. Details like these are incredibly useful:
 
-- A reproducible test case or series of steps
-- The version of our code being used
-- Any modifications you've made relevant to the bug
-- Anything unusual about your environment or deployment
+* A reproducible test case or series of steps
+* The version of our code being used
+* Any modifications you've made relevant to the bug
+* Anything unusual about your environment or deployment
 
 For feature requests:
 
@@ -184,7 +181,6 @@ For feature requests:
 - **IAM Permissions**: Only request the minimum necessary permissions for new functionality
 
 ## Security issue notifications
-
 If you discover a potential security issue in this project we ask that you notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public github issue.
 
 ---

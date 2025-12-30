@@ -20,6 +20,7 @@ This directory contains the default configuration for the GenAI IDP Accelerator.
 
 The default configuration
 
+
 ## Key Components
 
 ### Document Classes and Extraction Settings
@@ -28,13 +29,13 @@ Defined by the BDA project referenced by the BDA Project Arn specified at deploy
 
 NOTE If BDA Project Arn was left blank at deployment, then a demo BDA project is created for you, that is
 designed to work with the sample 'lending_package.pdf' document to identify:
-
 - Payslip
 - US Bank Checks
 - W2
 - US-drivers-licenses
 - Bank-Statement
 - Homeowners-Insurance-Application
+
 
 ### Summarization Settings
 
@@ -55,7 +56,6 @@ To use this default configuration:
 1. **Direct Use**: Deploy the GenAI IDP Accelerator with this configuration without any modifications for general-purpose document processing.
 
 2. **As a Template**: Copy this configuration to a new directory and modify it for your specific use case:
-
    ```bash
    cp -r config_library/pattern-2/default config_library/pattern-2/your_use_case_name
    ```
@@ -66,14 +66,13 @@ To use this default configuration:
 
 ### Adding New Document Classes
 
-Classess and attributes are defined by the BDA project blueprints - use the BDA console to configure your project.
+Classess and attributes are defined by the BDA project blueprints - use the BDA console to configure your project. 
 
-You can optionally add Classes and Attributes definitions in the IDP accelerator configuration for fine grain control of evaluation methods, to override the default evaluation method of 'LLM' for specific attributes.
+You can optionally add Classes and Attributes definitions in the IDP accelerator configuration for fine grain control of evaluation methods, to override the default evaluation method of 'LLM' for specific attributes. 
 
 To add a new document class:
 
 1. Add a new entry to the `classes` array in the configuration:
-
    ```json
    {
      "name": "your_class_name",
@@ -98,6 +97,7 @@ See BDA blueprints
 
 Model choice for Classification and Extraction is managed by BDA.
 You can select your preffered model and prompts for Summarization and Evaluation.
+
 
 ## Contributors
 

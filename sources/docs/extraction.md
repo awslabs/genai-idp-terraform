@@ -79,7 +79,6 @@ The extraction service supports precise control over where document images are p
 ### How {DOCUMENT_IMAGE} Works
 
 **Without Placeholder (Default Behavior):**
-
 ```yaml
 extraction:
   task_prompt: |
@@ -92,11 +91,9 @@ extraction:
     
     Respond with valid JSON.
 ```
-
 Images are automatically appended after the text content.
 
 **With Placeholder (Controlled Placement):**
-
 ```yaml
 extraction:
   task_prompt: |
@@ -112,13 +109,11 @@ extraction:
     
     Respond with valid JSON containing the extracted values.
 ```
-
 Images are inserted exactly where `{DOCUMENT_IMAGE}` appears in the prompt.
 
 ### Usage Examples
 
 **Visual-First Extraction:**
-
 ```yaml
 task_prompt: |
   You are extracting data from a {DOCUMENT_CLASS}. Here are the fields to find:
@@ -134,7 +129,6 @@ task_prompt: |
 ```
 
 **Image for Context and Verification:**
-
 ```yaml
 task_prompt: |
   Extract these fields from a {DOCUMENT_CLASS}:
@@ -150,7 +144,6 @@ task_prompt: |
 ```
 
 **Mixed Content Analysis:**
-
 ```yaml
 task_prompt: |
   You are processing a {DOCUMENT_CLASS} that may contain both text and visual elements like tables, stamps, or signatures.
@@ -233,6 +226,212 @@ extraction:
 4. **Handle OCR Limitations**: Use images to fill gaps where OCR may miss visual-only content
 5. **Consider Document Types**: Different document types benefit from different image placement strategies
 
+## Custom Prompt Generator Lambda Functions
+
+The extraction service supports custom Lambda functions for advanced prompt generation, allowing you to inject custom business logic into the extraction process while leveraging the existing IDP infrastructure.
+
+### Overview
+
+Custom prompt generator Lambda functions enable:
+
+- **Document type-specific processing** with specialized extraction logic
+- **Integration with external systems** for dynamic configuration retrieval
+- **Conditional processing** based on document content analysis
+- **Regulatory compliance** with industry-specific prompt requirements
+- **Multi-tenant customization** for different customer requirements
+
+### Configuration
+
+Add the `custom_prompt_lambda_arn` field to your extraction configuration:
+
+```yaml
+extraction:
+  model: us.amazon.nova-pro-v1:0
+  temperature: 0.0
+  system_prompt: "Your default system prompt..."
+  task_prompt: "Your default task prompt..."
+  # Custom Lambda function for prompt generation
+  custom_prompt_lambda_arn: "arn:aws:lambda:us-east-1:123456789012:function:GENAIIDP-my-extractor"
+```
+
+**Lambda Function Requirements:**
+- Function name must start with `GENAIIDP-` (required for IAM permissions)
+- Must return valid JSON with `system_prompt` and `task_prompt_content` fields
+- Available in Patterns 2 and 3 only
+
+### Lambda Interface
+
+Your Lambda function receives a comprehensive payload with all context needed for prompt generation:
+
+**Input Payload:**
+```json
+{
+  "config": {
+    "extraction": {...},
+    "classes": [...],
+    "assessment": {...}
+  },
+  "prompt_placeholders": {
+    "DOCUMENT_TEXT": "Full OCR extracted text from all pages",
+    "DOCUMENT_CLASS": "Invoice",
+    "ATTRIBUTE_NAMES_AND_DESCRIPTIONS": "Invoice Number\t[Unique identifier]...",
+    "DOCUMENT_IMAGE": ["s3://bucket/document/pages/1/image.jpg", "s3://bucket/document/pages/2/image.jpg"]
+  },
+  "default_task_prompt_content": [
+    {"text": "Resolved default task prompt with placeholders replaced"},
+    {"image_uri": "<image_placeholder>"}, 
+    {"cachePoint": true}
+  ],
+  "serialized_document": {
+    "id": "document-123",
+    "input_bucket": "my-bucket", 
+    "input_key": "documents/invoice.pdf",
+    "pages": {...},
+    "sections": [...],
+    "status": "EXTRACTING"
+  }
+}
+```
+
+**Required Output:**
+```json
+{
+  "system_prompt": "Your custom system prompt based on document analysis",
+  "task_prompt_content": [
+    {"text": "Your custom task prompt with business logic applied"},
+    {"image_uri": "<preserved_placeholder>"},
+    {"cachePoint": true}
+  ]
+}
+```
+
+### Implementation Examples
+
+**Document Type Detection:**
+```python
+def lambda_handler(event, context):
+    placeholders = event.get('prompt_placeholders', {})
+    document_class = placeholders.get('DOCUMENT_CLASS', '')
+    
+    if 'bank statement' in document_class.lower():
+        return generate_banking_prompts(event)
+    elif 'invoice' in document_class.lower():
+        return generate_invoice_prompts(event)
+    else:
+        return use_default_prompts(event)
+```
+
+**Content-Based Analysis:**
+```python
+def lambda_handler(event, context):
+    placeholders = event.get('prompt_placeholders', {})
+    document_text = placeholders.get('DOCUMENT_TEXT', '')
+    image_uris = placeholders.get('DOCUMENT_IMAGE', [])
+    
+    # Multi-page processing logic
+    if len(image_uris) > 3:
+        return generate_multi_page_prompts(event)
+    
+    # International document detection
+    if any(term in document_text.lower() for term in ['vat', 'gst', 'euro']):
+        return generate_international_prompts(event)
+    
+    return use_standard_prompts(event)
+```
+
+**External System Integration:**
+```python
+import boto3
+
+def lambda_handler(event, context):
+    document = event.get('serialized_document', {})
+    customer_id = document.get('customer_id')  # Custom field
+    
+    # Retrieve customer-specific rules
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('customer-extraction-rules')
+    
+    customer_rules = table.get_item(Key={'customer_id': customer_id}).get('Item', {})
+    
+    # Apply customer-specific customization
+    if customer_rules.get('enhanced_validation'):
+        return generate_enhanced_validation_prompts(event)
+    
+    return use_standard_prompts(event)
+```
+
+### Error Handling
+
+The system implements **fail-fast error handling** for custom Lambda functions:
+
+- **Lambda invocation failures** cause extraction to fail with detailed error messages
+- **Invalid response format** results in extraction failure with validation errors
+- **Function errors** propagate with Lambda error details
+- **Timeout scenarios** fail with timeout information
+
+**Example Error Messages:**
+```
+Failed to invoke custom prompt Lambda arn:aws:lambda:...: Connection timeout
+Custom prompt Lambda failed: KeyError: 'system_prompt' not found in response
+Custom prompt Lambda returned invalid response format: expected dict, got str
+```
+
+### Performance Considerations
+
+- **Lambda Overhead**: Adds latency from Lambda cold starts and execution time
+- **JSON Serialization**: Optimized with URI-based image handling to minimize payload size
+- **Efficient Interface**: Avoids sending large image bytes, uses S3 URIs instead
+- **Monitoring**: Comprehensive logging for performance analysis and troubleshooting
+
+### Deployment and Testing
+
+**1. Demo Lambda Function:**
+Deploy the provided demo Lambda for testing:
+```bash
+cd notebooks/examples/demo-lambda
+sam deploy --guided
+```
+
+**2. Interactive Testing:**
+Use the demo notebook for hands-on experimentation:
+```bash
+jupyter notebook notebooks/examples/step3_extraction_with_custom_lambda.ipynb
+```
+
+**3. Production Deployment:**
+Create your production Lambda with business-specific logic and deploy with appropriate IAM permissions.
+
+### Use Cases
+
+**Financial Services:**
+- Regulatory compliance prompts for different financial products
+- Multi-currency transaction handling with exchange rate awareness
+- Customer-specific formatting for different banking institutions
+
+**Healthcare:**
+- HIPAA compliance with privacy-focused prompts
+- Medical terminology enhancement for clinical documents
+- Provider-specific templates for different healthcare systems
+
+**Legal:**
+- Jurisdiction-specific legal language processing
+- Contract type specialization (NDAs, service agreements, etc.)
+- Compliance requirements for regulatory documents
+
+**Insurance:**
+- Policy type customization for different insurance products
+- Claims processing with adjuster-specific requirements
+- Risk assessment integration with underwriting systems
+
+### Security and Compliance
+
+- **Scoped IAM Permissions**: Only Lambda functions with `GENAIIDP-*` naming can be invoked
+- **Audit Trail**: All Lambda invocations are logged for security monitoring
+- **Input Validation**: Lambda response structure is validated before use
+- **Fail-Safe Operation**: Lambda failures cause extraction to fail rather than continue with potentially incorrect prompts
+
+For complete examples and deployment instructions, see `notebooks/examples/demo-lambda/README.md`.
+
 ## Using CachePoint for Extraction
 
 CachePoint is a feature of select Bedrock models that caches partial computations to improve performance and reduce costs. When used with extraction, it provides:
@@ -290,7 +489,6 @@ pricing:
 ### Optimal CachePoint Placement
 
 For extraction tasks, place CachePoint tags to separate:
-
 1. **Static content** (system instructions, few-shot examples) - cacheable
 2. **Dynamic content** (document text, specific attributes) - not cacheable
 
@@ -522,7 +720,6 @@ YAML format provides significant token savings for extraction tasks:
 ### Example Prompt Configurations
 
 **JSON-focused extraction prompt:**
-
 ```yaml
 extraction:
   system_prompt: |
@@ -538,7 +735,6 @@ extraction:
 ```
 
 **YAML-focused extraction prompt:**
-
 ```yaml
 extraction:
   system_prompt: |
@@ -556,7 +752,6 @@ extraction:
 ### Complex Data Structure Examples
 
 **JSON format for nested extraction:**
-
 ```json
 {
   "vendor_info": {
@@ -579,7 +774,6 @@ extraction:
 ```
 
 **Equivalent YAML format (more compact):**
-
 ```yaml
 vendor_info:
   name: ACME Corporation
@@ -615,13 +809,11 @@ The extraction service uses the new `extract_structured_data_from_text()` functi
 For a typical invoice extraction with 10 fields:
 
 **JSON format (traditional):**
-
 ```json
 {"invoice_number": "INV-2024-001", "invoice_date": "2024-03-15", "vendor_name": "ACME Corp", "total_amount": "1,234.56", "tax_amount": "123.45", "subtotal": "1,111.11", "due_date": "2024-04-15", "payment_terms": "Net 30", "customer_name": "John Smith", "customer_address": "456 Oak Ave, City, State 67890"}
 ```
 
 **YAML format (more efficient):**
-
 ```yaml
 invoice_number: INV-2024-001
 invoice_date: 2024-03-15

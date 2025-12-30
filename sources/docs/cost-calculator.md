@@ -15,17 +15,14 @@ The primary cost drivers for the GenAI IDP Accelerator solution include:
 ### 1. Document Processing Services
 
 #### Pattern 1: Bedrock Data Automation (BDA)
-
 - **BDA Processing**: The main cost component for Pattern 1, charged per document processed.
 - **Amazon Bedrock**: Used for summarization (if enabled).
 
 #### Pattern 2: Textract and Bedrock
-
 - **Amazon Textract**: Costs based on the number of pages processed.
 - **Amazon Bedrock**: Costs based on the models used, input tokens processed, and output tokens generated.
 
 #### Pattern 3: Textract, SageMaker (UDOP), and Bedrock
-
 - **Amazon Textract**: Costs based on the number of pages processed.
 - **Amazon SageMaker**: Costs based on the instance type used and running time.
 - **Amazon Bedrock**: Costs for extraction and optional summarization.

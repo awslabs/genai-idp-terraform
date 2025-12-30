@@ -132,21 +132,18 @@ validation_config = {
 ### Configuration Parameters Reference
 
 #### Processing Controls
-
 - **semaphore**: Controls concurrent LLM requests (default: 5)
 - **max_chunk_size**: Maximum tokens per text chunk (default: 10,000)
 - **token_size**: Average characters per token for estimation (default: 4)
 - **overlap_percentage**: Percentage overlap between chunks (default: 10%)
 
 #### Model Parameters
-
 - **temperature**: LLM temperature for deterministic responses (default: 0.0)
 - **top_k**: Top-k sampling parameter (default: 5)
 - **top_p**: Top-p sampling parameter (default: 0.1)
 - **max_tokens**: Optional maximum tokens in response
 
 #### Storage Configuration
-
 - **request_bucket**: S3 bucket containing user history files
 - **request_history_prefix**: Prefix for organizing request data
 - **criteria_bucket**: S3 bucket containing criteria definitions
@@ -166,7 +163,6 @@ s3://{request_bucket}/{request_history_prefix}-{request_id}/extracted_text/
 ```
 
 **Requirements:**
-
 - Files must have `.txt` extension
 - UTF-8 encoding required
 - Automatically chunked if exceeding token limits
@@ -181,7 +177,6 @@ s3://{criteria_bucket}/{criteria_type}.json
 ```
 
 **Format:**
-
 ```json
 {
     "criteria": [
@@ -194,7 +189,6 @@ s3://{criteria_bucket}/{criteria_type}.json
 ```
 
 **Best Practices for Criteria Questions:**
-
 - Write specific, answerable questions
 - Focus on binary Pass/Fail outcomes when possible
 - Ensure questions can be answered from typical user history
@@ -357,7 +351,6 @@ Large documents are intelligently chunked with overlap for context preservation:
 ```
 
 **Chunking Process:**
-
 1. Estimate tokens using `len(text) // token_size`
 2. If exceeding `max_chunk_size`, split into overlapping chunks
 3. Each chunk overlaps by `overlap_percentage` with the next
@@ -446,7 +439,6 @@ except Exception as e:
 ### Common Issues and Solutions
 
 #### No Text Files Found
-
 ```
 Error: "No text files found for request {request_id}"
 Solution: Verify file locations and .txt extension
@@ -454,7 +446,6 @@ Expected: s3://{bucket}/{prefix}-{request_id}/extracted_text/*.txt
 ```
 
 #### JSON Parsing Failures
-
 ```
 Symptoms: "Information Not Found" responses with parsing errors
 Solutions: 
@@ -464,7 +455,6 @@ Solutions:
 ```
 
 #### Rate Limiting Issues
-
 ```
 Symptoms: HTTP 429 errors or slow processing
 Solutions:
@@ -474,7 +464,6 @@ Solutions:
 ```
 
 #### High Token Costs
-
 ```
 Solutions for cost optimization:
 - Reduce max_chunk_size (e.g., from 10000 to 8000)
@@ -511,14 +500,12 @@ logging.getLogger('idp_common.criteria_validation').setLevel(logging.DEBUG)
 ### Criteria Design Principles
 
 1. **Specific Questions**: Write clear, answerable criteria questions
-
    ```
    Good: "Is the facility equipped with emergency response equipment?"
    Poor: "Is the facility adequate?"
    ```
 
 2. **Binary Decisions**: Design for clear Pass/Fail outcomes when possible
-
    ```
    Good: "Has the physician documented contraindications?"
    Poor: "What are the physician's thoughts on contraindications?"
@@ -536,8 +523,7 @@ logging.getLogger('idp_common.criteria_validation').setLevel(logging.DEBUG)
 
 ### Production Deployment
 
-1. **Scaling Configuration**:
-
+1. **Scaling Configuration**: 
    ```python
    # Production settings
    "criteria_validation": {

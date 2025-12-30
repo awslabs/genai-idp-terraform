@@ -1,9 +1,9 @@
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
-# How to run IDP UI Locally
+# How to run IDP UI Locally:
 
-1. To get the IDP UI to run locally, you will need to configure a `.env` file in the `/src/ui/` folder. The contents of the `.env` file must contain the environment variables listed below along with their values.
+1. To get the IDP UI to run locally, you will need to configure a `.env` file in the `/src/ui/` folder. The contents of the `.env` file must contain the environment variables listed below along with their values. 
 
 The values may be found in the Outputs of the GenAIIDP stack under `WebUITestEnvFile`.
 Example contents of `.env` file:
@@ -17,10 +17,13 @@ Example contents of `.env` file:
   REACT_APP_SETTINGS_PARAMETER=CFN-IDPSettingsParameter-XXXXXXXXXXXX
 ```
 
+
+
 2. Make sure you have NodeJS 16+ installed.
 3. Run `npm install` to install dependencies
 4. Run `npm run start` to start the local development mode.
 5. Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+
 
 Default React App Readme Below:
 

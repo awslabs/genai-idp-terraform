@@ -23,6 +23,27 @@ Parameters:
     Type: String
     Description: Enter the ARN of the customer managed key.
 
+  pVectorStoreType:
+    Type: String
+    Default: OPENSEARCH_SERVERLESS
+    AllowedValues:
+      - OPENSEARCH_SERVERLESS
+      - S3_VECTORS
+    Description: Choose vector store type for Bedrock Knowledge Base. OpenSearch Serverless (default) for sub-millisecond queries, S3 Vectors for cost-effective storage with sub-second latency.
+
+  pS3VectorBucketName:
+    Type: String
+    Default: ""
+    Description: >-
+      Name for S3 vector bucket (auto-generated if empty). Only used when pVectorStoreType is S3_VECTORS.
+
+  pS3VectorIndexName:
+    Type: String
+    Default: "bedrock-kb-index"
+    Description: >-
+      Name for S3 vector index. Only used when pVectorStoreType is S3_VECTORS.
+
+
   pKnowledgeBaseBucketName:
     Type: String
     Default: ""
@@ -70,7 +91,6 @@ Parameters:
     Type: String
     AllowedValues:
       - amazon.titan-embed-text-v2:0
-      - amazon.titan-embed-text-v1
       - cohere.embed-english-v3
       - cohere.embed-multilingual-v3
     Default: amazon.titan-embed-text-v2:0
@@ -129,14 +149,20 @@ Parameters:
     Description: >-
       (Optional) ARN of an existing IAM Permissions Boundary policy to attach to all IAM roles.
       Required by some organizations with Service Control Policies (SCPs).
-      Format: arn:aws:iam::account-id:policy/policy-name
+      Format: arn:${AWS::Partition}:iam::account-id:policy/policy-name
       Leave blank if no Permissions Boundary is required.
-    AllowedPattern: "^(|arn:aws:iam::[0-9]{12}:policy/.+)$"
+    AllowedPattern: "^(|arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
 
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
+      - Label:
+          default: Vector Store Configuration
+        Parameters:
+          - pVectorStoreType
+          - pS3VectorBucketName
+          - pS3VectorIndexName
       - Label:
           default: Knowledge Base Data Sources
         Parameters:
@@ -166,6 +192,12 @@ Metadata:
           - pTextFieldName
 
     ParameterLabels:
+      pVectorStoreType:
+        default: Vector Store Type
+      pS3VectorBucketName:
+        default: S3 Vector Bucket Name (S3 Vectors only)
+      pS3VectorIndexName:
+        default: S3 Vector Index Name (S3 Vectors only)
       pCustomerManagedEncryptionKeyArn:
         default: Customer Managed Key ARN
       pKnowledgeBaseBucketName:
@@ -240,6 +272,9 @@ Conditions:
       - Condition: IsChunkingStrategyFixed
       - Condition: IsChunkingStrategyDefault
   HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  UseS3Vectors: !Equals [!Ref pVectorStoreType, "S3_VECTORS"]
+  UseOpenSearchServerless: !Equals [!Ref pVectorStoreType, "OPENSEARCH_SERVERLESS"]
+  HasS3VectorBucketName: !Not [!Equals [!Ref pS3VectorBucketName, ""]]
 
 Resources:
   # Custom resource to transform input to lowercase.
@@ -334,19 +369,136 @@ Resources:
       ServiceToken: !GetAtt GetSeedUrlsFunction.Arn
       WebCrawlerURLs: !Ref pWebCrawlerURLs
 
+  #
+  # S3 Vectors Custom Resource for creating vector bucket and index
+  #
+  S3VectorManagerRole:
+    Type: AWS::IAM::Role
+    Condition: UseS3Vectors
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub "lambda.${AWS::URLSuffix}"
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Policies:
+        - PolicyName: S3VectorsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3vectors:CreateVectorBucket
+                  - s3vectors:DeleteVectorBucket
+                  - s3vectors:GetVectorBucket
+                  - s3vectors:ListVectorBuckets
+                  - s3vectors:CreateIndex
+                  - s3vectors:DeleteIndex
+                  - s3vectors:GetIndex
+                  - s3vectors:ListIndexes
+                  - s3vectors:PutVectors
+                  - s3vectors:GetVectors
+                  - s3vectors:QueryVectors
+                  - s3vectors:DeleteVectors
+                Resource: "*"
+        - PolicyName: BedrockAgentAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:CreateKnowledgeBase
+                  - bedrock:DeleteKnowledgeBase
+                  - bedrock:GetKnowledgeBase
+                  - bedrock:UpdateKnowledgeBase
+                  - bedrock:ListKnowledgeBases
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
+        - !If
+          - IsCustomerManagedKey
+          - PolicyName: KMSAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - kms:Encrypt
+                    - kms:Decrypt
+                    - kms:ReEncrypt*
+                    - kms:GenerateDataKey*
+                    - kms:DescribeKey
+                  Resource: !Ref pCustomerManagedEncryptionKeyArn
+          - !Ref "AWS::NoValue"
+
+  S3VectorManagerFunction:
+    Type: AWS::Serverless::Function
+    Condition: UseS3Vectors
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for Cfn Custom Resource function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: handler.lambda_handler
+      Role: !GetAtt S3VectorManagerRole.Arn
+      Runtime: python3.12
+      Timeout: 600
+      MemorySize: 512
+      CodeUri: ./src/s3_vectors_manager
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+
+  S3VectorBucketAndIndex:
+    Type: Custom::S3VectorBucketAndIndex
+    Condition: UseS3Vectors
+    Properties:
+      ServiceToken: !GetAtt S3VectorManagerFunction.Arn
+      BucketName: !If
+        - HasS3VectorBucketName
+        - !Ref pS3VectorBucketName
+        - !Sub "${AWS::StackName}-s3-vectors"
+      IndexName: !Ref pS3VectorIndexName
+      EmbeddingModel: !Ref pEmbedModel
+      Region: !Ref AWS::Region
+      KmsKeyArn: !If [IsCustomerManagedKey, !Ref pCustomerManagedEncryptionKeyArn, !Ref "AWS::NoValue"]
+      VectorDimension: 1024
+      DistanceMetric: "cosine"
+      MetadataConfiguration:
+        nonFilterableMetadataKeys:
+          - "AMAZON_BEDROCK_METADATA"
+          - "AMAZON_BEDROCK_TEXT"
+
+  #
+  # OpenSearch Serverless resources (only when using OpenSearch)
+  #
   OSSCollection:
     Type: AWS::OpenSearchServerless::Collection
+    Condition: UseOpenSearchServerless
     Properties:
       Name: !Sub "${AdjustedStackName.OutputString}"
       Type: VECTORSEARCH
       Description: Bedrock Knowledge Base collection
     DependsOn: OSSEncryptionPolicy
 
-  #
-  # OpenSearch Serverless resources
-  #
   OSSEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
+    Condition: UseOpenSearchServerless
     Properties:
       Name: !Sub "${AdjustedStackName.OutputString}"
       Type: encryption
@@ -357,6 +509,7 @@ Resources:
 
   OSSNetworkPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
+    Condition: UseOpenSearchServerless
     DependsOn:
       - OSSEncryptionPolicy
     Properties:
@@ -371,6 +524,7 @@ Resources:
 
   OSSDataAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
+    Condition: UseOpenSearchServerless
     DependsOn:
       - OSSNetworkPolicy
     Properties:
@@ -382,16 +536,13 @@ Resources:
           "ResourceType": "collection"}, {"ResourceType": "index", "Resource": ["index/${CollName}/*"],
           "Permission": ["aoss:CreateIndex", "aoss:DescribeIndex", "aoss:ReadDocument",
           "aoss:WriteDocument", "aoss:UpdateIndex", "aoss:DeleteIndex"]}],
-          "Principal": ["arn:aws:iam::${AWS::AccountId}:role/${KnowledgeBaseServiceRole}"]}]'
+          "Principal": ["${ServiceRoleArn}"]}]'
         - CollName: !Sub "${AdjustedStackName.OutputString}"
-
-  #
-  # Custom resource code to initialize OpenSearch Serverless index
-  # Cloned from https://github.com/aws-samples/contact-center-genai-agent/blob/main/infrastructure/bedrock-KB.yaml#L303-L312
-  #
+          ServiceRoleArn: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${KnowledgeBaseServiceRole}"
 
   OpenSearchLambdaExecutionRole:
     Type: AWS::IAM::Role
+    Condition: UseOpenSearchServerless
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -399,7 +550,7 @@ Resources:
         - Effect: Allow
           Principal:
             Service:
-            - lambda.amazonaws.com
+            - !Sub "lambda.${AWS::URLSuffix}"
           Action:
           - sts:AssumeRole
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
@@ -422,7 +573,7 @@ Resources:
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
+            Resource: !Sub "arn:${AWS::Partition}:logs:*:*:*"
       - PolicyName: AllowS3 # Reference: https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazons3.html
         PolicyDocument:
           Version: '2012-10-17'
@@ -433,7 +584,7 @@ Resources:
             - s3:GetObject*
             - s3:DeleteObject*
             Resource:
-              Fn::Sub: arn:aws:s3:::*
+              Fn::Sub: arn:${AWS::Partition}:s3:::*
       - PolicyName: AOSSPermissionsPart1 # References: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/security-iam-serverless.html, https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonopensearchserverless.html
         PolicyDocument:
           Version: '2012-10-17'
@@ -459,7 +610,7 @@ Resources:
             - aoss:UpdateCollection
             - aoss:APIAccessAll
             Resource:
-              Fn::Sub: arn:aws:aoss:${AWS::Region}:${AWS::AccountId}:collection/*
+              Fn::Sub: arn:${AWS::Partition}:aoss:${AWS::Region}:${AWS::AccountId}:collection/*
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -468,6 +619,7 @@ Resources:
 
   CreateOSSIndexLambdaFunction:
     Type: AWS::Serverless::Function
+    Condition: UseOpenSearchServerless
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -495,6 +647,7 @@ Resources:
 
   InvokeCreateOSSIndexLambdaFunction:
     Type: Custom::InvokeCreateOSSIndexLambdaFunction
+    Condition: UseOpenSearchServerless
     DependsOn:
     - CreateOSSIndexLambdaFunction
     - OSSDataAccessPolicy
@@ -510,7 +663,6 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
-
   #
   # IAM Role used by the Bedrock service to access S3, OpenSearch, and embedding models
   #
@@ -523,14 +675,14 @@ Resources:
           - Effect: Allow
             Principal:
               Service:
-                - bedrock.amazonaws.com
+                - !Sub "bedrock.${AWS::URLSuffix}"
             Action:
               - sts:AssumeRole
             Condition:
               StringEquals:
                 aws:SourceAccount: !Sub ${AWS::AccountId}
               ArnLike:
-                aws:SourceArn: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: bedrock-invoke-model
@@ -541,16 +693,35 @@ Resources:
                 Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/*
-        - PolicyName: oss-api-access
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: OpenSearchServerlessAPIAccessAll
-                Effect: Allow
-                Action:
-                  - aoss:APIAccessAll
-                Resource: !GetAtt OSSCollection.Arn
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${pEmbedModel}"
+        - !If
+          - UseOpenSearchServerless
+          - PolicyName: oss-api-access
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: OpenSearchServerlessAPIAccessAll
+                  Effect: Allow
+                  Action:
+                    - aoss:APIAccessAll
+                  Resource: !GetAtt OSSCollection.Arn
+          - !Ref "AWS::NoValue"
+        - !If
+          - UseS3Vectors
+          - PolicyName: s3-vectors-access
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: S3VectorsAccess
+                  Effect: Allow
+                  Action:
+                    - s3vectors:GetIndex
+                    - s3vectors:QueryVectors
+                    - s3vectors:PutVectors
+                    - s3vectors:GetVectors
+                    - s3vectors:DeleteVectors
+                  Resource: !GetAtt S3VectorBucketAndIndex.IndexArn
+          - !Ref "AWS::NoValue"
         - !If
           - IsS3DataSource
           - PolicyName: s3-read-objects
@@ -561,12 +732,20 @@ Resources:
                   Effect: Allow
                   Action:
                     - s3:ListBucket
-                  Resource: !Sub arn:aws:s3:::${pKnowledgeBaseBucketName}
+                  Resource: !If
+                    - UseS3Vectors
+                    - - !Sub "arn:${AWS::Partition}:s3:::${pKnowledgeBaseBucketName}"
+                      - !GetAtt S3VectorBucketAndIndex.BucketArn
+                    - - !Sub "arn:${AWS::Partition}:s3:::${pKnowledgeBaseBucketName}"
                 - Sid: S3GetObject
                   Effect: Allow
                   Action:
                     - s3:GetObject
-                  Resource: !Sub arn:aws:s3:::${pKnowledgeBaseBucketName}/*
+                  Resource: !If
+                    - UseS3Vectors
+                    - - !Sub "arn:${AWS::Partition}:s3:::${pKnowledgeBaseBucketName}/*"
+                      - !GetAtt S3VectorBucketAndIndex.BucketArn
+                    - - !Sub "arn:${AWS::Partition}:s3:::${pKnowledgeBaseBucketName}/*"
           - !Ref "AWS::NoValue"
         - !If
           - IsCustomerManagedKey
@@ -585,22 +764,24 @@ Resources:
           - !Ref "AWS::NoValue"
 
   #
-  # Bedrock Knowedge Base resources
+  # Unified Bedrock Knowledge Base resource (uses CloudFormation or Custom Resource based on vector store type)
   #
-  KnowledgeBase:
+  KnowledgeBaseOpenSearchNative:
     Type: AWS::Bedrock::KnowledgeBase
+    Condition: UseOpenSearchServerless
     DependsOn:
       - InvokeCreateOSSIndexLambdaFunction
     Properties:
-      Description: Bedrock Knowledge Base
+      Description: Bedrock Knowledge Base with OpenSearch Serverless
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn:
-            Fn::Sub: arn:aws:bedrock:${AWS::Region}::foundation-model/${pEmbedModel}
-      Name: !Sub "${AWS::StackName}"
+            Fn::Sub: arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${pEmbedModel}
+      Name: !Sub "${AWS::StackName}-OpenSearchServerless"
       RoleArn: !GetAtt KnowledgeBaseServiceRole.Arn
       StorageConfiguration:
+        Type: OPENSEARCH_SERVERLESS
         OpensearchServerlessConfiguration:
           CollectionArn: !GetAtt OSSCollection.Arn
           FieldMapping:
@@ -612,7 +793,34 @@ Resources:
               Ref: pVectorFieldName
           VectorIndexName:
             Ref: pIndexName
-        Type: OPENSEARCH_SERVERLESS
+
+  KnowledgeBaseS3VectorsCustom:
+    Type: Custom::S3VectorsKnowledgeBase
+    Condition: UseS3Vectors
+    DependsOn:
+      - S3VectorBucketAndIndex
+    Properties:
+      ServiceToken: !GetAtt S3VectorManagerFunction.Arn
+      ResourceType: S3VectorsKnowledgeBase
+      Name: !Sub "${AWS::StackName}-S3Vectors"
+      Description: "Bedrock Knowledge Base with S3 Vectors"
+      RoleArn: !GetAtt KnowledgeBaseServiceRole.Arn
+      EmbeddingModelArn: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${pEmbedModel}"
+      IndexArn: !GetAtt S3VectorBucketAndIndex.IndexArn
+      Region: !Ref AWS::Region
+      KmsKeyArn: !If [IsCustomerManagedKey, !Ref pCustomerManagedEncryptionKeyArn, !Ref "AWS::NoValue"]
+
+  # Unified Knowledge Base reference for data sources and other resources
+  KnowledgeBase:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${AWS::StackName}-KnowledgeBaseId"
+      Type: String
+      Value: !If
+        - UseS3Vectors
+        - !GetAtt KnowledgeBaseS3VectorsCustom.KnowledgeBaseId
+        - !Ref KnowledgeBaseOpenSearchNative
+      Description: Unified Knowledge Base ID for resource references
 
   S3DataSource:
     Type: AWS::Bedrock::DataSource
@@ -625,15 +833,14 @@ Resources:
         Type: S3
         S3Configuration:
           BucketArn:
-            Fn::Sub: arn:aws:s3:::${pKnowledgeBaseBucketName}
+            Fn::Sub: arn:${AWS::Partition}:s3:::${pKnowledgeBaseBucketName}
           InclusionPrefixes:
             Fn::If:
               - HasInputDocumentUploadFolderPrefix
               - !Split [",", Ref: pInputDocumentUploadFolderPrefix]
               - Ref: AWS::NoValue
-      Description: S3 KnowKnowledge Base Data Source
-      KnowledgeBaseId:
-        Ref: KnowledgeBase
+      Description: S3 Knowledge Base Data Source
+      KnowledgeBaseId: !GetAtt KnowledgeBase.Value
       Name: !Sub "S3KBDataSource-${AWS::StackName}"
       VectorIngestionConfiguration:
         ChunkingConfiguration:
@@ -683,9 +890,8 @@ Resources:
           SourceConfiguration:
             UrlConfiguration:
               SeedUrls: !GetAtt GetSeedUrls.SeedUrls
-      Description: Web KnowKnowledge Base Data Source
-      KnowledgeBaseId:
-        Ref: KnowledgeBase
+      Description: Web Knowledge Base Data Source
+      KnowledgeBaseId: !GetAtt KnowledgeBase.Value
       Name: !Sub "WebKBDataSource-${AWS::StackName}"
       VectorIngestionConfiguration:
         ChunkingConfiguration:
@@ -724,10 +930,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
+              Service: !Sub "lambda.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyDocument:
@@ -737,7 +943,7 @@ Resources:
                 Action:
                   - "bedrock:StartIngestionJob"
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/${KnowledgeBase}"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/${KnowledgeBase.Value}"
           PolicyName: BedrockPolicy
 
   StartIngestionJobFunction:
@@ -749,6 +955,8 @@ Resources:
             reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
           - id: W92
             reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W58
+            reason: "DLQ not required for Cfn Custom Resource function"
     # checkov:skip=CKV_AWS_116: "DLQ not required for Cfn Custom Resource function"
     # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
     # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
@@ -767,23 +975,29 @@ Resources:
   StartWebIngestionJob:
     Type: AWS::CloudFormation::CustomResource
     Condition: IsWebDataSource
+    DependsOn:
+      - KnowledgeBase
     Properties:
       ServiceToken: !GetAtt StartIngestionJobFunction.Arn
-      knowledgeBaseId: !Ref KnowledgeBase
+      knowledgeBaseId: !GetAtt KnowledgeBase.Value
       dataSourceId: !GetAtt WebDataSource.DataSourceId
 
   StartS3IngestionJob:
     Type: AWS::CloudFormation::CustomResource
     Condition: IsS3DataSource
+    DependsOn:
+      - KnowledgeBase
     Properties:
       ServiceToken: !GetAtt StartIngestionJobFunction.Arn
-      knowledgeBaseId: !Ref KnowledgeBase
+      knowledgeBaseId: !GetAtt KnowledgeBase.Value
       dataSourceId: !GetAtt S3DataSource.DataSourceId
 
   # EventBridge schedulers for data sources
   S3DataSourceScheduler:
     Type: AWS::Scheduler::Schedule
     Condition: IsS3DataSource
+    DependsOn:
+      - KnowledgeBase
     Properties:
       Description: "Rule to start Bedrock KB S3 datasource ingestion job on a schedule"
       FlexibleTimeWindow: 
@@ -792,33 +1006,38 @@ Resources:
       ScheduleExpressionTimezone: "UTC"
       State: "ENABLED"
       Target:
-        Arn: "arn:aws:scheduler:::aws-sdk:bedrockagent:startIngestionJob"
+        Arn: !Sub "arn:${AWS::Partition}:scheduler:::aws-sdk:bedrockagent:startIngestionJob"
         RoleArn: !GetAtt  DataSourceSchedulerRole.Arn
-        Input: !Sub |
-              {
-                "DataSourceId": "${S3DataSource.DataSourceId}",
-                "KnowledgeBaseId": "${KnowledgeBase}"
-              }
+        Input: !Sub
+          - |
+            {
+              "DataSourceId": "${S3DataSource.DataSourceId}",
+              "KnowledgeBaseId": "${KnowledgeBaseId}"
+            }
+          - KnowledgeBaseId: !GetAtt KnowledgeBase.Value
 
-  # EventBridge schedulers for data sources
   WebDataSourceScheduler:
     Type: AWS::Scheduler::Schedule
     Condition: IsWebDataSource
+    DependsOn:
+      - KnowledgeBase
     Properties:
-      Description: "Rule to start Bedrock KB S3 datasource ingestion job on a schedule"
+      Description: "Rule to start Bedrock KB Web datasource ingestion job on a schedule"
       FlexibleTimeWindow: 
         Mode: "OFF"
       ScheduleExpression: !Ref pWebSyncScheduleExpression
       ScheduleExpressionTimezone: "UTC"
       State: "ENABLED"
       Target:
-        Arn: "arn:aws:scheduler:::aws-sdk:bedrockagent:startIngestionJob"
+        Arn: !Sub "arn:${AWS::Partition}:scheduler:::aws-sdk:bedrockagent:startIngestionJob"
         RoleArn: !GetAtt  DataSourceSchedulerRole.Arn
-        Input: !Sub |
-              {
-                "DataSourceId": "${WebDataSource.DataSourceId}",
-                "KnowledgeBaseId": "${KnowledgeBase}"
-              }
+        Input: !Sub
+          - |
+            {
+              "DataSourceId": "${WebDataSource.DataSourceId}",
+              "KnowledgeBaseId": "${KnowledgeBaseId}"
+            }
+          - KnowledgeBaseId: !GetAtt KnowledgeBase.Value
 
   DataSourceSchedulerRole:
     Type: AWS::IAM::Role
@@ -828,7 +1047,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: scheduler.amazonaws.com
+              Service: !Sub "scheduler.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
@@ -840,7 +1059,9 @@ Resources:
                 Action:
                   - "bedrock:StartIngestionJob"
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/${KnowledgeBase}"
+                  - !Sub
+                    - "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}"
+                    - KnowledgeBaseId: !GetAtt KnowledgeBase.Value
 
 Outputs:
   KnowledgeBaseS3BucketName:
@@ -850,17 +1071,38 @@ Outputs:
     Value: !Ref pWebCrawlerURLs
     Description: Knowledge Base Web Crawler data source urls
   KnowledgeBaseID:
-    Value: !Ref KnowledgeBase
+    Value: !GetAtt KnowledgeBase.Value
     Description: Knowledge Base ID
+  KnowledgeBaseVectorStore:
+    Value: !Ref pVectorStoreType
+    Description: Knowledge Base vector store type
+  S3VectorBucketName:
+    Condition: UseS3Vectors
+    Value: !If
+      - HasS3VectorBucketName
+      - !Ref pS3VectorBucketName
+      - !Sub "${AWS::StackName}-s3-vectors"
+    Description: S3 Vector bucket name (S3 Vectors only)
+  S3VectorBucketArn:
+    Condition: UseS3Vectors
+    Value: !If
+      - UseS3Vectors
+      - !GetAtt S3VectorBucketAndIndex.BucketArn
+      - ""
+    Description: S3 Vector bucket ARN (S3 Vectors only)
   OpenSearchCollectionName:
+    Condition: UseOpenSearchServerless
     Value: !Ref OSSCollection
     Description: OpenSearch collection
   OpenSearchCollectionArn:
+    Condition: UseOpenSearchServerless
     Value: !GetAtt OSSCollection.Arn
     Description: OpenSearch collection ARN
   OpenSearchCollectionEndpoint:
+    Condition: UseOpenSearchServerless
     Value: !GetAtt OSSCollection.CollectionEndpoint
     Description: OpenSearch collection endpoint
   OpenSearchCollectionDashboard:
+    Condition: UseOpenSearchServerless
     Value: !GetAtt OSSCollection.DashboardEndpoint
     Description: OpenSearch collection dashboard endpoint

@@ -10,7 +10,9 @@ This folder contains detailed documentation on various aspects of the GenAI Inte
 - [Architecture](./architecture.md) - Detailed component architecture and data flow
 - [Deployment](./deployment.md) - Build, publish, deploy, and test instructions
 - [Web UI](./web-ui.md) - Web interface features and usage
+- [Agent Analysis](./agent-analysis.md) - Natural language analytics and data visualization feature
 - [Knowledge Base](./knowledge-base.md) - Document knowledge base query feature
+- [Post-Processing Lambda Hook](./post-processing-lambda-hook.md) - Custom downstream processing integration
 - [Evaluation Framework](./evaluation.md) - Accuracy assessment system
 - [Assessment Feature](./assessment.md) - Extraction confidence evaluation using LLMs
 - [Configuration](./configuration.md) - Configuration and customization options

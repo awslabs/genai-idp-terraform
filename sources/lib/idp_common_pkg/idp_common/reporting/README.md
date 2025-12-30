@@ -132,13 +132,11 @@ When cost calculation is enabled, metering records include additional fields:
 The following methods support the cost calculation functionality:
 
 #### `_get_pricing_from_config() -> Dict[str, Dict[str, float]]`
-
 Loads and caches pricing data from the configuration dictionary.
 
 **Returns**: Dictionary mapping service names to unit costs
 
 **Example**:
-
 ```python
 # Automatically called during metering data processing
 pricing_map = reporter._get_pricing_from_config()
@@ -151,18 +149,15 @@ pricing_map = reporter._get_pricing_from_config()
 ```
 
 #### `_get_unit_cost(service_api: str, unit: str) -> float`
-
 Retrieves the unit cost for a specific service API and unit combination.
 
 **Parameters**:
-
 - `service_api`: The service identifier (e.g., "bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0")
 - `unit`: The unit of measurement (e.g., "inputTokens", "pages")
 
 **Returns**: Unit cost in USD, or 0.0 if not found
 
 **Example**:
-
 ```python
 # Get cost per input token for Claude
 cost = reporter._get_unit_cost(
@@ -173,22 +168,18 @@ cost = reporter._get_unit_cost(
 ```
 
 #### `clear_pricing_cache()`
-
 Clears the cached pricing data to force reload from configuration.
 
 **Example**:
-
 ```python
 # Clear cache after configuration update
 reporter.clear_pricing_cache()
 ```
 
 #### `_create_or_update_metering_glue_table(schema: pa.Schema) -> bool`
-
 Creates or updates the AWS Glue table for metering data with the enhanced schema including cost fields.
 
 **Parameters**:
-
 - `schema`: PyArrow schema including unit_cost and estimated_cost columns
 
 **Returns**: True if table was created or updated, False otherwise
@@ -295,7 +286,6 @@ For the sections functionality to work, your `Document` object must have:
 #### Data Processing
 
 **Schema Inference**: The method dynamically infers PyArrow schemas by analyzing the JSON data:
-
 - **Strings**: Mapped to `pa.string()`
 - **Integers**: Mapped to `pa.int64()`
 - **Floats**: Mapped to `pa.float64()`
@@ -328,7 +318,6 @@ For the sections functionality to work, your `Document` object must have:
 ```
 
 **Metadata Fields**: Each record includes the following metadata fields:
-
 - `section_id`: The unique identifier of the section
 - `document_id`: The document identifier
 - `section_classification`: The section's classification/type
@@ -375,7 +364,6 @@ reporting-bucket/
 ### File Naming Convention
 
 All files use a unique timestamp-based naming convention to prevent overwrites:
-
 - **Format**: `{escaped_doc_id}_{timestamp}_results.parquet`
 - **Timestamp**: `YYYYMMDD_HHMMSS_mmm` (includes milliseconds)
 - **Example**: `invoice-123_20240115_143052_123_results.parquet`
@@ -403,15 +391,12 @@ The reporting module is designed to work seamlessly with AWS Glue and Amazon Ath
 The reporting module provides two types of automatic table creation:
 
 #### Predefined Tables (CloudFormation)
-
 - **Evaluation Tables**: `document_evaluations`, `section_evaluations`, `attribute_evaluations`
 - **Metering Table**: `metering`
 - Created during stack deployment via CloudFormation
 
 #### Dynamic Section Tables (Runtime)
-
 When processing documents with new section types, the `SaveReportingData` class automatically:
-
 - **Creates New Tables**: Generates a Glue table for each unique section type (e.g., `document_sections_invoice`, `document_sections_w2`)
 - **Updates Schemas**: Adds new columns when new fields are detected in extraction results
 - **Configures Partitions**: Sets up partition projection for efficient date-based queries

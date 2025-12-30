@@ -12,7 +12,6 @@ This testing plan outlines the strategy to validate the unified Document class i
 ### 1. Unit Tests
 
 #### Basic Functionality
-
 - [ ] Test Document initialization with minimal parameters
 - [ ] Test Document initialization with all parameters
 - [ ] Verify default values are set correctly
@@ -20,7 +19,6 @@ This testing plan outlines the strategy to validate the unified Document class i
 - [ ] Verify validation rules on field values
 
 #### URI Handling
-
 - [ ] Test S3 URI parsing and validation
 - [ ] Test local file URI parsing and validation
 - [ ] Verify URI template placeholder substitution
@@ -28,7 +26,6 @@ This testing plan outlines the strategy to validate the unified Document class i
 - [ ] Test invalid URI handling and error messages
 
 #### Serialization/Deserialization
-
 - [ ] Test to/from_dict conversion for simple documents
 - [ ] Test to/from_dict conversion for complex documents with pages and sections
 - [ ] Test to/from_json serialization
@@ -36,14 +33,12 @@ This testing plan outlines the strategy to validate the unified Document class i
 - [ ] Verify backward compatibility with old serialized documents
 
 #### Lazy Loading
-
 - [ ] Test cached_property behavior for heavy resources
 - [ ] Verify resources are loaded only when accessed
 - [ ] Test cleanup of cached resources
 - [ ] Measure memory usage with lazy vs. eager loading
 
 #### State Management
-
 - [ ] Test status transitions
 - [ ] Test timing fields update correctly
 - [ ] Test error collection and reporting
@@ -51,28 +46,24 @@ This testing plan outlines the strategy to validate the unified Document class i
 ### 2. Integration Tests
 
 #### OCR Service Integration
-
-- [ ] Test Document with OCR service
+- [ ] Test Document with OCR service 
 - [ ] Verify page creation and population
 - [ ] Test handling of OCR metadata
 - [ ] Verify image and text URIs are stored correctly
 
 #### Classification Service Integration
-
 - [ ] Test Document with classification service
 - [ ] Verify section creation based on classifications
 - [ ] Test confidence scoring
 - [ ] Verify multipage classification
 
 #### Extraction Service Integration
-
 - [ ] Test Document with extraction service
 - [ ] Verify attribute extraction and storage
 - [ ] Test section-based extraction
 - [ ] Verify extraction URIs are stored correctly
 
 #### Evaluation Service Integration
-
 - [ ] Test Document with evaluation service
 - [ ] Verify metrics calculation and storage
 - [ ] Test comparison logic
@@ -105,13 +96,11 @@ This testing plan outlines the strategy to validate the unified Document class i
 ## Testing Infrastructure
 
 ### Test Environment
-
 - Local development environment
 - CI/CD pipeline
 - AWS environment for S3 integration tests
 
 ### Test Data
-
 - Sample PDFs of various sizes and complexities
 - Predefined OCR results
 - Classification fixtures
@@ -119,7 +108,6 @@ This testing plan outlines the strategy to validate the unified Document class i
 - Evaluation fixtures
 
 ### Test Automation
-
 - PyTest for unit and integration tests
 - Performance benchmarking with pytest-benchmark
 - Mocking S3 with moto

@@ -1,76 +1,900 @@
 # Document Classes and Attributes Configuration
 classes:
-  - name: "letter"
-    description: "A formal written correspondence with sender/recipient addresses, date, salutation, body, and closing signature"
+  - name: Payslip
+    description: >-
+      An employee wage statement showing earnings, deductions, taxes, and net pay for a specific pay period, 
+      typically issued by employers to document compensation details including gross pay, various tax withholdings, 
+      and year-to-date totals.
     attributes:
-      - name: "sender_name"
-        description: "The name of the person or entity who wrote or sent the letter. Look for text following or near terms like 'from', 'sender', 'authored by', 'written by', or at the end of the letter before a signature."
-        confidence_threshold: "0.85"
-      - name: "sender_address"
-        description: "The physical address of the sender, typically appearing at the top of the letter. May be labeled as 'address', 'location', or 'from address'."
-        confidence_threshold: "0.8"
-      - name: "recipient_name"
-        description: "The name of the person or entity receiving the letter. Look for this after 'to', 'recipient', 'addressee', or at the beginning of the letter."
-        confidence_threshold: "0.9"
-      - name: "recipient_address"
-        description: "The physical address where the letter is to be delivered. Often labeled as 'to address' or 'delivery address', typically appearing below the recipient name."
-      - name: "date"
-        description: "The date when the letter was written. Look for a standalone date or text following phrases like 'written on' or 'dated'."
-      - name: "subject"
-        description: "The topic or main point of the letter. Often preceded by 'subject', 'RE:', or 'regarding'."
-      - name: "letter_type"
-        description: "The category or classification of the letter, such as 'complaint', 'inquiry', 'invitation', etc. May be indicated by 'type' or 'category'."
-      - name: "signature"
-        description: "The handwritten name or mark of the sender at the end of the letter. May follow terms like 'signed by' or simply appear at the bottom of the document."
-      - name: "cc"
-        description: "Names of people who receive a copy of the letter in addition to the main recipient. Often preceded by 'cc', 'carbon copy', or 'copy to'."
-      - name: "reference_number"
-        description: "An identifying number or code associated with the letter. Look for labels like 'ref', 'reference', or 'our ref'."
+      - name: YTDNetPay
+        description: >-
+          Year-to-date net pay amount representing cumulative take-home earnings after all deductions 
+          from the beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: PayPeriodStartDate
+        description: >-
+          The beginning date of the pay period covered by this payslip, indicating when the earning 
+          period started for the compensation shown.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: PayPeriodEndDate
+        description: >-
+          The ending date of the pay period covered by this payslip, indicating when the earning 
+          period ended for the compensation shown.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: PayDate
+        description: >-
+          The actual date when the employee was paid, representing when the compensation was issued 
+          or deposited.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CurrentGrossPay
+        description: >-
+          The total earnings before any deductions for the current pay period, representing gross 
+          compensation for the period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDGrossPay
+        description: >-
+          Year-to-date gross pay representing cumulative earnings before deductions from the 
+          beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: CurrentNetPay
+        description: >-
+          The take-home pay after all deductions for the current pay period, representing the 
+          actual amount paid to the employee.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: CurrentTotalDeductions
+        description: >-
+          Total amount deducted from gross pay for the current period, including all taxes, 
+          benefits, and other withholdings.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDTotalDeductions
+        description: >-
+          Year-to-date total deductions representing cumulative amounts withheld from gross pay 
+          from the beginning of the year to the current pay period.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: RegularHourlyRate
+        description: >-
+          The standard hourly wage rate for regular working hours, representing the base 
+          compensation rate for normal work time.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: HolidayHourlyRate
+        description: >-
+          The hourly wage rate for holiday work, typically higher than the regular rate to 
+          reflect premium compensation for holiday hours.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: EmployeeNumber
+        description: >-
+          The unique identifier assigned to the employee by the employer for payroll and 
+          administrative purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: PayrollNumber
+        description: >-
+          The payroll batch or sequence number for this pay period, used for payroll processing 
+          identification and tracking.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: FederalFilingStatus
+        description: >-
+          The employee's federal tax filing status for withholding purposes, such as Single, 
+          Married Filing Jointly, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: StateFilingStatus
+        description: >-
+          The employee's state tax filing status for withholding purposes, which may differ 
+          from federal filing status based on state requirements.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: YTDFederalTax
+        description: >-
+          Year-to-date federal income tax withheld, representing cumulative federal tax 
+          deductions from the beginning of the year.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDStateTax
+        description: >-
+          Year-to-date state income tax withheld, representing cumulative state tax deductions 
+          from the beginning of the year.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: YTDCityTax
+        description: >-
+          Year-to-date city or local income tax withheld, representing cumulative local tax 
+          deductions from the beginning of the year.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: currency
+        description: >-
+          The currency in which all monetary amounts on the payslip are denominated, typically 
+          represented as a three-letter code like USD, EUR, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: is_gross_pay_valid
+        description: >-
+          A validation flag indicating whether the gross pay calculation is correct and valid 
+          based on payroll system checks.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: are_field_names_sufficient
+        description: >-
+          A validation flag indicating whether the field names on the payslip provide sufficient 
+          information for processing and understanding.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: is_ytd_gross_pay_highest
+        description: >-
+          A validation flag indicating whether the year-to-date gross pay represents the highest 
+          value among pay categories.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CompanyAddress
+        groupAttributes:
+          - name: State
+            description: The state or province portion of the company's business address.
+            evaluation_method: EXACT
+          - name: ZipCode
+            description: The postal code portion of the company's business address.
+            evaluation_method: EXACT
+          - name: City
+            description: The city portion of the company's business address.
+            evaluation_method: EXACT
+          - name: Line1
+            description: The primary street address line of the company's business location.
+            evaluation_method: EXACT
+          - name: Line2
+            description: The secondary address line for the company, such as suite or floor number.
+            evaluation_method: EXACT
+        description: >-
+          The complete business address of the employing company, including street address, 
+          city, state, and postal code information.
+        evaluation_method: LLM
+        attributeType: group
+      - name: EmployeeAddress
+        groupAttributes:
+          - name: State
+            description: The state or province portion of the employee's residential address.
+            evaluation_method: EXACT
+          - name: ZipCode
+            description: The postal code portion of the employee's residential address.
+            evaluation_method: EXACT
+          - name: City
+            description: The city portion of the employee's residential address.
+            evaluation_method: EXACT
+          - name: Line1
+            description: The primary street address line of the employee's residence.
+            evaluation_method: EXACT
+          - name: Line2
+            description: The secondary address line for the employee, such as apartment number.
+            evaluation_method: EXACT
+        description: >-
+          The complete residential address of the employee, including street address, city, 
+          state, and postal code information.
+        evaluation_method: LLM
+        attributeType: group
+      - name: EmployeeName
+        groupAttributes:
+          - name: FirstName
+            description: The given name of the employee.
+            evaluation_method: EXACT
+          - name: SuffixName
+            description: Name suffix such as Jr., Sr., III, etc.
+            evaluation_method: EXACT
+          - name: LastName
+            description: The family name or surname of the employee.
+            evaluation_method: EXACT
+          - name: MiddleName
+            description: The middle name or initial of the employee.
+            evaluation_method: EXACT
+        description: >-
+          The complete name information of the employee, including first name, middle name, 
+          last name, and any suffix.
+        evaluation_method: LLM
+        attributeType: group
+      - name: FederalTaxes
+        listItemTemplate:
+          itemAttributes:
+            - name: YTD
+              description: Year-to-date amount for this federal tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: Period
+              description: Current period amount for this federal tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: ItemDescription
+              description: Description of the specific federal tax type or category.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific federal tax withholding category
+        description: >-
+          List of federal tax withholdings showing different types of federal taxes deducted, 
+          with both current period and year-to-date amounts.
+        evaluation_method: LLM
+        attributeType: list
+      - name: CityTaxes
+        listItemTemplate:
+          itemAttributes:
+            - name: YTD
+              description: Year-to-date amount for this city tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: Period
+              description: Current period amount for this city tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: ItemDescription
+              description: Description of the specific city tax type or jurisdiction.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific city or local tax withholding
+        description: >-
+          List of city or local tax withholdings showing different municipal taxes deducted, 
+          with both current period and year-to-date amounts.
+        evaluation_method: LLM
+        attributeType: list
+      - name: StateTaxes
+        listItemTemplate:
+          itemAttributes:
+            - name: YTD
+              description: Year-to-date amount for this state tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: Period
+              description: Current period amount for this state tax item.
+              evaluation_method: NUMERIC_EXACT
+            - name: ItemDescription
+              description: Description of the specific state tax type or category.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific state tax withholding category
+        description: >-
+          List of state tax withholdings showing different types of state taxes deducted, 
+          with both current period and year-to-date amounts.
+        evaluation_method: LLM
+        attributeType: list
 
-  - name: "form"
-    description: "A structured document with labeled fields, checkboxes, or blanks requiring user input and completion"
+  - name: US-drivers-licenses
+    description: >-
+      An official government-issued identification document that authorizes an individual to operate 
+      motor vehicles, containing personal information, physical characteristics, address details, 
+      and driving privileges with restrictions and endorsements.
     attributes:
-      - name: "form_type"
-        description: "The category or purpose of the form, such as 'application', 'registration', 'request', etc. May be identified by 'form name', 'document type', or 'form category'."
-      - name: "form_id"
-        description: "The unique identifier for the form, typically a number or alphanumeric code. Often labeled as 'form number', 'id', or 'reference number'."
-      - name: "submission_date"
-        description: "The date when the form was submitted or filed. Look for text near 'date', 'submitted on', or 'filed on'."
-      - name: "submitter_name"
-        description: "The name of the person who submitted the form. May be labeled as 'name', 'submitted by', or 'filed by'."
-      - name: "submitter_id"
-        description: "An identification number for the person submitting the form, such as social security number, employee ID, etc. Often labeled as 'id number', 'identification', or 'reference'."
-      - name: "approval_status"
-        description: "The current state of approval for the form, such as 'approved', 'pending', 'rejected', etc. Look for terms like 'status', 'approved', or 'pending'."
-      - name: "processed_by"
-        description: "The name of the person or department that processed the form. May be indicated by 'processor', 'handled by', or 'approved by'."
-      - name: "processing_date"
-        description: "The date when the form was processed or completed. Look for labels like 'processed on' or 'completion date'."
-      - name: "department"
-        description: "The organizational unit responsible for the form. Often abbreviated as 'dept' or may appear as 'department' or 'division'."
-      - name: "comments"
-        description: "Additional notes or remarks about the form. Look for sections labeled 'notes', 'remarks', or 'comments'."
+      - name: STATE_NAME
+        description: >-
+          The state or jurisdiction that issued the driver's license, typically shown as a 
+          two-letter state abbreviation like MA, CA, NY, etc.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: ID_NUMBER
+        description: >-
+          The unique driver's license identification number assigned by the issuing state, 
+          prominently displayed on the license for identification purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: EXPIRATION_DATE
+        description: >-
+          The date when the driver's license expires and requires renewal, typically in 
+          YYYY-MM-DD format indicating when the license becomes invalid.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: DATE_OF_ISSUE
+        description: >-
+          The date when the driver's license was originally issued by the state authority, 
+          typically in YYYY-MM-DD format showing the license creation date.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: CLASS
+        description: >-
+          The type or category of driving privileges granted by the license, such as Class D 
+          for regular driver's license or other classifications for commercial vehicles.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: DATE_OF_BIRTH
+        description: >-
+          The birth date of the license holder in YYYY-MM-DD format, used for age verification 
+          and identification purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: COUNTY
+        description: >-
+          The county of residence for the license holder, though this field may be empty 
+          if not provided by the issuing jurisdiction.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: NAME_DETAILS
+        groupAttributes:
+          - name: SUFFIX
+            description: Name suffix such as Jr., Sr., III, etc.
+            evaluation_method: EXACT
+          - name: MIDDLE_NAME
+            description: The middle name of the license holder.
+            evaluation_method: EXACT
+          - name: LAST_NAME
+            description: The family name or surname of the license holder.
+            evaluation_method: EXACT
+          - name: FIRST_NAME
+            description: The given name of the license holder.
+            evaluation_method: EXACT
+        description: >-
+          Complete name information of the license holder including first name, middle name, 
+          last name, and any suffix, structured for official identification.
+        evaluation_method: LLM
+        attributeType: group
+      - name: PERSONAL_DETAILS
+        groupAttributes:
+          - name: SEX
+            description: The gender of the license holder, typically 'M' for male or 'F' for female.
+            evaluation_method: EXACT
+          - name: HAIR_COLOR
+            description: The color of the license holder's hair, often abbreviated like BLN, BRN, etc.
+            evaluation_method: EXACT
+          - name: HEIGHT
+            description: The physical height of the license holder, often in feet-inches format like '5-10'.
+            evaluation_method: EXACT
+          - name: WEIGHT
+            description: The weight of the license holder, typically in pounds.
+            evaluation_method: EXACT
+          - name: EYE_COLOR
+            description: The color of the license holder's eyes, often abbreviated like BLU, BRN, GRN, etc.
+            evaluation_method: EXACT
+        description: >-
+          Physical characteristics and personal details of the license holder used for 
+          identification purposes, including gender, height, weight, and eye/hair color.
+        evaluation_method: LLM
+        attributeType: group
+      - name: ADDRESS_DETAILS
+        groupAttributes:
+          - name: CITY
+            description: The city of residence for the license holder.
+            evaluation_method: EXACT
+          - name: ZIP_CODE
+            description: The postal code of the license holder's address.
+            evaluation_method: EXACT
+          - name: STATE
+            description: The state of residence for the license holder, may be abbreviated.
+            evaluation_method: EXACT
+          - name: STREET_ADDRESS
+            description: The street address of the license holder's residence.
+            evaluation_method: EXACT
+        description: >-
+          Complete residential address information of the license holder including street 
+          address, city, state, and postal code.
+        evaluation_method: LLM
+        attributeType: group
+      - name: ENDORSEMENTS
+        listItemTemplate:
+          itemAttributes:
+            - name: endorsement
+              description: Specific driving endorsement or certification code.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a special driving endorsement or certification
+        description: >-
+          List of special driving endorsements or certifications held by the license holder, 
+          or 'NONE' if no special endorsements apply.
+        evaluation_method: LLM
+        attributeType: list
+      - name: RESTRICTIONS
+        listItemTemplate:
+          itemAttributes:
+            - name: restriction
+              description: Specific driving restriction or limitation code.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a driving restriction or limitation
+        description: >-
+          List of driving restrictions or limitations that apply to the license holder, 
+          or 'NONE' if no restrictions apply.
+        evaluation_method: LLM
+        attributeType: list
 
-  - name: "email"
-    description: "A digital message with email headers (To/From/Subject), timestamps, and conversational threading"
+  - name: Bank-checks
+    description: >-
+      A written financial instrument directing a bank to pay a specific amount of money from 
+      the account holder's account to a designated payee, containing payment details, account 
+      information, and verification elements.
     attributes:
-      - name: "from_address"
-        description: "The email address of the sender. Look for text following 'from', 'sender', or 'sent by', typically at the beginning of the email header."
-      - name: "to_address"
-        description: "The email address of the primary recipient. May be labeled as 'to', 'recipient', or 'sent to'."
-      - name: "cc_address"
-        description: "Email addresses of additional recipients who receive copies. Look for 'cc' or 'carbon copy' followed by one or more email addresses."
-      - name: "bcc_address"
-        description: "Email addresses of hidden recipients. May be labeled as 'bcc' or 'blind copy'."
-      - name: "subject"
-        description: "The topic of the email. Often preceded by 'subject', 'RE:', or 'regarding'."
-      - name: "date_sent"
-        description: "The date and time when the email was sent. Look for 'date', 'sent on', or 'received', typically in the email header."
-      - name: "attachments"
-        description: "Files included with the email. May be indicated by 'attached', 'attachment', or 'enclosed', often with icons or file names."
-      - name: "priority"
-        description: "The urgency level of the email, such as 'high', 'normal', etc. Look for 'priority' or 'importance'."
-      - name: "thread_id"
-        description: "An identifier for the email conversation. May be labeled as 'thread' or 'conversation', typically not visible to regular users."
-      - name: "message_id"
-        description: "A unique identifier for the specific email. Look for 'message id' or 'email id', usually hidden in the email metadata."
+      - name: date
+        description: >-
+          The date when the check was written, typically handwritten or printed in the 
+          date field of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: dollar_amount
+        description: >-
+          The numerical amount to be paid as specified on the check, typically found in 
+          the amount box on the right side of the check.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: check_number
+        description: >-
+          The unique sequential number identifying this specific check, usually found in 
+          the upper right corner and bottom of the check.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: account_holder_name
+        description: >-
+          The name of the person or entity who owns the bank account and wrote the check, 
+          typically printed in the upper left corner.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: payee_name
+        description: >-
+          The name of the person or entity receiving the payment, written on the 'Pay to 
+          the order of' line of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: bank_name
+        description: >-
+          The name of the financial institution where the account is held, usually printed 
+          prominently on the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: memo
+        description: >-
+          Optional note or reference information written in the memo field, typically in 
+          the lower left area of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: routing_number_valid
+        description: >-
+          A boolean indicator of whether the bank routing number on the check is valid 
+          and properly formatted.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: bank_routing_number
+        description: >-
+          The bank's routing number for electronic transactions, typically found in the 
+          MICR line at the bottom of the check.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: amount_in_words
+        description: >-
+          The payment amount written out in words, typically on the line below the payee 
+          name and ending with 'DOLLARS'.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: is_signed
+        description: >-
+          A boolean indicator of whether the check has been signed by the account holder 
+          in the signature area.
+        evaluation_method: EXACT
+        attributeType: simple
+
+  - name: Bank-Statement
+    description: >-
+      A periodic financial document issued by banks detailing account activity, balances, 
+      and transactions over a specific time period, providing account holders with a summary 
+      of their financial activity and current account status.
+    attributes:
+      - name: account_holder_address
+        description: >-
+          The mailing address of the account holder as recorded by the bank, typically 
+          displayed prominently on the statement header.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_number
+        description: >-
+          The unique identifier for the bank account, often partially masked for security 
+          purposes on the statement.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_type
+        description: >-
+          The category of bank account such as checking, savings, money market, etc., 
+          indicating the type of banking service.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: statement_end_date
+        description: >-
+          The ending date of the statement period in MM/DD/YYYY format, indicating when 
+          the reporting period concluded.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: statement_start_date
+        description: >-
+          The beginning date of the statement period in MM/DD/YYYY format, indicating 
+          when the reporting period began.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_holder_name
+        description: >-
+          The name of the person or entity who owns the bank account, as registered 
+          with the financial institution.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: branch_transit_number
+        description: >-
+          The specific branch identifier or transit number associated with the account, 
+          used for routing and identification purposes.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: bank_name
+        description: >-
+          The name of the financial institution issuing the statement, typically displayed 
+          prominently at the top of the document.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: account_summary
+        listItemTemplate:
+          itemAttributes:
+            - name: summary_desc
+              description: Description of the account summary item, such as opening balance or closing balance.
+              evaluation_method: EXACT
+            - name: summary_amount
+              description: The monetary amount associated with this summary item.
+              evaluation_method: NUMERIC_EXACT
+          itemDescription: Each item represents a key account balance or summary figure
+        description: >-
+          Summary of key account information including opening balance, closing balance, 
+          and other important account totals for the statement period.
+        evaluation_method: LLM
+        attributeType: list
+      - name: transaction_details
+        listItemTemplate:
+          itemAttributes:
+            - name: date
+              description: The date when the transaction occurred.
+              evaluation_method: EXACT
+            - name: balance
+              description: The account balance after this transaction.
+              evaluation_method: NUMERIC_EXACT
+            - name: description
+              description: Description of the transaction or merchant information.
+              evaluation_method: EXACT
+            - name: deposits
+              description: Amount deposited or credited to the account.
+              evaluation_method: NUMERIC_EXACT
+            - name: withdrawals
+              description: Amount withdrawn or debited from the account.
+              evaluation_method: NUMERIC_EXACT
+          itemDescription: Each item represents an individual transaction record
+        description: >-
+          Detailed listing of all transactions that occurred during the statement period, 
+          including deposits, withdrawals, and resulting account balances.
+        evaluation_method: LLM
+        attributeType: list
+
+  - name: W2
+    description: >-
+      An annual tax document provided by employers to employees reporting wages earned and 
+      taxes withheld during the tax year for federal and state income tax filing purposes, 
+      containing comprehensive compensation and withholding information.
+    attributes:
+      - name: other
+        description: >-
+          Other compensation or benefits not covered in standard W2 boxes, representing 
+          additional taxable or non-taxable benefits provided to the employee.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: nonqualified_plans_incom
+        description: >-
+          Income from nonqualified deferred compensation plans, representing distributions 
+          or benefits from employer-sponsored retirement or compensation plans.
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: employer_info
+        groupAttributes:
+          - name: employer_address
+            description: The complete business address of the employing company.
+            evaluation_method: EXACT
+          - name: control_number
+            description: A unique identifier assigned by the employer for tracking and processing purposes.
+            evaluation_method: EXACT
+          - name: employer_name
+            description: The legal name of the employing company or organization.
+            evaluation_method: EXACT
+          - name: ein
+            description: The federal Employer Identification Number of the company.
+            evaluation_method: EXACT
+          - name: employer_zip_code
+            description: The postal code portion of the employer's address.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the employing organization including name, address, 
+          tax identification numbers, and control numbers for processing.
+        evaluation_method: LLM
+        attributeType: group
+      - name: filing_info
+        groupAttributes:
+          - name: omb_number
+            description: The Office of Management and Budget form number for the W2 form.
+            evaluation_method: EXACT
+          - name: verification_code
+            description: A verification code used to validate the authenticity of the form.
+            evaluation_method: EXACT
+        description: >-
+          Official form identification and verification information including OMB numbers 
+          and validation codes for the W2 document.
+        evaluation_method: LLM
+        attributeType: group
+      - name: federal_tax_info
+        groupAttributes:
+          - name: federal_income_tax
+            description: The amount of federal income tax withheld from the employee's pay.
+            evaluation_method: NUMERIC_EXACT
+          - name: allocated_tips
+            description: Tips allocated by the employer to the employee for tax purposes.
+            evaluation_method: NUMERIC_EXACT
+          - name: social_security_tax
+            description: The amount of Social Security tax withheld from the employee's pay.
+            evaluation_method: NUMERIC_EXACT
+          - name: medicare_tax
+            description: The amount of Medicare tax withheld from the employee's pay.
+            evaluation_method: NUMERIC_EXACT
+        description: >-
+          Federal tax withholding information including income tax, Social Security tax, 
+          Medicare tax, and allocated tips for federal tax reporting.
+        evaluation_method: LLM
+        attributeType: group
+      - name: employee_general_info
+        groupAttributes:
+          - name: employee_name_suffix
+            description: Name suffix of the employee such as Jr., Sr., III, etc.
+            evaluation_method: EXACT
+          - name: employee_address
+            description: The complete residential address of the employee.
+            evaluation_method: EXACT
+          - name: employee_last_name
+            description: The family name or surname of the employee.
+            evaluation_method: EXACT
+          - name: employee_zip_code
+            description: The postal code portion of the employee's address.
+            evaluation_method: EXACT
+          - name: first_name
+            description: The given name of the employee.
+            evaluation_method: EXACT
+          - name: ssn
+            description: The Social Security Number of the employee.
+            evaluation_method: EXACT
+        description: >-
+          Complete personal information about the employee including full name, address, 
+          and Social Security Number for tax identification purposes.
+        evaluation_method: LLM
+        attributeType: group
+      - name: federal_wage_info
+        groupAttributes:
+          - name: social_security_tips
+            description: Tips subject to Social Security tax reporting.
+            evaluation_method: NUMERIC_EXACT
+          - name: wages_tips_other_compensation
+            description: Total wages, tips, and other compensation paid to the employee.
+            evaluation_method: NUMERIC_EXACT
+          - name: medicare_wages_tips
+            description: Wages and tips subject to Medicare tax.
+            evaluation_method: NUMERIC_EXACT
+          - name: social_security_wages
+            description: Wages subject to Social Security tax.
+            evaluation_method: NUMERIC_EXACT
+        description: >-
+          Federal wage and compensation information including total wages, tips, and 
+          amounts subject to Social Security and Medicare taxes.
+        evaluation_method: LLM
+        attributeType: group
+      - name: codes
+        listItemTemplate:
+          itemAttributes:
+            - name: amount
+              description: The monetary amount associated with this compensation code.
+              evaluation_method: NUMERIC_EXACT
+            - name: code
+              description: The letter code representing the type of compensation or benefit.
+              evaluation_method: EXACT
+          itemDescription: Each item represents a specific type of compensation or benefit with its corresponding code
+        description: >-
+          Additional compensation codes and amounts representing various types of benefits, 
+          deferred compensation, or other taxable/non-taxable items.
+        evaluation_method: LLM
+        attributeType: list
+      - name: state_taxes_table
+        listItemTemplate:
+          itemAttributes:
+            - name: state_name
+              description: The name of the state for tax reporting purposes.
+              evaluation_method: EXACT
+            - name: local_wages_tips
+              description: Wages and tips subject to local income tax.
+              evaluation_method: NUMERIC_EXACT
+            - name: employer_state_id_number
+              description: The employer's state identification number for this jurisdiction.
+              evaluation_method: NUMERIC_EXACT
+            - name: state_wages_and_tips
+              description: Wages and tips subject to state income tax.
+              evaluation_method: NUMERIC_EXACT
+            - name: state_income_tax
+              description: State income tax withheld for this jurisdiction.
+              evaluation_method: NUMERIC_EXACT
+            - name: local_income_tax
+              description: Local income tax withheld for this jurisdiction.
+              evaluation_method: NUMERIC_EXACT
+            - name: locality_name
+              description: The name of the local jurisdiction for local tax reporting.
+              evaluation_method: EXACT
+          itemDescription: Each item represents state and local tax information for a specific jurisdiction
+        description: >-
+          State and local tax information including wages subject to tax, taxes withheld, 
+          and jurisdiction details for state and local tax reporting.
+        evaluation_method: LLM
+        attributeType: list
+
+  - name: Homeowners-Insurance-Application
+    description: >-
+      An application form for homeowners insurance coverage containing applicant personal information, 
+      property details, coverage requirements, existing insurance history, and underwriting data 
+      necessary for evaluating risk and determining appropriate coverage terms.
+    attributes:
+      - name: Expiration Date
+        description: >-
+          The date when the insurance policy expires and requires renewal, indicating when 
+          coverage will terminate if not renewed.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Purchase Date and Time
+        description: >-
+          The specific date and time when the insurance policy was purchased, including both 
+          date and time components for precise transaction recording.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Policy Number
+        description: >-
+          The unique identifier assigned to the insurance policy for tracking and reference 
+          purposes throughout the policy lifecycle.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Named Insured(s) and Mailing Address
+        description: >-
+          The complete name and mailing address of the primary insured party, representing 
+          the policyholder and their contact information.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Insurance Company
+        description: >-
+          The name and address of the insurance provider issuing the policy, including 
+          complete company contact information.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Insured Property
+        description: >-
+          The complete address of the property being insured, representing the physical 
+          location covered by the homeowners insurance policy.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Primary Phone number
+        description: >-
+          The main contact phone number for the policyholder, used for communication 
+          regarding the insurance policy and claims.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Effective Date
+        description: >-
+          The date when the insurance coverage begins and becomes active, marking the 
+          start of the policy period.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Primary Email
+        description: >-
+          The main email address for the policyholder, used for electronic communication 
+          regarding policy matters and updates.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Alternate Phone number
+        description: >-
+          The secondary contact phone number for the policyholder, providing an alternative 
+          method of communication for policy-related matters.
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: Co-Applicant Information
+        groupAttributes:
+          - name: Drivers License Number
+            description: The driver's license number of the co-applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Current Auto Carrier
+            description: Duration of relationship with current auto insurance provider for co-applicant.
+            evaluation_method: EXACT
+          - name: DL State
+            description: The state that issued the co-applicant's driver's license.
+            evaluation_method: EXACT
+          - name: Education Level
+            description: The highest level of education completed by the co-applicant.
+            evaluation_method: EXACT
+          - name: Currently Insured- Auto
+            description: Current auto insurance carrier for the co-applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Prior Auto Carrier
+            description: Duration of relationship with previous auto insurance provider for co-applicant.
+            evaluation_method: EXACT
+          - name: Date of Birth
+            description: The birth date of the co-applicant.
+            evaluation_method: EXACT
+          - name: Gender
+            description: The gender of the co-applicant.
+            evaluation_method: EXACT
+          - name: Marital Status
+            description: The marital status of the co-applicant.
+            evaluation_method: EXACT
+          - name: Relationship to Primary Applicant
+            description: The relationship of the co-applicant to the primary policyholder.
+            evaluation_method: EXACT
+          - name: Name
+            description: The full name of the co-applicant.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the co-applicant including personal details, driver's 
+          license information, insurance history, and relationship to primary applicant.
+        evaluation_method: LLM
+        attributeType: group
+      - name: Auto Claims, Accidents, and Violations
+        groupAttributes:
+          - name: Major
+            description: Information about major auto claims or incidents.
+            evaluation_method: EXACT
+          - name: Number of Comp Claims
+            description: The number of comprehensive auto insurance claims filed.
+            evaluation_method: EXACT
+          - name: Number of Violations
+            description: The total number of traffic violations.
+            evaluation_method: EXACT
+          - name: At-Fault
+            description: Details about at-fault accidents or incidents.
+            evaluation_method: EXACT
+          - name: Number of Auto Accidents
+            description: The total number of auto accidents.
+            evaluation_method: EXACT
+          - name: Minor
+            description: Information about minor auto claims or incidents.
+            evaluation_method: EXACT
+          - name: Not-at-Fault
+            description: Details about not-at-fault accidents or incidents.
+            evaluation_method: EXACT
+        description: >-
+          Comprehensive history of auto claims, accidents, and traffic violations for 
+          underwriting risk assessment purposes.
+        evaluation_method: LLM
+        attributeType: group
+      - name: Primary Applicant Information
+        groupAttributes:
+          - name: Type of Current Property Policy
+            description: The type of current property insurance policy held by primary applicant.
+            evaluation_method: EXACT
+          - name: Drivers License Number
+            description: The driver's license number of the primary applicant.
+            evaluation_method: EXACT
+          - name: Education Level
+            description: The highest level of education completed by the primary applicant.
+            evaluation_method: EXACT
+          - name: Currently Insured Auto
+            description: Current auto insurance carrier for the primary applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Prior Auto Carrier
+            description: Duration of relationship with previous auto insurance provider for primary applicant.
+            evaluation_method: EXACT
+          - name: Gender
+            description: The gender of the primary applicant.
+            evaluation_method: EXACT
+          - name: Marital Status
+            description: The marital status of the primary applicant.
+            evaluation_method: EXACT
+          - name: Name
+            description: The full name of the primary applicant.
+            evaluation_method: EXACT
+          - name: Length of Time with Current Auto Carrier
+            description: Duration of relationship with current auto insurance provider for primary applicant.
+            evaluation_method: EXACT
+          - name: Existing Esurance Policy
+            description: Existing insurance policy number or reference for primary applicant.
+            evaluation_method: EXACT
+          - name: DL State
+            description: The state that issued the primary applicant's driver's license.
+            evaluation_method: EXACT
+          - name: Date of Birth
+            description: The birth date of the primary applicant.
+            evaluation_method: EXACT
+          - name: Years with Prior Property Company
+            description: Number of years with previous property insurance company for primary applicant.
+            evaluation_method: EXACT
+        description: >-
+          Complete information about the primary applicant including personal details, 
+          driver's license information, insurance history, and existing policy details.
+        evaluation_method: LLM
+        attributeType: group

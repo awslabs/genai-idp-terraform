@@ -23,7 +23,7 @@ The GenAIIDP solution includes a built-in evaluation framework to assess the acc
 
 3. **Evaluation Reports**
    - Compare section classification accuracy
-   - Analyze extracted field differences
+   - Analyze extracted field differences 
    - Identify patterns in discrepancies
    - Assess severity of differences (cosmetic vs. substantial)
 
@@ -43,7 +43,7 @@ The framework supports multiple comparison methods:
 
 ## Assessment Confidence Integration
 
-The evaluation framework automatically integrates with the assessment feature to provide enhanced quality insights. When documents have been processed with assessment enabled, the evaluation reports include confidence scores alongside traditional accuracy metrics.
+The evaluation framework automatically integrates with the assessment feature to provide enhanced quality insights. When documents have been processed with assessment enabled via the configuration `assessment.enabled: true` property, the evaluation reports include confidence scores alongside traditional accuracy metrics.
 
 ### Confidence Score Display
 
@@ -73,7 +73,6 @@ The combination of evaluation accuracy and confidence scores provides deeper ins
 ### Backward Compatibility
 
 The confidence integration is fully backward compatible:
-
 - Evaluation reports without assessment data show "N/A" in confidence columns
 - All existing evaluation workflows continue to function unchanged
 - No additional configuration required to enable confidence display
@@ -184,7 +183,6 @@ The evaluation framework automatically processes nested structures by flattening
 ### Group Attribute Processing
 
 Group attributes are flattened using dot notation:
-
 - `Account Holder Address.Street Number` (evaluated with FUZZY method)
 - `Account Holder Address.City` (evaluated with FUZZY method)
 - `Account Holder Address.State` (evaluated with EXACT method)
@@ -192,7 +190,6 @@ Group attributes are flattened using dot notation:
 ### List Attribute Processing
 
 List attributes are processed by creating individual evaluations for each array item:
-
 - `Transactions[0].Date` (evaluated with FUZZY method)
 - `Transactions[0].Amount` (evaluated with NUMERIC_EXACT method)
 - `Transactions[1].Date` (evaluated with FUZZY method)
@@ -204,7 +201,6 @@ List attributes are processed by creating individual evaluations for each array 
 The evaluation reports provide detailed breakdowns for all nested attributes:
 
 **Group Attribute Results:**
-
 ```
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :--------: | ----- | ------ | ------ |
@@ -214,7 +210,6 @@ The evaluation reports provide detailed breakdowns for all nested attributes:
 ```
 
 **List Attribute Results:**
-
 ```
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :--------: | ----- | ------ | ------ |
@@ -234,7 +229,6 @@ For documents with nested structures, the evaluation framework provides comprehe
 5. **List-Level Analysis**: Pattern analysis across list items (e.g., transaction accuracy trends)
 
 This multi-level analysis helps identify specific areas for improvement, such as:
-
 - Consistent issues with certain group attributes (e.g., address parsing)
 - Performance degradation with larger transaction lists
 - Specific list item attributes that frequently fail evaluation
@@ -242,7 +236,7 @@ This multi-level analysis helps identify specific areas for improvement, such as
 ## Viewing Reports
 
 1. In the web UI, select a document from the Documents list
-2. Click "View Evaluation Report" button
+2. Click "View Evaluation Report" button 
 3. The report shows:
    - Section classification accuracy
    - Field-by-field comparison with visual indicators (✅/❌)
@@ -296,7 +290,7 @@ Each baseline file should match the format of the GenAIIDP output, typically inc
 ## Best Practices
 
 - Enable auto-evaluation during testing/tuning phases
-- Disable auto-evaluation in production for cost efficiency
+- Disable auto-evaluation in production for cost efficiency 
 - Use evaluation reports to:
   - Compare different processing patterns
   - Test effects of prompt changes
@@ -313,7 +307,6 @@ The evaluation framework automatically discovers and evaluates fields that exist
 - Handles cases where fields are missing from either actual or expected results
 
 This capability is valuable when:
-
 - The complete schema is not yet fully defined
 - You're handling variations in extraction outputs
 - Identifying potential new fields to add to your configuration
@@ -356,7 +349,6 @@ The framework calculates the following detailed metrics for each document and se
 - **False Discovery Rate**: Rate of false positives among positive predictions (FP / (FP + TP))
 
 The evaluation also tracks different evaluation statuses:
-
 - **RUNNING**: Evaluation is in progress
 - **COMPLETED**: Evaluation finished successfully
 - **FAILED**: Evaluation encountered errors
@@ -374,27 +366,21 @@ The solution includes a comprehensive analytics system that stores evaluation me
 The evaluation framework automatically saves detailed metrics to an AWS Glue database (available from CloudFormation stack outputs as `ReportingDatabase`) containing three main tables:
 
 #### 1. document_evaluations
-
 Stores document-level metrics including:
-
 - Document ID, input key, evaluation date
 - Overall accuracy, precision, recall, F1 score
 - False alarm rate, false discovery rate
 - Execution time performance metrics
 
 #### 2. section_evaluations  
-
 Stores section-level metrics including:
-
 - Document ID, section ID, section type
 - Section-specific accuracy, precision, recall, F1 score
 - Section classification performance
 - Evaluation timestamps
 
 #### 3. attribute_evaluations
-
 Stores detailed attribute-level metrics including:
-
 - Document ID, section context, attribute name
 - Expected vs actual values, match results
 - Individual attribute scores and evaluation methods
@@ -446,19 +432,19 @@ The solution includes a comprehensive Jupyter notebook (`notebooks/evaluation_re
 - **Method Comparison**: Analysis of different evaluation methods and their effectiveness
 - **Processing Time Analysis**: Correlation between execution time and accuracy performance
 
-#### Key Analytics Features
+#### Key Analytics Features:
 
 1. **Comprehensive Dashboard**: Interactive summary report with health indicators and top issues
-2. **Problem Detection Reports**:
+2. **Problem Detection Reports**: 
    - Documents with lowest accuracy scores
-   - Section types with poor performance
+   - Section types with poor performance 
    - Attributes with low match rates and common failure reasons
 3. **Accuracy Trend Analysis**: Track same documents over time to identify improvement/regression patterns
 4. **Processing Performance**: Analyze correlation between processing time and accuracy
 5. **Method Effectiveness**: Compare different evaluation methods' performance and coverage
 6. **Export Capabilities**: Save analysis results to CSV files for further analysis or reporting
 
-#### Using the Analytics Notebook
+#### Using the Analytics Notebook:
 
 1. **Configuration**: Set your ReportingDatabase name, AWS region, and S3 output location for Athena
 2. **Filter Setup**: Configure date range, document name filters, and accuracy thresholds
@@ -467,7 +453,7 @@ The solution includes a comprehensive Jupyter notebook (`notebooks/evaluation_re
 5. **Visual Insights**: Review generated charts and visualizations for patterns and trends
 6. **Export Results**: Optional CSV export for stakeholder reporting and further analysis
 
-#### Sample Analytics Use Cases
+#### Sample Analytics Use Cases:
 
 - **Quality Monitoring**: Weekly accuracy assessments across all document types
 - **Performance Tuning**: Identify which attributes or sections need prompt improvements

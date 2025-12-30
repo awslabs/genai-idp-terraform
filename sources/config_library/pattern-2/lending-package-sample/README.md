@@ -13,7 +13,7 @@ This directory contains the default-lending configuration for the GenAI IDP Acce
 
 **Level**: 2 - Minimal Testing
 
-- **Testing Evidence**: This configuration has been lightly tested with lending sample document including payslips, driver's licenses, bank statements, checks, W2 forms, and insurance applications.
+- **Testing Evidence**: This configuration has been lightly tested with lending sample document including payslips, driver's licenses, bank statements, checks, W2 forms, and insurance applications. 
 - **Known Limitations**: Performance may vary with non-standard document formats, heavily redacted financial documents, or documents with poor image quality that affect OCR accuracy.
 
 ## Overview
@@ -59,7 +59,6 @@ The classification component analyzes document content and structure to accurate
 - **Max Tokens**: 10,000 (increased for detailed financial data)
 
 The extraction component performs comprehensive attribute extraction tailored to each lending document type, capturing critical financial information including:
-
 - Detailed income and deduction breakdowns
 - Personal identification information
 - Account numbers and financial institution details
@@ -105,6 +104,7 @@ To use this default-lending configuration:
 
 4. **Custom Lending Workflows**: Adapt for specific lending scenarios:
 
+
 ## Common Customization Scenarios
 
 ### Adding New Financial Document Classes
@@ -112,7 +112,6 @@ To use this default-lending configuration:
 To add additional lending document types (e.g., tax returns, employment verification letters):
 
 1. Add a new entry to the `classes` array:
-
    ```yaml
    - name: tax_return
      description: Individual or business tax return documents containing income and deduction information
@@ -130,7 +129,6 @@ To add additional lending document types (e.g., tax returns, employment verifica
 For enhanced compliance and audit requirements:
 
 1. Modify the extraction `task_prompt` to include compliance-specific instructions:
-
    ```yaml
    task_prompt: |
      Extract financial information with particular attention to:
@@ -144,7 +142,6 @@ For enhanced compliance and audit requirements:
 For critical lending decisions, you may want higher confidence thresholds:
 
 1. Update the `default_confidence_threshold` in the assessment section:
-
    ```yaml
    assessment:
      default_confidence_threshold: '0.95'  # Higher threshold for financial data
@@ -155,7 +152,6 @@ For critical lending decisions, you may want higher confidence thresholds:
 For different geographic regions with varying document formats:
 
 1. Create region-specific configurations:
-
    ```bash
    cp -r default-lending default-lending-ca  # Canadian lending documents
    cp -r default-lending default-lending-uk  # UK lending documents
@@ -194,7 +190,6 @@ When processing lending documents:
 ### Loan Origination Systems (LOS)
 
 This configuration can be integrated with popular LOS platforms:
-
 - Automated document classification upon upload
 - Real-time data extraction for loan application prefill
 - Exception handling for documents requiring manual review
@@ -202,7 +197,6 @@ This configuration can be integrated with popular LOS platforms:
 ### Credit Decisioning
 
 Extracted data can feed directly into credit decisioning engines:
-
 - Income verification from payslips and W2s
 - Asset verification from bank statements
 - Identity verification from driver's licenses

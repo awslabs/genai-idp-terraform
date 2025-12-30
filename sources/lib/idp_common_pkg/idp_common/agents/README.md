@@ -58,35 +58,27 @@ idp_common/agents/
 ## Design Principles
 
 ### 1. Strands-First Approach
-
 All agents use the Strands framework directly without unnecessary abstraction layers. This provides:
-
 - Excellent tool abstractions via `@tool` decorator
 - Built-in agent management and conversation handling
 - Consistent patterns across all agent types
 
 ### 2. Simple Factory Pattern
-
 Each agent type follows a simple pattern:
-
 - `agent.py` - Factory function to create configured Strands agents
 - `config.py` - Simple configuration management
 - `tools/` - Strands tools specific to that agent type
 - `assets/` - Static assets like prompts, schemas, etc.
 
 ### 3. Security-First Design
-
 Agents are designed with security as a primary concern:
-
 - **Sandboxed Code Execution**: Uses AWS Bedrock AgentCore for secure Python execution
 - **Data Isolation**: Query results are transferred securely between services
 - **Minimal Permissions**: Each agent requests only necessary AWS permissions
 - **Audit Trail**: Comprehensive logging and monitoring for security reviews
 
 ### 4. IDP Integration
-
 Agents are designed to integrate seamlessly with the IDP accelerator:
-
 - Environment variable configuration for Lambda deployment
 - AWS service integration (Athena, S3, AgentCore, etc.)
 - Consistent logging patterns
@@ -147,7 +139,6 @@ response = agent("How many documents were processed last week?")
 The External MCP Agent connects to external MCP (Model Context Protocol) servers to provide additional tools and capabilities. This agent enables integration with third-party services and custom tools hosted outside the IDP system.
 
 **Key Features:**
-
 - **Cross-Account Support**: MCP servers can be hosted in separate AWS accounts
 - **OAuth Authentication**: Uses AWS Cognito for secure authentication
 - **Dynamic Tool Discovery**: Automatically discovers and integrates available MCP tools
@@ -178,12 +169,10 @@ The agent requires credentials stored in AWS Secrets Manager at `{StackName}/ext
 ```
 
 **Optional Fields:**
-
 - `agent_name`: Custom name for the agent (defaults to "External MCP Agent {N}")
 - `agent_description`: Custom description (tool information is automatically appended)
 
 **Usage:**
-
 ```python
 from idp_common.agents.factory import agent_factory
 
@@ -196,7 +185,6 @@ with agent_factory.create_agent(
 ```
 
 **Security:**
-
 - Uses streamable HTTP transport with OAuth bearer tokens
 - Credentials managed through AWS Secrets Manager
 - MCP client context properly managed to prevent connection leaks
@@ -269,7 +257,6 @@ agent.hooks.add_hook(message_tracker)
 To add a new agent type (e.g., `document_analysis`):
 
 1. **Create the directory structure**:
-
    ```
    idp_common/agents/document_analysis/
    ├── __init__.py
@@ -281,7 +268,6 @@ To add a new agent type (e.g., `document_analysis`):
    ```
 
 2. **Implement the factory function** (`agent.py`):
-
    ```python
    from strands import Agent
    from .tools import your_tool1, your_tool2, your_tool3
@@ -293,7 +279,6 @@ To add a new agent type (e.g., `document_analysis`):
    ```
 
 3. **Add configuration management** (`config.py`):
-
    ```python
    from ..common.config import get_environment_config
    
@@ -302,7 +287,6 @@ To add a new agent type (e.g., `document_analysis`):
    ```
 
 4. **Create Strands tools** (`tools/`):
-
    ```python
    from strands import tool
    
@@ -313,7 +297,6 @@ To add a new agent type (e.g., `document_analysis`):
    ```
 
 5. **Update the main module** (`__init__.py`):
-
    ```python
    # Add to the lazy loading list
    if name in ["analytics", "common", "document_analysis"]:
@@ -333,13 +316,11 @@ See [`testing/README.md`](./testing/README.md) for detailed testing instructions
 ## Dependencies
 
 ### Core Dependencies
-
 - `strands-agents>=1.0.0` - Core agent framework
 - `boto3` - AWS service integration
 - `bedrock-agentcore` - Secure code execution sandbox
 
 ### Analytics-Specific Dependencies
-
 - `pandas>=2.0.0` - Data manipulation (used in sandbox)
 
 ### Required AWS Permissions
@@ -374,9 +355,7 @@ For analytics agents, the following IAM permissions are required:
 ```
 
 ### Optional Dependencies
-
 Install specific agent dependencies as needed:
-
 ```bash
 # For analytics agents
 pip install "idp_common[agents,analytics]"
@@ -445,7 +424,6 @@ When adding new agents or modifying existing ones:
 ## Support
 
 For questions about the agents module:
-
 - Check the testing utilities in `testing/`
 - Review existing agent implementations
 - Consult the main IDP documentation

@@ -10,7 +10,6 @@ This directory contains tests for the `idp_common` package, organized into unit 
 **Important:** All new features must include appropriate unit tests. This is a mandatory requirement for code contributions.
 
 ### Why Tests Are Required
-
 - Ensures code quality and reliability
 - Prevents regressions when making changes
 - Serves as documentation for how components should work
@@ -30,7 +29,6 @@ You can use AI Coding Agents like Amazon Q to help generate tests for your code:
    - Review and validate the generated tests before committing
 
 3. **Example Prompt for Amazon Q**:
-
    ```
    Generate unit tests for this file: relate/path/to/your/file.py.
    ```
@@ -42,22 +40,18 @@ You can use AI Coding Agents like Amazon Q to help generate tests for your code:
    - Tests are properly marked with the correct decorators
 
 ### CI/CD Integration
-
 - Tests run automatically when pull requests are created
 - PRs with failing tests will be blocked from merging
 - Test coverage is tracked and reported in the CI pipeline
 - Both unit and integration tests are executed in the CI environment
 
 ### Before Creating a Pull Request
-
 1. Write appropriate unit tests for your new code (manually or with AI assistance)
 2. Run tests locally to verify they pass:
-
    ```bash
    cd lib/idp_common_pkg
    make test
    ```
-
 3. Fix any failing tests before submitting your PR
 4. Ensure your code meets the coverage requirements
 
@@ -126,7 +120,6 @@ pytest tests/integration
 ### Unit Tests
 
 Add new unit tests to the `tests/unit` directory. Unit tests should:
-
 - Be marked with the `@pytest.mark.unit` decorator
 - Be fast and not depend on external services
 - Test individual components in isolation
@@ -147,7 +140,6 @@ def test_my_function():
 ### Integration Tests
 
 Add new integration tests to the `tests/integration` directory. Integration tests should:
-
 - Be marked with the `@pytest.mark.integration` decorator
 - Test interactions between components or with external services
 - Include proper setup and teardown of test resources
@@ -167,7 +159,6 @@ def test_my_integration():
 ## Test Configuration
 
 The `pytest.ini` file in the root directory defines:
-
 - Markers for categorizing tests:
   - `unit`: For unit tests
   - `integration`: For integration tests

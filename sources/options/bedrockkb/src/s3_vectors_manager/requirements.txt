@@ -1,0 +1,8 @@
+# AWS SDK for Python - Use latest version for S3 Vectors support
+boto3>=1.40.25
+
+# CloudFormation response helper (built into Lambda runtime but useful for local testing)
+cfnresponse
+
+# Optional: For enhanced error handling and logging  
+botocore>=1.40.25

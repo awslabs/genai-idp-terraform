@@ -246,7 +246,6 @@ The evaluation module produces richly formatted Markdown reports with:
    - Indications for attributes that were discovered in the data but not in the configuration
 
 Examples of method display in reports:
-
 - `EXACT` - Simple exact matching
 - `FUZZY (threshold: 0.8)` - Fuzzy matching with threshold
 - `HUNGARIAN (comparator: EXACT)` - Hungarian algorithm with exact matching
@@ -284,7 +283,6 @@ expected_results = {
 ```
 
 This capability is particularly useful for:
-
 - Exploratory evaluation when the complete schema is not yet defined
 - Handling variations in extraction outputs that may contain additional information
 - Identifying potential new attributes to add to the configuration
@@ -301,7 +299,6 @@ The evaluation service automatically integrates with the assessment feature to d
 ### Enhanced Report Format
 
 #### JSON Output with Confidence
-
 ```json
 {
   "attributes": [
@@ -319,7 +316,6 @@ The evaluation service automatically integrates with the assessment feature to d
 ```
 
 #### Markdown Table with Confidence
-
 ```
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :---------------: | ----- | ------ | ------ |
@@ -338,7 +334,6 @@ Confidence scores provide additional insights for evaluation analysis:
 ### Backward Compatibility
 
 The confidence integration is fully backward compatible:
-
 - Reports without assessment data show "N/A" for confidence columns
 - Evaluation logic remains unchanged when confidence data is absent
 - Existing evaluation workflows continue to work without modification
@@ -350,7 +345,6 @@ The evaluation service fully supports nested document structures including group
 ### Attribute Types and Processing
 
 #### Simple Attributes
-
 Basic single-value extractions that are evaluated directly:
 
 ```python
@@ -366,7 +360,6 @@ Basic single-value extractions that are evaluated directly:
 ```
 
 #### Group Attributes  
-
 Nested object structures where each sub-attribute is evaluated individually:
 
 ```python
@@ -394,7 +387,6 @@ Nested object structures where each sub-attribute is evaluated individually:
 ```
 
 #### List Attributes
-
 Arrays of items where each item's attributes are evaluated individually:
 
 ```python
@@ -430,7 +422,6 @@ Arrays of items where each item's attributes are evaluated individually:
 The evaluation service automatically flattens nested extraction results for comparison:
 
 #### Input Data (Nested)
-
 ```json
 {
   "Account Number": "1234567890",
@@ -456,7 +447,6 @@ The evaluation service automatically flattens nested extraction results for comp
 ```
 
 #### Flattened Data (For Evaluation)
-
 ```json
 {
   "Account Number": "1234567890",
@@ -478,7 +468,6 @@ The evaluation service automatically flattens nested extraction results for comp
 The evaluation service provides detailed results for all flattened attributes:
 
 #### Sample Evaluation Output
-
 ```json
 {
   "attributes": [
@@ -525,7 +514,6 @@ The evaluation service provides detailed results for all flattened attributes:
 ```
 
 #### Markdown Report for Nested Structures
-
 ```markdown
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :--------: | ----- | ------ | ------ |

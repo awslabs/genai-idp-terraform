@@ -88,7 +88,6 @@ To use this default configuration:
 1. **Direct Use**: Deploy the GenAI IDP Accelerator with this configuration without any modifications for general-purpose document processing.
 
 2. **As a Template**: Copy this configuration to a new directory and modify it for your specific use case:
-
    ```bash
    cp -r config_library/pattern-2/default config_library/pattern-2/your_use_case_name
    ```
@@ -102,7 +101,6 @@ To use this default configuration:
 To add a new document class:
 
 1. Add a new entry to the `classes` array in the configuration:
-
    ```json
    {
      "name": "your_class_name",

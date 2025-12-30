@@ -4,6 +4,41 @@ ocr:
     - name: "LAYOUT"
     - name: "TABLES" 
     - name: "SIGNATURES"
-  # Additional OCR-specific settings can be added here
-  # region: "us-east-1"  # Will be set from environment
-  # enhanced_features: ["LAYOUT"]  # Can override the features list above
+  
+  # Image Processing Configuration
+  # When image sizing is not specified, automatic defaults (1600x1200) are applied
+  # to balance OCR accuracy with resource usage and token consumption
+  image:
+    dpi: 150  # DPI for PDF conversion (default: 150)
+    
+    # Image size limits - AUTOMATIC DEFAULTS APPLIED IF NOT SPECIFIED
+    # Defaults: target_width: 1600, target_height: 1200
+    # 
+    # Uncomment and customize based on your use case:
+    #
+    # For HIGH ACCURACY (forms, tables, handwritten content):
+    # target_width: 1600
+    # target_height: 1200
+    # Expected token usage: ~500-800 per page
+    #
+    # For STANDARD DOCUMENTS (printed text, simple layouts):
+    # target_width: 1200  
+    # target_height: 900
+    # Expected token usage: ~300-500 per page
+    #
+    # For TOKEN-CONSCIOUS processing (basic text extraction):
+    # target_width: 800
+    # target_height: 600
+    # Expected token usage: ~150-300 per page
+    #
+    # For MINIMAL processing (when speed > accuracy):
+    # target_width: 600
+    # target_height: 450  
+    # Expected token usage: ~100-200 per page
+    #
+    # To disable size limits entirely (NOT RECOMMENDED - causes high resource usage):
+    # target_width: ""
+    # target_height: ""
+    
+    # Preprocessing (can improve OCR accuracy on low-quality scans)
+    # preprocessing: true

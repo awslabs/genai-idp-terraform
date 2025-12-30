@@ -8,6 +8,12 @@ import lightning.pytorch as pl
 from transformers import UdopForConditionalGeneration
 from transformers.optimization import get_cosine_schedule_with_warmup
 
+# Import for secure model version management
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from model_versions import get_model_revision
+
 
 class UDOPModel(pl.LightningModule):
     def __init__(
@@ -23,9 +29,19 @@ class UDOPModel(pl.LightningModule):
         self.lr_warmup_steps = lr_warmup_steps
         self.max_steps = max_steps
         self.print_every_n_steps = print_every_n_steps
-        self.model = UdopForConditionalGeneration.from_pretrained(
-            model_id, dropout_rate=dropout_rate
-        )
+        # Load model with pinned revision for security (addresses B615 finding)
+        revision = get_model_revision(model_id) if model_id in ["microsoft/udop-large"] else None
+        if revision:
+            print(f"Loading model {model_id} with pinned revision: {revision}")
+            self.model = UdopForConditionalGeneration.from_pretrained(
+                model_id, revision=revision, dropout_rate=dropout_rate
+            )
+        else:
+            # Fallback for custom models without managed versions
+            print(f"Loading model {model_id} without revision pinning (not in managed list)")
+            self.model = UdopForConditionalGeneration.from_pretrained(
+                model_id, dropout_rate=dropout_rate
+            )
         self.training_step_outputs = []
         self.validation_step_outputs = []
         self.tasks = {}

@@ -83,7 +83,6 @@ class Page:
 ```
 
 **Key URIs:**
-
 - `image_uri`: S3 URI to the page image (JPG format)
 - `raw_text_uri`: S3 URI to the raw Textract response (full JSON with all metadata)
 - `parsed_text_uri`: S3 URI to the parsed text content (markdown format)

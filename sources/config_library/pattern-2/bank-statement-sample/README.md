@@ -24,7 +24,7 @@ The bank statement sample configuration is designed to handle multi-page bank ac
 The configuration processes bank statements to extract:
 
 - Account-level information (simple attributes)
-- Customer address details (group attributes)
+- Customer address details (group attributes) 
 - Individual transaction records (list attributes)
 
 ## Key Components
@@ -43,12 +43,10 @@ The configuration defines 1 document class with comprehensive nested attributes:
 This configuration demonstrates all three attribute types supported by the GenAI IDP Accelerator:
 
 #### 1. Simple Attributes
-
 - **Account Number**: Primary account identifier (EXACT evaluation)
 - **Statement Period**: Statement period like "January 2024" (FUZZY evaluation with 0.8 threshold)
 
 #### 2. Group Attributes  
-
 - **Account Holder Address**: Nested object structure containing:
   - **Street Number**: House or building number (FUZZY evaluation with 0.9 threshold)
   - **Street Name**: Name of the street (FUZZY evaluation with 0.8 threshold)
@@ -57,7 +55,6 @@ This configuration demonstrates all three attribute types supported by the GenAI
   - **ZIP Code**: 5 or 9 digit postal code (EXACT evaluation)
 
 #### 3. List Attributes
-
 - **Transactions**: Array of transaction records, each containing:
   - **Date**: Transaction date in MM/DD/YYYY format (FUZZY evaluation with 0.9 threshold)
   - **Description**: Transaction description or merchant name (SEMANTIC evaluation with 0.7 threshold)
@@ -92,7 +89,7 @@ The assessment component evaluates extraction confidence for each attribute, inc
 ### Evaluation Settings
 
 - **Model**: Claude 3 Haiku (for LLM evaluations)
-- **Evaluation Methods**:
+- **Evaluation Methods**: 
   - EXACT: For account numbers, state abbreviations, ZIP codes
   - FUZZY: For names, addresses, dates (with configurable thresholds)
   - SEMANTIC: For transaction descriptions  
@@ -103,7 +100,6 @@ The assessment component evaluates extraction confidence for each attribute, inc
 ### 1. Nested Attribute Support
 
 Unlike the default configuration which only uses simple attributes, this configuration demonstrates:
-
 - **Group attributes** for structured address information
 - **List attributes** for variable-length transaction records
 - **Mixed evaluation methods** tailored to each attribute type
@@ -151,7 +147,6 @@ To use this bank statement configuration:
 ### Adding New Attributes
 
 To add new simple attributes:
-
 ```yaml
 - name: "Routing Number"
   description: "Bank routing number"
@@ -160,7 +155,6 @@ To add new simple attributes:
 ```
 
 To extend the address group:
-
 ```yaml
 groupAttributes:
   - name: "Country"
@@ -169,7 +163,6 @@ groupAttributes:
 ```
 
 To add new transaction fields:
-
 ```yaml
 itemAttributes:
   - name: "Category"
@@ -181,7 +174,6 @@ itemAttributes:
 ### Modifying Evaluation Methods
 
 Adjust evaluation methods and thresholds based on your accuracy requirements:
-
 - Use `EXACT` for critical identifiers
 - Use `FUZZY` with high thresholds (0.8-0.9) for names and addresses  
 - Use `SEMANTIC` for descriptive fields

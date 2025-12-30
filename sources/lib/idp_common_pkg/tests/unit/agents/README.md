@@ -20,14 +20,12 @@ tests/unit/agents/
 ## Running Tests
 
 ### Run All Agent Tests
-
 ```bash
 # From the idp_common_pkg directory
 pytest tests/unit/agents/ -v
 ```
 
 ### Run Specific Test Categories
-
 ```bash
 # Common configuration tests
 pytest tests/unit/agents/test_common_config.py -v
@@ -40,7 +38,6 @@ pytest tests/unit/agents/analytics/test_tools.py -v
 ```
 
 ### Run with Coverage
-
 ```bash
 pytest tests/unit/agents/ --cov=idp_common.agents --cov-report=html
 ```
@@ -52,12 +49,10 @@ pytest tests/unit/agents/ --cov=idp_common.agents --cov-report=html
 Tests the shared configuration utilities used by all agent types.
 
 **Test Classes:**
-
 - `TestGetEnvironmentConfig`: Tests environment variable loading and validation
 - `TestValidateAwsCredentials`: Tests AWS credential validation
 
 **Key Test Cases:**
-
 - `test_get_basic_config()`: Verifies basic configuration loading without required keys
 - `test_get_config_with_default_region()`: Tests default AWS region fallback (us-east-1)
 - `test_get_config_with_required_keys()`: Tests configuration with required environment variables
@@ -72,13 +67,11 @@ Tests the shared configuration utilities used by all agent types.
 Tests analytics-specific configuration loading and validation.
 
 **Test Classes:**
-
 - `TestGetAnalyticsConfig`: Tests analytics configuration loading
 - `TestLoadDbDescription`: Tests database description file loading
 - `TestLoadResultFormatDescription`: Tests result format description loading
 
 **Key Test Cases:**
-
 - `test_get_analytics_config_success()`: Tests successful analytics config loading with all required variables
 - `test_missing_required_config_raises_error()`: Tests error handling for missing required config
 - `test_all_missing_required_config()`: Tests scenario with all required config missing
@@ -92,17 +85,14 @@ Tests analytics-specific configuration loading and validation.
 Tests the analytics agent creation and configuration.
 
 **Test Classes:**
-
 - `TestCreateAnalyticsAgent`: Tests analytics agent factory function
 
 **Key Test Cases:**
-
 - `test_create_analytics_agent_success()`: Tests successful agent creation with proper configuration
 - `test_create_analytics_agent_tools_configured()`: Verifies that all required tools are properly configured
 - `test_create_analytics_agent_handles_asset_loading_error()`: Tests graceful handling of asset loading errors
 
 **Mocked Components:**
-
 - Strands Agent class
 - Database description loading
 - Result format description loading
@@ -113,27 +103,23 @@ Tests the analytics agent creation and configuration.
 Tests individual analytics tools functionality.
 
 **Test Classes:**
-
 - `TestRunAthenaQuery`: Tests Athena query execution tool
 - `TestExecutePython`: Tests Python code execution tool
 
 **Key Test Cases:**
 
-#### Athena Query Tool Tests
-
+#### Athena Query Tool Tests:
 - `test_successful_query_execution()`: Tests successful Athena query with proper result formatting
 - `test_failed_query_execution()`: Tests handling of failed Athena queries
 - `test_query_execution_exception()`: Tests exception handling during query execution
 
-#### Python Execution Tool Tests
-
+#### Python Execution Tool Tests:
 - `test_successful_python_execution()`: Tests successful Python code execution
 - `test_python_execution_with_error()`: Tests error handling in Python code execution
 - `test_python_execution_with_pandas()`: Tests pandas availability and usage
 - `test_python_execution_output_capture()`: Tests proper stdout/stderr capture
 
 **Mocked Components:**
-
 - Boto3 Athena client
 - Query execution responses
 - Query results
@@ -144,17 +130,14 @@ Tests individual analytics tools functionality.
 Integration tests that verify components work together correctly.
 
 **Test Classes:**
-
 - `TestAnalyticsIntegration`: End-to-end integration tests
 
 **Key Test Cases:**
-
 - `test_end_to_end_agent_creation()`: Tests complete agent creation flow from config to agent
 - `test_configuration_validation()`: Tests that configuration validation works across components
 - `test_missing_configuration_raises_error()`: Tests error propagation through the integration stack
 
 **Integration Points Tested:**
-
 - Configuration loading → Agent creation
 - Environment variables → Configuration validation
 - Asset loading → Agent initialization
@@ -165,7 +148,6 @@ Integration tests that verify components work together correctly.
 ### Mocking Strategy
 
 **Environment Variables:**
-
 ```python
 @patch.dict(os.environ, {"VAR_NAME": "value"}, clear=True)
 def test_function(self):
@@ -173,7 +155,6 @@ def test_function(self):
 ```
 
 **File Operations:**
-
 ```python
 @patch("builtins.open", new_callable=mock_open, read_data="content")
 def test_file_loading(self, mock_file):
@@ -181,7 +162,6 @@ def test_file_loading(self, mock_file):
 ```
 
 **AWS Services:**
-
 ```python
 mock_client = MagicMock()
 mock_client.method.return_value = {"expected": "response"}
@@ -199,14 +179,12 @@ with patch("boto3.client", return_value=mock_client):
 ### Assertion Patterns
 
 **Configuration Tests:**
-
 ```python
 assert config["key"] == "expected_value"
 assert "required_key" in config
 ```
 
 **Error Testing:**
-
 ```python
 with pytest.raises(ValueError) as exc_info:
     function_call()
@@ -214,7 +192,6 @@ assert "expected_message" in str(exc_info.value)
 ```
 
 **Mock Verification:**
-
 ```python
 mock_function.assert_called_once_with(expected_args)
 assert mock_function.call_count == expected_count
@@ -245,7 +222,6 @@ assert mock_function.call_count == expected_count
 ### For New Agent Types
 
 1. **Create agent-specific test directory**:
-
    ```
    tests/unit/agents/new_agent_type/
    ├── __init__.py
@@ -285,7 +261,6 @@ assert mock_function.call_count == expected_count
 ### Common Issues
 
 **Import Errors:**
-
 ```bash
 # Ensure you're in the right directory
 cd lib/idp_common_pkg
@@ -294,14 +269,12 @@ pip install -e .
 ```
 
 **Mock Configuration:**
-
 ```python
 # Ensure mocks are properly configured before use
 mock_object.configure_mock(attribute=value)
 ```
 
 **Environment Isolation:**
-
 ```python
 # Use clear=True to avoid environment pollution
 @patch.dict(os.environ, {...}, clear=True)

@@ -40,12 +40,19 @@ The GenAI Intelligent Document Processing (GenAIIDP) Accelerator demonstrates st
 
 ### Recommendations
 
-- **CloudFront Security Enhancement**:
+- **Production Logging Security**: 
+  - **Set the `LogLevel` parameter to WARN or ERROR (not INFO) for production deployments** to prevent sensitive information from being logged
+  - The `LogLevel` parameter in template.yaml automatically configures logging levels across all Lambda functions, AppSync APIs, and other components
+  - INFO level logging can inadvertently capture sensitive document contents, PII data (SSN, addresses, names), and S3 presigned URLs
+  - For production environments, use `LogLevel: WARN` or `LogLevel: ERROR` in your CloudFormation deployment parameters
+  - Implement log filtering and masking for any essential INFO-level logs that must be retained
+  - Regularly audit CloudWatch log groups to ensure no sensitive information is being captured
+- **CloudFront Security Enhancement**: 
   - Create a custom domain with a custom ACM certificate for the CloudFront distribution
   - Enforce TLS 1.2 or greater protocol in the CloudFront security policy
   - Configure secure response headers (X-Content-Type-Options, X-Frame-Options, Content-Security-Policy)
   - Restrict viewer access using signed URLs or cookies for sensitive content
-- **Additional WAF Protection**:
+- **Additional WAF Protection**: 
   - Deploy a WAF WebACL with GLOBAL scope in the us-east-1 region
   - Associate this WAF with the CloudFront distribution to protect the UI
   - Enable core rule sets (AWS Managed Rules) including protections against XSS and SQL injection

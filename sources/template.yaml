@@ -86,31 +86,24 @@ Parameters:
     Description: >-
       Built-in IDP workflow patterns - see README for pattern descriptions.
 
+  # Custom Configuration Path
+  
+  CustomConfigPath:
+    Type: String
+    Default: ""
+    Description: >-
+      S3 URI pointing to your custom configuration YAML file. When provided, this configuration overrides the selected pattern preset and applies to all processing patterns. 
+      Leave blank to use the selected pattern configuration preset. For example s3://my-bucket/custom-config/config.yaml
+    AllowedPattern: '^(|s3://[a-zA-Z0-9.\\-_]+(/.*)?)$'
+    ConstraintDescription: Must be empty or a valid S3 URI (e.g., s3://my-bucket/custom-config/config.yaml)
+
   # Pattern 1 Parameters
 
   Pattern1BDAProjectArn:
     Type: String
     Default: ""
-    AllowedPattern: "^(|^arn:aws:bedrock:[a-z0-9-]+:.+:data-automation-project/.+)$"
+    AllowedPattern: "^(|^arn:aws[a-z-]*:bedrock:[a-z0-9-]+:.+:data-automation-project/.+)$"
     Description: For Pattern-1, provide a Bedrock Data Automation (BDA) project ARN, or leave blank to create a sample project for processing the sample lending package.
-
-  Pattern1EnableHITL:
-    Type: String
-    AllowedValues:
-      - true
-      - false
-    Default: false
-    Description: Enable Human In The Loop configuration to invoke HITL (SageMaker A2I) if the extraction and classification of BDA is less than configured Confidence Threshold
-
-  ExistingPrivateWorkforceArn:
-    Type: String
-    Default: ""
-    AllowedPattern: "^(|arn:aws:sagemaker:[a-z0-9-]+:[0-9]{12}:workteam/private-crowd/.+)$"
-    Description: >-
-      (Optional) ARN of an existing SageMaker private workforce workteam to use for Human In The Loop (HITL).
-      If provided, the template will use this existing workteam instead of creating a new one.
-      Format: arn:aws:sagemaker:region:account-id:workteam/private-crowd/workteam-name
-      Leave blank to create a new private workteam.
 
   Pattern1Configuration:
     Type: String
@@ -118,7 +111,8 @@ Parameters:
     AllowedValues:
       - "lending-package-sample"
       - "default"
-    Description: Select the configuration preset for Pattern 1. Each configuration contains pre-tuned settings for specific document processing scenarios - see https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md.
+    Description: >-
+     Select the configuration preset for Pattern 1. Each configuration contains pre-tuned settings for specific document processing scenarios - see https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md. Note: This selected configuration will be replaced by the Custom Configuration Path if specified.
 
   # Pattern 2 Parameters
 
@@ -131,7 +125,8 @@ Parameters:
       - "rvl-cdip-package-sample-with-few-shot-examples"
       - "bank-statement-sample"
       - "default"
-    Description: Select the configuration preset for Pattern 2. Each configuration contains pre-tuned settings for specific document processing scenarios - see https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md.
+    Description: >-
+     Select the configuration preset for Pattern 2. Each configuration contains pre-tuned settings for specific document processing scenarios see https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md. Note: Custom configuration overrides the selected pattern configuration when provided.
 
   Pattern2CustomClassificationModelARN:
     Type: String
@@ -157,7 +152,31 @@ Parameters:
     AllowedValues:
       - "rvl-cdip-package-sample"
       - "default"
-    Description: Select the configuration preset for Pattern 3. Each configuration contains pre-tuned settings for specific document processing scenarios - see https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md.
+    Description: >-
+     Select the configuration preset for Pattern 3. Each configuration contains pre-tuned settings for specific document processing scenarios - see https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md. Note: Custom configuration overrides the selected pattern configuration when provided.
+  
+  # HITL (A2I) Configuration
+
+  EnableHITL:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Enable Human In The Loop configuration to invoke HITL (SageMaker A2I) if the extraction confidence is less than configured threshold (applies to Pattern-1)
+
+  ExistingPrivateWorkforceArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^(|arn:aws[a-z-]*:sagemaker:[a-z0-9-]+:[0-9]{12}:workteam/private-crowd/.+)$"
+    Description: >-
+      ARN of an existing SageMaker private workforce workteam to use for Human In The Loop (HITL). 
+      If you do not have existing Private workteam and leave it blank then solution will create one. 
+      REQUIRED when deploying multiple patterns with HITL enabled, as only one private workteam can exist per AWS account.
+      If you already have a GenAI-IDP deployment with HITL enabled, provide the existing workteam ARN here.
+      Leave empty for first-time HITL deployment to create a new private workteam automatically.
+      Find the ARN in your existing stack's CloudFormation outputs under 'PrivateWorkteamArn'.
+      Format: arn:${AWS::Partition}:sagemaker:region:account-id:workteam/private-crowd/workteam-name
 
   # Evaluation
   EvaluationBaselineBucketName:
@@ -201,24 +220,6 @@ Parameters:
       Set to true during test cycles to evaluate and compare accuracy for different patterns and prompts for each document.
       If false, evaluation is not automatically attempted for each processed document. Set to false when deployed in production.
 
-  # Summarization 
-  IsSummarizationEnabled:
-    Type: String
-    Default: true
-    AllowedValues:
-      - true
-      - false
-    Description: Enable or disable document summarization functionality across all patterns.
-
-  # Assessment
-  IsAssessmentEnabled:
-    Type: String
-    Default: true
-    AllowedValues:
-      - true
-      - false
-    Description: Enable or disable extraction confidence assessment functionality (except pattern-1 BDA, which always includes confidence scores).
-
   # Optional Knowledge Base Configuration
   DocumentKnowledgeBase:
     Default: "BEDROCK_KNOWLEDGE_BASE (Create)"
@@ -227,6 +228,14 @@ Parameters:
       - "DISABLED"
       - "BEDROCK_KNOWLEDGE_BASE (Create)"
     Description: Use document processing results as knowledge base content. Model access for amazon.titan-embed-text-v2:0 MUST be enabled in Amazon Bedrock.
+
+  KnowledgeBaseVectorStore:
+    Type: String
+    Default: "OPENSEARCH_SERVERLESS"
+    AllowedValues:
+      - "OPENSEARCH_SERVERLESS"
+      - "S3_VECTORS"
+    Description: Choose vector store type for Bedrock Knowledge Base. OpenSearch Serverless (default) for sub-millisecond queries, S3 Vectors for cost-effective storage with sub-second latency.
 
   KnowledgeBaseModelId:
     Type: String
@@ -241,11 +250,25 @@ Parameters:
       - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
     Description: Model to use for optional Document Knowledge Base. Model access MUST be enabled in Amazon Bedrock.
 
+  DocumentAnalysisAgentModelId:
+    Type: String
+    Default: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    AllowedValues:
+      - "us.amazon.nova-lite-v1:0"
+      - "us.amazon.nova-pro-v1:0"
+      - "us.amazon.nova-premier-v1:0"
+      - "us.anthropic.claude-3-haiku-20240307-v1:0"
+      - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+      - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    Description: Model to use for Document Analysis Agent (analytics queries). Model access MUST be enabled in Amazon Bedrock.
+
   # Optional - Post processing Lambda hook
   PostProcessingLambdaHookFunctionArn:
     Default: ""
     Type: String
-    AllowedPattern: "^(|arn:aws:lambda:.*)$"
+    AllowedPattern: "^(|arn:aws[a-z-]*:lambda:.*)$"
     Description: >
       (Optional) The specified Lambda function is invoked by EventBridge after the document processing workflow is processed.
       This function can implement custom logic to initiate downstream processing on the output of the processing pattern.
@@ -297,9 +320,9 @@ Parameters:
     Description: >-
       (Optional) ARN of an existing IAM Permissions Boundary policy to attach to all IAM roles.
       Required by some organizations with Service Control Policies (SCPs).
-      Format: arn:aws:iam::account-id:policy/policy-name
+      Format: arn:${AWS::Partition}:iam::account-id:policy/policy-name
       Leave blank if no Permissions Boundary is required.
-    AllowedPattern: "^(|arn:aws:iam::[0-9]{12}:policy/.+)$"
+    AllowedPattern: "^(|arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
 
   # Logging configuration
@@ -376,16 +399,6 @@ Parameters:
 
 
 Rules:
-  # Pattern 1 rules
-  ValidateExistingPrivateWorkforceArn:
-    RuleCondition:
-      !And [
-        !Equals [!Ref Pattern1EnableHITL, "true"],
-        !Not [!Equals [!Ref ExistingPrivateWorkforceArn, ""]]
-      ]
-    Assertions:
-      - Assert: !Not [!Equals [!Ref ExistingPrivateWorkforceArn, ""]]
-        AssertDescription: ExistingPrivateWorkforceArn must be a valid ARN when provided and HITL is enabled.
 
   Pattern3UDOPModelArtifactPath:
     RuleCondition:
@@ -396,9 +409,6 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref Pattern3UDOPModelArtifactPath, ""]]
         AssertDescription: UDOP Model Artifact Path is required when IDPPattern is 'Pattern1'
-
-  # Pattern 2 rules - Custom model validation now handled in pattern templates
-
 
 Conditions:
   IsPattern1:
@@ -424,9 +434,9 @@ Conditions:
   HasGuardrailConfig: !And [!Not [!Equals [!Ref BedrockGuardrailId, ""]], !Not [!Equals [!Ref BedrockGuardrailVersion, ""]]]
   
   # HITL and Private Workforce conditions
-  IsPattern1HITLEnabled: !And [!Condition IsPattern1, !Equals [!Ref Pattern1EnableHITL, "true"]]
-  ShouldCreatePrivateWorkteam: !And [!Condition IsPattern1HITLEnabled, !Equals [!Ref ExistingPrivateWorkforceArn, ""]]
-  ShouldUseExistingPrivateWorkteam: !And [!Condition IsPattern1HITLEnabled, !Not [!Equals [!Ref ExistingPrivateWorkforceArn, ""]]]
+  IsHITLEnabled: !Equals [!Ref EnableHITL, "true"]
+  ShouldCreatePrivateWorkteam: !And [!Condition IsHITLEnabled, !Equals [!Ref ExistingPrivateWorkforceArn, ""]]
+  ShouldUseExistingPrivateWorkteam: !And [!Condition IsHITLEnabled, !Not [!Equals [!Ref ExistingPrivateWorkforceArn, ""]]]
 
   # General rules
   ShouldAllowSignUpEmailDomain:
@@ -441,6 +451,8 @@ Conditions:
   ShouldUseDocumentKnowledgeBase: !Condition ShouldCreateDocumentKnowledgeBase
   DocumentSectionsCrawlerScheduleEnabled: !Not [!Equals [!Ref DocumentSectionsCrawlerFrequency, "Manual"]]
   HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  HasCustomConfigPath: !Not [!Equals [!Ref CustomConfigPath, ""]]
+  IsS3VectorsVectorStore: !Equals [!Ref KnowledgeBaseVectorStore, "S3_VECTORS"]
 
 
 Metadata:
@@ -460,8 +472,6 @@ Metadata:
         Parameters:
           - Pattern1Configuration
           - Pattern1BDAProjectArn
-          - Pattern1EnableHITL
-          - ExistingPrivateWorkforceArn
       - Label:
           default: "Pattern 2 Configuration"
         Parameters:
@@ -474,13 +484,14 @@ Metadata:
           - Pattern3Configuration
           - Pattern3UDOPModelArtifactPath
       - Label:
-          default: "Summarization"
+          default: "Custom Configuration"
         Parameters:
-          - IsSummarizationEnabled
+          - CustomConfigPath
       - Label:
-          default: "Assessment / Confidence Scoring"
+          default: "HITL (A2I) Configuration"
         Parameters:
-          - IsAssessmentEnabled
+          - EnableHITL
+          - ExistingPrivateWorkforceArn
       - Label:
           default: "Evaluation"
         Parameters:
@@ -495,7 +506,12 @@ Metadata:
           default: "Document Knowledge Base"
         Parameters:
           - DocumentKnowledgeBase
+          - KnowledgeBaseVectorStore
           - KnowledgeBaseModelId
+      - Label:
+          default: "Agentic Analysis"
+        Parameters:
+          - DocumentAnalysisAgentModelId
       - Label:
           default: "Post Processing"
         Parameters:
@@ -537,16 +553,18 @@ Metadata:
         default: "Pattern2 - Custom Extraction Model ARN"
       Pattern1Configuration:
         default: "Pattern1 - Configuration Preset"
-      Pattern1EnableHITL:
-        default: "Pattern1 - Enable Human In The Loop"
+      EnableHITL:
+        default: "Enable Human In The Loop"
       ExistingPrivateWorkforceArn:
-        default: "Pattern1 - Existing Private Workforce ARN"
+        default: "Existing Private Workforce ARN"
       Pattern2Configuration:
         default: "Pattern2 - Configuration Preset"
       Pattern3UDOPModelArtifactPath:
         default: "Pattern3 - UDOP Model Artifact Path"
       Pattern3Configuration:
         default: "Pattern3 - Configuration Preset"
+      CustomConfigPath:
+        default: "Custom Configuration Path"
       PostProcessingLambdaHookFunctionArn:
         default: "Post Processing Lambda Hook Function ARN"
       EvaluationBaselineBucketName:
@@ -555,14 +573,12 @@ Metadata:
         default: "Evaluation Auto Enabled"
       ReportingBucketName:
         default: "Reporting Bucket Name"
-      IsSummarizationEnabled:
-        default: "Summarization Enabled"
-      IsAssessmentEnabled:
-        default: "Assessment / Confidence Scoring Enabled"
       DocumentKnowledgeBase:
         default: "Document Knowledge Base Configuration"
       KnowledgeBaseModelId:
         default: "Knowledge Base Model Id"
+      DocumentAnalysisAgentModelId:
+        default: "Document Analysis Agent Model Id"
       BedrockGuardrailId:
         default: "Bedrock Guardrail Id"
       BedrockGuardrailVersion:
@@ -797,7 +813,7 @@ Resources:
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
 
 
-  DOCUMENTBEDROCKKB:
+  DOCUMENTKB:
     DependsOn:
       - IsStacknameLengthOK
     Type: AWS::CloudFormation::Stack
@@ -809,7 +825,9 @@ Resources:
         pInputDocumentUploadFolderPrefix: ""
         pS3SyncScheduleExpression: "cron(0/30 * ? * * *)"  # default is to sync documents every 30 minutes
         pCustomerManagedEncryptionKeyArn: !GetAtt CustomerManagedEncryptionKey.Arn
-        pChunkingStrategy: 'No chunking'
+        pChunkingStrategy: 'Fixed-size chunking'
+        pMaxTokens: 8192
+        pVectorStoreType: !Ref KnowledgeBaseVectorStore
         LogLevel: !Ref LogLevel
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
 
@@ -829,6 +847,9 @@ Resources:
       Parameters:
         StackName: !Ref AWS::StackName
         InputBucket: !Ref InputBucket
+        DiscoveryBucket: !Ref DiscoveryBucket
+        ConfigurationQueueArn: !GetAtt ConfigurationQueue.Arn
+        DiscoveryTrackingTable: !Ref DiscoveryTrackingTable
         ConfigurationBucket: !Ref ConfigurationBucket
         WorkingBucket: !Ref WorkingBucket
         OutputBucket: !Ref OutputBucket
@@ -843,19 +864,21 @@ Resources:
           - ShouldCreateBDASampleProject
           - !GetAtt BDASAMPLEPROJECT.Outputs.ProjectArn
           - !Ref Pattern1BDAProjectArn
-        IsSummarizationEnabled: !Ref IsSummarizationEnabled
         UpdateConfigurationFunctionArn: !GetAtt UpdateConfigurationFunction.Arn
         ConfigurationTable: !Ref ConfigurationTable
         AppSyncApiUrl: !GetAtt GraphQLApi.GraphQLUrl
         AppSyncApiArn: !GetAtt GraphQLApi.Arn
-        EnableHITL: !Ref Pattern1EnableHITL
-        ConfigurationDefaultS3Uri: !Sub 
-          - "s3://${ConfigurationBucket}/config_library/pattern-1/${ConfigPath}/config.yaml"
-          - ConfigPath: !FindInMap [Pattern1ConfigurationMap, !Ref Pattern1Configuration, ConfigPath]
+        EnableHITL: !Ref EnableHITL
+        ConfigurationDefaultS3Uri: !If
+          - HasCustomConfigPath
+          - !Ref CustomConfigPath
+          - !Sub 
+            - "s3://${ConfigurationBucket}/config_library/pattern-1/${ConfigPath}/config.yaml"
+            - ConfigPath: !FindInMap [Pattern1ConfigurationMap, !Ref Pattern1Configuration, ConfigPath]
         ConfigLibraryHash: "<CONFIG_LIBRARY_HASH_TOKEN>"
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
         SageMakerA2IReviewPortalURL: !If
-          - IsPattern1HITLEnabled
+          - IsHITLEnabled
           - !GetAtt WorkforceURLResource.PortalURL
           - ""
 
@@ -883,16 +906,22 @@ Resources:
         BedrockGuardrailVersion: !Ref BedrockGuardrailVersion
         CustomClassificationModelARN: !Ref Pattern2CustomClassificationModelARN
         CustomExtractionModelARN: !Ref Pattern2CustomExtractionModelARN
-        IsSummarizationEnabled: !Ref IsSummarizationEnabled
-        IsAssessmentEnabled: !Ref IsAssessmentEnabled
         UpdateConfigurationFunctionArn: !GetAtt UpdateConfigurationFunction.Arn
         AppSyncApiUrl: !GetAtt GraphQLApi.GraphQLUrl
         AppSyncApiArn: !GetAtt GraphQLApi.Arn
         ConfigurationTable: !Ref ConfigurationTable
-        ConfigurationDefaultS3Uri: !Sub 
-          - "s3://${ConfigurationBucket}/config_library/pattern-2/${ConfigPath}/config.yaml"
-          - ConfigPath: !FindInMap [Pattern2ConfigurationMap, !Ref Pattern2Configuration, ConfigPath]
+        ConfigurationDefaultS3Uri: !If
+          - HasCustomConfigPath
+          - !Ref CustomConfigPath
+          - !Sub 
+            - "s3://${ConfigurationBucket}/config_library/pattern-2/${ConfigPath}/config.yaml"
+            - ConfigPath: !FindInMap [Pattern2ConfigurationMap, !Ref Pattern2Configuration, ConfigPath]
         ConfigLibraryHash: "<CONFIG_LIBRARY_HASH_TOKEN>"
+        EnableHITL: !Ref EnableHITL
+        SageMakerA2IReviewPortalURL: !If
+          - IsHITLEnabled
+          - !GetAtt WorkforceURLResource.PortalURL
+          - ""
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
 
   PATTERN3STACK:
@@ -918,16 +947,22 @@ Resources:
         BedrockGuardrailId: !Ref BedrockGuardrailId
         BedrockGuardrailVersion: !Ref BedrockGuardrailVersion
         UDOPModelArtifactPath: !Ref Pattern3UDOPModelArtifactPath
-        IsSummarizationEnabled: !Ref IsSummarizationEnabled
-        IsAssessmentEnabled: !Ref IsAssessmentEnabled
         UpdateConfigurationFunctionArn: !GetAtt UpdateConfigurationFunction.Arn
         AppSyncApiUrl: !GetAtt GraphQLApi.GraphQLUrl
         AppSyncApiArn: !GetAtt GraphQLApi.Arn
         ConfigurationTable: !Ref ConfigurationTable
-        ConfigurationDefaultS3Uri: !Sub 
-          - "s3://${ConfigurationBucket}/config_library/pattern-3/${ConfigPath}/config.yaml"
-          - ConfigPath: !FindInMap [Pattern3ConfigurationMap, !Ref Pattern3Configuration, ConfigPath]
+        ConfigurationDefaultS3Uri: !If
+          - HasCustomConfigPath
+          - !Ref CustomConfigPath
+          - !Sub 
+            - "s3://${ConfigurationBucket}/config_library/pattern-3/${ConfigPath}/config.yaml"
+            - ConfigPath: !FindInMap [Pattern3ConfigurationMap, !Ref Pattern3Configuration, ConfigPath]
         ConfigLibraryHash: "<CONFIG_LIBRARY_HASH_TOKEN>"
+        EnableHITL: !Ref EnableHITL
+        SageMakerA2IReviewPortalURL: !If
+          - IsHITLEnabled
+          - !GetAtt WorkforceURLResource.PortalURL
+          - ""
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
 
   ##########################################################################
@@ -947,13 +982,13 @@ Resources:
           - Sid: Enable IAM User Permissions
             Effect: Allow
             Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
             Action: kms:*
             Resource: "*"
           - Sid: Allow lambda to access the Keys
             Effect: Allow
             Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
             Action:
               - kms:Encrypt
               - kms:Decrypt
@@ -964,7 +999,7 @@ Resources:
           - Sid: Allow DynamoDB to use the key
             Effect: Allow
             Principal:
-              Service: dynamodb.amazonaws.com
+              Service: !Sub "dynamodb.${AWS::URLSuffix}"
             Action:
               - kms:Encrypt
               - kms:Decrypt
@@ -975,7 +1010,7 @@ Resources:
           - Sid: Allow CloudWatch Logs to use the key
             Effect: Allow
             Principal:
-              Service: logs.amazonaws.com
+              Service: !Sub "logs.${AWS::URLSuffix}"
             Action:
               - kms:Encrypt
               - kms:Decrypt
@@ -983,6 +1018,20 @@ Resources:
               - kms:GenerateDataKey*
               - kms:DescribeKey
             Resource: "*"
+          - !If
+            - IsS3VectorsVectorStore
+            - Sid: Allow S3 Vectors indexing service to use the key
+              Effect: Allow
+              Principal:
+                Service: !Sub "indexing.s3vectors.${AWS::URLSuffix}"
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: "*"
+            - !Ref AWS::NoValue
 
   CustomerManagedEncryptionKeyAlias:
     Type: AWS::KMS::Alias
@@ -1042,7 +1091,7 @@ Resources:
           - Sid: AllowS3ServerAccessLogs
             Effect: Allow
             Principal:
-              Service: logging.s3.amazonaws.com
+              Service: !Sub "logging.s3.${AWS::URLSuffix}"
             Action:
               - s3:PutObject
             Resource: !Sub "${LoggingBucket.Arn}/*"
@@ -1052,7 +1101,7 @@ Resources:
           - Sid: AllowCloudFrontLogs
             Effect: Allow
             Principal:
-              Service: cloudfront.amazonaws.com
+              Service: !Sub "cloudfront.${AWS::URLSuffix}"
             Action:
               - s3:PutObject
             Resource: !Sub "${LoggingBucket.Arn}/*"
@@ -1069,6 +1118,75 @@ Resources:
             Condition:
               Bool:
                 'aws:SecureTransport': false
+
+  DiscoveryBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    Properties:
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "Content-Type"
+              - "x-amz-content-sha256"
+              - "x-amz-date"
+              - "Authorization"
+              - "x-amz-security-token"
+            AllowedMethods:
+              - PUT
+              - POST
+            AllowedOrigins:
+              - !Sub "https://${CloudFrontDistribution.DomainName}"
+              # For local development only
+              - "http://localhost:3000"
+            ExposedHeaders:
+              - "ETag"
+              - "x-amz-server-side-encryption"
+            MaxAge: 3000
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref CustomerManagedEncryptionKey
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingBucket
+        LogFilePrefix: discov-bucket-logs/
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteAfterNDays
+            Status: Enabled
+            ExpirationInDays: !Ref DataRetentionInDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  DiscoveryBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DiscoveryBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnforceSSLOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub "${DiscoveryBucket.Arn}/*"
+              - !Sub "${DiscoveryBucket.Arn}"
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+
+
 
   InputBucket:
     Type: AWS::S3::Bucket
@@ -1636,6 +1754,10 @@ Resources:
               Type: double
             - Name: number_of_pages
               Type: int
+            - Name: unit_cost
+              Type: double
+            - Name: estimated_cost
+              Type: double
             - Name: timestamp
               Type: timestamp
           Compressed: true
@@ -1695,10 +1817,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: glue.amazonaws.com
+              Service: !Sub "glue.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSGlueServiceRole"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: DocumentSectionsCrawlerS3Access
@@ -1711,13 +1833,13 @@ Resources:
                   - s3:ListBucket
                 Resource:
                   - !Sub 
-                    - "arn:aws:s3:::${Bucket}"
+                    - "arn:${AWS::Partition}:s3:::${Bucket}"
                     - Bucket: !If
                         - ShouldCreateReportingBucket
                         - !Ref ReportingBucket
                         - !Ref ReportingBucketName
                   - !Sub 
-                    - "arn:aws:s3:::${Bucket}/document_sections/*"
+                    - "arn:${AWS::Partition}:s3:::${Bucket}/document_sections/*"
                     - Bucket: !If
                         - ShouldCreateReportingBucket
                         - !Ref ReportingBucket
@@ -1727,6 +1849,8 @@ Resources:
                   - kms:Decrypt
                   - kms:DescribeKey
                 Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+
 
 
   EvaluationBaselineBucket:
@@ -1954,6 +2078,69 @@ Resources:
         SSEEnabled: true
         SSEType: KMS
         KMSMasterKeyId: !Ref CustomerManagedEncryptionKey
+  ##########################################################################
+  # Discovery tracking table for discovery jobs
+  ##########################################################################
+
+  DiscoveryTrackingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ExpiresAfter
+        Enabled: true
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref CustomerManagedEncryptionKey
+
+  ##########################################################################
+  # Discovery SQS queue for processing discovery jobs
+  ##########################################################################
+
+  DiscoveryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 86400  # 1 day
+      KmsMasterKeyId: !Ref CustomerManagedEncryptionKey
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DiscoveryDLQ.Arn
+        maxReceiveCount: 1000
+
+  DiscoveryDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 345600  # 4 days
+      KmsMasterKeyId: !Ref CustomerManagedEncryptionKey
+
+
+  ConfigurationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 86400  # 1 day
+      KmsMasterKeyId: !Ref CustomerManagedEncryptionKey
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ConfigurationDLQ.Arn
+        maxReceiveCount: 1000
+
+  ConfigurationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 345600  # 4 days
+      KmsMasterKeyId: !Ref CustomerManagedEncryptionKey
 
   UpdateConfigurationFunction:
     Type: AWS::Serverless::Function
@@ -1977,8 +2164,7 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel
-          CONFIGURATION_TABLE_NAME:
-            Ref: ConfigurationTable
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
       LoggingConfig:
         LogGroup: !Ref UpdateConfigurationFunctionLogGroup
       Policies:
@@ -1998,10 +2184,30 @@ Resources:
               - "s3:GetObject"
               - "s3:ListBucket"
             Resource:
-              - !Sub "arn:aws:s3:::<ARTIFACT_BUCKET_TOKEN>"
-              - !Sub "arn:aws:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/*"
-              - !Sub "arn:aws:s3:::${ConfigurationBucket}"
-              - !Sub "arn:aws:s3:::${ConfigurationBucket}/*"
+              - !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>"
+              - !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/*"
+              - !Sub "arn:${AWS::Partition}:s3:::${ConfigurationBucket}"
+              - !Sub "arn:${AWS::Partition}:s3:::${ConfigurationBucket}/*"
+          # Allow reading user-supplied config file only if CustomConfigPath is specified
+          - !If
+            - HasCustomConfigPath
+            - Effect: Allow
+              Action:
+                - "s3:GetObject"
+              Resource: !Sub
+                - "arn:${AWS::Partition}:s3:::${Path}"
+                - Path: !Select [1, !Split ["s3://", !Ref CustomConfigPath]]
+            - !Ref AWS::NoValue
+          # Allow listing the specific bucket containing the custom config file
+          - !If
+            - HasCustomConfigPath
+            - Effect: Allow
+              Action:
+                - "s3:ListBucket"
+              Resource: !Sub
+                - "arn:${AWS::Partition}:s3:::${BucketName}"
+                - BucketName: !Select [0, !Split ["/", !Select [1, !Split ["s3://", !Ref CustomConfigPath]]]]
+            - !Ref AWS::NoValue
 
   UpdateConfigurationFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -2058,7 +2264,7 @@ Resources:
               - ssm:GetParameter
               - ssm:PutParameter
             Resource:
-              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SettingsParameter}"
+              - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SettingsParameter}"
 
   UpdateSettingsFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -2077,6 +2283,7 @@ Resources:
         BuildDateTime: <BUILD_DATE_TIME>
         IDPPattern: !Ref IDPPattern
         InputBucket: !Ref InputBucket
+        DiscoveryBucket: !Ref DiscoveryBucket
         ConfigurationBucket: !Ref ConfigurationBucket
         OutputBucket: !Ref OutputBucket
         ReportingBucket: !If
@@ -2280,6 +2487,7 @@ Resources:
           APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
           CONCURRENCY_TABLE: !Ref ConcurrencyTable
           MAX_CONCURRENT: !Ref MaxConcurrentWorkflows
+          WORKING_BUCKET: !Ref WorkingBucket
       Policies:
         - SQSPollerPolicy:
             QueueName: !GetAtt DocumentQueue.QueueName
@@ -2295,6 +2503,8 @@ Resources:
             TableName: !Ref TrackingTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ConcurrencyTable
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucket
         - Statement:
             - Effect: Allow
               Action:
@@ -2462,115 +2672,8 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref WorkflowTracker
-      Principal: events.amazonaws.com
+      Principal: !Sub "events.${AWS::URLSuffix}"
       SourceArn: !GetAtt WorkflowStateChangeRule.Arn
-
-  ##########################################################################
-  # Step Functions Subscription Publisher
-  ##########################################################################
-  StepFunctionSubscriptionPublisher:
-    Type: AWS::Serverless::Function
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W89
-            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
-          - id: W92
-            reason: "Function does not require reserved concurrency as it scales based on demand"
-          - id: W12
-            reason: "Lambda requires CloudWatch logs permissions"
-    # checkov:skip=CKV_AWS_116: "DLQ not required for subscription publisher function"
-    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
-    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
-    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
-    Properties:
-      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
-      CodeUri: src/lambda/stepfunction_subscription_publisher/
-      Handler: index.handler
-      Runtime: python3.12
-      Architectures:
-        - x86_64
-      MemorySize: 256
-      Timeout: 30
-      LoggingConfig:
-        LogGroup: !Ref StepFunctionSubscriptionPublisherLogGroup
-      Environment:
-        Variables:
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
-          LOG_LEVEL: !Ref LogLevel
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - states:DescribeExecution
-                - states:GetExecutionHistory
-              Resource: 
-                - !Sub
-                  - "arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}*"
-                  - StateMachineName: !If
-                    - IsPattern3
-                    - !GetAtt PATTERN3STACK.Outputs.StateMachineName
-                    - !If
-                      - IsPattern2
-                      - !GetAtt PATTERN2STACK.Outputs.StateMachineName
-                      - !GetAtt PATTERN1STACK.Outputs.StateMachineName
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Subscription/*"
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
-            - Effect: Allow
-              Action:
-                - kms:Encrypt
-                - kms:Decrypt
-                - kms:ReEncrypt*
-                - kms:GenerateDataKey*
-                - kms:DescribeKey
-              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
-
-  StepFunctionSubscriptionPublisherLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
-      RetentionInDays: !Ref LogRetentionDays
-
-  StepFunctionSubscriptionRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - aws.states
-        detail-type:
-          - Step Functions Execution Status Change
-        detail:
-          stateMachineArn:
-            - !If
-              - IsPattern3
-              - !GetAtt PATTERN3STACK.Outputs.StateMachineArn
-              - !If
-                - IsPattern2
-                - !GetAtt PATTERN2STACK.Outputs.StateMachineArn
-                - !GetAtt PATTERN1STACK.Outputs.StateMachineArn
-          status:
-            - RUNNING
-            - SUCCEEDED
-            - FAILED
-            - TIMED_OUT
-            - ABORTED
-      Targets:
-        - Arn: !GetAtt StepFunctionSubscriptionPublisher.Arn
-          Id: "StepFunctionSubscriptionPublisher"
-          RetryPolicy:
-            MaximumRetryAttempts: 3
-
-  StepFunctionSubscriptionPublisherPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref StepFunctionSubscriptionPublisher
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt StepFunctionSubscriptionRule.Arn
 
   ##########################################################################
   # Optional Post Processing Lambda Hook
@@ -2608,7 +2711,7 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref PostProcessingLambdaHookFunctionArn
-      Principal: events.amazonaws.com
+      Principal: !Sub "events.${AWS::URLSuffix}"
       SourceArn: !GetAtt PostProcessingLambdaHookRule.Arn
 
   ##########################################################################
@@ -2647,6 +2750,8 @@ Resources:
               - !Ref ReportingBucketName
         - S3ReadPolicy:
             BucketName: !Ref OutputBucket
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTable
         - Statement:
             - Effect: Allow
               Action:
@@ -2660,10 +2765,23 @@ Resources:
                 - kms:GenerateDataKey*
                 - kms:DescribeKey
               Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+            - Effect: Allow
+              Action:
+                - glue:CreateTable
+                - glue:GetTable
+                - glue:UpdateTable
+                - glue:GetDatabase
+              Resource:
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${GetLowercase.Lowercase}-reporting-db"
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${GetLowercase.Lowercase}-reporting-db/document_sections_*"
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${GetLowercase.Lowercase}-reporting-db/metering"
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel
           METRIC_NAMESPACE: !Ref AWS::StackName
+          STACK_NAME: !Ref AWS::StackName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
 
   SaveReportingDataFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -2762,8 +2880,8 @@ Resources:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource: 
-                  - !Sub "arn:aws:bedrock:*::foundation-model/*"
-                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
 
   EvaluationFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -2804,7 +2922,7 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref EvaluationFunction
-      Principal: events.amazonaws.com
+      Principal: !Sub "events.${AWS::URLSuffix}"
       SourceArn: !GetAtt EvaluationFunctionRule.Arn
 
 
@@ -3343,7 +3461,7 @@ Resources:
                 - states:GetExecutionHistory
               Resource:
                 - !Sub
-                  - "arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}*"
+                  - "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}*"
                   - StateMachineName: !If
                       - IsPattern3
                       - !GetAtt PATTERN3STACK.Outputs.StateMachineName
@@ -3366,7 +3484,496 @@ Resources:
       KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
       RetentionInDays: !Ref LogRetentionDays
 
+  ##########################################################################
+  # Agent resources for text-to-agent feature
+  ##########################################################################
 
+  # DynamoDB table for agent job tracking
+  AgentTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ExpiresAfter
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref CustomerManagedEncryptionKey
+
+  # Secrets Manager secret for External MCP Agent credentials
+  ExternalMCPAgentsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AWS::StackName}/external-mcp-agents/credentials"
+      Description: "Credentials for External MCP Agents - JSON array with required fields: mcp_url, cognito_user_pool_id, cognito_client_id, cognito_username, cognito_password. Optional fields: agent_name, agent_description"
+      SecretString: "[]"
+      KmsKeyId: !Ref CustomerManagedEncryptionKey
+
+  # Lambda function for agent request handler
+  AgentRequestHandlerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for analytics request handler as it's invoked synchronously via AppSync and errors are handled by the caller"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      CodeUri: src/lambda/agent_request_handler/
+      Handler: index.handler
+      Runtime: python3.12
+      Timeout: 30
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          AGENT_TABLE: !Ref AgentTable
+          AGENT_PROCESSOR_FUNCTION: !Ref AgentProcessorFunction
+          DATA_RETENTION_DAYS: !Ref DataRetentionInDays
+      LoggingConfig:
+        LogGroup: !Ref AgentRequestHandlerLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AgentProcessorFunction
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  AgentRequestHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  # Lambda function for agent processor
+  AgentProcessorFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W58
+            reason: "DLQ not required for Cfn Custom Resource function"
+          - id: W76
+            reason: "Suppressing W76: SPCM for IAM policy document is higher than 25"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for analytics processor as it's invoked asynchronously by request handler with error handling and job status tracking in DynamoDB"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      CodeUri: src/lambda/agent_processor/
+      Handler: index.handler
+      Runtime: python3.12
+      Timeout: 900
+      MemorySize: 1024
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          STRANDS_LOG_LEVEL: !Ref LogLevel
+          AGENT_TABLE: !Ref AgentTable
+          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          ATHENA_DATABASE: !Ref ReportingDatabase
+          ATHENA_OUTPUT_LOCATION: !Sub 
+            - "s3://${Bucket}/athena-results/"
+            - Bucket: !If
+                - ShouldCreateReportingBucket
+                - !Ref ReportingBucket
+                - !Ref ReportingBucketName
+          DOCUMENT_ANALYSIS_AGENT_MODEL_ID: !Ref DocumentAnalysisAgentModelId
+          AWS_STACK_NAME: !Ref AWS::StackName
+          GUARDRAIL_ID_AND_VERSION: !If [HasGuardrailConfig, !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}", ""]
+      LoggingConfig:
+        LogGroup: !Ref AgentProcessorLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTable
+        - S3CrudPolicy:
+            BucketName: !If
+              - ShouldCreateReportingBucket
+              - !Ref ReportingBucket
+              - !Ref ReportingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - athena:StartQueryExecution
+                - athena:GetQueryExecution
+                - athena:GetQueryResults
+              Resource: 
+                - !Sub "arn:${AWS::Partition}:athena:${AWS::Region}:${AWS::AccountId}:workgroup/primary"
+                - !Sub "arn:${AWS::Partition}:athena:${AWS::Region}:${AWS::AccountId}:datacatalog/*"
+            - Effect: Allow
+              Action:
+                - glue:GetTable
+                - glue:GetTables
+                - glue:GetDatabase
+                - glue:GetDatabases
+                - glue:GetPartitions
+              Resource: 
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${ReportingDatabase}"
+                - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${ReportingDatabase}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: 
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+            - !If
+              - HasGuardrailConfig
+              - Effect: Allow
+                Action:
+                  - "bedrock:ApplyGuardrail"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action:
+                - appsync:GraphQL
+              Resource:
+                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:StartCodeInterpreterSession
+                - bedrock-agentcore:StopCodeInterpreterSession
+                - bedrock-agentcore:InvokeCodeInterpreter
+                - bedrock-agentcore:GetCodeInterpreterSession
+                - bedrock-agentcore:ListCodeInterpreterSessions
+              Resource: 
+                - !Sub "arn:${AWS::Partition}:bedrock-agentcore:*:aws:code-interpreter/*"
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Ref ExternalMCPAgentsSecret
+
+  AgentProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  # Lambda function for listing available agents
+  ListAvailableAgentsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with local agent factory"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with local agent factory"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      CodeUri: src/lambda/list_available_agents/
+      Handler: index.handler
+      Runtime: python3.12
+      Timeout: 30
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          AWS_STACK_NAME: !Ref AWS::StackName
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Ref ExternalMCPAgentsSecret
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+      LoggingConfig:
+        LogGroup: !Ref ListAvailableAgentsLogGroup
+
+  ListAvailableAgentsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  # AppSync resolvers for agent operations
+  ListAvailableAgentsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Query
+      FieldName: listAvailableAgents
+      DataSourceName: !GetAtt ListAvailableAgentsDataSource.Name
+
+  ListAvailableAgentsDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: ListAvailableAgentsDataSource
+      Description: Lambda function for listing available agents
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt ListAvailableAgentsFunction.Arn
+
+  SubmitAgentQueryResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Query
+      FieldName: submitAgentQuery
+      DataSourceName: !GetAtt AgentRequestHandlerDataSource.Name
+
+  AgentRequestHandlerDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: AgentRequestHandlerDataSource
+      Description: Lambda function for handling agent query requests
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt AgentRequestHandlerFunction.Arn
+
+  GetAgentJobStatusResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Query
+      FieldName: getAgentJobStatus
+      DataSourceName: !GetAtt AgentTableDataSource.Name
+      RequestMappingTemplate: |
+        #set($userId = $context.identity.username)
+        #if(!$userId)
+          #set($userId = $context.identity.sub)
+        #end
+        #if(!$userId)
+          #set($userId = "anonymous")
+        #end
+        {
+          "version": "2018-05-29",
+          "operation": "GetItem",
+          "key": {
+            "PK": $util.dynamodb.toDynamoDBJson("agent#${userId}"),
+            "SK": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
+          }
+        }
+      ResponseMappingTemplate: |
+        #if(!$ctx.result)
+          null
+        #else
+          {
+            "jobId": $util.toJson($ctx.result.SK),
+            "status": $util.toJson($ctx.result.status),
+            "query": $util.toJson($ctx.result.query),
+            "agentIds": $util.toJson($ctx.result.agentIds),
+            "createdAt": $util.toJson($ctx.result.createdAt),
+            "completedAt": $util.toJson($ctx.result.completedAt),
+            "result": $util.toJson($ctx.result.result),
+            "error": $util.toJson($ctx.result.error),
+            "agent_messages": $util.toJson($ctx.result.agent_messages)
+          }
+        #end
+
+  ListAgentJobsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Query
+      FieldName: listAgentJobs
+      DataSourceName: !GetAtt AgentTableDataSource.Name
+      RequestMappingTemplate: |
+        #set($userId = $context.identity.username)
+        #if(!$userId)
+          #set($userId = $context.identity.sub)
+        #end
+        #if(!$userId)
+          #set($userId = "anonymous")
+        #end
+        {
+          "version": "2018-05-29",
+          "operation": "Query",
+          "query": {
+            "expression": "PK = :pk",
+            "expressionValues": {
+              ":pk": $util.dynamodb.toDynamoDBJson("agent#${userId}")
+            }
+          },
+          #if($ctx.args.limit)
+            "limit": $ctx.args.limit,
+          #end
+          #if($ctx.args.nextToken)
+            "nextToken": "$ctx.args.nextToken",
+          #end
+          "scanIndexForward": false
+        }
+      ResponseMappingTemplate: |
+        {
+          "items": [
+            #foreach($item in $ctx.result.items)
+              {
+                "jobId": $util.toJson($item.SK),
+                "status": $util.toJson($item.status),
+                "query": $util.toJson($item.query),
+                "agentIds": $util.toJson($item.agentIds),
+                "createdAt": $util.toJson($item.createdAt),
+                "completedAt": $util.toJson($item.completedAt),
+                "result": $util.toJson($item.result),
+                "error": $util.toJson($item.error)
+              }#if($foreach.hasNext),#end
+            #end
+          ],
+          "nextToken": $util.toJson($ctx.result.nextToken)
+        }
+
+  UpdateAgentJobStatusResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: updateAgentJobStatus
+      DataSourceName: !GetAtt AgentTableDataSource.Name
+      RequestMappingTemplate: |-
+        #set($userId = $ctx.args.userId)
+        #set($expNames = {})
+        #set($expValues = {})
+        
+        ## Set status (required)
+        $util.qr($expNames.put("#status", "status"))
+        $util.qr($expValues.put(":status", $util.dynamodb.toDynamoDB($ctx.args.status)))
+        #set($updateExpression = "SET #status = :status")
+        
+        ## Set result (optional)
+        #if($ctx.args.result)
+          $util.qr($expNames.put("#result", "result"))
+          $util.qr($expValues.put(":result", $util.dynamodb.toDynamoDB($ctx.args.result)))
+          #set($updateExpression = "${updateExpression}, #result = :result")
+        #end
+        
+        ## Set completedAt to current timestamp when status is COMPLETED or FAILED
+        #if($ctx.args.status == "COMPLETED" || $ctx.args.status == "FAILED")
+          $util.qr($expNames.put("#completedAt", "completedAt"))
+          $util.qr($expValues.put(":completedAt", $util.dynamodb.toDynamoDB($util.time.nowISO8601())))
+          #set($updateExpression = "${updateExpression}, #completedAt = :completedAt")
+        #end
+        
+        {
+          "version": "2018-05-29",
+          "operation": "UpdateItem",
+          "key": {
+            "PK": $util.dynamodb.toDynamoDBJson("agent#${userId}"),
+            "SK": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
+          },
+          "update": {
+            "expression": "$updateExpression",
+            "expressionNames": $utils.toJson($expNames),
+            "expressionValues": $utils.toJson($expValues)
+          }
+        }
+      ResponseMappingTemplate: |-
+        #if($ctx.error)
+          $util.error($ctx.error.message, $ctx.error.type)
+        #end
+        
+        ## Return false if no item was updated (item not found)
+        #if(!$ctx.result)
+          false
+        #else
+          true
+        #end
+
+  DeleteAgentJobResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: deleteAgentJob
+      DataSourceName: !GetAtt AgentTableDataSource.Name
+      RequestMappingTemplate: |-
+        #set($userId = $context.identity.username)
+        #if(!$userId)
+          #set($userId = $context.identity.sub)
+        #end
+        #if(!$userId)
+          #set($userId = "anonymous")
+        #end
+        {
+          "version": "2018-05-29",
+          "operation": "DeleteItem",
+          "key": {
+            "PK": $util.dynamodb.toDynamoDBJson("agent#${userId}"),
+            "SK": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
+          }
+        }
+      ResponseMappingTemplate: |-
+        #if($ctx.error)
+          $util.error($ctx.error.message, $ctx.error.type)
+        #else
+          true
+        #end
+
+  AgentTableDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: AgentTableDataSource
+      Description: DynamoDB table for agent job tracking
+      Type: AMAZON_DYNAMODB
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      DynamoDBConfig:
+        TableName: !Ref AgentTable
+        AwsRegion: !Ref AWS::Region
+        
   ##########################################################################
   # Cognoito user authentication for AppSync API and WebUI 
   ##########################################################################
@@ -3556,12 +4163,12 @@ Resources:
                   - "s3:GetObject"
                   - "s3:ListBucket"
                 Resource:
-                  - !Sub "arn:aws:s3:::${OutputBucket}"
-                  - !Sub "arn:aws:s3:::${OutputBucket}/*"
-                  - !Sub "arn:aws:s3:::${InputBucket}"
-                  - !Sub "arn:aws:s3:::${InputBucket}/*"
-                  - !Sub "arn:aws:s3:::${ConfigurationBucket}"
-                  - !Sub "arn:aws:s3:::${ConfigurationBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${OutputBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${OutputBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${InputBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${InputBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ConfigurationBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ConfigurationBucket}/*"
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -3578,7 +4185,7 @@ Resources:
                 Action:
                   - "ssm:GetParameter"
                 Resource:
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SettingsParameter}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SettingsParameter}"
         - PolicyName: GraphQL
           PolicyDocument:
             Version: 2012-10-17
@@ -3690,7 +4297,7 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref CognitoUserPoolEmailDomainVerifyFunction
-      Principal: cognito-idp.amazonaws.com
+      Principal: !Sub "cognito-idp.${AWS::URLSuffix}"
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt UserPool.Arn
 
@@ -3701,7 +4308,7 @@ Resources:
   # Cognito user pool client with generate secret as true (HITL)
   UserPoolClienta2i:
     Type: AWS::Cognito::UserPoolClient
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Properties:
       ClientName:
         Fn::Sub: ${AWS::StackName}-A2I-Client
@@ -3742,10 +4349,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
+              Service: !Sub "lambda.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: CognitoClientUpdaterPolicy
@@ -3781,6 +4388,8 @@ Resources:
             reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
           - id: W92
             reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W58
+            reason: "DLQ not required for Cfn Custom Resource function"
     # checkov:skip=CKV_AWS_116: "DLQ not required for Cfn Custom Resource function"
     # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
     # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
@@ -3835,14 +4444,14 @@ Resources:
   # Separate role for SageMaker Flow Definition with minimal permissions
   A2IFlowDefinitionRole:
     Type: AWS::IAM::Role
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: sagemaker.amazonaws.com
+              Service: !Sub "sagemaker.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
@@ -3853,6 +4462,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
+                  - s3:GetObjectVersion
                   - s3:PutObject
                 Resource:
                   - !Sub '${OutputBucket.Arn}/*'
@@ -3860,6 +4470,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetBucketLocation
+                  - s3:ListBucket
                 Resource:
                   - !GetAtt OutputBucket.Arn
                   - !GetAtt InputBucket.Arn
@@ -3868,7 +4479,7 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*'
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*'
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -3880,7 +4491,7 @@ Resources:
 
   A2IHumanTaskUILambdaRole:
     Type: AWS::IAM::Role
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -3892,36 +4503,36 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
+              Service: !Sub "lambda.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: SageMakerA2IAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
-                Action:
-                  - sagemaker:CreateHumanTaskUi
-                  - sagemaker:DeleteHumanTaskUi
-                  - sagemaker:DescribeHumanTaskUi
-                  - sagemaker:CreateFlowDefinition
-                  - sagemaker:DeleteFlowDefinition
-                  - sagemaker:DescribeFlowDefinition
-                  - sagemaker:ListHumanLoops
-                  - sagemaker:StopHumanLoop
-                  - sagemaker:DescribeWorkteam
-                  - sagemaker:DeleteWorkteam
-                  - sagemaker:ListWorkforces
-                  - sagemaker:DescribeWorkforce
-                  - sagemaker:DeleteWorkforce
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - iam:PassRole
-                Resource: !GetAtt A2IFlowDefinitionRole.Arn
+            - Effect: Allow
+              Action:
+                - sagemaker:CreateHumanTaskUi
+                - sagemaker:DeleteHumanTaskUi
+                - sagemaker:DescribeHumanTaskUi
+                - sagemaker:CreateFlowDefinition
+                - sagemaker:DeleteFlowDefinition
+                - sagemaker:DescribeFlowDefinition
+                - sagemaker:ListHumanLoops
+                - sagemaker:StopHumanLoop
+                - sagemaker:DescribeWorkteam
+                - sagemaker:DeleteWorkteam
+                - sagemaker:ListWorkforces
+                - sagemaker:DescribeWorkforce
+                - sagemaker:DeleteWorkforce
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: !GetAtt A2IFlowDefinitionRole.Arn
         - PolicyName: S3Access
           PolicyDocument:
             Version: '2012-10-17'
@@ -3932,10 +4543,10 @@ Resources:
                   - s3:GetBucketLocation
                   - s3:GetObject
                 Resource:
-                  - Fn::Sub: arn:aws:s3:::${OutputBucket}
-                  - Fn::Sub: arn:aws:s3:::${OutputBucket}/*
-                  - Fn::Sub: arn:aws:s3:::${InputBucket}
-                  - Fn::Sub: arn:aws:s3:::${InputBucket}/*
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${OutputBucket}
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${OutputBucket}/*
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${InputBucket}
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${InputBucket}/*
         - PolicyName: LambdaSSMAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -3944,7 +4555,7 @@ Resources:
                 Action:
                   - ssm:PutParameter
                 Resource: 
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/FlowDefinitionArn'
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/FlowDefinitionArn'
         - PolicyName: KMSAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -3965,12 +4576,12 @@ Resources:
                 Action:
                   - s3:PutObject
                 Resource:
-                  - 'arn:aws:s3:::cloudformation-custom-resource-response-*'
-                  - 'arn:aws:s3:::cloudformation-custom-resource-response-*/*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::cloudformation-custom-resource-response-*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::cloudformation-custom-resource-response-*/*'
   
   CreateA2IResourcesLambda:
     Type: AWS::Serverless::Function
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -3978,6 +4589,8 @@ Resources:
             reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
           - id: W92
             reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W58
+            reason: "DLQ not required for Cfn Custom Resource function"
     # checkov:skip=CKV_AWS_116: "DLQ not required for Cfn Custom Resource function"
     # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
     # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
@@ -3993,14 +4606,14 @@ Resources:
           STACK_NAME: !Ref AWS::StackName
           A2I_WORKTEAM_ARN: !If
             - ShouldCreatePrivateWorkteam
-            - !Sub 'arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:workteam/private-crowd/${PrivateWorkteam.WorkteamName}'
-            - !Ref AWS::NoValue
+            - !Sub 'arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:workteam/private-crowd/${PrivateWorkteam.WorkteamName}'
+            - !Ref ExistingPrivateWorkforceArn
           A2I_FLOW_DEFINITION_ROLE_ARN: !GetAtt A2IFlowDefinitionRole.Arn
           BDA_OUTPUT_BUCKET: !Ref OutputBucket #Pass the IDP Output Bucket
       
   A2IResourcesCustomResource:
     Type: Custom::A2IResources
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Properties:
       ServiceToken: 
         Fn::GetAtt: CreateA2IResourcesLambda.Arn
@@ -4009,7 +4622,7 @@ Resources:
   
   GetWorkforceURLFunction:
     Type: AWS::Serverless::Function
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -4041,12 +4654,12 @@ Resources:
           - sagemaker:DescribeWorkteam
           Resource: !If
             - ShouldCreatePrivateWorkteam
-            - !Sub 'arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:workteam/private-crowd/${PrivateWorkteam.WorkteamName}'
+            - !Sub 'arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:workteam/private-crowd/${PrivateWorkteam.WorkteamName}'
             - !Ref ExistingPrivateWorkforceArn
   
   WorkforceURLResource:
     Type: Custom::WorkforceURL
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Properties:
       ServiceToken:
         Fn::GetAtt:
@@ -4094,7 +4707,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -4104,7 +4717,7 @@ Resources:
               - sts:AssumeRole
             Principal:
               Service:
-                - appsync.amazonaws.com
+                - !Sub "appsync.${AWS::URLSuffix}"
 
   # Optionally Secure API with WAF
 
@@ -4243,6 +4856,17 @@ Resources:
         TableName: !Ref TrackingTable
         AwsRegion: !Ref AWS::Region
 
+  DiscoveryTableDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: DiscoveryTableDataSource
+      Type: AMAZON_DYNAMODB
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      DynamoDBConfig:
+        TableName: !Ref DiscoveryTrackingTable
+        AwsRegion: !Ref AWS::Region
+
   AppSyncServiceRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -4256,10 +4880,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: appsync.amazonaws.com
+              Service: !Sub "appsync.${AWS::URLSuffix}"
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: DynamoDBAccess
@@ -4275,7 +4899,9 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                 Resource:
-                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TrackingTable}
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TrackingTable}"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AgentTable}"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DiscoveryTrackingTable}"
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -4297,6 +4923,11 @@ Resources:
                   - !GetAtt DeleteDocumentResolverFunction.Arn
                   - !GetAtt QueryKnowledgeBaseResolverFunction.Arn
                   - !GetAtt ReprocessDocumentResolverFunction.Arn
+                  - !GetAtt ProcessChangesResolverFunction.Arn
+                  - !GetAtt AgentRequestHandlerFunction.Arn
+                  - !GetAtt ListAvailableAgentsFunction.Arn
+                  - !GetAtt ChatWithDocumentResolverFunction.Arn
+                  - !GetAtt DiscoveryUploadResolverFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:
@@ -4671,7 +5302,7 @@ Resources:
                 - states:GetExecutionHistory
               Resource: 
                 - !Sub
-                  - "arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}*"
+                  - "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}*"
                   - StateMachineName: !If
                       - IsPattern3
                       - !GetAtt PATTERN3STACK.Outputs.StateMachineName
@@ -4717,71 +5348,6 @@ Resources:
       TypeName: Query
       FieldName: getStepFunctionExecution
 
-  PublishStepFunctionUpdateResolverFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W89
-            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
-          - id: W92
-            reason: "Function does not require reserved concurrency as it scales based on demand"
-          - id: W12
-            reason: "Lambda requires CloudWatch logs permissions"
-    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
-    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
-    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
-    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
-    Properties:
-      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
-      CodeUri: src/lambda/publish_stepfunction_update_resolver/
-      Handler: index.lambda_handler
-      Runtime: python3.12
-      Architectures:
-        - x86_64
-      MemorySize: 256
-      Timeout: 30
-      LoggingConfig:
-        LogGroup: !Ref PublishStepFunctionUpdateResolverFunctionLogGroup
-      Environment:
-        Variables:
-          LOG_LEVEL: !Ref LogLevel
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - kms:Encrypt
-                - kms:Decrypt
-                - kms:ReEncrypt*
-                - kms:GenerateDataKey*
-                - kms:DescribeKey
-              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
-
-  PublishStepFunctionUpdateResolverFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
-      RetentionInDays: !Ref LogRetentionDays
-
-  PublishStepFunctionUpdateDataSource:
-    Type: AWS::AppSync::DataSource
-    Properties:
-      ApiId: !GetAtt GraphQLApi.ApiId
-      Name: PublishStepFunctionUpdate
-      Description: Lambda function to publish Step Functions execution updates via GraphQL API
-      Type: AWS_LAMBDA
-      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
-      LambdaConfig:
-        LambdaFunctionArn: !GetAtt PublishStepFunctionUpdateResolverFunction.Arn
-
-  PublishStepFunctionUpdateResolver:
-    Type: AWS::AppSync::Resolver
-    DependsOn: GraphQLSchema
-    Properties:
-      ApiId: !GetAtt GraphQLApi.ApiId
-      DataSourceName: !GetAtt PublishStepFunctionUpdateDataSource.Name
-      TypeName: Mutation
-      FieldName: publishStepFunctionExecutionUpdate
 
   ConfigurationResolverFunction:
       Type: AWS::Serverless::Function
@@ -4810,12 +5376,15 @@ Resources:
           Variables:
             LOG_LEVEL: !Ref LogLevel
             CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+            CONFIGURATION_QUEUE_URL: !Ref ConfigurationQueue
             STACK_NAME: !Ref AWS::StackName
         LoggingConfig:
           LogGroup: !Ref ConfigurationResolverFunctionLogGroup
         Policies:
           - DynamoDBCrudPolicy:
               TableName: !Ref ConfigurationTable
+          - SQSSendMessagePolicy:
+              QueueName: !GetAtt ConfigurationQueue.QueueName
           - Statement:
               - Effect: Allow
                 Action:
@@ -4829,7 +5398,8 @@ Resources:
                 Action:
                   - ssm:GetParameter
                   - ssm:PutParameter
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/FlowDefinitionArn'
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/FlowDefinitionArn'
+              
 
   ConfigurationResolverFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -5180,6 +5750,254 @@ Resources:
       FieldName: uploadDocument
 
   ##########################################################################
+  # Discovery Upload Resolver 
+  ##########################################################################
+
+  DiscoveryUploadResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Lambda requires CloudWatch logs permissions"
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/discovery_upload_resolver
+      Description: Lambda function to handle discovery document uploads via GraphQL API
+      MemorySize: 512
+      Timeout: 120
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          DISCOVERY_BUCKET: !Ref DiscoveryBucket
+          DISCOVERY_TRACKING_TABLE: !Ref DiscoveryTrackingTable
+          DISCOVERY_QUEUE_URL: !Ref DiscoveryQueue
+      LoggingConfig:
+        LogGroup: !Ref DiscoveryUploadResolverFunctionLogGroup
+      Policies:      
+        - S3WritePolicy:
+            BucketName: !Ref DiscoveryBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DiscoveryTrackingTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt DiscoveryQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+  
+  DiscoveryUploadResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DiscoveryUploadResolverDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: DiscoveryUploadResolverDataSource
+      Description: Lambda function for discovery document uploads
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt DiscoveryUploadResolverFunction.Arn
+
+  DiscoveryUploadDocumentResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt DiscoveryUploadResolverDataSource.Name
+      TypeName: Mutation
+      FieldName: uploadDiscoveryDocument
+
+  ##########################################################################
+  # Discovery Jobs List Resolver 
+  ##########################################################################
+  DiscoveryJobsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Query
+      FieldName: listDiscoveryJobs
+      DataSourceName: !GetAtt DiscoveryTableDataSource.Name
+      RequestMappingTemplate: |
+        {
+            "version": "2018-05-29",
+            "operation": "Scan",
+            "limit": 50,
+            "consistentRead": false,
+            "select": "ALL_ATTRIBUTES"
+        }
+      ResponseMappingTemplate: |
+        {
+            "DiscoveryJobs": $util.toJson($ctx.result.items),
+            "nextToken": $util.toJson($ctx.result.nextToken)
+        }
+
+
+  ##########################################################################
+  # Update Discovery Job Status Resolver
+  ##########################################################################
+  UpdateDiscoveryJobStatusResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: updateDiscoveryJobStatus
+      DataSourceName: !GetAtt DiscoveryTableDataSource.Name
+      RequestMappingTemplate: |-
+        ## Validate status is one of the allowed values
+        #set($validStatuses = ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"])
+        #if(!$validStatuses.contains($ctx.args.status))
+          $util.error("Invalid status value. Status must be one of: PENDING, IN_PROGRESS, COMPLETED, FAILED", "ValidationException")
+        #end
+        
+        #set($expNames = {})
+        #set($expValues = {})
+        
+        ## Set status (required)
+        $util.qr($expNames.put("#status", "status"))
+        $util.qr($expValues.put(":status", $util.dynamodb.toDynamoDB($ctx.args.status)))
+        #set($updateExpression = "SET #status = :status")
+        
+        ## Set errorMessage (optional)
+        #if($ctx.args.errorMessage)
+          $util.qr($expNames.put("#errorMessage", "errorMessage"))
+          $util.qr($expValues.put(":errorMessage", $util.dynamodb.toDynamoDB($ctx.args.errorMessage)))
+          #set($updateExpression = "${updateExpression}, #errorMessage = :errorMessage")
+        #end
+        
+        ## Set updatedAt to current timestamp
+        $util.qr($expNames.put("#updatedAt", "updatedAt"))
+        $util.qr($expValues.put(":updatedAt", $util.dynamodb.toDynamoDB($util.time.nowISO8601())))
+        #set($updateExpression = "${updateExpression}, #updatedAt = :updatedAt")
+        
+        ## Set completedAt when status is COMPLETED or FAILED
+        #if($ctx.args.status == "COMPLETED" || $ctx.args.status == "FAILED")
+          $util.qr($expNames.put("#completedAt", "completedAt"))
+          $util.qr($expValues.put(":completedAt", $util.dynamodb.toDynamoDB($util.time.nowISO8601())))
+          #set($updateExpression = "${updateExpression}, #completedAt = :completedAt")
+        #end
+        
+        {
+          "version": "2018-05-29",
+          "operation": "UpdateItem",
+          "key": {
+            "jobId": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
+          },
+          "update": {
+            "expression": "$updateExpression",
+            "expressionNames": $utils.toJson($expNames),
+            "expressionValues": $utils.toJson($expValues)
+          }
+        }
+      ResponseMappingTemplate: |-
+        $util.toJson($ctx.result)
+
+  ##########################################################################
+  # Discovery Processor Function
+  ##########################################################################
+
+  DiscoveryProcessorFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W12
+            reason: "Lambda requires CloudWatch logs permissions"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for SQS triggered function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/discovery_processor
+      Description: Lambda function to process discovery jobs from SQS queue
+      MemorySize: 1024
+      Timeout: 120
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          DISCOVERY_BUCKET: !Ref DiscoveryBucket
+          DISCOVERY_TRACKING_TABLE: !Ref DiscoveryTrackingTable
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+      LoggingConfig:
+        LogGroup: !Ref DiscoveryProcessorFunctionLogGroup
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt DiscoveryQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref DiscoveryBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DiscoveryTrackingTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - appsync:GraphQL
+              Resource:
+                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+  
+  DiscoveryProcessorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+
+
+  ##########################################################################
   # Knowledge Base Query Resolver 
   ##########################################################################
 
@@ -5211,7 +6029,7 @@ Resources:
           LOG_LEVEL: !Ref LogLevel
           KB_ID: !If
             - ShouldUseDocumentKnowledgeBase
-            - !GetAtt DOCUMENTBEDROCKKB.Outputs.KnowledgeBaseID
+            - !GetAtt DOCUMENTKB.Outputs.KnowledgeBaseID
             - ""
           KB_ACCOUNT_ID: !Ref AWS::AccountId
           KB_REGION: !Ref AWS::Region
@@ -5227,26 +6045,26 @@ Resources:
               Action:
                 - bedrock:Retrieve
                 - bedrock:RetrieveAndGenerate
-              Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${DOCUMENTBEDROCKKB.Outputs.KnowledgeBaseID}"
+              Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${DOCUMENTKB.Outputs.KnowledgeBaseID}"
             - !Ref AWS::NoValue
           - Effect: Allow
             Action:
               - "bedrock:InvokeModel"
             Resource:
-              - !Sub "arn:aws:bedrock:*::foundation-model/*"
-              - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+              - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+              - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
           - Effect: Allow
             Action:
               - "bedrock:GetInferenceProfile"
             Resource:
-              - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+              - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
           - !If
             - HasGuardrailConfig
             - Effect: Allow
               Action:
                 - "bedrock:ApplyGuardrail"
               Resource:
-                - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
             - !Ref AWS::NoValue
           - Effect: Allow
             Action:
@@ -5282,6 +6100,201 @@ Resources:
       DataSourceName: !GetAtt QueryKnowledgeBaseDataSource.Name
       TypeName: Query
       FieldName: queryKnowledgeBase
+
+  ##########################################################################
+  # Chat With Document Resolver 
+  ##########################################################################
+
+  ChatWithDocumentResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W12
+            reason: "Lambda requires CloudWatch logs permissions"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/chat_with_document_resolver
+      Description: Lambda function to chat with the document via GraphQL API
+      MemorySize: 512
+      Timeout: 120
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          OUTPUT_BUCKET: !Ref OutputBucket
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          TRACKING_TABLE_NAME: !Ref TrackingTable
+          GUARDRAIL_ID_AND_VERSION: !If [HasGuardrailConfig, !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}", ""]
+      LoggingConfig:
+        LogGroup: !Ref ChatWithDocumentResolverFunctionLogGroup
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref OutputBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTable
+        - Statement: 
+          - !If
+            - ShouldUseDocumentKnowledgeBase
+            - Effect: Allow
+              Action:
+                - bedrock:Retrieve
+                - bedrock:RetrieveAndGenerate
+              Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${DOCUMENTKB.Outputs.KnowledgeBaseID}"
+            - !Ref AWS::NoValue
+          - Effect: Allow
+            Action:
+              - "bedrock:InvokeModel"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+              - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+          - Effect: Allow
+            Action:
+              - cloudwatch:PutMetricData
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "bedrock:GetInferenceProfile"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+          - !If
+            - HasGuardrailConfig
+            - Effect: Allow
+              Action:
+                - "bedrock:ApplyGuardrail"
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
+            - !Ref AWS::NoValue
+          - Effect: Allow
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  ChatWithDocumentResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ProcessChangesResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+          - id: W12
+            reason: "Lambda requires CloudWatch logs permissions"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/process_changes_resolver
+      Description: Lambda function to process section changes via GraphQL API
+      MemorySize: 512
+      Timeout: 60
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          TRACKING_TABLE: !Ref TrackingTable
+          QUEUE_URL: !Ref DocumentQueue
+          DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
+          WORKING_BUCKET: !Ref WorkingBucket
+          INPUT_BUCKET: !Ref InputBucket
+          OUTPUT_BUCKET: !Ref OutputBucket
+          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+      LoggingConfig:
+        LogGroup: !Ref ProcessChangesResolverFunctionLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt DocumentQueue.QueueName
+        - S3CrudPolicy:
+            BucketName: !Ref OutputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - appsync:GraphQL
+              Resource:
+                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  ProcessChangesResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ProcessChangesDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: ProcessChangesDataSource
+      Description: Lambda function for processing section changes
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt ProcessChangesResolverFunction.Arn
+
+  ProcessChangesResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt ProcessChangesDataSource.Name
+      TypeName: Mutation
+      FieldName: processChanges
+
+  ChatWithDocumentDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: ChatWithDocument
+      Description: Lambda function to chat with document
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt ChatWithDocumentResolverFunction.Arn
+
+  ChatWithDocumentResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt ChatWithDocumentDataSource.Name
+      TypeName: Query
+      FieldName: chatWithDocument
 
   ##########################################################################
   # WebUI build and deployment 
@@ -5333,7 +6346,7 @@ Resources:
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
         Logging:
-          Bucket: !Sub "${LoggingBucket}.s3.amazonaws.com"
+          Bucket: !Sub "${LoggingBucket}.s3.${AWS::URLSuffix}"
           Prefix: "cloudfront-logs"
           IncludeCookies: true
         CustomErrorResponses:
@@ -5390,7 +6403,7 @@ Resources:
           - Action: sts:AssumeRole
             Effect: Allow
             Principal:
-              Service: codebuild.amazonaws.com
+              Service: !Sub "codebuild.${AWS::URLSuffix}"
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
       Policies:
         - PolicyName: ecs-service
@@ -5398,8 +6411,8 @@ Resources:
             Version: 2012-10-17
             Statement:
               - Resource:
-                  - !Sub "arn:aws:s3:::<ARTIFACT_BUCKET_TOKEN>"
-                  - !Sub "arn:aws:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>"
+                  - !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/*"
                 Effect: Allow
                 Action:
                   - s3:GetObject
@@ -5409,8 +6422,8 @@ Resources:
                   - s3:PutObject
                   - s3:ListBucket
               - Resource:
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*"
                 Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -5421,7 +6434,7 @@ Resources:
                   - s3:PutObject
                   - s3:DeleteObject
                 Resource:
-                  - !Sub "arn:aws:s3:::${WebUIBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${WebUIBucket}/*"
               - Effect: Allow
                 Action:
                   - cloudfront:CreateInvalidation
@@ -5440,7 +6453,7 @@ Resources:
         Type: NO_ARTIFACTS
       Source:
         # Publish script substitutes the tokens in the filename here during package build
-        Location: !Sub "arn:aws:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/<WEBUI_ZIPFILE_TOKEN>"
+        Location: !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/<WEBUI_ZIPFILE_TOKEN>"
         Type: S3
         BuildSpec: |
           version: 0.2
@@ -5451,10 +6464,14 @@ Resources:
                 - echo `ls -altr`
                 - echo `pwd`
                 - echo Installing NodeJS
-                - n 18.20.4
-                - npm install -g npm@10.7.0
+                - n 22.14.0
+                - npm install -g npm@11.1.0
                 - echo Installing Web UI dependencies
-                - npm install
+                - rm -rf node_modules
+                - npm cache clean --force
+                - npm ci
+                - echo Checking for and fixing security vulnerabilities
+                - npm audit fix || echo "Some vulnerabilities could not be automatically fixed"
             build:
               commands:
                 - echo Build started on `date`
@@ -5533,7 +6550,7 @@ Resources:
           - Effect: Allow
             Principal:
               Service:
-                - lambda.amazonaws.com
+                - !Sub "lambda.${AWS::URLSuffix}"
             Action:
               - sts:AssumeRole
       Path: "/"
@@ -5613,7 +6630,7 @@ Resources:
       SettingsParameter: !Ref SettingsParameter
       # Force codebuild to rerun when source code changes (filename will change), and to correctly roll back to
       # previous version if build fails.
-      CodeLocation: "arn:aws:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/<WEBUI_ZIPFILE_TOKEN>"
+      CodeLocation: !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/<WEBUI_ZIPFILE_TOKEN>"
 
 Outputs:
   ApplicationWebURL:
@@ -5621,14 +6638,21 @@ Outputs:
     Value: !Sub "https://${CloudFrontDistribution.DomainName}/"
   SageMakerA2IReviewPortalURL:
     Description: SageMaker HITL Review portal URL
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Value:
       Fn::GetAtt:
       - WorkforceURLResource
       - PortalURL
+  PrivateWorkteamArn:
+    Description: SageMaker A2I Private Workteam ARN (use this ARN when deploying additional patterns with HITL enabled)
+    Condition: IsHITLEnabled
+    Value: !If
+      - ShouldCreatePrivateWorkteam
+      - !Sub 'arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:workteam/private-crowd/${PrivateWorkteam.WorkteamName}'
+      - !Ref ExistingPrivateWorkforceArn
   LabelingConsoleURL:
     Description: SageMaker Ground Truth console URL
-    Condition: IsPattern1HITLEnabled
+    Condition: IsHITLEnabled
     Value:
       Fn::GetAtt:
       - WorkforceURLResource
@@ -5645,9 +6669,15 @@ Outputs:
   S3InputBucketName:
     Description: Input S3 bucket name
     Value: !Ref InputBucket
+  S3DiscoveryBucketName:
+    Description: Discovery S3 bucket name
+    Value: !Ref DiscoveryBucket
   S3InputBucketConsoleURL:
     Description: Input S3 bucket console URL
     Value: !Sub https://s3.console.aws.amazon.com/s3/buckets/${InputBucket}
+  S3DiscoveryBucketConsoleURL:
+    Description: Discovery S3 bucket console URL
+    Value: !Sub https://s3.console.aws.amazon.com/s3/buckets/${DiscoveryBucket}
   S3OutputBucketName:
     Description: Output S3 bucket name
     Value: !Ref OutputBucket
@@ -5733,6 +6763,12 @@ Outputs:
   DynamoDBConfigurationTableConsoleURL:
     Description: DynamoDB table console URL
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/dynamodbv2/home?region=${AWS::Region}#item-explorer?maximize=true&operation=QUERY&table=${ConfigurationTable}
+  DynamoDBAgentTableName:
+    Description: Name of the DynamoDB table for agent job tracking
+    Value: !Ref AgentTable
+  DynamoDBAgentTableConsoleURL:
+    Description: DynamoDB table console URL for agent job tracking
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/dynamodbv2/home?region=${AWS::Region}#item-explorer?maximize=true&operation=QUERY&table=${AgentTable}
   LambdaLookupFunctionName:
     Description: Name of the Lookup function
     Value: !Ref LookupFunction
@@ -5754,3 +6790,6 @@ Outputs:
       REACT_APP_APPSYNC_GRAPHQL_URL=${GraphQLApi.GraphQLUrl}
       REACT_APP_AWS_REGION=${AWS::Region}
       REACT_APP_SETTINGS_PARAMETER=${SettingsParameter}
+  ExternalMCPAgentsSecretConsoleURL:
+    Description: External MCP Agents secret console URL - configure MCP server credentials here (JSON array format)
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/secretsmanager/secret?name=${AWS::StackName}/external-mcp-agents/credentials&region=${AWS::Region}"

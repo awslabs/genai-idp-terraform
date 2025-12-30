@@ -21,7 +21,6 @@ This directory contains a comprehensive configuration example for the GenAI IDP 
 This configuration demonstrates the few-shot example prompting capability, where you can provide concrete examples of documents along with their expected classification and extraction outputs. The system uses these examples to better understand document patterns and improve accuracy.
 
 Key features:
-
 - **Few-shot classification examples**: Uses `classPrompt` with example images to improve document classification
 - **Few-shot extraction examples**: Uses `attributesPrompt` with example images to improve attribute extraction  
 - **Class-specific examples**: Extraction examples are filtered by document class for targeted learning
@@ -46,14 +45,12 @@ The configuration handles various business document types including:
 ### Few-Shot Examples Structure
 
 Examples are defined within each document class and contain:
-
 - **name**: Descriptive name for the example
 - **classPrompt**: Text used for classification few-shot prompting
 - **attributesPrompt**: Text used for extraction few-shot prompting with expected attribute values
 - **imagePath**: Path to the example document image
 
 Example structure:
-
 ```yaml
 classes:
   - name: letter
@@ -127,7 +124,6 @@ The system supports flexible image path resolution:
 ### 1. Direct Use
 
 Deploy with this configuration to see few-shot prompting in action:
-
 ```bash
 # Use the few_shot_example configuration
 CONFIG_BUCKET_URI="s3://your-bucket/config_library/pattern-2/few_shot_example/"
@@ -139,7 +135,6 @@ To add examples for existing classes:
 
 1. Create example document images and place them in the `example-images/` directory
 2. Add example entries to the class definition:
-
    ```yaml
    examples:
      - classPrompt: "This is an example of the class 'your_class'"
@@ -166,7 +161,6 @@ Use the provided test notebooks to validate the few-shot functionality:
 - `notebooks/test_few_shot_extraction.ipynb`: Test extraction with examples
 
 These notebooks demonstrate:
-
 - How examples are loaded and processed
 - Class-specific filtering for extraction
 - Path resolution logic
@@ -181,7 +175,6 @@ Few-shot examples provide several benefits:
 - **Reduced Ambiguity**: Visual examples clarify edge cases that text descriptions might miss
 
 Trade-offs:
-
 - **Increased Token Usage**: Examples add to prompt length and cost
 - **Processing Time**: Loading and processing example images takes additional time
 - **Storage Requirements**: Example images need to be stored and accessible

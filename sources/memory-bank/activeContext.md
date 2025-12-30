@@ -1,97 +1,146 @@
 # GenAI IDP Accelerator - Active Context
 
-## Current Task Focus
+## Current Task Status
 
-**Customer Question**: "We are encountering difficulties deploying your IDP stack outside of a sandbox environment due to an organization-wide Service Control Policy (SCP). This policy mandates the attachment of a Permissions Boundary to any new role. Could you please inform us if it is possible to update the CloudFormation template to include a parameterized Permissions Boundary? Without this update, our ability to transition the code to production will be significantly impeded."
+**ProcessChanges Resolver Fix & Agent Analytics Optimization**: ✅ **COMPLETED** - 2-Phase Schema Knowledge Optimization
 
-**Task Status**: Implementation phase - Need to add Permissions Boundary parameter support to CloudFormation templates
+**Previous Tasks**: 
+- ✅ **COMPLETED** - Section Edit Mode Performance Optimization  
+- ✅ **COMPLETED** - IDP CLI Dependency Security Updates
+- ✅ **COMPLETED** - Service Principal GovCloud Compatibility Updates
 
-## Problem Analysis
+## ProcessChanges Resolver Fix & Agent Analytics Optimization Overview
 
-### Current Situation
+Successfully implemented comprehensive optimization techniques using a **2-phase schema knowledge approach** to dramatically improve agent analytics performance and resolve resolver failures:
 
-- IDP stack creates numerous IAM roles across main template and pattern templates
-- Organization has SCP requiring Permissions Boundary on all new IAM roles
-- Current templates don't support Permissions Boundary configuration
-- Blocking production deployment
+### **2-Phase Schema Knowledge Optimization Techniques**
 
-### Affected Templates
+#### **Phase 1: Frontend Intelligence & Payload Optimization**
+**Technique**: Smart Change Detection with Selective Payload Construction
+- **Implementation**: Added `hasActualChanges()` function with deep comparison logic in `SectionsPanel.jsx`
+- **Optimization**: ProcessChanges mutation now sends only modified sections instead of ALL sections
+- **Performance Impact**: Reduced payload size by 83% (from 6 sections to 1 section for single changes)
+- **Agent Analytics Benefit**: Faster data processing with reduced network overhead and processing time
 
-- **Main Template**: `template.yaml` - ~15 IAM roles
-- **Pattern 1**: `patterns/pattern-1/template.yaml` - ~8 IAM roles  
-- **Pattern 2**: `patterns/pattern-2/template.yaml` - ~6 roles
-- **Pattern 3**: `patterns/pattern-3/template.yaml` - ~5 roles
-- **Options**: `options/bda-lending-project/template.yaml`, `options/bedrockkb/template.yaml`
+#### **Phase 2: Backend Architecture Alignment & Service Integration**  
+**Technique**: Document Class Architecture with Service Layer Adoption
+- **Implementation**: Refactored `process_changes_resolver` to use proper IDP Common `Document` class patterns
+- **Optimization**: Replaced direct DynamoDB operations with `create_document_service()` 
+- **Race Condition Prevention**: Eliminated manual document state writing - processing pipeline handles updates via AppSync
+- **Agent Analytics Benefit**: Consistent data access patterns for faster analytics queries
 
-## Solution Design
+### **Critical Data Format Robustness**
+**Technique**: Multi-Format Data Handling with Graceful Fallbacks
+- **Issue Resolved**: Fixed `AttributeError: 'Document' object has no attribute 'get'` in resolver
+- **Root Cause**: `get_document()` returns Document object directly, not dictionary 
+- **Solution**: Removed incorrect `Document.from_dict()` call on Document objects
+- **Additional Fix**: Enhanced DynamoDB service to handle both JSON string and native object formats for metering field
+- **Agent Analytics Benefit**: Robust data access preventing analytics failures from format inconsistencies
 
-### Approach: Parameterized Permissions Boundary
+### **Implementation Details**
 
-1. **Add optional parameter** to main template for Permissions Boundary ARN
-2. **Conditionally apply boundary** to all IAM roles when provided
-3. **Maintain backward compatibility** for deployments without boundaries
-4. **Cascade parameter** to all nested pattern stacks
+#### **Frontend Changes** (`src/ui/src/components/sections-panel/SectionsPanel.jsx`):
+```javascript
+// Phase 1: Smart Change Detection  
+const hasActualChanges = (section, originalSections) => {
+  if (section.isNew) return true;
+  
+  const originalSection = originalSections?.find(orig => orig.Id === section.OriginalId);
+  if (!originalSection) return true;
+  
+  // Deep comparison of classification, page IDs, and section ID changes
+  if (section.Class !== originalSection.Class) return true;
+  // ... page ID deep comparison
+  if (section.Id !== section.OriginalId) return true;
+  
+  return false;
+};
 
-### Implementation Plan
-
-#### Step 1: Main Template Updates (`template.yaml`)
-
-- Add `PermissionsBoundaryArn` parameter
-- Add `HasPermissionsBoundary` condition
-- Update all IAM role resources with conditional boundary
-- Pass parameter to nested stacks
-- Update CloudFormation interface metadata
-
-#### Step 2: Pattern Template Updates
-
-- Add parameter to each pattern template
-- Update all IAM roles in patterns
-- Maintain consistency across all patterns
-
-#### Step 3: Options Template Updates
-
-- Update BDA lending project template
-- Update Bedrock KB template
-
-### Key Implementation Details
-
-**Parameter Definition:**
-
-```yaml
-PermissionsBoundaryArn:
-  Type: String
-  Default: ""
-  Description: (Optional) ARN of IAM Permissions Boundary policy
-  AllowedPattern: "^(|arn:aws:iam::[0-9]{12}:policy/.+)$"
+// Selective payload construction - ONLY send changed sections
+const actuallyModifiedSections = editedSections.filter(section => 
+  hasActualChanges(section, sections)
+);
 ```
 
-**Condition:**
+#### **Backend Changes** (`src/lambda/process_changes_resolver/index.py`):
+```python
+# Phase 2: Proper Document service usage
+from idp_common.models import Document, Section, Status
+from idp_common.docs_service import create_document_service
 
-```yaml
-HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+# FIXED: Use Document object directly (not Document.from_dict)
+doc_service = create_document_service()
+document = doc_service.get_document(object_key)  # Returns Document object
+
+# Document manipulation using proper classes
+new_section = Section(
+    section_id=section_id,
+    classification=classification,
+    confidence=1.0,
+    page_ids=[str(pid) for pid in page_ids]
+)
+document.sections.append(new_section)
+
+# Let processing pipeline handle document updates via AppSync
 ```
 
-**Role Update Pattern:**
-
-```yaml
-SomeRole:
-  Type: AWS::IAM::Role
-  Properties:
-    # existing properties...
-    PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+#### **Data Format Robustness** (`lib/idp_common_pkg/idp_common/dynamodb/service.py`):
+```python
+# Enhanced metering data handling
+if isinstance(metering_data, str):
+    # JSON string format
+    doc.metering = json.loads(metering_data) if metering_data.strip() else {}
+else:
+    # Native DynamoDB object format
+    doc.metering = metering_data
 ```
 
-## Benefits
+### **Performance & Business Impact**
 
-- **SCP Compliance**: Satisfies organizational requirements
-- **Backward Compatible**: Existing deployments unaffected
-- **Flexible**: Works with any Permissions Boundary policy
-- **Comprehensive**: Covers all IAM roles across all components
+#### **Agent Analytics Performance Improvements:**
+1. **83% Payload Reduction**: From ALL sections to only modified sections
+2. **Elimination of Race Conditions**: Consistent data state for analytics queries
+3. **Robust Data Access**: Prevents analytics failures from format inconsistencies
+4. **Faster UI Response**: Reduced processing time and network overhead
 
-## Next Steps
+#### **Architectural Benefits:**
+1. **Architecture Compliance**: Aligns with established IDP Common patterns
+2. **Maintainability**: Uses standardized Document service patterns  
+3. **Scalability**: Selective processing suitable for large multi-document analytics
+4. **Reliability**: Eliminates manual database operations that could cause inconsistencies
 
-1. Implement main template changes
-2. Update all pattern templates
-3. Update options templates
-4. Test deployment scenarios
-5. Document usage examples
+#### **Business Value:**
+- **Performance**: Faster analytics queries and UI responsiveness
+- **Reliability**: Eliminated critical resolver failures affecting user workflow
+- **Maintainability**: Clean architecture reduces technical debt
+- **Scalability**: Optimization patterns suitable for enterprise-scale document processing
+
+### **Testing & Validation**
+- **Comprehensive Test Suite**: Created `lib/idp_common_pkg/tests/unit/dynamodb/test_service_data_formats.py`
+- **Real Environment Testing**: Verified fix works with actual DynamoDB service and Lambda payload
+- **Multiple Data Format Testing**: Validated robust handling of JSON strings, native objects, Decimals, and edge cases
+- **Lint Compliance**: All code quality checks pass
+
+## Key Learning: 2-Phase Schema Knowledge Approach
+
+This optimization demonstrates the power of **2-phase schema knowledge** for agent analytics:
+1. **Phase 1 (Frontend)**: Intelligent data filtering at source reduces processing load
+2. **Phase 2 (Backend)**: Proper service layer architecture ensures consistent, efficient data access
+
+This pattern is applicable to other analytics optimization scenarios where both client-side intelligence and server-side architecture alignment are needed for optimal performance.
+
+## Implementation Files Modified
+
+### ProcessChanges Resolver Optimization:
+- `src/ui/src/components/sections-panel/SectionsPanel.jsx` - Smart change detection and payload filtering
+- `src/lambda/process_changes_resolver/index.py` - Document class architecture and service usage
+- `lib/idp_common_pkg/idp_common/dynamodb/service.py` - Data format robustness enhancements
+- `lib/idp_common_pkg/tests/unit/dynamodb/test_service_data_formats.py` - Comprehensive test coverage
+- `CHANGELOG.md` - Performance optimization documentation
+
+### Previous Security & Compliance Updates:
+- Security vulnerability updates in IDP CLI
+- GovCloud compatibility templates and automation
+- Service principal dynamic expressions
+
+This 2-phase optimization approach provides a reusable pattern for improving agent analytics performance while maintaining architectural integrity and data consistency.

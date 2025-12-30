@@ -58,20 +58,17 @@ All logs include correlation IDs for tracing individual document processing jour
 Each pattern includes additional monitoring tailored to its specific workflow:
 
 ### Pattern 1: Bedrock Data Automation (BDA)
-
 - BDA project execution metrics
 - API usage and throttling
 - Media processor performance
 
 ### Pattern 2: Textract + Bedrock
-
 - Textract OCR performance
 - Bedrock model usage
 - Classification confidence distribution
 - Extraction completeness metrics
 
 ### Pattern 3: Textract + UDOP + Bedrock
-
 - SageMaker endpoint performance
 - UDOP model latency and throughput
 - GPU utilization metrics

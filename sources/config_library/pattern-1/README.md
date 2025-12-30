@@ -10,7 +10,6 @@ This directory contains configurations for Pattern 1 of the GenAI IDP Accelerato
 Pattern 1 implements an intelligent document processing workflow using Amazon Bedrock Data Automation (BDA) for orchestrating ML-powered document processing tasks. It leverages BDA's ability to extract insights from documents using pre-configured templates and workflows.
 
 Key components of Pattern 1:
-
 - BDA Invoke Lambda that starts BDA jobs asynchronously with a task token
 - BDA Completion Lambda that processes job completion events from EventBridge
 - Process Results Lambda that copies output files to designated location

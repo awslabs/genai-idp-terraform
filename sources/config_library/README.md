@@ -29,6 +29,7 @@ Each configuration in this library is designed for a specific pattern. The libra
 
 The accelerator supports few-shot example prompting to improve processing accuracy by providing concrete examples of documents and their expected outputs. This is demonstrated in the `pattern-2/few_shot_example/` configuration.
 
+
 ## Validation Levels
 
 To help users understand the reliability and testing status of each configuration, we use the following validation level indicators:
@@ -76,13 +77,11 @@ To add a new configuration to the library:
 1. **Determine the appropriate pattern** for your use case (Pattern 1, 2, or 3)
 
 2. **Create a new directory** with a descriptive name that reflects the use case:
-
    ```
    mkdir -p config_library/pattern-X/your_use_case_name
    ```
 
 3. **Copy and modify** the default configuration for that pattern:
-
    ```
    cp config_library/pattern-2/default/config.json config_library/pattern-X/your_use_case_name/config.json
    ```

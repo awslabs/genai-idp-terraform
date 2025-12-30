@@ -10,7 +10,6 @@ This directory contains configurations for Pattern 3 of the GenAI IDP Accelerato
 Pattern 3 implements an intelligent document processing workflow that uses UDOP (Unified Document Processing) for page classification and grouping, followed by Claude for information extraction.
 
 Key components of Pattern 3:
-
 - OCR processing using Amazon Textract
 - Page classification and grouping using a UDOP model deployed on SageMaker
 - Field extraction using Claude via Amazon Bedrock

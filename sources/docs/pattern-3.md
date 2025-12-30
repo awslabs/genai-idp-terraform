@@ -5,7 +5,8 @@ SPDX-License-Identifier: MIT-0
 
 This pattern implements an intelligent document processing workflow that uses UDOP (Unified Document Processing) for page classification and grouping, followed by Claude for information extraction.
 
-<img src="../../images/IDP-Pattern3-UDOP.drawio.png" alt="Architecture" width="800">
+<img src="../images/IDP-Pattern3-UDOP.drawio.png" alt="Architecture" width="800">
+
 
 ## Table of Contents
 
@@ -29,14 +30,14 @@ This pattern implements an intelligent document processing workflow that uses UD
 
 ## Fine tuning a UDOP model for classification
 
-See [Fine-Tuning Models on SageMaker](./fine-tune-sm-udop-classification/README.md)
+See [Fine-Tuning Models on SageMaker](../patterns/pattern-3/fine-tune-sm-udop-classification/README.md) 
 
 Once you have trained the model, deploy the GenAIIDP stack for Pattern-3 using the path for your new fine tuned model.
+
 
 ## Architecture Overview
 
 The workflow consists of three main processing steps:
-
 1. OCR processing using Amazon Textract
 2. Page classification and grouping using a UDOP model deployed on SageMaker
 3. Field extraction using Claude via Amazon Bedrock
@@ -50,7 +51,6 @@ OCRStep → ClassificationStep → ProcessPageGroups (Map State for Extraction)
 ```
 
 Each step includes comprehensive retry logic for handling transient errors:
-
 - Initial retry after 2 seconds
 - Exponential backoff with rate of 2
 - Maximum of 10 retry attempts
@@ -58,10 +58,8 @@ Each step includes comprehensive retry logic for handling transient errors:
 ### Lambda Functions
 
 #### OCR Function
-
 - **Purpose**: Processes input PDFs using Amazon Textract
 - **Input**:
-
   ```json
   {
     "execution_arn": "<ARN>",
@@ -74,9 +72,7 @@ Each step includes comprehensive retry logic for handling transient errors:
     }
   }
   ```
-
 - **Output**:
-
   ```json
   {
     "metadata": {
@@ -96,12 +92,10 @@ Each step includes comprehensive retry logic for handling transient errors:
   }
   ```
 
-#### Classification Function
-
+#### Classification Function 
 - **Purpose**: Classifies pages using UDOP model on SageMaker, and segments into sections using class boundaries
 - **Input**: Output from OCR function plus output bucket
-- **Output**:
-
+- **Output**: 
   ```json
   {
     "metadata": "<FROM_OCR>",
@@ -116,11 +110,9 @@ Each step includes comprehensive retry logic for handling transient errors:
   ```
 
 #### Extraction Function
-
 - **Purpose**: Extracts fields using Claude via Amazon Bedrock
 - **Input**: Individual section from Classification output
 - **Output**:
-
   ```json
   {
     "section": {
@@ -145,7 +137,6 @@ Each step includes comprehensive retry logic for handling transient errors:
 - **Purpose**: Aggregates results for all sections
 - **Input**: Extraction output from each section extraction
 - **Output**: Consumed by the GenAIIDP parent stack workflow tracker to update job status/UI etc
-
   ```json
   {
     "Sections": [
@@ -173,7 +164,7 @@ Each step includes comprehensive retry logic for handling transient errors:
 The pattern includes a complete UDOP model deployment:
 
 - **SageMaker Endpoint**: `sagemaker_classifier_endpoint.yaml` provisions:
-  - SageMaker model
+  - SageMaker model 
   - Endpoint configuration
   - Endpoint with auto-scaling
   - IAM roles and permissions
@@ -185,7 +176,6 @@ To create a new UDOP model fine tuned for your data, see [Fine tuning a UDOP mod
 The pattern includes a comprehensive CloudWatch dashboard with:
 
 #### Performance Metrics
-
 - Document and page throughput (per minute)
 - Token usage (input/output/total)
 - Bedrock request statistics and latency
@@ -193,7 +183,6 @@ The pattern includes a comprehensive CloudWatch dashboard with:
 - Processing latencies by function
 
 #### Error Tracking
-
 - Lambda function errors with detailed logs
 - Long-running invocations with duration metrics
 - Classification/extraction failures
@@ -201,7 +190,6 @@ The pattern includes a comprehensive CloudWatch dashboard with:
 - SageMaker endpoint errors
 
 #### Lambda Function Metrics
-
 - Duration (average, p90, maximum)
 - Memory usage and utilization
 - Error rates and exception counts
@@ -220,16 +208,14 @@ The pattern exports these outputs to the parent stack:
 ### Configuration
 
 **Stack Deployment Parameters:**
-
 - `UDOPModelArtifactPath`: S3 path to UDOP model artifacts (see [Fine tuning a UDOP model](#fine-tuning-a-udop-model-for-classification))
-- `IsSummarizationEnabled`: Boolean to enable/disable summarization functionality (true|false)
+- **Summarization**: Control summarization via configuration file `summarization.enabled` property (replaces `IsSummarizationEnabled` parameter)
 - `ConfigurationDefaultS3Uri`: Optional S3 URI to custom configuration (uses default configuration if not specified)
 - `MaxConcurrentWorkflows`: Workflow concurrency limit
 - `LogRetentionDays`: CloudWatch log retention period
 - `ExecutionTimeThresholdMs`: Latency threshold for alerts
 
 **Configuration Management:**
-
 - Model selection for extraction is now handled through configuration files rather than CloudFormation parameters
 - Configuration supports multiple presets per pattern (e.g., default, checkboxed_attributes_extraction, medical_records_summarization)
 - Configuration can be updated through the Web UI without stack redeployment
@@ -252,7 +238,6 @@ You are an expert in business document analysis and information extraction. You 
 </background>
 ...
 ```
-
 To modify the extraction behavior:
 
 1. Modify the configuration settings through the Web UI or configuration files
@@ -270,11 +255,9 @@ To modify the extraction behavior:
 - **Classification model (UDOP)** is still specified via CloudFormation parameter due to SageMaker endpoint requirements
 
 ### Extraction Attributes
-
 Attributes to be extracted are defined in the configuration files' `classes` section. The structure is similar to the example below:
 
 Example attribute definition:
-
 ```yaml
 classes:
   - name: letter
@@ -298,12 +281,12 @@ classes:
 ```
 
 To customize attributes:
-
 1. Modify the `classes` section in the configuration files or through the Web UI
 2. For each attribute, provide a clear name and detailed description
 3. Changes are applied immediately without requiring function redeployment
 
 Note: Configuration changes through the Web UI take effect immediately for new document processing jobs.
+
 
 ## Testing
 

@@ -158,7 +158,6 @@ logging.getLogger('idp_common.bedrock.client').setLevel(logging.DEBUG)
 ```
 
 ### Example CachePoint Processing
-
 See notebook [Bedrock Client Prompt Cache Testing Notebook](../../../../notebooks/bedrock_client_cachepoint_test.ipynb)
 
 ## Helper Methods
@@ -281,7 +280,6 @@ Different Bedrock models implement these parameters with varying defaults, namin
   - Implementation: `topK` is placed in `additionalModelRequestFields.inferenceConfig`
 
 **Common implementation details**:
-
 - Temperature is always included in the main `inferenceConfig`
 - top_p is added to `inferenceConfig` as "topP"
 
