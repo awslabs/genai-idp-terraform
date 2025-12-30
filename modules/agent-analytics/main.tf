@@ -35,6 +35,47 @@ locals {
 
   # Athena workgroup name - use provided or create new
   athena_workgroup = var.athena_workgroup_name != null ? var.athena_workgroup_name : aws_athena_workgroup.agent_analytics[0].name
+
+  # Helper function to generate model permissions for bedrock_model_id
+  # This follows the same pattern as processing-environment-api
+  bedrock_model_permissions = {
+    # Parse model information
+    is_arn                = startswith(var.bedrock_model_id, "arn:")
+    is_inference_profile  = !startswith(var.bedrock_model_id, "arn:") && (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac."))
+    base_model_id        = (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac.")) ? substr(var.bedrock_model_id, 3, -1) : var.bedrock_model_id
+
+    # Foundation model statement (always needed)
+    # For inference profiles, we need permissions for the underlying foundation model (without prefix)
+    foundation_statement = {
+      effect = "Allow"
+      actions = [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:GetFoundationModel"
+      ]
+      resources = [
+        # For ARNs that are not inference profiles, use as-is
+        # For inference profiles, create foundation model ARN with base model ID (no prefix)
+        # For regular model IDs, create foundation model ARN as-is
+        startswith(var.bedrock_model_id, "arn:") && !contains(split(":", var.bedrock_model_id), "inference-profile") ?
+        var.bedrock_model_id :
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${(startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac.")) ? substr(var.bedrock_model_id, 3, -1) : var.bedrock_model_id}"
+      ]
+    }
+
+    # Inference profile statement (only for inference profiles)
+    inference_profile_statement = (!startswith(var.bedrock_model_id, "arn:") && (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac."))) ? {
+      effect = "Allow"
+      actions = [
+        "bedrock:GetInferenceProfile",
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ]
+      resources = [
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}"
+      ]
+    } : null
+  }
 }
 
 # Create a random string for unique resource names
@@ -49,6 +90,54 @@ resource "null_resource" "create_module_build_dir" {
   provisioner "local-exec" {
     command = "mkdir -p ${local.module_build_dir}"
   }
+}
+
+# =============================================================================
+# Lambda Layers for Agent Functions
+# =============================================================================
+
+# Define requirements files for functions that need external dependencies
+locals {
+  # Clean requirements files by removing local dependencies and idp_common_pkg references
+  clean_requirements = {
+    agent_processor = fileexists("${path.module}/../../sources/src/lambda/agent_processor/requirements.txt") ? join("\n", [
+      for line in split("\n", file("${path.module}/../../sources/src/lambda/agent_processor/requirements.txt")) :
+      line if !can(regex("^\\s*\\.+/", line)) && !can(regex("idp_common_pkg", line)) && trimspace(line) != "" && !startswith(trimspace(line), "#")
+    ]) : ""
+    # Create a layer for the agents dependencies (strands, etc.)
+    list_available_agents = join("\n", [
+      "strands-agents>=1.0.0",
+      "strands-agents-tools>=0.2.2", 
+      "bedrock-agentcore>=0.1.1",
+      "regex>=2024.0.0,<2026.0.0"
+    ])
+  }
+
+  # Filter out empty requirements files
+  requirements_files = {
+    for k, v in local.clean_requirements : k => v if trimspace(v) != "" && length(split("\n", trimspace(v))) > 0
+  }
+}
+
+# Create Lambda layers for functions with external dependencies
+module "lambda_layers" {
+  source = "../lambda-layer-codebuild"
+
+  name_prefix              = "agent-analytics-${local.suffix}"
+  lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
+
+  requirements_files = local.requirements_files
+  
+  # Calculate hash of all requirements files to use as trigger
+  requirements_hash = md5(join("", [
+    for k, v in local.clean_requirements : v
+  ]))
+
+  # Don't force rebuild unless requirements change
+  force_rebuild = false
+
+  # Lambda tracing configuration
+  lambda_tracing_mode = var.lambda_tracing_mode
 }
 
 
@@ -194,7 +283,11 @@ resource "aws_lambda_function" "agent_processor" {
   filename         = data.archive_file.agent_processor_code.output_path
   source_code_hash = data.archive_file.agent_processor_code.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = compact([
+    contains(keys(module.lambda_layers.layer_arns), "agent_processor") ? lookup(module.lambda_layers.layer_arns, "agent_processor") : null,
+    contains(keys(module.lambda_layers.layer_arns), "list_available_agents") ? lookup(module.lambda_layers.layer_arns, "list_available_agents") : null,
+    var.idp_common_layer_arn
+  ])
 
   handler     = "index.handler"
   runtime     = "python3.12"
@@ -207,13 +300,17 @@ resource "aws_lambda_function" "agent_processor" {
 
   environment {
     variables = {
-      LOG_LEVEL             = var.log_level
-      AGENT_TABLE           = aws_dynamodb_table.agent_jobs.name
-      APPSYNC_API_URL       = var.appsync_api_url
-      BEDROCK_MODEL_ID      = var.bedrock_model_id
-      ATHENA_WORKGROUP      = local.athena_workgroup
-      ATHENA_DATABASE       = var.reporting_database_name
-      ATHENA_RESULTS_BUCKET = local.athena_results_bucket_name
+      LOG_LEVEL                        = var.log_level
+      CONFIGURATION_TABLE_NAME         = var.configuration_table_name
+      STRANDS_LOG_LEVEL               = var.log_level
+      AGENT_TABLE                     = aws_dynamodb_table.agent_jobs.name
+      APPSYNC_API_URL                 = var.appsync_api_url
+      ATHENA_DATABASE                 = var.reporting_database_name
+      ATHENA_OUTPUT_LOCATION          = "s3://${local.reporting_bucket_name}/athena-results/"
+      DOCUMENT_ANALYSIS_AGENT_MODEL_ID = var.bedrock_model_id
+      AWS_STACK_NAME                  = "terraform-${var.name_prefix}"
+      GUARDRAIL_ID_AND_VERSION        = ""
+      METRIC_NAMESPACE                = "GenAI/IDP/AgentAnalytics"
     }
   }
 
@@ -269,7 +366,10 @@ resource "aws_lambda_function" "list_available_agents" {
   filename         = data.archive_file.list_available_agents_code.output_path
   source_code_hash = data.archive_file.list_available_agents_code.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = compact([
+    contains(keys(module.lambda_layers.layer_arns), "list_available_agents") ? lookup(module.lambda_layers.layer_arns, "list_available_agents") : null,
+    var.idp_common_layer_arn
+  ])
 
   handler     = "index.handler"
   runtime     = "python3.12"

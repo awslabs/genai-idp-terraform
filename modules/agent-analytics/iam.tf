@@ -99,7 +99,7 @@ resource "aws_iam_role_policy_attachment" "agent_request_handler_vpc_attachment"
 
 # KMS policy for request handler
 resource "aws_iam_policy" "agent_request_handler_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
+  count = var.enable_encryption ? 1 : 0
   name  = "${var.name_prefix}-agent-request-kms-policy-${local.suffix}"
 
   policy = jsonencode({
@@ -123,7 +123,7 @@ resource "aws_iam_policy" "agent_request_handler_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "agent_request_handler_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
+  count      = var.enable_encryption ? 1 : 0
   role       = aws_iam_role.agent_request_handler_role.name
   policy_arn = aws_iam_policy.agent_request_handler_kms_policy[0].arn
 }
@@ -157,7 +157,7 @@ resource "aws_iam_policy" "agent_processor_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect = "Allow"
         Action = [
@@ -180,10 +180,35 @@ resource "aws_iam_policy" "agent_processor_policy" {
       {
         Effect = "Allow"
         Action = [
-          "bedrock:InvokeModel",
-          "bedrock:InvokeModelWithResponseStream"
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
+      },
+      # Foundation model permissions (always needed)
+      {
+        Effect   = local.bedrock_model_permissions.foundation_statement.effect
+        Action   = local.bedrock_model_permissions.foundation_statement.actions
+        Resource = local.bedrock_model_permissions.foundation_statement.resources
+      }],
+      # Inference profile permissions (only for cross-region inference profiles)
+      local.bedrock_model_permissions.inference_profile_statement != null ? [{
+        Effect   = local.bedrock_model_permissions.inference_profile_statement.effect
+        Action   = local.bedrock_model_permissions.inference_profile_statement.actions
+        Resource = local.bedrock_model_permissions.inference_profile_statement.resources
+      }] : [],
+      [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:StartCodeInterpreterSession",
+          "bedrock-agentcore:StopCodeInterpreterSession", 
+          "bedrock-agentcore:InvokeCodeInterpreter",
+          "bedrock-agentcore:GetCodeInterpreterSession",
+          "bedrock-agentcore:ListCodeInterpreterSessions"
+        ]
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:*:aws:code-interpreter/*"
       },
       {
         Effect = "Allow"
@@ -191,11 +216,15 @@ resource "aws_iam_policy" "agent_processor_policy" {
           "athena:StartQueryExecution",
           "athena:GetQueryExecution",
           "athena:GetQueryResults",
-          "athena:StopQueryExecution"
+          "athena:StopQueryExecution",
+          "athena:GetWorkGroup",
+          "athena:GetDataCatalog",
+          "athena:GetDatabase",
+          "athena:GetTableMetadata",
+          "athena:ListDatabases",
+          "athena:ListTableMetadata"
         ]
-        Resource = [
-          "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:workgroup/*"
-        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
@@ -206,11 +235,7 @@ resource "aws_iam_policy" "agent_processor_policy" {
           "glue:GetTables",
           "glue:GetPartitions"
         ]
-        Resource = [
-          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:catalog",
-          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:database/${var.reporting_database_name}",
-          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.reporting_database_name}/*"
-        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
@@ -229,14 +254,17 @@ resource "aws_iam_policy" "agent_processor_policy" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:ListBucket"
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
         Resource = [
           var.reporting_bucket_arn,
           "${var.reporting_bucket_arn}/*"
         ]
       }
-    ]
+    ])
   })
 
   tags = var.tags
@@ -259,7 +287,7 @@ resource "aws_iam_policy" "agent_processor_appsync_policy" {
         Action = [
           "appsync:GraphQL"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
+        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
       }
     ]
   })
@@ -305,7 +333,7 @@ resource "aws_iam_role_policy_attachment" "agent_processor_vpc_attachment" {
 
 # KMS policy for processor
 resource "aws_iam_policy" "agent_processor_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
+  count = var.enable_encryption ? 1 : 0
   name  = "${var.name_prefix}-agent-processor-kms-policy-${local.suffix}"
 
   policy = jsonencode({
@@ -329,7 +357,7 @@ resource "aws_iam_policy" "agent_processor_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "agent_processor_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
+  count      = var.enable_encryption ? 1 : 0
   role       = aws_iam_role.agent_processor_role.name
   policy_arn = aws_iam_policy.agent_processor_kms_policy[0].arn
 }
@@ -416,7 +444,7 @@ resource "aws_iam_role_policy_attachment" "list_available_agents_vpc_attachment"
 
 # KMS policy for list agents
 resource "aws_iam_policy" "list_available_agents_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
+  count = var.enable_encryption ? 1 : 0
   name  = "${var.name_prefix}-list-agents-kms-policy-${local.suffix}"
 
   policy = jsonencode({
@@ -440,7 +468,7 @@ resource "aws_iam_policy" "list_available_agents_kms_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "list_available_agents_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
+  count      = var.enable_encryption ? 1 : 0
   role       = aws_iam_role.list_available_agents_role.name
   policy_arn = aws_iam_policy.list_available_agents_kms_policy[0].arn
 }
