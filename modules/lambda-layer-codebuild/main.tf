@@ -388,7 +388,7 @@ locals {
 resource "time_sleep" "wait_for_s3_consistency" {
   depends_on = [aws_lambda_invocation.trigger_codebuild]
   
-  create_duration = "60s"
+  create_duration = "120s"
 }
 
 # Create Lambda layers only for non-empty requirements
@@ -397,7 +397,7 @@ resource "aws_lambda_layer_version" "layers" {
 
   layer_name = "${var.name_prefix}-${each.key}"
   s3_bucket  = local.lambda_layers_bucket_name
-  s3_key     = "layers/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}/${each.key}.zip"
+  s3_key     = "layers/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}/${each.key}.zip"
 
   compatible_runtimes = ["python3.12"]
 
