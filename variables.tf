@@ -402,6 +402,17 @@ variable "chat_with_document" {
 }
 
 #
+# Process Changes Configuration
+#
+variable "process_changes" {
+  description = "Configuration for document editing and reprocessing functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
+#
 # Lambda Configuration
 #
 variable "lambda_tracing_mode" {

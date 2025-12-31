@@ -427,6 +427,9 @@ module "genai_idp_accelerator" {
   # Chat with Document configuration
   chat_with_document = var.chat_with_document
 
+  # Process Changes configuration
+  process_changes = var.process_changes
+
   # Feature flags
   enable_api = var.enable_api
 

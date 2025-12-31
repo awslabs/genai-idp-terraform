@@ -136,6 +136,15 @@ variable "chat_with_document" {
   default = { enabled = false }
 }
 
+# Process Changes Configuration
+variable "process_changes" {
+  description = "Configuration for document editing and reprocessing functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
 # SageMaker Model Training Configuration
 variable "training_config" {
   description = "Configuration for SageMaker model training"

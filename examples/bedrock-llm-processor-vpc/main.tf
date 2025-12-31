@@ -550,6 +550,12 @@ module "genai_idp_accelerator" {
     database_name = aws_glue_catalog_database.reporting_database[0].name
   } : { enabled = false }
 
+  # Chat with Document configuration
+  chat_with_document = var.chat_with_document
+
+  # Process Changes configuration
+  process_changes = var.process_changes
+
   # Feature flags
   enable_api = false
 

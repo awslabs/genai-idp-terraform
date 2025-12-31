@@ -144,6 +144,15 @@ variable "chat_with_document" {
   default = { enabled = false }
 }
 
+# Process Changes Configuration
+variable "process_changes" {
+  description = "Configuration for document editing and reprocessing functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
 # Configuration File Path
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"

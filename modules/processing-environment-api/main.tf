@@ -145,6 +145,51 @@ module "chat_with_document" {
   tags = var.tags
 }
 
+# =============================================================================
+# PROCESS CHANGES SUB-MODULE
+# =============================================================================
+
+module "process_changes" {
+  count  = var.enable_edit_sections ? 1 : 0
+  source = "./process-changes"
+
+  name_prefix                 = "process-changes-${random_string.suffix.result}"
+  appsync_api_id              = aws_appsync_graphql_api.api.id
+  appsync_lambda_role_arn     = aws_iam_role.appsync_lambda_role.arn
+  idp_common_layer_arn        = var.idp_common_layer_arn
+  
+  # DynamoDB tables
+  tracking_table_name = local.tracking_table_name
+  tracking_table_arn  = local.tracking_table_arn
+  
+  # SQS queue
+  queue_url = var.document_queue_url
+  queue_arn = var.document_queue_arn
+  
+  # Data retention
+  data_retention_days = var.data_retention_in_days
+  
+  # S3 bucket access
+  working_bucket_arn = var.working_bucket_arn
+  input_bucket_arn   = local.input_bucket_arn
+  output_bucket_arn  = local.output_bucket_arn
+  
+  # AppSync GraphQL URL
+  appsync_graphql_url = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+  
+  # Configuration
+  log_level           = var.log_level
+  log_retention_days  = var.log_retention_days
+  encryption_key_arn  = local.encryption_key_arn
+  lambda_tracing_mode = var.lambda_tracing_mode
+
+  # VPC configuration
+  vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
+  vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
+
+  tags = var.tags
+}
+
 # AppSync GraphQL API
 resource "aws_appsync_graphql_api" "api" {
   name                = local.api_name

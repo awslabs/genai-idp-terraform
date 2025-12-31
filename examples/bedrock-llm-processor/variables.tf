@@ -128,6 +128,15 @@ variable "chat_with_document" {
   default = { enabled = false }
 }
 
+# Process Changes Configuration
+variable "process_changes" {
+  description = "Configuration for document editing and reprocessing functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = { enabled = false }
+}
+
 # Model Configuration
 variable "classification_model_id" {
   description = "Model ID for document classification (Bedrock LLM processor only)"

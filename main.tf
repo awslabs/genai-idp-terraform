@@ -345,6 +345,11 @@ module "processing_environment_api" {
     guardrail_id_and_version = var.chat_with_document.guardrail_id_and_version
   } : { enabled = false }
 
+  # Process Changes configuration (Edit Sections feature)
+  enable_edit_sections = var.process_changes.enabled
+  document_queue_url   = var.process_changes.enabled ? module.processing_environment.document_queue_url : null
+  document_queue_arn   = var.process_changes.enabled ? module.processing_environment.document_queue_arn : null
+
   # IDP Common Layer ARN for discovery sub-module
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
