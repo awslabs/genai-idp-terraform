@@ -19,6 +19,8 @@ This solution is in experimental stage. While it implements security best practi
 - **Comprehensive Monitoring**: Built-in CloudWatch dashboards and alerting
 - **Web Interface**: Optional React-based UI for document management
 - **Knowledge Base**: Query processed documents using natural language
+- **Document Discovery**: Upload and analyze documents for pattern discovery
+- **Chat with Documents**: Interactive Q&A with processed documents using foundation models
 - **Enhanced Permissions**: Comprehensive IAM policies aligned with AWS security best practices
 
 ## Processing Patterns
@@ -258,6 +260,18 @@ enable_web_ui           = true
 enable_knowledge_base   = true
 enable_evaluation       = true
 enable_summarization    = true
+
+# Discovery Configuration (optional)
+discovery = {
+  enabled = true
+}
+
+# Chat with Document Configuration (optional)
+chat_with_document = {
+  enabled = true
+  # Optional: Add Bedrock Guardrail for content filtering
+  guardrail_id_and_version = "your-guardrail-id:1"
+}
 
 # HITL (Human-in-the-Loop) Configuration
 # Set to non-null value to enable HITL functionality
