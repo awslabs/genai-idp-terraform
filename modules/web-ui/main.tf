@@ -80,7 +80,7 @@ locals {
     ReportingBucket                = var.reporting_bucket_name
     EvaluationBaselineBucket       = var.evaluation_baseline_bucket_name
     IDPPattern                     = var.idp_pattern
-    ShouldUseDocumentKnowledgeBase = false
+    ShouldUseDocumentKnowledgeBase = var.knowledge_base_enabled ? "true" : "false"
     Version                        = "0.3.18"
     StackName                      = var.display_name != null ? var.display_name : "${var.name_prefix}-processor"
     # Add other settings as needed

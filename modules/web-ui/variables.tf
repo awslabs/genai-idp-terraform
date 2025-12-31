@@ -36,6 +36,12 @@ variable "discovery_bucket_name" {
   default     = null
 }
 
+variable "knowledge_base_enabled" {
+  description = "Whether Knowledge Base functionality is enabled"
+  type        = bool
+  default     = false
+}
+
 variable "idp_pattern" {
   description = "IDP processing pattern name (mapped from processor type)"
   type        = string

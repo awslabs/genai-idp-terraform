@@ -158,11 +158,16 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
     webapp_bucket              = local.web_app_bucket.bucket_name
     cloudfront_distribution_id = local.cloudfront_distribution_id
     settings_hash = sha256(jsonencode({
-      user_pool_id        = var.user_identity.user_pool.user_pool_id
-      user_pool_client_id = var.user_identity.user_pool_client.user_pool_client_id
-      identity_pool_id    = var.user_identity.identity_pool.identity_pool_id
-      appsync_url         = var.api_url
-      cloudfront_domain   = local.cloudfront_domain_name
+      user_pool_id               = var.user_identity.user_pool.user_pool_id
+      user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
+      identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
+      appsync_url                = var.api_url
+      cloudfront_domain          = local.cloudfront_domain_name
+      knowledge_base_enabled     = var.knowledge_base_enabled
+      discovery_bucket_name      = var.discovery_bucket_name
+      reporting_bucket_name      = var.reporting_bucket_name
+      evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
+      idp_pattern               = var.idp_pattern
     }))
     buildspec_hash   = md5(aws_codebuild_project.ui_build.source[0].buildspec)
     source_code_hash = data.archive_file.ui_source.output_base64sha256
@@ -171,16 +176,19 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
   triggers = {
     # Trigger when UI settings change
     settings_hash = sha256(jsonencode({
-      user_pool_id        = var.user_identity.user_pool.user_pool_id
-      user_pool_client_id = var.user_identity.user_pool_client.user_pool_client_id
-      identity_pool_id    = var.user_identity.identity_pool.identity_pool_id
-      appsync_url         = var.api_url
-      cloudfront_domain   = local.cloudfront_domain_name
+      user_pool_id               = var.user_identity.user_pool.user_pool_id
+      user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
+      identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
+      appsync_url                = var.api_url
+      cloudfront_domain          = local.cloudfront_domain_name
+      knowledge_base_enabled     = var.knowledge_base_enabled
+      discovery_bucket_name      = var.discovery_bucket_name
+      reporting_bucket_name      = var.reporting_bucket_name
+      evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
+      idp_pattern               = var.idp_pattern
     }))
     # Trigger when CodeBuild project changes
     codebuild_project = aws_codebuild_project.ui_build.name
-    # Trigger when SSM parameter changes
-    settings_parameter = aws_ssm_parameter.web_ui_settings.name
     # Trigger when source code changes
     source_code_hash = data.archive_file.ui_source.output_base64sha256
     # Trigger when buildspec changes

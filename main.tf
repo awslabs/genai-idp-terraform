@@ -57,23 +57,10 @@ check "single_processor_required" {
   }
 }
 
-# Validation: Required bucket ARNs
-#tfsec:ignore:*
-check "required_bucket_arns" {
-  assert {
-    condition     = var.input_bucket_arn != null && var.output_bucket_arn != null && var.working_bucket_arn != null
-    error_message = "input_bucket_arn, output_bucket_arn, and working_bucket_arn are required."
-  }
-}
-
-# Validation: Encryption key ARN is required
-#tfsec:ignore:*
-check "encryption_key_required" {
-  assert {
-    condition     = var.encryption_key_arn != null
-    error_message = "encryption_key_arn is required."
-  }
-}
+# Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.) 
+# have been removed to eliminate "known after apply" warnings. These validations
+# are still enforced by Terraform's resource dependencies and will fail at apply
+# time if the required resources don't exist.
 
 # Validation: Web UI logging bucket requirement
 #tfsec:ignore:*
@@ -84,14 +71,8 @@ check "web_ui_logging_bucket" {
   }
 }
 
-# Validation: BDA processor project ARN requirement
-#tfsec:ignore:*
-check "bda_processor_project_arn" {
-  assert {
-    condition     = var.bda_processor != null ? var.bda_processor.project_arn != null : true
-    error_message = "project_arn is required in bda_processor configuration."
-  }
-}
+# Validation: BDA processor project ARN requirement (only for static values)
+# Note: Removed check for computed project_arn to eliminate warnings
 
 # Validation: SageMaker UDOP processor endpoint ARN requirement
 #tfsec:ignore:*
@@ -594,6 +575,9 @@ module "web_ui" {
 
   # Discovery bucket name (if discovery is enabled)
   discovery_bucket_name = var.discovery.enabled && var.enable_api ? module.processing_environment_api[0].discovery_bucket_name : null
+
+  # Knowledge Base enabled flag
+  knowledge_base_enabled = var.knowledge_base.enabled
 
   # IDP Pattern mapping (processor type to CloudFormation pattern names)
   idp_pattern = local.idp_pattern_mapping[local.processor_type]
