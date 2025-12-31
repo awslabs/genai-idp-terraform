@@ -308,7 +308,9 @@
                 "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
                 "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
                 "us.anthropic.claude-sonnet-4-20250514-v1:0",
-                "us.anthropic.claude-opus-4-20250514-v1:0"
+                "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
+                "us.anthropic.claude-opus-4-20250514-v1:0",
+                "us.anthropic.claude-opus-4-1-20250805-v1:0"
               ],
               "order": "1"
             },
@@ -378,7 +380,9 @@
             "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
             "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
             "us.anthropic.claude-sonnet-4-20250514-v1:0",
-            "us.anthropic.claude-opus-4-20250514-v1:0"
+            "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
+            "us.anthropic.claude-opus-4-20250514-v1:0",
+            "us.anthropic.claude-opus-4-1-20250805-v1:0"
           ],
           "order": "1"
         },
@@ -416,13 +420,164 @@
         }
       }
     },
+    "discovery": {
+      "order": "6",
+      "type": "object",
+      "sectionLabel": "Discovery Configuration",
+      "description": "Configuration for document class discovery functionality",
+      "properties": {
+        "without_ground_truth": {
+          "order": "0",
+          "type": "object",
+          "sectionLabel": "Discovery Without Ground Truth",
+          "description": "Configuration for discovering document classes without reference data",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Bedrock model ID for discovery without ground truth",
+              "enum": [
+                "us.amazon.nova-lite-v1:0",
+                "us.amazon.nova-pro-v1:0",
+                "us.amazon.nova-premier-v1:0",
+                "us.anthropic.claude-3-haiku-20240307-v1:0",
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
+                "us.anthropic.claude-opus-4-20250514-v1:0",
+                "us.anthropic.claude-opus-4-1-20250805-v1:0"
+              ],
+              "default": "us.amazon.nova-pro-v1:0",
+              "order": "0"
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Temperature parameter for model creativity (0.0-1.0)",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 1.0,
+              "order": "1"
+            },
+            "top_p": {
+              "type": "number",
+              "description": "Top-p parameter for nucleus sampling (0.0-1.0)",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 0.1,
+              "order": "2"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Maximum number of tokens to generate",
+              "minimum": 1000,
+              "maximum": 20000,
+              "default": 10000,
+              "order": "3"
+            },
+            "system_prompt": {
+              "type": "string",
+              "format": "textarea",
+              "description": "System prompt for the discovery model",
+              "default": "You are an expert in processing forms. Extracting data from images and documents. Analyze forms line by line to identify field names, data types, and organizational structure. Focus on creating comprehensive blueprints for document processing without extracting actual values.",
+              "order": "4"
+            },
+            "user_prompt": {
+              "type": "string",
+              "format": "textarea",
+              "description": "User prompt template for discovery without ground truth",
+              "default": "This image contains forms data. Analyze the form line by line. Image may contains multiple pages, process all the pages. Form may contain multiple name value pair in one line. Extract all the names in the form including the name value pair which doesn't have value. Organize them into groups, extract field_name, data_type and field description. Field_name should be less than 60 characters, should not have space use '-' instead of space. field_description is a brief description of the field and the location of the field like box number or line number in the form and section of the form. Field_name should be unique within the group. Add two fields document_class and document_description. For document_class generate a short name based on the document content like W4, I-9, Paystub. For document_description generate a description about the document in less than 50 words. Group the fields based on the section they are grouped in the form. Group should have attributeType as \"group\". If the group repeats, add an additional field groupType and set the value as \"Table\". Do not extract the values. Return the extracted data in JSON format.",
+              "order": "5"
+            }
+          }
+        },
+        "with_ground_truth": {
+          "order": "1",
+          "type": "object",
+          "sectionLabel": "Discovery With Ground Truth",
+          "description": "Configuration for discovering document classes using reference data",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Bedrock model ID for discovery with ground truth",
+              "enum": [
+                "us.amazon.nova-lite-v1:0",
+                "us.amazon.nova-pro-v1:0",
+                "us.amazon.nova-premier-v1:0",
+                "us.anthropic.claude-3-haiku-20240307-v1:0",
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
+                "us.anthropic.claude-opus-4-20250514-v1:0",
+                "us.anthropic.claude-opus-4-1-20250805-v1:0"
+              ],
+              "default": "us.amazon.nova-pro-v1:0",
+              "order": "0"
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Temperature parameter for model creativity (0.0-1.0)",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 1.0,
+              "order": "1"
+            },
+            "top_p": {
+              "type": "number",
+              "description": "Top-p parameter for nucleus sampling (0.0-1.0)",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 0.1,
+              "order": "2"
+            },
+            "max_tokens": {
+              "type": "number",
+              "description": "Maximum number of tokens to generate",
+              "minimum": 1000,
+              "maximum": 20000,
+              "default": 10000,
+              "order": "3"
+            },
+            "system_prompt": {
+              "type": "string",
+              "format": "textarea",
+              "description": "System prompt for the discovery model with ground truth",
+              "default": "You are an expert in processing forms. Extracting data from images and documents. Use provided ground truth data as reference to optimize field extraction and ensure consistency with expected document structure and field definitions.",
+              "order": "4"
+            },
+            "user_prompt": {
+              "type": "string",
+              "format": "textarea",
+              "description": "User prompt template for discovery with ground truth (use {ground_truth_json} placeholder)",
+              "default": "This image contains unstructured data. Analyze the data line by line using the provided ground truth as reference. <GROUND_TRUTH_REFERENCE>{ground_truth_json}</GROUND_TRUTH_REFERENCE> Ground truth reference JSON has the fields we are interested in extracting from the document/image. Use the ground truth to optimize field extraction. Match field names, data types, and groupings from the reference. Image may contain multiple pages, process all pages. Extract all field names including those without values. Do not change the group name and field name from ground truth in the extracted data json. Add field_description field for every field which will contain instruction to LLM to extract the field data from the image/document. Add data_type field for every field. Add two fields document_class and document_description. For document_class generate a short name based on the document content like W4, I-9, Paystub. For document_description generate a description about the document in less than 50 words. If the group repeats and follows table format, add a special field group_type with value \"Table\" and description field for the group. Do not extract the values.",
+              "order": "5"
+            }
+          }
+        },
+        "output_format": {
+          "order": "2",
+          "type": "object",
+          "sectionLabel": "Output Format Configuration",
+          "description": "Configuration for discovery output format",
+          "properties": {
+            "sample_json": {
+              "type": "string",
+              "format": "textarea",
+              "description": "Sample JSON format for discovery output",
+              "default": "{\n  \"document_class\": \"Form-1040\",\n  \"document_description\": \"Brief summary of the document\",\n  \"groups\": [\n    {\n      \"name\": \"PersonalInformation\",\n      \"description\": \"Personal information of Tax payer\",\n      \"attributeType\": \"group\",\n      \"groupType\": \"normal\",\n      \"groupAttributes\": [\n        {\n          \"name\": \"FirstName\",\n          \"dataType\": \"string\",\n          \"description\": \"First Name of Taxpayer\"\n        },\n        {\n          \"name\": \"Age\",\n          \"dataType\": \"number\",\n          \"description\": \"Age of Taxpayer\"\n        }\n      ]\n    }\n  ]\n}",
+              "order": "0"
+            }
+          }
+        }
+      }
+    },
     "pricing": {
       "type": "array",
       "listLabel": "Services",
       "itemLabel": "Service/API",
       "columns": "2",
       "sectionLabel": "Pricing Estimates - check https://aws.amazon.com/bedrock/pricing/",
-      "order": "6",
+      "order": "7",
       "items": {
         "type": "object",
         "required": [
