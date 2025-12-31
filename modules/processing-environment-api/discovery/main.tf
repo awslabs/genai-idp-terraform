@@ -52,17 +52,19 @@ resource "aws_s3_bucket_versioning" "discovery_bucket_versioning" {
   }
 }
 
-# Bucket encryption
+# Bucket encryption (conditional)
 resource "aws_s3_bucket_server_side_encryption_configuration" "discovery_bucket_encryption" {
-  count  = var.encryption_key_arn != null ? 1 : 0
   bucket = aws_s3_bucket.discovery_bucket.id
 
-  rule {
-    apply_server_side_encryption_by_default {
-      kms_master_key_id = var.encryption_key_arn
-      sse_algorithm     = "aws:kms"
+  dynamic "rule" {
+    for_each = var.encryption_key_arn != null ? [1] : []
+    content {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = var.encryption_key_arn
+        sse_algorithm     = "aws:kms"
+      }
+      bucket_key_enabled = true
     }
-    bucket_key_enabled = true
   }
 }
 

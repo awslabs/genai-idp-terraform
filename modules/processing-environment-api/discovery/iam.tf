@@ -108,12 +108,11 @@ resource "aws_iam_role_policy_attachment" "discovery_upload_resolver_vpc_attachm
 
 # KMS policy for upload resolver
 resource "aws_iam_policy" "discovery_upload_resolver_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
-  name  = "${var.name_prefix}-discovery-upload-kms-policy-${local.suffix}"
+  name = "${var.name_prefix}-discovery-upload-kms-policy-${local.suffix}"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = var.encryption_key_arn != null ? [
       {
         Action = [
           "kms:Encrypt",
@@ -125,16 +124,15 @@ resource "aws_iam_policy" "discovery_upload_resolver_kms_policy" {
         Effect   = "Allow"
         Resource = var.encryption_key_arn
       }
-    ]
+    ] : []
   })
 
   tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "discovery_upload_resolver_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
   role       = aws_iam_role.discovery_upload_resolver_role.name
-  policy_arn = aws_iam_policy.discovery_upload_resolver_kms_policy[0].arn
+  policy_arn = aws_iam_policy.discovery_upload_resolver_kms_policy.arn
 }
 
 # =============================================================================
@@ -245,12 +243,11 @@ resource "aws_iam_role_policy_attachment" "discovery_processor_policy_attachment
 
 # AppSync policy for processor (to update job status)
 resource "aws_iam_policy" "discovery_processor_appsync_policy" {
-  count = var.appsync_api_url != null ? 1 : 0
-  name  = "${var.name_prefix}-discovery-processor-appsync-policy-${local.suffix}"
+  name = "${var.name_prefix}-discovery-processor-appsync-policy-${local.suffix}"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = var.appsync_api_url != null ? [
       {
         Effect = "Allow"
         Action = [
@@ -258,16 +255,15 @@ resource "aws_iam_policy" "discovery_processor_appsync_policy" {
         ]
         Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:apis/*"
       }
-    ]
+    ] : []
   })
 
   tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "discovery_processor_appsync_attachment" {
-  count      = var.appsync_api_url != null ? 1 : 0
   role       = aws_iam_role.discovery_processor_role.name
-  policy_arn = aws_iam_policy.discovery_processor_appsync_policy[0].arn
+  policy_arn = aws_iam_policy.discovery_processor_appsync_policy.arn
 }
 
 # VPC policy for processor
@@ -303,12 +299,11 @@ resource "aws_iam_role_policy_attachment" "discovery_processor_vpc_attachment" {
 
 # KMS policy for processor
 resource "aws_iam_policy" "discovery_processor_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
-  name  = "${var.name_prefix}-discovery-processor-kms-policy-${local.suffix}"
+  name = "${var.name_prefix}-discovery-processor-kms-policy-${local.suffix}"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = var.encryption_key_arn != null ? [
       {
         Action = [
           "kms:Encrypt",
@@ -320,14 +315,13 @@ resource "aws_iam_policy" "discovery_processor_kms_policy" {
         Effect   = "Allow"
         Resource = var.encryption_key_arn
       }
-    ]
+    ] : []
   })
 
   tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "discovery_processor_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
   role       = aws_iam_role.discovery_processor_role.name
-  policy_arn = aws_iam_policy.discovery_processor_kms_policy[0].arn
+  policy_arn = aws_iam_policy.discovery_processor_kms_policy.arn
 }

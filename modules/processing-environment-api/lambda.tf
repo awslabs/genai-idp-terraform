@@ -613,7 +613,7 @@ resource "aws_appsync_resolver" "copy_to_baseline" {
 
 # Process Changes Resolver Lambda (for Edit Sections feature)
 data "archive_file" "process_changes_resolver_code" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   type        = "zip"
   source_dir  = "${path.module}/../../sources/src/lambda/process_changes_resolver"
   output_path = "${local.module_build_dir}/process-changes-resolver.zip_${random_id.build_id.hex}"
@@ -622,17 +622,17 @@ data "archive_file" "process_changes_resolver_code" {
 }
 
 resource "aws_lambda_function" "process_changes_resolver" {
-  count         = local.edit_sections_enabled ? 1 : 0
+  for_each      = var.enable_edit_sections ? { "enabled" = true } : {}
   function_name = "ProcessChangesResolver-${random_string.suffix.result}"
 
-  filename         = data.archive_file.process_changes_resolver_code[0].output_path
-  source_code_hash = data.archive_file.process_changes_resolver_code[0].output_base64sha256
+  filename         = data.archive_file.process_changes_resolver_code["enabled"].output_path
+  source_code_hash = data.archive_file.process_changes_resolver_code["enabled"].output_base64sha256
 
   handler     = "index.handler"
   runtime     = "python3.12"
   timeout     = 60
   memory_size = 512
-  role        = aws_iam_role.process_changes_resolver_role[0].arn
+  role        = aws_iam_role.process_changes_resolver_role["enabled"].arn
   description = "Lambda function to process section changes via GraphQL API (Edit Sections feature)"
 
   kms_key_arn = var.encryption_key_arn
@@ -642,9 +642,9 @@ resource "aws_lambda_function" "process_changes_resolver" {
   environment {
     variables = {
       TRACKING_TABLE         = local.tracking_table_name
-      QUEUE_URL              = local.document_queue_url
+      QUEUE_URL              = var.document_queue_url != null ? var.document_queue_url : ""
       DATA_RETENTION_IN_DAYS = tostring(var.data_retention_in_days)
-      WORKING_BUCKET         = local.working_bucket_name
+      WORKING_BUCKET         = var.working_bucket_arn != null ? element(split(":", var.working_bucket_arn), 5) : ""
       INPUT_BUCKET           = local.input_bucket_name
       OUTPUT_BUCKET          = local.output_bucket_name
       APPSYNC_API_URL        = aws_appsync_graphql_api.api.uris["GRAPHQL"]
@@ -669,22 +669,22 @@ resource "aws_lambda_function" "process_changes_resolver" {
 
 # Process Changes Resolver Data Source
 resource "aws_appsync_datasource" "process_changes_resolver" {
-  count            = local.edit_sections_enabled ? 1 : 0
+  for_each         = var.enable_edit_sections ? { "enabled" = true } : {}
   api_id           = aws_appsync_graphql_api.api.id
   name             = "ProcessChangesResolverDataSource"
   type             = "AWS_LAMBDA"
   service_role_arn = aws_iam_role.appsync_lambda_role.arn
 
   lambda_config {
-    function_arn = aws_lambda_function.process_changes_resolver[0].arn
+    function_arn = aws_lambda_function.process_changes_resolver["enabled"].arn
   }
 }
 
 # Process Changes Resolver
 resource "aws_appsync_resolver" "process_changes" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Mutation"
   field       = "processChanges"
-  data_source = aws_appsync_datasource.process_changes_resolver[0].name
+  data_source = aws_appsync_datasource.process_changes_resolver["enabled"].name
 }

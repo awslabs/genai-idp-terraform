@@ -1264,8 +1264,8 @@ resource "aws_iam_role_policy_attachment" "upload_resolver_vpc_attachment" {
 
 # IAM Role for Process Changes Resolver Lambda
 resource "aws_iam_role" "process_changes_resolver_role" {
-  count = local.edit_sections_enabled ? 1 : 0
-  name  = "ProcessChangesResolverRole-${random_string.suffix.result}"
+  for_each = var.enable_edit_sections ? { "enabled" = true } : {}
+  name     = "ProcessChangesResolverRole-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -1285,7 +1285,7 @@ resource "aws_iam_role" "process_changes_resolver_role" {
 
 # CloudWatch Logs Policy
 resource "aws_iam_policy" "process_changes_resolver_logs_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverLogsPolicy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to write logs to CloudWatch"
 
@@ -1307,7 +1307,7 @@ resource "aws_iam_policy" "process_changes_resolver_logs_policy" {
 
 # DynamoDB Policy for tracking table
 resource "aws_iam_policy" "process_changes_resolver_dynamodb_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverDynamoDBPolicy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to access DynamoDB tracking table"
 
@@ -1335,7 +1335,7 @@ resource "aws_iam_policy" "process_changes_resolver_dynamodb_policy" {
 
 # SQS Policy for document queue
 resource "aws_iam_policy" "process_changes_resolver_sqs_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverSQSPolicy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to send messages to SQS queue"
 
@@ -1356,7 +1356,7 @@ resource "aws_iam_policy" "process_changes_resolver_sqs_policy" {
 
 # S3 Policy for input, output, and working buckets
 resource "aws_iam_policy" "process_changes_resolver_s3_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverS3Policy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to access S3 buckets"
 
@@ -1376,8 +1376,8 @@ resource "aws_iam_policy" "process_changes_resolver_s3_policy" {
           local.input_bucket_arn != null ? "${local.input_bucket_arn}/*" : null,
           local.output_bucket_arn,
           local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null,
-          local.working_bucket_arn,
-          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null
+          var.working_bucket_arn,
+          var.working_bucket_arn != null ? "${var.working_bucket_arn}/*" : null
         ])
       }
     ]
@@ -1386,7 +1386,7 @@ resource "aws_iam_policy" "process_changes_resolver_s3_policy" {
 
 # KMS Policy
 resource "aws_iam_policy" "process_changes_resolver_kms_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverKMSPolicy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to use KMS key"
 
@@ -1400,7 +1400,7 @@ resource "aws_iam_policy" "process_changes_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = var.encryption_key_arn
       }
     ]
   })
@@ -1408,7 +1408,7 @@ resource "aws_iam_policy" "process_changes_resolver_kms_policy" {
 
 # AppSync Policy for GraphQL mutations
 resource "aws_iam_policy" "process_changes_resolver_appsync_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverAppSyncPolicy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to access AppSync GraphQL API"
 
@@ -1428,7 +1428,7 @@ resource "aws_iam_policy" "process_changes_resolver_appsync_policy" {
 resource "aws_iam_policy" "process_changes_resolver_vpc_policy" {
   #checkov:skip=CKV_AWS_355:EC2 network interface operations require wildcard resource as ENIs are created dynamically by Lambda in VPC
   #checkov:skip=CKV_AWS_290:EC2 network interface operations require wildcard resource as ENIs are created dynamically by Lambda in VPC
-  count       = local.edit_sections_enabled && var.vpc_config != null ? 1 : 0
+  for_each    = var.enable_edit_sections && var.vpc_config != null ? { "enabled" = true } : {}
   name        = "ProcessChangesResolverVPCPolicy-${random_string.suffix.result}"
   description = "Policy for Process Changes Resolver Lambda to access VPC"
 
@@ -1450,50 +1450,50 @@ resource "aws_iam_policy" "process_changes_resolver_vpc_policy" {
 
 # Policy attachments
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_logs_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_logs_policy[0].arn
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_logs_policy["enabled"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_dynamodb_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_dynamodb_policy[0].arn
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_dynamodb_policy["enabled"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_sqs_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_sqs_policy[0].arn
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_sqs_policy["enabled"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_s3_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_s3_policy[0].arn
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_s3_policy["enabled"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_kms_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_kms_policy[0].arn
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_kms_policy["enabled"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_appsync_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_appsync_policy[0].arn
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_appsync_policy["enabled"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "process_changes_resolver_vpc_attachment" {
-  count      = local.edit_sections_enabled && var.vpc_config != null ? 1 : 0
-  role       = aws_iam_role.process_changes_resolver_role[0].name
-  policy_arn = aws_iam_policy.process_changes_resolver_vpc_policy[0].arn
+  for_each   = var.enable_edit_sections && var.vpc_config != null ? { "enabled" = true } : {}
+  role       = aws_iam_role.process_changes_resolver_role["enabled"].name
+  policy_arn = aws_iam_policy.process_changes_resolver_vpc_policy["enabled"].arn
 }
 
 # AppSync permission to invoke Process Changes Resolver Lambda
 resource "aws_iam_policy" "appsync_invoke_process_changes_resolver_policy" {
-  count       = local.edit_sections_enabled ? 1 : 0
+  for_each    = var.enable_edit_sections ? { "enabled" = true } : {}
   name        = "AppSyncInvokeProcessChangesResolverPolicy-${random_string.suffix.result}"
   description = "Policy for AppSync to invoke the Process Changes Resolver Lambda"
 
@@ -1503,14 +1503,14 @@ resource "aws_iam_policy" "appsync_invoke_process_changes_resolver_policy" {
       {
         Action   = "lambda:InvokeFunction"
         Effect   = "Allow"
-        Resource = aws_lambda_function.process_changes_resolver[0].arn
+        Resource = aws_lambda_function.process_changes_resolver["enabled"].arn
       }
     ]
   })
 }
 
 resource "aws_iam_role_policy_attachment" "appsync_invoke_process_changes_resolver_attachment" {
-  count      = local.edit_sections_enabled ? 1 : 0
+  for_each   = var.enable_edit_sections ? { "enabled" = true } : {}
   role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_process_changes_resolver_policy[0].arn
+  policy_arn = aws_iam_policy.appsync_invoke_process_changes_resolver_policy["enabled"].arn
 }

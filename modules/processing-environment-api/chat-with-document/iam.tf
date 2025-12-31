@@ -168,12 +168,11 @@ resource "aws_iam_role_policy_attachment" "chat_with_document_resolver_vpc_attac
 
 # KMS policy for chat resolver
 resource "aws_iam_policy" "chat_with_document_resolver_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
-  name  = "${var.name_prefix}-chat-with-document-kms-policy-${local.suffix}"
+  name = "${var.name_prefix}-chat-with-document-kms-policy-${local.suffix}"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = var.encryption_key_arn != null ? [
       {
         Action = [
           "kms:Encrypt",
@@ -185,14 +184,13 @@ resource "aws_iam_policy" "chat_with_document_resolver_kms_policy" {
         Effect   = "Allow"
         Resource = var.encryption_key_arn
       }
-    ]
+    ] : []
   })
 
   tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "chat_with_document_resolver_kms_attachment" {
-  count      = var.encryption_key_arn != null ? 1 : 0
   role       = aws_iam_role.chat_with_document_resolver_role.name
-  policy_arn = aws_iam_policy.chat_with_document_resolver_kms_policy[0].arn
+  policy_arn = aws_iam_policy.chat_with_document_resolver_kms_policy.arn
 }
