@@ -25,7 +25,7 @@ output "user_identity" {
 
 output "api" {
   description = "API resources (if enabled)"
-  value = var.enable_api ? {
+  value = local.api_enabled ? {
     api_id      = module.processing_environment_api[0].api_id
     graphql_url = module.processing_environment_api[0].graphql_url
   } : null
@@ -80,13 +80,12 @@ output "processor" {
 
 output "agent_analytics" {
   description = "Agent analytics resources (if enabled)"
-  value = var.agent_analytics.enabled && var.reporting.enabled ? {
-    agent_table_name                   = module.agent_analytics[0].agent_table_name
-    agent_table_arn                    = module.agent_analytics[0].agent_table_arn
-    agent_request_handler_function_arn = module.agent_analytics[0].agent_request_handler_function_arn
-    agent_processor_function_arn       = module.agent_analytics[0].agent_processor_function_arn
-    list_available_agents_function_arn = module.agent_analytics[0].list_available_agents_function_arn
-    bedrock_model_id                   = module.agent_analytics[0].bedrock_model_id
+  value = local.agent_analytics_config.enabled && var.reporting.enabled && local.api_enabled ? {
+    agent_table_name                   = module.processing_environment_api[0].agent_table_name
+    agent_table_arn                    = module.processing_environment_api[0].agent_table_arn
+    agent_request_handler_function_arn = module.processing_environment_api[0].agent_request_handler_function_arn
+    agent_processor_function_arn       = module.processing_environment_api[0].agent_processor_function_arn
+    list_available_agents_function_arn = module.processing_environment_api[0].list_available_agents_function_arn
   } : null
 }
 
