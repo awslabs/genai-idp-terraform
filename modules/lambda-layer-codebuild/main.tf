@@ -387,7 +387,7 @@ locals {
 # Wait for S3 consistency after CodeBuild completion
 resource "time_sleep" "wait_for_s3_consistency" {
   depends_on = [aws_lambda_invocation.trigger_codebuild]
-  
+
   create_duration = "120s"
 }
 

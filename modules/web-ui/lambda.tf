@@ -167,7 +167,7 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       discovery_bucket_name      = var.discovery_bucket_name
       reporting_bucket_name      = var.reporting_bucket_name
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
-      idp_pattern               = var.idp_pattern
+      idp_pattern                = var.idp_pattern
     }))
     buildspec_hash   = md5(aws_codebuild_project.ui_build.source[0].buildspec)
     source_code_hash = data.archive_file.ui_source.output_base64sha256
@@ -185,7 +185,7 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       discovery_bucket_name      = var.discovery_bucket_name
       reporting_bucket_name      = var.reporting_bucket_name
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
-      idp_pattern               = var.idp_pattern
+      idp_pattern                = var.idp_pattern
     }))
     # Trigger when CodeBuild project changes
     codebuild_project = aws_codebuild_project.ui_build.name
