@@ -278,7 +278,7 @@ resource "aws_iam_role_policy" "ocr_function_appsync_policy" {
 
 # Classification Function Role
 resource "aws_iam_role" "classification_function_role" {
-  name = "${local.name_prefix}-sagemaker-udop-classification-role"
+  name = "${local.name_prefix}-classification-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -549,7 +549,7 @@ resource "aws_iam_role_policy" "extraction_function_appsync_policy" {
 
 # Process Results Function Role
 resource "aws_iam_role" "process_results_function_role" {
-  name = "${local.name_prefix}-sagemaker-udop-process-results-role"
+  name = "${local.name_prefix}-results-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -673,7 +673,7 @@ resource "aws_iam_role_policy" "process_results_function_appsync_policy" {
 
 # Summarization Function Role
 resource "aws_iam_role" "summarization_function_role" {
-  name = "${local.name_prefix}-sagemaker-udop-summarization-role"
+  name = "${local.name_prefix}-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
