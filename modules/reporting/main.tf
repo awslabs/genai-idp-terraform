@@ -3,11 +3,16 @@
 
 # Data sources for cross-partition compatibility
 data "aws_partition" "current" {}
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 locals {
   # Extract bucket name from ARN
   # ARN format: arn:${data.aws_partition.current.partition}:s3:::bucket-name
   reporting_bucket_name = element(split(":", var.reporting_bucket_arn), length(split(":", var.reporting_bucket_arn)) - 1)
+
+  # Database name for Glue resources
+  database_name = var.reporting_database_name
 
   # Module build directory
   module_build_dir = "${path.module}/.terraform-build"
@@ -435,7 +440,7 @@ resource "aws_glue_catalog_table" "metering_table" {
 
     columns {
       name = "number_of_pages"
-      type = "integer"
+      type = "int"
     }
 
     columns {
@@ -492,7 +497,7 @@ locals {
     "manual" = null
     "15min"  = "cron(0/15 * * * ? *)"
     "hourly" = "cron(0 * * * ? *)"
-    "daily"  = "cron(0 1 * * ? *)"
+    "daily"  = "cron(0 0 * * ? *)"  # Changed from 1 AM to midnight to match CloudFormation
   }
   crawler_schedule_expression = local.crawler_schedule_map[var.crawler_schedule]
 }
@@ -589,6 +594,16 @@ resource "aws_iam_policy" "document_sections_crawler_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Resource = var.encryption_key_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:AssociateKmsKey",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/crawlers-role/*"
       }
     ]
   })
@@ -637,7 +652,7 @@ resource "aws_glue_crawler" "document_sections_crawler" {
       Partitions = { AddOrUpdateBehavior = "InheritFromTable" }
       Tables     = { AddOrUpdateBehavior = "MergeNewColumns" }
     }
-    Grouping             = { TableLevelConfiguration = 3 }
+    Grouping             = { TableLevelConfiguration = var.crawler_table_level }
     CreatePartitionIndex = true
   })
 
@@ -668,10 +683,12 @@ resource "aws_lambda_function" "save_reporting_data" {
 
   environment {
     variables = {
-      LOG_LEVEL        = var.log_level
-      METRIC_NAMESPACE = var.metric_namespace
-      REPORTING_BUCKET = local.reporting_bucket_name
-      OUTPUT_BUCKET    = var.output_bucket_name
+      LOG_LEVEL                = var.log_level
+      METRIC_NAMESPACE         = var.metric_namespace
+      STACK_NAME               = var.name_prefix
+      REPORTING_BUCKET         = local.reporting_bucket_name
+      OUTPUT_BUCKET            = var.output_bucket_name
+      CONFIGURATION_TABLE_NAME = var.configuration_table_name
     }
   }
 
@@ -769,6 +786,30 @@ resource "aws_iam_policy" "save_reporting_data_policy" {
             "cloudwatch:namespace" = var.metric_namespace
           }
         }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = var.configuration_table_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:CreateTable",
+          "glue:GetTable",
+          "glue:UpdateTable",
+          "glue:GetDatabase"
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:catalog",
+          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:database/${local.database_name}",
+          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${local.database_name}/document_sections_*",
+          "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${local.database_name}/metering"
+        ]
       }
     ]
   })
