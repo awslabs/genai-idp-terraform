@@ -23,7 +23,6 @@ evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # Feature Toggles
 summarization_enabled = true
-enable_assessment     = false
 enable_evaluation     = false
 enable_reporting      = false
 

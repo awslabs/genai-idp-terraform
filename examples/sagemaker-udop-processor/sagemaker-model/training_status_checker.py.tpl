@@ -6,15 +6,27 @@ This script polls the Lambda function to check training job completion.
 
 import json
 import sys
-import boto3
 import time
 
+try:
+    import boto3
+except ImportError:
+    # Provide helpful error message with installation instructions
+    result = {
+        'status': 'error',
+        'error': 'boto3 not installed',
+        'attempts': '0',
+        'message': 'boto3 is required but not installed. Please install it with: pip install boto3'
+    }
+    print(json.dumps(result))
+    sys.exit(1)
+
 def main():
-    # Read input from stdin
-    input_data = json.loads(sys.stdin.read())
+    # Read input from environment variables (Terraform external data source)
+    import os
     
-    job_name = input_data.get('job_name')
-    max_attempts = int(input_data.get('max_attempts', 60))
+    job_name = os.environ.get('job_name')
+    max_attempts = int(os.environ.get('max_attempts', 60))
     
     # Configuration from template
     function_name = "${function_name}"
@@ -30,8 +42,23 @@ def main():
         print(json.dumps(result))
         return
     
-    # Initialize Lambda client
-    lambda_client = boto3.client('lambda', region_name=region)
+    try:
+        # Initialize Lambda client with explicit error handling
+        lambda_client = boto3.client('lambda', region_name=region)
+        
+        # Test AWS credentials first
+        sts_client = boto3.client('sts', region_name=region)
+        identity = sts_client.get_caller_identity()
+        
+    except Exception as e:
+        result = {
+            'status': 'error',
+            'error': f'AWS credentials or client initialization failed: {str(e)}',
+            'attempts': '0',
+            'message': f'Failed to initialize AWS clients. Check credentials and permissions: {str(e)}'
+        }
+        print(json.dumps(result))
+        return
     
     # Poll for completion
     attempt = 0

@@ -107,7 +107,6 @@ region = "us-east-1"
 prefix = "my-idp"
 
 # Enable optional features (all default to false)
-enable_assessment = true
 enable_evaluation = true
 enable_reporting  = true
 

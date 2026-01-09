@@ -1,66 +1,62 @@
-# AWS Configuration
-region = "us-east-1"
-prefix = "genai-bda-idp"
+# Example configuration for BDA Processor with new API variable structure
 
-# Administrator Configuration
+# Basic configuration
+region = "us-east-1"
+prefix = "my-idp"
+
+# Admin user (optional)
 admin_email = "admin@example.com"
 
-# Logging Configuration
-log_level          = "INFO"
-log_retention_days = 7
-
-# Data Retention
-data_tracking_retention_days = 365
-
-# Configuration File Path (optional - uses default lending package config)
-# config_file_path = "../../sources/config_library/pattern-1/lending-package-sample/config.yaml"
-
-# Feature Toggles
-summarization_enabled = true
-enable_evaluation     = false
-enable_reporting      = false
-
-# Discovery Configuration
-discovery = {
-  enabled = false
+# API Configuration (New Consolidated Structure)
+api = {
+  enabled = true
+  
+  # Enable specific API features as needed
+  agent_analytics = {
+    enabled  = false  # Requires reporting to be enabled
+    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  }
+  
+  discovery = {
+    enabled = true  # Enable document discovery workflow
+  }
+  
+  chat_with_document = {
+    enabled                  = true   # Enable chat with document feature
+    guardrail_id_and_version = null   # Optional Bedrock Guardrail
+  }
+  
+  process_changes = {
+    enabled = false  # Enable document editing and reprocessing
+  }
+  
+  knowledge_base = {
+    enabled            = true  # Required for chat_with_document
+    knowledge_base_arn = null  # Will be set automatically by the example
+    model_id           = "us.amazon.nova-pro-v1:0"
+    embedding_model_id = "amazon.titan-embed-text-v2:0"
+  }
 }
-
-# Chat with Document Configuration
-chat_with_document = {
-  enabled = false
-  # Optional: Add Bedrock Guardrail for content filtering
-  # guardrail_id_and_version = "your-guardrail-id:1"
-}
-
-# Example: To enable chat with document feature, use:
-# chat_with_document = {
-#   enabled = true
-#   # Optional: Add Bedrock Guardrail for content filtering
-#   # guardrail_id_and_version = "your-guardrail-id:1"
-# }
-
-# Knowledge Base Configuration
-enable_knowledge_base                = true
-knowledge_base_model_id              = "us.amazon.nova-pro-v1:0"
-knowledge_base_embeddings_model_id   = "amazon.titan-embed-text-v2:0"
-
-# Model Configuration
-summarization_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-evaluation_model_id    = "anthropic.claude-3-sonnet-20240229-v1:0"
-
-# API Configuration
-enable_api = true
 
 # Web UI Configuration
 web_ui = {
-  enabled = true
+  enabled               = true
+  create_infrastructure = true
+  logging_enabled       = false
+  enable_signup         = ""  # Set to "true" to allow user self-registration
 }
 
-# Force rebuild of Lambda layers (set to true if you need to rebuild)
-force_layer_rebuild = false
+# BDA Processor Configuration
+summarization_enabled = true
+summarization_model_id = "us.amazon.nova-pro-v1:0"
+
+# Optional Features
+enable_evaluation = false
+enable_reporting  = false
 
 # Tags
 tags = {
-  Environment = "dev"
-  Project     = "genai-idp-accelerator"
+  Environment = "development"
+  Project     = "genai-idp"
+  Owner       = "my-team"
 }

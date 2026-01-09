@@ -110,11 +110,7 @@ variable "summarization_model_id" {
   default     = null
 }
 
-variable "enable_assessment" {
-  description = "Enable assessment functionality"
-  type        = bool
-  default     = true
-}
+
 
 # Configuration File Path
 variable "config_file_path" {
@@ -129,30 +125,70 @@ variable "tags" {
   default     = {}
 }
 
-# Discovery Configuration
-variable "discovery" {
-  description = "Configuration for document discovery functionality"
+# API Configuration (New Consolidated Structure)
+variable "api" {
+  description = "API configuration for processing environment features"
   type = object({
     enabled = optional(bool, false)
+    
+    agent_analytics = optional(object({
+      enabled  = optional(bool, false)
+      model_id = optional(string, "us.anthropic.claude-3-haiku-20240307-v1:0")
+    }), { enabled = false })
+    
+    discovery = optional(object({
+      enabled = optional(bool, false)
+    }), { enabled = false })
+    
+    chat_with_document = optional(object({
+      enabled                  = optional(bool, false)
+      guardrail_id_and_version = optional(string, null)
+    }), { enabled = false })
+    
+    process_changes = optional(object({
+      enabled = optional(bool, false)
+    }), { enabled = false })
+    
+    knowledge_base = optional(object({
+      enabled            = optional(bool, false)
+      knowledge_base_arn = optional(string, null)
+      model_id           = optional(string, "us.amazon.nova-pro-v1:0")
+      embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
+    }), { enabled = false })
   })
   default = { enabled = false }
 }
 
-# Chat with Document Configuration
+# DEPRECATED: Individual API feature variables (for backward compatibility)
+# These will be removed in a future version. Use the consolidated 'api' variable instead.
+
+variable "discovery" {
+  description = "DEPRECATED: Use api.discovery instead. Configuration for document discovery functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = null
+}
+
 variable "chat_with_document" {
-  description = "Configuration for chat with document functionality"
+  description = "DEPRECATED: Use api.chat_with_document instead. Configuration for chat with document functionality"
   type = object({
     enabled                  = optional(bool, false)
     guardrail_id_and_version = optional(string, null)
   })
-  default = { enabled = false }
+  default = null
 }
 
-# Process Changes Configuration
 variable "process_changes" {
-  description = "Configuration for document editing and reprocessing functionality"
+  description = "DEPRECATED: Use api.process_changes instead. Configuration for document editing and reprocessing functionality"
   type = object({
     enabled = optional(bool, false)
   })
-  default = { enabled = false }
+  default = null
+}
+
+variable "admin_email" {
+  description = "Administrator email address for notifications and access"
+  type        = string
+  default     = null
 }

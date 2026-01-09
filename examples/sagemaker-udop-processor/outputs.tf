@@ -35,7 +35,7 @@ output "encryption_key" {
 
 output "api" {
   description = "GraphQL API details"
-  value       = var.enable_api ? module.genai_idp_accelerator.api : null
+  value       = (var.enable_api != null ? var.enable_api : var.api.enabled) ? module.genai_idp_accelerator.api : null
 }
 
 output "web_ui" {

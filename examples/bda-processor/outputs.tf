@@ -35,7 +35,7 @@ output "encryption_key" {
 
 output "api" {
   description = "GraphQL API details"
-  value       = var.enable_api ? module.genai_idp_accelerator.api : null
+  value       = var.api.enabled ? module.genai_idp_accelerator.api : null
 }
 
 output "web_ui" {
@@ -96,7 +96,7 @@ output "evaluation_function_arn" {
 # Knowledge Base Outputs
 output "knowledge_base" {
   description = "Knowledge base details (if enabled)"
-  value = var.enable_knowledge_base ? {
+  value = local.knowledge_base_enabled ? {
     id                        = aws_bedrockagent_knowledge_base.knowledge_base[0].id
     arn                       = aws_bedrockagent_knowledge_base.knowledge_base[0].arn
     data_source_id            = aws_bedrockagent_data_source.knowledge_base_data_source[0].data_source_id
@@ -108,10 +108,10 @@ output "knowledge_base" {
 
 output "knowledge_base_id" {
   description = "ID of the Bedrock Knowledge Base (if enabled)"
-  value       = var.enable_knowledge_base ? aws_bedrockagent_knowledge_base.knowledge_base[0].id : null
+  value       = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].id : null
 }
 
 output "knowledge_base_arn" {
   description = "ARN of the Bedrock Knowledge Base (if enabled)"
-  value       = var.enable_knowledge_base ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
+  value       = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
 }

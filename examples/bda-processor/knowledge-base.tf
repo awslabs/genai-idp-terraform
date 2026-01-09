@@ -25,7 +25,7 @@ data "aws_partition" "current" {}
 #
 
 resource "aws_opensearchserverless_access_policy" "knowledge_base_data_policy" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-data-policy"
   type  = "data"
   policy = jsonencode([
@@ -66,7 +66,7 @@ resource "aws_opensearchserverless_access_policy" "knowledge_base_data_policy" {
 }
 
 resource "aws_opensearchserverless_security_policy" "knowledge_base_encryption" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-encryption"
   type  = "encryption"
   policy = jsonencode({
@@ -83,7 +83,7 @@ resource "aws_opensearchserverless_security_policy" "knowledge_base_encryption" 
 }
 
 resource "aws_opensearchserverless_security_policy" "knowledge_base_network" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-network"
   type  = "network"
   policy = jsonencode([
@@ -108,7 +108,7 @@ resource "aws_opensearchserverless_security_policy" "knowledge_base_network" {
 }
 
 resource "aws_opensearchserverless_collection" "knowledge_base_collection" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-collection"
   type  = "VECTORSEARCH"
 
@@ -125,14 +125,14 @@ resource "aws_opensearchserverless_collection" "knowledge_base_collection" {
 
 # Wait before creating the index to ensure collection is ready
 resource "time_sleep" "wait_before_index_creation" {
-  count           = var.enable_knowledge_base ? 1 : 0
+  count           = local.knowledge_base_enabled ? 1 : 0
   depends_on      = [aws_opensearchserverless_collection.knowledge_base_collection]
   create_duration = "60s"
 }
 
 # OpenSearch index for vector search
 resource "opensearch_index" "knowledge_base_index" {
-  count                          = var.enable_knowledge_base ? 1 : 0
+  count                          = local.knowledge_base_enabled ? 1 : 0
   name                           = "${var.prefix}-kb-index"
   number_of_shards               = "2"
   number_of_replicas             = "0"
@@ -173,7 +173,7 @@ resource "opensearch_index" "knowledge_base_index" {
 
 # IAM role for Bedrock Knowledge Base
 resource "aws_iam_role" "knowledge_base_role" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-role"
 
   assume_role_policy = jsonencode({
@@ -192,7 +192,7 @@ resource "aws_iam_role" "knowledge_base_role" {
 
 # IAM policy for Bedrock to access OpenSearch Serverless
 resource "aws_iam_role_policy" "knowledge_base_opensearch_policy" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-opensearch-policy"
   role  = aws_iam_role.knowledge_base_role[0].id
 
@@ -214,7 +214,7 @@ resource "aws_iam_role_policy" "knowledge_base_opensearch_policy" {
 
 # IAM policy for Bedrock to access S3
 resource "aws_iam_role_policy" "knowledge_base_s3_policy" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-s3-policy"
   role  = aws_iam_role.knowledge_base_role[0].id
 
@@ -239,7 +239,7 @@ resource "aws_iam_role_policy" "knowledge_base_s3_policy" {
 # IAM policy for Bedrock to access foundation models
 resource "aws_iam_role_policy" "knowledge_base_bedrock_policy" {
   #checkov:skip=CKV_AWS_355:Bedrock ListFoundationModels and GetFoundationModel require wildcard resource to list all available models
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-bedrock-policy"
   role  = aws_iam_role.knowledge_base_role[0].id
 
@@ -252,7 +252,7 @@ resource "aws_iam_role_policy" "knowledge_base_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base_embeddings_model_id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${local.knowledge_base_embedding_model_id}"
         ]
       },
       {
@@ -269,7 +269,7 @@ resource "aws_iam_role_policy" "knowledge_base_bedrock_policy" {
 
 # Wait for IAM consistency
 resource "time_sleep" "iam_consistency_delay" {
-  count           = var.enable_knowledge_base ? 1 : 0
+  count           = local.knowledge_base_enabled ? 1 : 0
   create_duration = "120s"
   depends_on = [
     aws_iam_role_policy.knowledge_base_opensearch_policy,
@@ -284,13 +284,13 @@ resource "time_sleep" "iam_consistency_delay" {
 
 # Bedrock Knowledge Base
 resource "aws_bedrockagent_knowledge_base" "knowledge_base" {
-  count    = var.enable_knowledge_base ? 1 : 0
+  count    = local.knowledge_base_enabled ? 1 : 0
   name     = "${var.prefix}-knowledge-base"
   role_arn = aws_iam_role.knowledge_base_role[0].arn
 
   knowledge_base_configuration {
     vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base_embeddings_model_id}"
+      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${local.knowledge_base_embedding_model_id}"
     }
     type = "VECTOR"
   }
@@ -316,7 +316,7 @@ resource "aws_bedrockagent_knowledge_base" "knowledge_base" {
 
 # Bedrock Data Source
 resource "aws_bedrockagent_data_source" "knowledge_base_data_source" {
-  count             = var.enable_knowledge_base ? 1 : 0
+  count             = local.knowledge_base_enabled ? 1 : 0
   knowledge_base_id = aws_bedrockagent_knowledge_base.knowledge_base[0].id
   name              = "${var.prefix}-kb-data-source"
 
@@ -334,7 +334,7 @@ resource "aws_bedrockagent_data_source" "knowledge_base_data_source" {
 
 # Archive for knowledge base ingestion Lambda function
 data "archive_file" "knowledge_base_ingestion_zip" {
-  count       = var.enable_knowledge_base ? 1 : 0
+  count       = local.knowledge_base_enabled ? 1 : 0
   type        = "zip"
   output_path = "./knowledge_base_ingestion.zip"
   source {
@@ -376,7 +376,7 @@ EOF
 
 # IAM role for knowledge base ingestion Lambda
 resource "aws_iam_role" "knowledge_base_ingestion_role" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-ingestion-role"
 
   assume_role_policy = jsonencode({
@@ -395,7 +395,7 @@ resource "aws_iam_role" "knowledge_base_ingestion_role" {
 
 # IAM policy for knowledge base ingestion Lambda
 resource "aws_iam_role_policy" "knowledge_base_ingestion_policy" {
-  count = var.enable_knowledge_base ? 1 : 0
+  count = local.knowledge_base_enabled ? 1 : 0
   name  = "${var.prefix}-kb-ingestion-policy"
   role  = aws_iam_role.knowledge_base_ingestion_role[0].id
 
@@ -429,7 +429,7 @@ resource "aws_iam_role_policy" "knowledge_base_ingestion_policy" {
 
 # Lambda function for knowledge base ingestion
 resource "aws_lambda_function" "knowledge_base_ingestion" {
-  count            = var.enable_knowledge_base ? 1 : 0
+  count            = local.knowledge_base_enabled ? 1 : 0
   filename         = data.archive_file.knowledge_base_ingestion_zip[0].output_path
   function_name    = "${var.prefix}-kb-ingestion"
   role             = aws_iam_role.knowledge_base_ingestion_role[0].arn
@@ -452,7 +452,7 @@ resource "aws_lambda_function" "knowledge_base_ingestion" {
 
 # Lambda permission for S3 to invoke the function
 resource "aws_lambda_permission" "allow_s3_invoke" {
-  count         = var.enable_knowledge_base ? 1 : 0
+  count         = local.knowledge_base_enabled ? 1 : 0
   statement_id  = "AllowExecutionFromS3Bucket"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.knowledge_base_ingestion[0].function_name
@@ -462,7 +462,7 @@ resource "aws_lambda_permission" "allow_s3_invoke" {
 
 # S3 bucket notification to trigger ingestion
 resource "aws_s3_bucket_notification" "output_bucket_notification" {
-  count  = var.enable_knowledge_base ? 1 : 0
+  count  = local.knowledge_base_enabled ? 1 : 0
   bucket = aws_s3_bucket.output_bucket.id
 
   lambda_function {

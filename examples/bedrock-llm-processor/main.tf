@@ -370,7 +370,6 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    enable_assessment = var.enable_assessment
     enable_hitl       = var.enable_hitl
     config            = local.config
   }
@@ -403,17 +402,23 @@ module "genai_idp_accelerator" {
     database_name = aws_glue_catalog_database.reporting_database[0].name
   } : { enabled = false }
 
-  # Agent Analytics configuration
-  agent_analytics = var.agent_analytics
+  # API configuration (consolidated)
+  api = {
+    enabled            = var.api.enabled
+    agent_analytics    = var.api.agent_analytics
+    discovery          = var.api.discovery
+    chat_with_document = var.api.chat_with_document
+    process_changes    = var.api.process_changes
+    knowledge_base     = var.api.knowledge_base
+  }
 
-  # Chat with Document configuration
+  # DEPRECATED: Individual API variables (backward compatibility)
+  # These take precedence over api variable if both are provided
+  enable_api         = var.enable_api
+  agent_analytics    = var.agent_analytics
+  discovery          = var.discovery
   chat_with_document = var.chat_with_document
-
-  # Process Changes configuration
-  process_changes = var.process_changes
-
-  # Feature flags
-  enable_api = var.enable_api
+  process_changes    = var.process_changes
 
   # Web UI configuration
   web_ui = {

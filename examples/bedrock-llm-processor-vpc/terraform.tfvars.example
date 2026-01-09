@@ -2,6 +2,9 @@
 region = "us-east-1"
 prefix = "genai-idp-vpc"
 
+# Administrator email for notifications
+admin_email = "your-email@example.com"
+
 # VPC Configuration
 vpc_cidr = "10.0.0.0/16"
 
@@ -30,21 +33,60 @@ evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # Feature Toggles
 summarization_enabled = true
-enable_assessment     = false
 enable_evaluation     = false
 enable_reporting      = false
 
-# Discovery Configuration
-discovery = {
+# API Configuration (New Consolidated Structure)
+api = {
   enabled = false
+
+  # Agent Analytics (requires reporting to be enabled)
+  agent_analytics = {
+    enabled  = false
+    model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+  }
+
+  # Discovery Configuration
+  discovery = {
+    enabled = false
+  }
+
+  # Chat with Document Configuration
+  chat_with_document = {
+    enabled = false
+    # Optional: Add Bedrock Guardrail for content filtering
+    # guardrail_id_and_version = "your-guardrail-id:1"
+  }
+
+  # Process Changes Configuration
+  process_changes = {
+    enabled = false
+  }
+
+  # Knowledge Base Configuration
+  knowledge_base = {
+    enabled            = false
+    knowledge_base_arn = null
+    model_id           = "us.amazon.nova-pro-v1:0"
+    embedding_model_id = "amazon.titan-embed-text-v2:0"
+  }
 }
 
-# Chat with Document Configuration
-chat_with_document = {
-  enabled = false
-  # Optional: Add Bedrock Guardrail for content filtering
-  # guardrail_id_and_version = "your-guardrail-id:1"
-}
+# DEPRECATED: Individual API feature variables (for backward compatibility)
+# Use the consolidated 'api' variable above instead. These will be removed in a future version.
+# discovery = {
+#   enabled = false
+# }
+# 
+# chat_with_document = {
+#   enabled = false
+#   # Optional: Add Bedrock Guardrail for content filtering
+#   # guardrail_id_and_version = "your-guardrail-id:1"
+# }
+#
+# process_changes = {
+#   enabled = false
+# }
 
 # Tags
 tags = {

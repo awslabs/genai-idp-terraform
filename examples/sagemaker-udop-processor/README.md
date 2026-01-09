@@ -220,7 +220,6 @@ classifier_min_instance_count = 2              # Higher minimum capacity
 ```hcl
 # Enable additional features
 enable_evaluation = true
-enable_assessment = true
 enable_reporting  = true
 summarization_enabled = true
 

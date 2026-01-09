@@ -17,9 +17,26 @@ provider "awscc" {
   region = var.region
 }
 
+# Local values for backward compatibility
+locals {
+  # Determine knowledge base configuration with backward compatibility
+  # New api.knowledge_base takes precedence over deprecated enable_knowledge_base
+  knowledge_base_enabled = var.api.knowledge_base.enabled != null ? var.api.knowledge_base.enabled : (
+    var.enable_knowledge_base != null ? var.enable_knowledge_base : var.api.knowledge_base.enabled
+  )
+
+  knowledge_base_model_id = var.api.knowledge_base.model_id != null ? var.api.knowledge_base.model_id : (
+    var.knowledge_base_model_id != null ? var.knowledge_base_model_id : var.api.knowledge_base.model_id
+  )
+
+  knowledge_base_embedding_model_id = var.api.knowledge_base.embedding_model_id != null ? var.api.knowledge_base.embedding_model_id : (
+    var.knowledge_base_embeddings_model_id != null ? var.knowledge_base_embeddings_model_id : var.api.knowledge_base.embedding_model_id
+  )
+}
+
 # OpenSearch provider configuration for native AWS provider implementation
 provider "opensearch" {
-  url         = var.enable_knowledge_base ? aws_opensearchserverless_collection.knowledge_base_collection[0].collection_endpoint : "https://placeholder.us-east-1.es.amazonaws.com"
+  url         = local.knowledge_base_enabled ? aws_opensearchserverless_collection.knowledge_base_collection[0].collection_endpoint : "https://placeholder.us-east-1.es.amazonaws.com"
   aws_region  = var.region
   healthcheck = false
 }
@@ -418,20 +435,36 @@ module "genai_idp_accelerator" {
     database_name = aws_glue_catalog_database.reporting_database[0].name
   } : { enabled = false }
 
-  # Agent Analytics configuration
-  agent_analytics = var.agent_analytics
+  # API configuration (consolidated)
+  api = {
+    enabled            = var.api.enabled
+    agent_analytics    = var.api.agent_analytics
+    discovery          = var.api.discovery
+    chat_with_document = var.api.chat_with_document
+    process_changes    = var.api.process_changes
+    knowledge_base = var.api.knowledge_base.enabled ? {
+      enabled            = true
+      knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
+      model_id           = var.api.knowledge_base.model_id
+      embedding_model_id = var.api.knowledge_base.embedding_model_id
+      } : {
+      enabled = false
+    }
+  }
 
-  # Discovery configuration
-  discovery = var.discovery
-
-  # Chat with Document configuration
+  # DEPRECATED: Individual API variables (backward compatibility)
+  # These take precedence over api variable if both are provided
+  enable_api         = var.enable_api
+  agent_analytics    = var.agent_analytics
+  discovery          = var.discovery
   chat_with_document = var.chat_with_document
-
-  # Process Changes configuration
-  process_changes = var.process_changes
-
-  # Feature flags
-  enable_api = var.enable_api
+  process_changes    = var.process_changes
+  knowledge_base = var.enable_knowledge_base != null ? {
+    enabled            = var.enable_knowledge_base
+    knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
+    model_id           = var.knowledge_base_model_id
+    embedding_model_id = var.knowledge_base_embeddings_model_id
+  } : null
 
   # Web UI configuration
   web_ui = {
@@ -445,16 +478,7 @@ module "genai_idp_accelerator" {
     display_name               = "BDA Processor (${element(split("/", var.config_file_path), length(split("/", var.config_file_path)) - 2)})"
   }
 
-  # Knowledge Base configuration
-  knowledge_base = var.enable_knowledge_base ? {
-    enabled            = true
-    knowledge_base_arn = var.enable_knowledge_base ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
-    model_id           = var.knowledge_base_model_id
-    } : {
-    enabled            = false
-    knowledge_base_arn = null
-    model_id           = null
-  }
+
 
   # General configuration
   prefix                       = var.prefix

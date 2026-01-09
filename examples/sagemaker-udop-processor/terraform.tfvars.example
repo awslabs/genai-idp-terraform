@@ -28,7 +28,6 @@ sagemaker_endpoint_name = "udop-endpoint"
 # Feature Toggles
 summarization_enabled = true
 enable_evaluation     = false
-enable_assessment     = false
 enable_reporting      = false
 
 # Discovery Configuration

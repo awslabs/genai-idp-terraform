@@ -90,3 +90,19 @@ output "configuration_table_arn" {
   description = "ARN of the DynamoDB table that stores configuration settings"
   value       = module.genai_idp_accelerator.processing_environment.configuration_table_arn
 }
+
+# API Outputs (when API is enabled)
+output "api" {
+  description = "API configuration and endpoints (when enabled)"
+  value       = local.api_config.enabled ? module.genai_idp_accelerator.api : null
+}
+
+output "api_graphql_url" {
+  description = "GraphQL API URL (when API is enabled)"
+  value       = local.api_config.enabled ? module.genai_idp_accelerator.api.graphql_url : null
+}
+
+output "api_id" {
+  description = "API ID (when API is enabled)"
+  value       = local.api_config.enabled ? module.genai_idp_accelerator.api.api_id : null
+}

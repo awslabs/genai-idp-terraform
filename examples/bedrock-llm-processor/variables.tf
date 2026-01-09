@@ -46,11 +46,104 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
-# Feature flags
+# API Configuration (Consolidated)
+variable "api" {
+  description = "Configuration for GraphQL API and all API-related features"
+  type = object({
+    # Core API configuration
+    enabled = optional(bool, true)
+
+    # Agent Analytics (GraphQL resolvers for agent functionality)
+    agent_analytics = optional(object({
+      enabled  = optional(bool, false)
+      model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    }), { enabled = false })
+
+    # Discovery (Document discovery and classification workflow)
+    discovery = optional(object({
+      enabled = optional(bool, false)
+    }), { enabled = false })
+
+    # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
+    chat_with_document = optional(object({
+      enabled                  = optional(bool, false)
+      guardrail_id_and_version = optional(string, null)
+    }), { enabled = false })
+
+    # Process Changes (Document editing and reprocessing)
+    process_changes = optional(object({
+      enabled = optional(bool, false)
+    }), { enabled = false })
+
+    # Knowledge Base (external dependency for chat feature)
+    knowledge_base = optional(object({
+      enabled            = optional(bool, false)
+      knowledge_base_arn = optional(string)
+      model_id           = optional(string, "us.amazon.nova-pro-v1:0")
+      embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
+    }), { enabled = false })
+  })
+
+  default = {
+    enabled            = true
+    agent_analytics    = { enabled = false }
+    discovery          = { enabled = false }
+    chat_with_document = { enabled = false }
+    process_changes    = { enabled = false }
+    knowledge_base     = { enabled = false }
+  }
+
+  validation {
+    condition     = !var.api.chat_with_document.enabled || var.api.knowledge_base.enabled
+    error_message = "When api.chat_with_document.enabled is true, api.knowledge_base.enabled must also be true."
+  }
+
+  validation {
+    condition     = !var.api.agent_analytics.enabled || var.api.agent_analytics.model_id != null
+    error_message = "When api.agent_analytics.enabled is true, model_id must be provided."
+  }
+}
+
+# DEPRECATED: Individual API feature variables (use 'api' variable instead)
+# These are kept for backward compatibility and will be removed in a future version
 variable "enable_api" {
-  description = "Enable GraphQL API for programmatic access and notifications"
+  description = "DEPRECATED: Use api.enabled instead. Enable GraphQL API for programmatic access and notifications"
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "agent_analytics" {
+  description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
+  type = object({
+    enabled  = optional(bool, false)
+    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+  })
+  default = null
+}
+
+variable "discovery" {
+  description = "DEPRECATED: Use api.discovery instead. Configuration for document discovery functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = null
+}
+
+variable "chat_with_document" {
+  description = "DEPRECATED: Use api.chat_with_document instead. Configuration for chat with document functionality"
+  type = object({
+    enabled                  = optional(bool, false)
+    guardrail_id_and_version = optional(string, null)
+  })
+  default = null
+}
+
+variable "process_changes" {
+  description = "DEPRECATED: Use api.process_changes instead. Configuration for document editing and reprocessing functionality"
+  type = object({
+    enabled = optional(bool, false)
+  })
+  default = null
 }
 
 variable "web_ui" {
@@ -94,49 +187,6 @@ variable "enable_reporting" {
   default     = false
 }
 
-# Agent Analytics Configuration
-variable "agent_analytics" {
-  description = "Configuration for agent analytics functionality"
-  type = object({
-    enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
-  })
-  default = { enabled = false }
-
-  validation {
-    condition     = !var.agent_analytics.enabled || var.agent_analytics.model_id != null
-    error_message = "When agent_analytics.enabled is true, model_id must be provided."
-  }
-}
-
-# Discovery Configuration
-variable "discovery" {
-  description = "Configuration for document discovery functionality"
-  type = object({
-    enabled = optional(bool, false)
-  })
-  default = { enabled = false }
-}
-
-# Chat with Document Configuration
-variable "chat_with_document" {
-  description = "Configuration for chat with document functionality"
-  type = object({
-    enabled                  = optional(bool, false)
-    guardrail_id_and_version = optional(string, null)
-  })
-  default = { enabled = false }
-}
-
-# Process Changes Configuration
-variable "process_changes" {
-  description = "Configuration for document editing and reprocessing functionality"
-  type = object({
-    enabled = optional(bool, false)
-  })
-  default = { enabled = false }
-}
-
 # Model Configuration
 variable "classification_model_id" {
   description = "Model ID for document classification (Bedrock LLM processor only)"
@@ -162,11 +212,7 @@ variable "summarization_model_id" {
   default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 }
 
-variable "enable_assessment" {
-  description = "Enable assessment functionality"
-  type        = bool
-  default     = false
-}
+
 
 variable "enable_hitl" {
   description = "Enable Human-in-the-Loop (HITL) functionality for document review"

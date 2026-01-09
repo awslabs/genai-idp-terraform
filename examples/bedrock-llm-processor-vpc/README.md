@@ -185,7 +185,6 @@ summarization_model_id  = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 enable_evaluation = true
 enable_reporting  = true
 summarization_enabled = true
-enable_assessment = true
 ```
 
 ## Network Architecture
