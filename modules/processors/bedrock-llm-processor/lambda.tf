@@ -235,12 +235,10 @@ resource "aws_cloudwatch_log_group" "summarization_lambda" {
   tags = local.common_tags
 }
 
-# Assessment Function (conditional)
+# Assessment Function (always deployed, controlled by configuration)
 resource "aws_lambda_function" "assessment" {
-  count = var.enable_assessment ? 1 : 0
-
   function_name = "${local.name_prefix}-assessment"
-  role          = aws_iam_role.assessment_lambda[0].arn
+  role          = aws_iam_role.assessment_lambda.arn
   handler       = "index.handler"
   runtime       = "python3.12"
   timeout       = 900
@@ -273,9 +271,7 @@ resource "aws_lambda_function" "assessment" {
 }
 
 resource "aws_cloudwatch_log_group" "assessment_lambda" {
-  count = var.enable_assessment ? 1 : 0
-
-  name              = "/aws/lambda/${aws_lambda_function.assessment[0].function_name}"
+  name              = "/aws/lambda/${aws_lambda_function.assessment.function_name}"
   retention_in_days = local.log_retention_days
   kms_key_id        = local.encryption_key_arn
 

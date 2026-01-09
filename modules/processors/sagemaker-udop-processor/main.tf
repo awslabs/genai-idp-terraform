@@ -165,8 +165,7 @@ resource "aws_sfn_state_machine" "document_processing" {
     ClassificationFunctionArn = aws_lambda_function.classification_function.arn
     ExtractionFunctionArn     = aws_lambda_function.extraction_function.arn
     ProcessResultsLambdaArn   = aws_lambda_function.process_results_function.arn
-    AssessmentFunctionArn     = var.enable_assessment ? aws_lambda_function.assessment_function[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}::function:nonexistent-function"
-    IsAssessmentEnabled       = var.enable_assessment ? "true" : "false"
+    AssessmentFunctionArn     = aws_lambda_function.assessment_function.arn
     IsSummarizationEnabled    = var.summarization_model_id != null ? "true" : "false"
     SummarizationLambdaArn    = aws_lambda_function.summarization_function.arn
     OutputBucket              = local.output_bucket_name

@@ -171,11 +171,7 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
-variable "enable_assessment" {
-  description = "Whether to enable the assessment function for document quality assessment"
-  type        = bool
-  default     = false
-}
+
 
 variable "assessment_model_id" {
   description = "The Bedrock model ID to use for assessment (when assessment is enabled)"

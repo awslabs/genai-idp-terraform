@@ -70,14 +70,14 @@ resource "aws_iam_role_policy_attachment" "summarization_function_bedrock" {
 }
 
 resource "aws_iam_role_policy_attachment" "assessment_lambda_bedrock" {
-  count      = var.enable_assessment && length(local.bedrock_models) > 0 ? 1 : 0
-  role       = aws_iam_role.assessment_lambda[0].name
+  count      = length(local.bedrock_models) > 0 ? 1 : 0
+  role       = aws_iam_role.assessment_lambda.name
   policy_arn = aws_iam_policy.bedrock_model_permissions[0].arn
 }
 
 # Step Functions Role
 resource "aws_iam_role" "step_functions_role" {
-  name = "${local.name_prefix}-sagemaker-udop-step-functions-role"
+  name = "${local.name_prefix}-sfn-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -96,7 +96,7 @@ resource "aws_iam_role" "step_functions_role" {
 }
 
 resource "aws_iam_role_policy" "step_functions_policy" {
-  name = "${local.name_prefix}-sagemaker-udop-step-functions-policy"
+  name = "${local.name_prefix}-sfn-policy"
   role = aws_iam_role.step_functions_role.id
 
   policy = jsonencode({
@@ -113,7 +113,7 @@ resource "aws_iam_role_policy" "step_functions_policy" {
           aws_lambda_function.extraction_function.arn,
           aws_lambda_function.process_results_function.arn,
           aws_lambda_function.summarization_function.arn,
-          var.enable_assessment ? aws_lambda_function.assessment_function[0].arn : ""
+          aws_lambda_function.assessment_function.arn
         ])
       },
       {
@@ -817,10 +817,8 @@ resource "aws_iam_role_policy" "summarization_function_appsync_policy" {
   })
 }
 
-# Assessment Lambda Role (conditional)
+# Assessment Lambda Role (always deployed, controlled by configuration)
 resource "aws_iam_role" "assessment_lambda" {
-  count = var.enable_assessment ? 1 : 0
-
   name = "${local.name_prefix}-assessment-lambda-role"
 
   assume_role_policy = jsonencode({
@@ -840,10 +838,8 @@ resource "aws_iam_role" "assessment_lambda" {
 }
 
 resource "aws_iam_role_policy" "assessment_lambda" {
-  count = var.enable_assessment ? 1 : 0
-
   name = "${local.name_prefix}-assessment-lambda-policy"
-  role = aws_iam_role.assessment_lambda[0].id
+  role = aws_iam_role.assessment_lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -943,10 +939,10 @@ resource "aws_iam_role_policy" "assessment_lambda" {
 
 # Add AppSync permissions if API is provided
 resource "aws_iam_role_policy" "assessment_lambda_appsync" {
-  for_each = var.enable_assessment && var.enable_api ? { "appsync" = true } : {}
+  for_each = var.enable_api ? { "appsync" = true } : {}
 
   name = "${local.name_prefix}-assessment-lambda-appsync-policy"
-  role = aws_iam_role.assessment_lambda[0].id
+  role = aws_iam_role.assessment_lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -964,10 +960,8 @@ resource "aws_iam_role_policy" "assessment_lambda_appsync" {
 
 # Add KMS permissions if encryption key is provided
 resource "aws_iam_role_policy" "assessment_lambda_kms" {
-  count = var.enable_assessment ? 1 : 0
-
   name = "${local.name_prefix}-assessment-lambda-kms-policy"
-  role = aws_iam_role.assessment_lambda[0].id
+  role = aws_iam_role.assessment_lambda.id
 
   policy = var.encryption_key_arn != null ? jsonencode({
     Version = "2012-10-17"
@@ -990,9 +984,9 @@ resource "aws_iam_role_policy" "assessment_lambda_kms" {
 
 # Add VPC permissions if VPC config is provided
 resource "aws_iam_role_policy_attachment" "assessment_lambda_vpc" {
-  count = var.enable_assessment && length(local.vpc_subnet_ids) > 0 ? 1 : 0
+  count = length(local.vpc_subnet_ids) > 0 ? 1 : 0
 
-  role       = aws_iam_role.assessment_lambda[0].name
+  role       = aws_iam_role.assessment_lambda.name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 

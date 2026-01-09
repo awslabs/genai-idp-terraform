@@ -41,7 +41,7 @@ resource "aws_iam_role_policy" "state_machine" {
           aws_lambda_function.extraction.arn,
           aws_lambda_function.process_results.arn,
           var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "",
-          var.enable_assessment ? aws_lambda_function.assessment[0].arn : "",
+          aws_lambda_function.assessment.arn,
           var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "",
           var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : ""
         ])
@@ -633,10 +633,8 @@ resource "aws_iam_role_policy_attachment" "summarization_kms_attachment" {
   policy_arn = aws_iam_policy.kms_policy.arn
 }
 
-# Assessment Lambda IAM Role (conditional)
+# Assessment Lambda IAM Role (always deployed, controlled by configuration)
 resource "aws_iam_role" "assessment_lambda" {
-  count = var.enable_assessment ? 1 : 0
-
   name = "${local.name_prefix}-assessment-lambda-role"
 
   assume_role_policy = jsonencode({
@@ -656,10 +654,8 @@ resource "aws_iam_role" "assessment_lambda" {
 }
 
 resource "aws_iam_role_policy" "assessment_lambda" {
-  count = var.enable_assessment ? 1 : 0
-
   name = "${local.name_prefix}-assessment-lambda-policy"
-  role = aws_iam_role.assessment_lambda[0].id
+  role = aws_iam_role.assessment_lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -673,8 +669,8 @@ resource "aws_iam_role_policy" "assessment_lambda" {
             "logs:PutLogEvents"
           ]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment[0].function_name}",
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment[0].function_name}:*"
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment.function_name}",
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment.function_name}:*"
           ]
         },
         {
@@ -777,10 +773,10 @@ resource "aws_iam_role_policy" "assessment_lambda" {
 
 # Add AppSync permissions if API is provided
 resource "aws_iam_role_policy" "assessment_lambda_appsync" {
-  count = var.enable_assessment && var.enable_api ? 1 : 0
+  count = var.enable_api ? 1 : 0
 
   name = "${local.name_prefix}-assessment-lambda-appsync-policy"
-  role = aws_iam_role.assessment_lambda[0].id
+  role = aws_iam_role.assessment_lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -798,10 +794,8 @@ resource "aws_iam_role_policy" "assessment_lambda_appsync" {
 
 # Add KMS permissions if encryption key is provided
 resource "aws_iam_role_policy" "assessment_lambda_kms" {
-  count = var.enable_assessment ? 1 : 0
-
   name = "${local.name_prefix}-assessment-lambda-kms-policy"
-  role = aws_iam_role.assessment_lambda[0].id
+  role = aws_iam_role.assessment_lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -821,15 +815,14 @@ resource "aws_iam_role_policy" "assessment_lambda_kms" {
 
 # Add VPC permissions if VPC config is provided
 resource "aws_iam_role_policy_attachment" "assessment_lambda_vpc" {
-  count = var.enable_assessment && length(local.vpc_subnet_ids) > 0 ? 1 : 0
+  count = length(local.vpc_subnet_ids) > 0 ? 1 : 0
 
-  role       = aws_iam_role.assessment_lambda[0].name
+  role       = aws_iam_role.assessment_lambda.name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "assessment_kms_attachment" {
-  count      = var.enable_assessment ? 1 : 0
-  role       = aws_iam_role.assessment_lambda[0].name
+  role       = aws_iam_role.assessment_lambda.name
   policy_arn = aws_iam_policy.kms_policy.arn
 }
 

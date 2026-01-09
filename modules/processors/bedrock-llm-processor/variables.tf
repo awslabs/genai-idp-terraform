@@ -200,11 +200,7 @@ variable "config" {
   default     = null
 }
 
-variable "enable_assessment" {
-  description = "Whether to enable the assessment function for document quality assessment"
-  type        = bool
-  default     = false
-}
+
 
 variable "enable_hitl" {
   description = "Whether to enable Human-in-the-Loop (HITL) functionality for document review"

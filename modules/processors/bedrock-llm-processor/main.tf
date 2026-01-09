@@ -163,18 +163,17 @@ resource "aws_sfn_state_machine" "document_processing" {
   role_arn = aws_iam_role.state_machine.arn
 
   definition = templatefile("${path.module}/../../../sources/patterns/pattern-2/statemachine/workflow.asl.json", {
-    OCRFunctionArn            = aws_lambda_function.ocr.arn
-    ClassificationFunctionArn = aws_lambda_function.classification.arn
-    ExtractionFunctionArn     = aws_lambda_function.extraction.arn
-    ProcessResultsLambdaArn   = aws_lambda_function.process_results.arn
-    AssessmentFunctionArn     = var.enable_assessment ? aws_lambda_function.assessment[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-function"
-    IsAssessmentEnabled       = var.enable_assessment ? "true" : "false"
-    SummarizationLambdaArn    = var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-function"
-    IsSummarizationEnabled    = var.is_summarization_enabled ? "true" : "false"
-    HITLWaitFunctionArn       = var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-wait-function"
+    OCRFunctionArn              = aws_lambda_function.ocr.arn
+    ClassificationFunctionArn   = aws_lambda_function.classification.arn
+    ExtractionFunctionArn       = aws_lambda_function.extraction.arn
+    ProcessResultsLambdaArn     = aws_lambda_function.process_results.arn
+    AssessmentFunctionArn       = aws_lambda_function.assessment.arn
+    SummarizationLambdaArn      = var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-function"
+    IsSummarizationEnabled      = var.is_summarization_enabled ? "true" : "false"
+    HITLWaitFunctionArn         = var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-wait-function"
     HITLStatusUpdateFunctionArn = var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-status-function"
-    EvaluationLambdaArn       = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-evaluation-function"
-    OutputBucket              = local.output_bucket_name
+    EvaluationLambdaArn         = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-evaluation-function"
+    OutputBucket                = local.output_bucket_name
   })
 
   logging_configuration {
