@@ -212,7 +212,7 @@ resource "aws_sqs_queue" "discovery_dlq" {
 # Main discovery processing queue
 resource "aws_sqs_queue" "discovery_queue" {
   name                       = "${var.name_prefix}-discovery-queue-${local.suffix}"
-  visibility_timeout_seconds = 960 # 16 minutes (longer than Lambda timeout)
+  visibility_timeout_seconds = 960     # 16 minutes (longer than Lambda timeout)
   message_retention_seconds  = 1209600 # 14 days
 
   redrive_policy = jsonencode({
@@ -377,7 +377,7 @@ resource "aws_lambda_event_source_mapping" "discovery_processor_sqs" {
   event_source_arn = aws_sqs_queue.discovery_queue.arn
   function_name    = aws_lambda_function.discovery_processor.arn
   batch_size       = 1
-  
+
   # Enable partial batch failure reporting
   function_response_types = ["ReportBatchItemFailures"]
 }
@@ -388,10 +388,10 @@ resource "aws_lambda_event_source_mapping" "discovery_processor_sqs" {
 
 # Discovery Lambda Data Source
 resource "aws_appsync_datasource" "discovery_lambda" {
-  api_id          = var.appsync_api_id
-  name            = "DiscoveryLambda"
-  description     = "Lambda function to handle discovery document uploads"
-  type            = "AWS_LAMBDA"
+  api_id           = var.appsync_api_id
+  name             = "DiscoveryLambda"
+  description      = "Lambda function to handle discovery document uploads"
+  type             = "AWS_LAMBDA"
   service_role_arn = var.appsync_lambda_role_arn
 
   lambda_config {
@@ -401,10 +401,10 @@ resource "aws_appsync_datasource" "discovery_lambda" {
 
 # Discovery Table DynamoDB Data Source
 resource "aws_appsync_datasource" "discovery_table" {
-  api_id          = var.appsync_api_id
-  name            = "DiscoveryTable"
-  description     = "DynamoDB table for discovery job tracking"
-  type            = "AMAZON_DYNAMODB"
+  api_id           = var.appsync_api_id
+  name             = "DiscoveryTable"
+  description      = "DynamoDB table for discovery job tracking"
+  type             = "AMAZON_DYNAMODB"
   service_role_arn = var.appsync_dynamodb_role_arn
 
   dynamodb_config {

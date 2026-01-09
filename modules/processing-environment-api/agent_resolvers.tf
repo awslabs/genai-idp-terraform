@@ -10,43 +10,43 @@
 
 # Agent Request Handler Lambda Data Source
 resource "aws_appsync_datasource" "agent_request_handler" {
-  count           = var.agent_analytics.enabled ? 1 : 0
-  api_id          = aws_appsync_graphql_api.api.id
-  name            = "AgentRequestHandler"
-  description     = "Lambda function to handle agent query requests"
-  type            = "AWS_LAMBDA"
+  count            = var.agent_analytics.enabled ? 1 : 0
+  api_id           = aws_appsync_graphql_api.api.id
+  name             = "AgentRequestHandler"
+  description      = "Lambda function to handle agent query requests"
+  type             = "AWS_LAMBDA"
   service_role_arn = aws_iam_role.appsync_lambda_role.arn
 
   lambda_config {
-    function_arn = var.agent_analytics.agent_request_handler_function_arn
+    function_arn = module.agent_analytics[0].agent_request_handler_function_arn
   }
 }
 
 # List Available Agents Lambda Data Source
 resource "aws_appsync_datasource" "list_available_agents" {
-  count           = var.agent_analytics.enabled ? 1 : 0
-  api_id          = aws_appsync_graphql_api.api.id
-  name            = "ListAvailableAgents"
-  description     = "Lambda function to list available analytics agents"
-  type            = "AWS_LAMBDA"
+  count            = var.agent_analytics.enabled ? 1 : 0
+  api_id           = aws_appsync_graphql_api.api.id
+  name             = "ListAvailableAgents"
+  description      = "Lambda function to list available analytics agents"
+  type             = "AWS_LAMBDA"
   service_role_arn = aws_iam_role.appsync_lambda_role.arn
 
   lambda_config {
-    function_arn = var.agent_analytics.list_available_agents_function_arn
+    function_arn = module.agent_analytics[0].list_available_agents_function_arn
   }
 }
 
 # Agent Table DynamoDB Data Source
 resource "aws_appsync_datasource" "agent_table" {
-  count           = var.agent_analytics.enabled ? 1 : 0
-  api_id          = aws_appsync_graphql_api.api.id
-  name            = "AgentTable"
-  description     = "DynamoDB table for agent job tracking"
-  type            = "AMAZON_DYNAMODB"
+  count            = var.agent_analytics.enabled ? 1 : 0
+  api_id           = aws_appsync_graphql_api.api.id
+  name             = "AgentTable"
+  description      = "DynamoDB table for agent job tracking"
+  type             = "AMAZON_DYNAMODB"
   service_role_arn = aws_iam_role.appsync_dynamodb_role.arn
 
   dynamodb_config {
-    table_name = var.agent_analytics.agent_table_name
+    table_name = module.agent_analytics[0].agent_table_name
   }
 }
 

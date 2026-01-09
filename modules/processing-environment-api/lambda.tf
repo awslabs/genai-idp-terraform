@@ -175,6 +175,13 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
   }
 
   tags = var.tags
+
+  depends_on = [
+    aws_iam_role_policy_attachment.reprocess_document_resolver_logs_attachment,
+    aws_iam_role_policy_attachment.reprocess_document_resolver_s3_attachment,
+    aws_iam_role_policy_attachment.reprocess_document_resolver_kms_attachment,
+    aws_iam_role_policy_attachment.reprocess_document_resolver_vpc_attachment
+  ]
 }
 
 # =============================================================================
@@ -318,6 +325,12 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
   }
 
   tags = var.tags
+
+  depends_on = [
+    aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_logs_attachment,
+    aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_stepfunctions_attachment,
+    aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_vpc_attachment
+  ]
 }
 
 # =============================================================================

@@ -92,7 +92,7 @@ resource "aws_iam_policy" "chat_with_document_resolver_policy" {
             "bedrock:InvokeModel",
             "bedrock:InvokeModelWithResponseStream"
           ]
-          Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+          Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/*"
         },
         # CloudWatch metrics permissions (for BedrockClient metrics)
         {
@@ -121,7 +121,7 @@ resource "aws_iam_policy" "chat_with_document_resolver_policy" {
           Action = [
             "bedrock:ApplyGuardrail"
           ]
-          Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
+          Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
         }
       ] : []
     )

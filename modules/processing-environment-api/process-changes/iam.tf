@@ -46,8 +46,8 @@ resource "aws_iam_role_policy" "process_changes_resolver_policy" {
           "logs:PutLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-process-changes-*",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-process-changes-*:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-process-changes-*",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-process-changes-*:*"
         ]
       },
       # DynamoDB permissions for tracking table
@@ -99,7 +99,7 @@ resource "aws_iam_role_policy" "process_changes_resolver_policy" {
           "appsync:GraphQL"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:apis/*/types/Mutation/*"
+          "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/*/types/Mutation/*"
         ]
       },
       # KMS permissions for encryption
@@ -114,20 +114,20 @@ resource "aws_iam_role_policy" "process_changes_resolver_policy" {
         ]
         Resource = var.encryption_key_arn
       }
-    ], 
-    # VPC permissions (conditional - only if VPC is configured)
-    length(var.vpc_subnet_ids) > 0 ? [
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:CreateNetworkInterface",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DeleteNetworkInterface",
-          "ec2:AttachNetworkInterface",
-          "ec2:DetachNetworkInterface"
-        ]
-        Resource = "*"
-      }
+      ],
+      # VPC permissions (conditional - only if VPC is configured)
+      length(var.vpc_subnet_ids) > 0 ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "ec2:CreateNetworkInterface",
+            "ec2:DescribeNetworkInterfaces",
+            "ec2:DeleteNetworkInterface",
+            "ec2:AttachNetworkInterface",
+            "ec2:DetachNetworkInterface"
+          ]
+          Resource = "*"
+        }
     ] : [])
   })
 }

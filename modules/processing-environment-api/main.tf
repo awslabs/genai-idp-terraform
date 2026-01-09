@@ -80,22 +80,22 @@ module "discovery" {
   count  = var.discovery.enabled ? 1 : 0
   source = "./discovery"
 
-  name_prefix              = "discovery-${random_string.suffix.result}"
-  input_bucket_arn         = local.input_bucket_arn
-  configuration_table_arn  = local.configuration_table_arn
-  appsync_api_url          = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
-  appsync_api_id           = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn  = aws_iam_role.appsync_lambda_role.arn
+  name_prefix               = "discovery-${random_string.suffix.result}"
+  input_bucket_arn          = local.input_bucket_arn
+  configuration_table_arn   = local.configuration_table_arn
+  appsync_api_url           = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
+  appsync_api_id            = aws_appsync_graphql_api.api.id
+  appsync_lambda_role_arn   = aws_iam_role.appsync_lambda_role.arn
   appsync_dynamodb_role_arn = aws_iam_role.appsync_dynamodb_role.arn
-  idp_common_layer_arn     = var.idp_common_layer_arn
-  
+  idp_common_layer_arn      = var.idp_common_layer_arn
+
   # Configuration
-  log_level                       = var.log_level
-  log_retention_days              = var.log_retention_days
-  data_retention_days             = 365 # Default retention for discovery documents
-  encryption_key_arn              = local.encryption_key_arn
-  lambda_tracing_mode             = var.lambda_tracing_mode
-  point_in_time_recovery_enabled  = true
+  log_level                      = var.log_level
+  log_retention_days             = var.log_retention_days
+  data_retention_days            = 365 # Default retention for discovery documents
+  encryption_key_arn             = local.encryption_key_arn
+  lambda_tracing_mode            = var.lambda_tracing_mode
+  point_in_time_recovery_enabled = true
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
@@ -112,26 +112,26 @@ module "chat_with_document" {
   count  = var.chat_with_document.enabled ? 1 : 0
   source = "./chat-with-document"
 
-  name_prefix                 = "chat-${random_string.suffix.result}"
-  tracking_table_name         = local.tracking_table_name
-  tracking_table_arn          = local.tracking_table_arn
-  configuration_table_name    = local.configuration_table_name
-  configuration_table_arn     = local.configuration_table_arn
-  appsync_api_id              = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn     = aws_iam_role.appsync_lambda_role.arn
-  idp_common_layer_arn        = var.idp_common_layer_arn
-  
+  name_prefix              = "chat-${random_string.suffix.result}"
+  tracking_table_name      = local.tracking_table_name
+  tracking_table_arn       = local.tracking_table_arn
+  configuration_table_name = local.configuration_table_name
+  configuration_table_arn  = local.configuration_table_arn
+  appsync_api_id           = aws_appsync_graphql_api.api.id
+  appsync_lambda_role_arn  = aws_iam_role.appsync_lambda_role.arn
+  idp_common_layer_arn     = var.idp_common_layer_arn
+
   # S3 bucket access
   input_bucket_arn   = local.input_bucket_arn
   output_bucket_arn  = local.output_bucket_arn
   working_bucket_arn = local.working_bucket_arn
-  
+
   # Optional Bedrock Guardrail configuration
   guardrail_id_and_version = var.chat_with_document.guardrail_id_and_version
-  
+
   # Optional Knowledge Base configuration
-  knowledge_base_arn = local.knowledge_base_id != null ? "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:knowledge-base/${local.knowledge_base_id}" : null
-  
+  knowledge_base_arn = local.knowledge_base_id != null ? "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:knowledge-base/${local.knowledge_base_id}" : null
+
   # Configuration
   log_level           = var.log_level
   log_retention_days  = var.log_retention_days
@@ -153,34 +153,70 @@ module "process_changes" {
   count  = var.enable_edit_sections ? 1 : 0
   source = "./process-changes"
 
-  name_prefix                 = "process-changes-${random_string.suffix.result}"
-  appsync_api_id              = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn     = aws_iam_role.appsync_lambda_role.arn
-  idp_common_layer_arn        = var.idp_common_layer_arn
-  
+  name_prefix             = "process-changes-${random_string.suffix.result}"
+  appsync_api_id          = aws_appsync_graphql_api.api.id
+  appsync_lambda_role_arn = aws_iam_role.appsync_lambda_role.arn
+  idp_common_layer_arn    = var.idp_common_layer_arn
+
   # DynamoDB tables
   tracking_table_name = local.tracking_table_name
   tracking_table_arn  = local.tracking_table_arn
-  
+
   # SQS queue
   queue_url = var.document_queue_url
   queue_arn = var.document_queue_arn
-  
+
   # Data retention
   data_retention_days = var.data_retention_in_days
-  
+
   # S3 bucket access
   working_bucket_arn = var.working_bucket_arn
   input_bucket_arn   = local.input_bucket_arn
   output_bucket_arn  = local.output_bucket_arn
-  
+
   # AppSync GraphQL URL
   appsync_graphql_url = aws_appsync_graphql_api.api.uris["GRAPHQL"]
-  
+
   # Configuration
   log_level           = var.log_level
   log_retention_days  = var.log_retention_days
   encryption_key_arn  = local.encryption_key_arn
+  lambda_tracing_mode = var.lambda_tracing_mode
+
+  # VPC configuration
+  vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
+  vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
+
+  tags = var.tags
+}
+
+# =============================================================================
+# Agent Analytics Sub-Module
+# =============================================================================
+
+module "agent_analytics" {
+  count  = var.agent_analytics.enabled ? 1 : 0
+  source = "./agent-analytics"
+
+  name_prefix               = "agent-analytics-${random_string.suffix.result}"
+  reporting_database_name   = var.agent_analytics.reporting_database_name
+  athena_results_bucket_arn = var.agent_analytics.reporting_bucket_arn
+  reporting_bucket_arn      = var.agent_analytics.reporting_bucket_arn
+  appsync_api_url           = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+  appsync_api_id            = aws_appsync_graphql_api.api.id
+  idp_common_layer_arn      = var.idp_common_layer_arn
+  configuration_table_name  = local.configuration_table_name
+
+  # Shared assets bucket for Lambda layers
+  lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
+
+  # Configuration
+  bedrock_model_id    = var.agent_analytics.model_id
+  log_level           = var.log_level
+  log_retention_days  = var.log_retention_days
+  data_retention_days = var.data_retention_in_days
+  encryption_key_arn  = local.encryption_key_arn
+  enable_encryption   = var.enable_encryption
   lambda_tracing_mode = var.lambda_tracing_mode
 
   # VPC configuration

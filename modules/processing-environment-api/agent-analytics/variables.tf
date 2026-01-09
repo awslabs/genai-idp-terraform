@@ -11,11 +11,7 @@ variable "reporting_database_name" {
   type        = string
 }
 
-variable "athena_workgroup_name" {
-  description = "Name of the Athena workgroup for queries"
-  type        = string
-  default     = null
-}
+
 
 variable "athena_results_bucket_arn" {
   description = "ARN of the S3 bucket for Athena query results"

@@ -270,12 +270,10 @@ variable "lambda_tracing_mode" {
 variable "agent_analytics" {
   description = "Agent analytics configuration"
   type = object({
-    enabled                            = bool
-    agent_request_handler_function_arn = optional(string)
-    agent_processor_function_arn       = optional(string)
-    list_available_agents_function_arn = optional(string)
-    agent_table_arn                    = optional(string)
-    agent_table_name                   = optional(string)
+    enabled                 = bool
+    model_id                = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    reporting_database_name = optional(string)
+    reporting_bucket_arn    = optional(string)
   })
   default = { enabled = false }
 }
@@ -333,6 +331,18 @@ variable "data_retention_in_days" {
 
 variable "idp_common_layer_arn" {
   description = "ARN of the IDP Common Lambda layer (required for Edit Sections feature)"
+  type        = string
+  default     = null
+}
+
+variable "enable_encryption" {
+  description = "Enable encryption for resources"
+  type        = bool
+  default     = true
+}
+
+variable "lambda_layers_bucket_arn" {
+  description = "ARN of the S3 bucket for Lambda layers"
   type        = string
   default     = null
 }

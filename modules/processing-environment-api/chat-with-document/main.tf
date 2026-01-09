@@ -15,7 +15,7 @@ locals {
 
   # Module build directory for Lambda archives
   module_build_dir = "${path.module}/.terraform-build"
-  
+
   # Extract bucket names from ARNs
   output_bucket_name = element(split(":", var.output_bucket_arn), 5)
 }
@@ -113,10 +113,10 @@ resource "aws_cloudwatch_log_group" "chat_with_document_resolver_logs" {
 
 # Chat with Document Lambda Data Source
 resource "aws_appsync_datasource" "chat_with_document_lambda" {
-  api_id          = var.appsync_api_id
-  name            = "ChatWithDocument"
-  description     = "Lambda function to chat with documents"
-  type            = "AWS_LAMBDA"
+  api_id           = var.appsync_api_id
+  name             = "ChatWithDocument"
+  description      = "Lambda function to chat with documents"
+  type             = "AWS_LAMBDA"
   service_role_arn = var.appsync_lambda_role_arn
 
   lambda_config {

@@ -39,7 +39,6 @@ module "agent_analytics" {
 
   name_prefix               = "my-idp"
   reporting_database_name   = module.reporting.database_name
-  athena_workgroup_name     = module.reporting.athena_workgroup_name
   athena_results_bucket_arn = module.reporting.athena_results_bucket_arn
   reporting_bucket_arn      = module.reporting.reporting_bucket_arn
   appsync_api_url           = module.processing_environment_api.appsync_api_url
@@ -127,7 +126,6 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [aws_athena_workgroup.agent_analytics](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/athena_workgroup) | resource |
 | [aws_cloudwatch_log_group.agent_processor_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.agent_request_handler_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.list_available_agents_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
@@ -179,7 +177,6 @@ No modules.
 | <a name="input_appsync_api_id"></a> [appsync\_api\_id](#input\_appsync\_api\_id) | ID of the AppSync GraphQL API | `string` | n/a | yes |
 | <a name="input_appsync_api_url"></a> [appsync\_api\_url](#input\_appsync\_api\_url) | URL of the AppSync GraphQL API for status updates | `string` | n/a | yes |
 | <a name="input_athena_results_bucket_arn"></a> [athena\_results\_bucket\_arn](#input\_athena\_results\_bucket\_arn) | ARN of the S3 bucket for Athena query results | `string` | n/a | yes |
-| <a name="input_athena_workgroup_name"></a> [athena\_workgroup\_name](#input\_athena\_workgroup\_name) | Name of the Athena workgroup for queries | `string` | `null` | no |
 | <a name="input_bedrock_model_id"></a> [bedrock\_model\_id](#input\_bedrock\_model\_id) | Bedrock model ID for the analytics agent | `string` | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | no |
 | <a name="input_data_retention_days"></a> [data\_retention\_days](#input\_data\_retention\_days) | Number of days to retain agent job data in DynamoDB | `number` | `30` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encryption | `string` | `null` | no |
@@ -209,8 +206,6 @@ No modules.
 | <a name="output_agent_request_handler_role_arn"></a> [agent\_request\_handler\_role\_arn](#output\_agent\_request\_handler\_role\_arn) | ARN of the IAM role for Agent Request Handler Lambda |
 | <a name="output_agent_table_arn"></a> [agent\_table\_arn](#output\_agent\_table\_arn) | ARN of the DynamoDB table for agent job tracking |
 | <a name="output_agent_table_name"></a> [agent\_table\_name](#output\_agent\_table\_name) | Name of the DynamoDB table for agent job tracking |
-| <a name="output_athena_workgroup_arn"></a> [athena\_workgroup\_arn](#output\_athena\_workgroup\_arn) | ARN of the Athena workgroup (if created by this module) |
-| <a name="output_athena_workgroup_name"></a> [athena\_workgroup\_name](#output\_athena\_workgroup\_name) | Name of the Athena workgroup used for agent analytics queries |
 | <a name="output_bedrock_model_id"></a> [bedrock\_model\_id](#output\_bedrock\_model\_id) | Bedrock model ID used for the analytics agent |
 | <a name="output_list_available_agents_function_arn"></a> [list\_available\_agents\_function\_arn](#output\_list\_available\_agents\_function\_arn) | ARN of the List Available Agents Lambda function |
 | <a name="output_list_available_agents_function_name"></a> [list\_available\_agents\_function\_name](#output\_list\_available\_agents\_function\_name) | Name of the List Available Agents Lambda function |

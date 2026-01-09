@@ -94,3 +94,28 @@ output "chat_with_document_function_arn" {
   description = "ARN of the Chat with Document Lambda function (if chat is enabled)"
   value       = var.chat_with_document.enabled ? module.chat_with_document[0].chat_with_document_resolver_function_arn : null
 }
+# Agent Analytics outputs
+output "agent_request_handler_function_arn" {
+  description = "ARN of the Agent Request Handler Lambda function (if agent analytics is enabled)"
+  value       = var.agent_analytics.enabled ? module.agent_analytics[0].agent_request_handler_function_arn : null
+}
+
+output "agent_processor_function_arn" {
+  description = "ARN of the Agent Processor Lambda function (if agent analytics is enabled)"
+  value       = var.agent_analytics.enabled ? module.agent_analytics[0].agent_processor_function_arn : null
+}
+
+output "list_available_agents_function_arn" {
+  description = "ARN of the List Available Agents Lambda function (if agent analytics is enabled)"
+  value       = var.agent_analytics.enabled ? module.agent_analytics[0].list_available_agents_function_arn : null
+}
+
+output "agent_table_arn" {
+  description = "ARN of the Agent Analytics DynamoDB table (if agent analytics is enabled)"
+  value       = var.agent_analytics.enabled ? module.agent_analytics[0].agent_table_arn : null
+}
+
+output "agent_table_name" {
+  description = "Name of the Agent Analytics DynamoDB table (if agent analytics is enabled)"
+  value       = var.agent_analytics.enabled ? module.agent_analytics[0].agent_table_name : null
+}

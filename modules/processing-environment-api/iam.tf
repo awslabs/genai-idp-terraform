@@ -58,11 +58,11 @@ resource "aws_iam_policy" "appsync_dynamodb_policy" {
         }
       ] : [],
       # Agent Analytics DynamoDB permissions (conditional)
-      var.agent_analytics.enabled && var.agent_analytics.agent_table_arn != null ? [
+      var.agent_analytics.enabled ? [
         {
           Action = [
             "dynamodb:GetItem",
-            "dynamodb:PutItem", 
+            "dynamodb:PutItem",
             "dynamodb:UpdateItem",
             "dynamodb:DeleteItem",
             "dynamodb:Query",
@@ -70,8 +70,8 @@ resource "aws_iam_policy" "appsync_dynamodb_policy" {
           ]
           Effect = "Allow"
           Resource = [
-            var.agent_analytics.agent_table_arn,
-            "${var.agent_analytics.agent_table_arn}/index/*"
+            module.agent_analytics[0].agent_table_arn,
+            "${module.agent_analytics[0].agent_table_arn}/index/*"
           ]
         }
       ] : [],
@@ -140,9 +140,9 @@ resource "aws_iam_policy" "appsync_lambda_policy" {
           ],
           local.knowledge_base_id != null ? [aws_lambda_function.query_knowledge_base_resolver["enabled"].arn] : [],
           local.evaluation_baseline_bucket_arn != null ? [aws_lambda_function.copy_to_baseline_resolver["enabled"].arn] : [],
-          var.agent_analytics.enabled && var.agent_analytics.agent_request_handler_function_arn != null && var.agent_analytics.list_available_agents_function_arn != null ? [
-            var.agent_analytics.agent_request_handler_function_arn,
-            var.agent_analytics.list_available_agents_function_arn
+          var.agent_analytics.enabled ? [
+            module.agent_analytics[0].agent_request_handler_function_arn,
+            module.agent_analytics[0].list_available_agents_function_arn
           ] : [],
           var.chat_with_document.enabled ? [module.chat_with_document[0].chat_with_document_resolver_function_arn] : [],
           var.discovery.enabled ? [

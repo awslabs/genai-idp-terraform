@@ -199,71 +199,78 @@ resource "aws_iam_policy" "agent_processor_policy" {
         Resource = local.bedrock_model_permissions.inference_profile_statement.resources
       }] : [],
       [
-      {
-        Effect = "Allow"
-        Action = [
-          "bedrock-agentcore:StartCodeInterpreterSession",
-          "bedrock-agentcore:StopCodeInterpreterSession", 
-          "bedrock-agentcore:InvokeCodeInterpreter",
-          "bedrock-agentcore:GetCodeInterpreterSession",
-          "bedrock-agentcore:ListCodeInterpreterSessions"
-        ]
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:*:aws:code-interpreter/*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "athena:StartQueryExecution",
-          "athena:GetQueryExecution",
-          "athena:GetQueryResults",
-          "athena:StopQueryExecution",
-          "athena:GetWorkGroup",
-          "athena:GetDataCatalog",
-          "athena:GetDatabase",
-          "athena:GetTableMetadata",
-          "athena:ListDatabases",
-          "athena:ListTableMetadata"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "glue:GetDatabase",
-          "glue:GetDatabases",
-          "glue:GetTable",
-          "glue:GetTables",
-          "glue:GetPartitions"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ]
-        Resource = [
-          var.athena_results_bucket_arn,
-          "${var.athena_results_bucket_arn}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ]
-        Resource = [
-          var.reporting_bucket_arn,
-          "${var.reporting_bucket_arn}/*"
-        ]
-      }
+        {
+          Effect = "Allow"
+          Action = [
+            "bedrock-agentcore:StartCodeInterpreterSession",
+            "bedrock-agentcore:StopCodeInterpreterSession",
+            "bedrock-agentcore:InvokeCodeInterpreter",
+            "bedrock-agentcore:GetCodeInterpreterSession",
+            "bedrock-agentcore:ListCodeInterpreterSessions"
+          ]
+          Resource = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:*:aws:code-interpreter/*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "athena:StartQueryExecution",
+            "athena:GetQueryExecution",
+            "athena:GetQueryResults",
+            "athena:StopQueryExecution",
+            "athena:GetWorkGroup",
+            "athena:GetDataCatalog",
+            "athena:GetDatabase",
+            "athena:GetTableMetadata",
+            "athena:ListDatabases",
+            "athena:ListTableMetadata"
+          ]
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:datacatalog/*"
+          ]
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "glue:GetDatabase",
+            "glue:GetDatabases",
+            "glue:GetTable",
+            "glue:GetTables",
+            "glue:GetPartitions"
+          ]
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:catalog",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:database/${var.reporting_database_name}",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.reporting_database_name}/*"
+          ]
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:ListBucket",
+            "s3:GetBucketLocation"
+          ]
+          Resource = [
+            var.athena_results_bucket_arn,
+            "${var.athena_results_bucket_arn}/*"
+          ]
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:DeleteObject",
+            "s3:ListBucket",
+            "s3:GetBucketLocation"
+          ]
+          Resource = [
+            var.reporting_bucket_arn,
+            "${var.reporting_bucket_arn}/*"
+          ]
+        }
     ])
   })
 

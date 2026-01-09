@@ -99,18 +99,3 @@ output "bedrock_model_id" {
   description = "Bedrock model ID used for the analytics agent"
   value       = var.bedrock_model_id
 }
-
-
-# =============================================================================
-# Athena Workgroup Outputs
-# =============================================================================
-
-output "athena_workgroup_name" {
-  description = "Name of the Athena workgroup used for agent analytics queries"
-  value       = local.athena_workgroup
-}
-
-output "athena_workgroup_arn" {
-  description = "ARN of the Athena workgroup (if created by this module)"
-  value       = var.athena_workgroup_name == null ? aws_athena_workgroup.agent_analytics[0].arn : null
-}

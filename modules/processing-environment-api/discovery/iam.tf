@@ -253,7 +253,7 @@ resource "aws_iam_policy" "discovery_processor_appsync_policy" {
         Action = [
           "appsync:GraphQL"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:apis/*"
+        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/*"
       }
     ] : []
   })
