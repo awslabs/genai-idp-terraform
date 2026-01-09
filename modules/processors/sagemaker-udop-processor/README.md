@@ -107,7 +107,6 @@
 | <a name="input_config"></a> [config](#input\_config) | Configuration to override defaults | `any` | `null` | no |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings | `string` | n/a | yes |
 | <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | Whether the API is enabled | `bool` | `false` | no |
-| <a name="input_enable_assessment"></a> [enable\_assessment](#input\_enable\_assessment) | Whether to enable the assessment function for document quality assessment | `bool` | `false` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources | `string` | `null` | no |
 | <a name="input_evaluation_model_id"></a> [evaluation\_model\_id](#input\_evaluation\_model\_id) | Optional model ID for evaluating extraction results. If not provided, the model from config.yaml will be used. | `string` | `null` | no |
 | <a name="input_extraction_guardrail"></a> [extraction\_guardrail](#input\_extraction\_guardrail) | Optional Bedrock guardrail to apply to extraction model interactions | <pre>object({<br/>    guardrail_id  = string<br/>    guardrail_arn = string<br/>  })</pre> | `null` | no |
