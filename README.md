@@ -10,6 +10,24 @@ This project provides a Terraform-based implementation of the [GenAI **Intellige
 
 This solution is in experimental stage. While it implements security best practices, conduct thorough testing and security review before production use.
 
+## Versioning
+
+This repository uses a dual-version scheme to track both the upstream IDP solution and the Terraform implementation:
+
+- **`IDP_VERSION`**: Tracks the upstream [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws) version
+- **`VERSION`**: Tracks this Terraform implementation using the format `{IDP_VERSION}-tf.{TERRAFORM_VERSION}`
+
+### Version Format Examples
+
+| VERSION | Meaning |
+|---------|---------|
+| `0.3.18-tf.0` | IDP v0.3.18, initial Terraform implementation |
+| `0.3.18-tf.1` | IDP v0.3.18, first Terraform patch |
+| `0.3.18-tf.2` | IDP v0.3.18, second Terraform patch |
+| `0.4.9-tf.0` | IDP v0.4.9, initial Terraform implementation |
+
+The Terraform version (`tf.X`) resets to `0` when the upstream IDP version changes.
+
 ### Key Features
 
 - **Modular Architecture**: Reusable Terraform modules for flexible composition
