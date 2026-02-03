@@ -83,24 +83,6 @@ check "sagemaker_processor_endpoint_arn" {
   }
 }
 
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
-    }
-    awscc = {
-      source  = "hashicorp/awscc"
-      version = ">= 0.70.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = ">= 3.1"
-    }
-  }
-}
-
 # Get current AWS account ID and caller identity
 data "aws_caller_identity" "current" {}
 
@@ -535,6 +517,10 @@ module "sagemaker_udop_processor" {
 module "web_ui" {
   count  = var.web_ui.enabled ? 1 : 0
   source = "./modules/web-ui"
+
+  providers = {
+    aws.us-east-1 = aws.us-east-1
+  }
 
   name_prefix  = "${local.name_prefix}-web-ui"
   prefix       = var.prefix

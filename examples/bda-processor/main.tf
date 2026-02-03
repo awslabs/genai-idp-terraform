@@ -13,6 +13,11 @@ provider "aws" {
   region = var.region
 }
 
+provider "aws" {
+  alias  = "us-east-1"
+  region = "us-east-1"
+}
+
 provider "awscc" {
   region = var.region
 }
@@ -395,6 +400,10 @@ locals {
 # Deploy the GenAI IDP Accelerator with BDA processor
 module "genai_idp_accelerator" {
   source = "../.." # Path to the top-level module
+
+  providers = {
+    aws.us-east-1 = aws.us-east-1
+  }
 
   # Processor configuration
   bda_processor = {
