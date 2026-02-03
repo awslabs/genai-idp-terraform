@@ -226,8 +226,10 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
 
 # CloudFront Distribution
 # WAF Web ACL for CloudFront protection
+# Note: CloudFront WAF must be created in us-east-1 region
 resource "aws_wafv2_web_acl" "cloudfront_waf" {
-  count = var.enable_waf ? 1 : 0
+  count    = var.enable_waf ? 1 : 0
+  provider = aws.us-east-1
 
   name  = "${var.name_prefix}-cloudfront-waf"
   scope = "CLOUDFRONT"

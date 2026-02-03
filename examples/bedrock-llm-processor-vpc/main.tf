@@ -14,6 +14,11 @@ provider "aws" {
   region = var.region
 }
 
+provider "aws" {
+  alias  = "us-east-1"
+  region = "us-east-1"
+}
+
 # Data sources
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
@@ -542,6 +547,10 @@ locals {
 # Deploy the GenAI IDP Accelerator with Bedrock LLM processor
 module "genai_idp_accelerator" {
   source = "../.."
+
+  providers = {
+    aws.us-east-1 = aws.us-east-1
+  }
 
   # Processor configuration
   bedrock_llm_processor = {
