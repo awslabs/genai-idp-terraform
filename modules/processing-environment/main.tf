@@ -68,6 +68,13 @@ locals {
   }
 }
 
+# Create a random string for unique resource names
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Create DynamoDB tables if not provided
 module "configuration_table" {
   count  = local.create_configuration_table ? 1 : 0
@@ -78,6 +85,8 @@ module "configuration_table" {
   point_in_time_recovery_enabled = true
 
   tags = var.tags
+
+  depends_on = [random_string.suffix]
 }
 
 module "tracking_table" {
@@ -89,6 +98,8 @@ module "tracking_table" {
   point_in_time_recovery_enabled = true
 
   tags = var.tags
+
+  depends_on = [random_string.suffix]
 }
 
 module "concurrency_table" {
@@ -100,11 +111,6 @@ module "concurrency_table" {
   point_in_time_recovery_enabled = true
 
   tags = var.tags
-}
 
-# Create a random string for unique resource names
-resource "random_string" "suffix" {
-  length  = 8
-  special = false
-  upper   = false
+  depends_on = [random_string.suffix]
 }
