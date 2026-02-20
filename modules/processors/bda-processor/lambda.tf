@@ -156,9 +156,11 @@ resource "aws_lambda_function" "invoke_bda" {
 
   environment {
     variables = {
-      TRACKING_TABLE   = local.tracking_table_name
-      METRIC_NAMESPACE = var.metric_namespace
-      LOG_LEVEL        = var.log_level
+      TRACKING_TABLE               = local.tracking_table_name
+      METRIC_NAMESPACE             = var.metric_namespace
+      LOG_LEVEL                    = var.log_level
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "bda_invoke"
     }
   }
 
@@ -231,9 +233,11 @@ resource "aws_lambda_function" "bda_completion" {
 
   environment {
     variables = {
-      TRACKING_TABLE   = local.tracking_table_name
-      METRIC_NAMESPACE = var.metric_namespace
-      LOG_LEVEL        = var.log_level
+      TRACKING_TABLE               = local.tracking_table_name
+      METRIC_NAMESPACE             = var.metric_namespace
+      LOG_LEVEL                    = var.log_level
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "bda_completion"
     }
   }
 
@@ -305,14 +309,16 @@ resource "aws_lambda_function" "process_results" {
 
   environment {
     variables = {
-      APPSYNC_API_URL          = var.api_graphql_url
-      METRIC_NAMESPACE         = var.metric_namespace
-      LOG_LEVEL                = var.log_level
-      WORKING_BUCKET           = local.working_bucket_name
-      TRACKING_TABLE           = local.tracking_table_name
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      DOCUMENT_TRACKING_MODE   = var.api_id != null ? "appsync" : "dynamodb"
-      BDA_PROJECT_ARN          = var.data_automation_project_arn
+      APPSYNC_API_URL              = var.api_graphql_url
+      METRIC_NAMESPACE             = var.metric_namespace
+      LOG_LEVEL                    = var.log_level
+      WORKING_BUCKET               = local.working_bucket_name
+      TRACKING_TABLE               = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      DOCUMENT_TRACKING_MODE       = var.api_id != null ? "appsync" : "dynamodb"
+      BDA_PROJECT_ARN              = var.data_automation_project_arn
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "process_results"
     }
   }
 
@@ -381,14 +387,16 @@ resource "aws_lambda_function" "summarization" {
 
   environment {
     variables = {
-      METRIC_NAMESPACE         = var.metric_namespace
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      GUARDRAIL_ID_AND_VERSION = var.summarization_guardrail != null ? var.summarization_guardrail.guardrail_id : ""
-      LOG_LEVEL                = var.log_level
-      APPSYNC_API_URL          = var.api_graphql_url
-      WORKING_BUCKET           = local.working_bucket_name
-      TRACKING_TABLE           = local.tracking_table_name
-      DOCUMENT_TRACKING_MODE   = var.api_id != null ? "appsync" : "dynamodb"
+      METRIC_NAMESPACE             = var.metric_namespace
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      GUARDRAIL_ID_AND_VERSION     = var.summarization_guardrail != null ? var.summarization_guardrail.guardrail_id : ""
+      LOG_LEVEL                    = var.log_level
+      APPSYNC_API_URL              = var.api_graphql_url
+      WORKING_BUCKET               = local.working_bucket_name
+      TRACKING_TABLE               = local.tracking_table_name
+      DOCUMENT_TRACKING_MODE       = var.api_id != null ? "appsync" : "dynamodb"
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "summarization"
     }
   }
 

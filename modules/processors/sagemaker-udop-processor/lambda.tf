@@ -29,14 +29,16 @@ resource "aws_lambda_function" "ocr_function" {
 
   environment {
     variables = {
-      METRIC_NAMESPACE         = local.metric_namespace
-      MAX_WORKERS              = var.ocr_max_workers
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      LOG_LEVEL                = local.log_level
-      TRACKING_TABLE           = local.tracking_table_name
-      WORKING_BUCKET           = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      METRIC_NAMESPACE             = local.metric_namespace
+      MAX_WORKERS                  = var.ocr_max_workers
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      LOG_LEVEL                    = local.log_level
+      TRACKING_TABLE               = local.tracking_table_name
+      WORKING_BUCKET               = local.working_bucket_name
+      DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "ocr"
     }
   }
 
@@ -78,16 +80,18 @@ resource "aws_lambda_function" "classification_function" {
 
   environment {
     variables = {
-      METRIC_NAMESPACE         = local.metric_namespace
-      MAX_WORKERS              = var.classification_max_workers
-      TRACKING_TABLE           = local.tracking_table_name
-      SAGEMAKER_ENDPOINT_NAME  = local.sagemaker_endpoint_name
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      GUARDRAIL_ID_AND_VERSION = var.classification_guardrail != null ? "${var.classification_guardrail.guardrail_id}:${var.classification_guardrail.guardrail_version}" : ""
-      LOG_LEVEL                = local.log_level
-      WORKING_BUCKET           = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      METRIC_NAMESPACE             = local.metric_namespace
+      MAX_WORKERS                  = var.classification_max_workers
+      TRACKING_TABLE               = local.tracking_table_name
+      SAGEMAKER_ENDPOINT_NAME      = local.sagemaker_endpoint_name
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      GUARDRAIL_ID_AND_VERSION     = var.classification_guardrail != null ? "${var.classification_guardrail.guardrail_id}:${var.classification_guardrail.guardrail_version}" : ""
+      LOG_LEVEL                    = local.log_level
+      WORKING_BUCKET               = local.working_bucket_name
+      DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "classification"
     }
   }
 
@@ -129,15 +133,17 @@ resource "aws_lambda_function" "extraction_function" {
 
   environment {
     variables = {
-      EXTRACTION_MODEL_ID      = local.config_with_overrides.extraction.model
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      METRIC_NAMESPACE         = local.metric_namespace
-      GUARDRAIL_ID_AND_VERSION = var.extraction_guardrail != null ? "${var.extraction_guardrail.guardrail_id}:${var.extraction_guardrail.guardrail_version}" : ""
-      LOG_LEVEL                = local.log_level
-      TRACKING_TABLE           = local.tracking_table_name
-      WORKING_BUCKET           = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      EXTRACTION_MODEL_ID          = local.config_with_overrides.extraction.model
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      METRIC_NAMESPACE             = local.metric_namespace
+      GUARDRAIL_ID_AND_VERSION     = var.extraction_guardrail != null ? "${var.extraction_guardrail.guardrail_id}:${var.extraction_guardrail.guardrail_version}" : ""
+      LOG_LEVEL                    = local.log_level
+      TRACKING_TABLE               = local.tracking_table_name
+      WORKING_BUCKET               = local.working_bucket_name
+      DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "extraction"
     }
   }
 
@@ -179,12 +185,14 @@ resource "aws_lambda_function" "process_results_function" {
 
   environment {
     variables = {
-      METRIC_NAMESPACE       = local.metric_namespace
-      LOG_LEVEL              = local.log_level
-      TRACKING_TABLE         = local.tracking_table_name
-      WORKING_BUCKET         = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE = local.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL        = local.api_graphql_url != null ? local.api_graphql_url : ""
+      METRIC_NAMESPACE             = local.metric_namespace
+      LOG_LEVEL                    = local.log_level
+      TRACKING_TABLE               = local.tracking_table_name
+      WORKING_BUCKET               = local.working_bucket_name
+      DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT           = "process_results"
     }
   }
 

@@ -29,6 +29,8 @@ resource "aws_lambda_function" "ocr" {
       WORKING_BUCKET           = local.working_bucket_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT       = "ocr"
     }
   }
 
@@ -74,6 +76,9 @@ resource "aws_lambda_function" "classification" {
       GUARDRAIL_ID_AND_VERSION = var.classification_guardrail != null ? var.classification_guardrail.guardrail_id : ""
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT       = "classification"
+      MAX_PAGES_FOR_CLASSIFICATION = var.max_pages_for_classification
     }
   }
 
@@ -110,6 +115,8 @@ resource "aws_lambda_function" "extraction" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT       = "extraction"
     }
   }
 
@@ -144,6 +151,8 @@ resource "aws_lambda_function" "process_results" {
       WORKING_BUCKET         = local.working_bucket_name
       DOCUMENT_TRACKING_MODE = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL        = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT     = "process_results"
     }
   }
 
@@ -182,6 +191,8 @@ resource "aws_lambda_function" "summarization" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT       = "summarization"
     }
   }
 
@@ -260,6 +271,8 @@ resource "aws_lambda_function" "assessment" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      LAMBDA_COST_METERING_ENABLED = "true"
+      PROCESSING_CONTEXT       = "assessment"
     }
   }
 
