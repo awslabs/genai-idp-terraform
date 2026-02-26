@@ -181,7 +181,7 @@ resource "aws_sfn_state_machine" "document_processing" {
     IsSummarizationEnabled      = var.is_summarization_enabled ? "true" : "false"
     HITLWaitFunctionArn         = var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-wait-function"
     HITLStatusUpdateFunctionArn = var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-status-function"
-    EvaluationLambdaArn         = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : ""
+    EvaluationLambdaArn         = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-evaluation-function"
     OutputBucket                = local.output_bucket_name
   })
 

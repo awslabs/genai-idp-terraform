@@ -577,19 +577,11 @@ resource "aws_appsync_resolver" "send_agent_chat_message" {
   data_source = aws_appsync_datasource.agent_chat_resolver[0].name
 }
 
-resource "aws_appsync_resolver" "create_chat_session" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "createChatSession"
-  data_source = aws_appsync_datasource.create_chat_session_resolver[0].name
-}
-
 resource "aws_appsync_resolver" "list_agent_chat_sessions" {
   count       = var.enable_agent_companion_chat ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Query"
-  field       = "listAgentChatSessions"
+  field       = "listChatSessions"
   data_source = aws_appsync_datasource.list_agent_chat_sessions_resolver[0].name
 }
 
@@ -601,10 +593,26 @@ resource "aws_appsync_resolver" "get_agent_chat_messages" {
   data_source = aws_appsync_datasource.get_agent_chat_messages_resolver[0].name
 }
 
+resource "aws_appsync_resolver" "get_chat_messages" {
+  count       = var.enable_agent_companion_chat ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getChatMessages"
+  data_source = aws_appsync_datasource.get_agent_chat_messages_resolver[0].name
+}
+
 resource "aws_appsync_resolver" "delete_agent_chat_session" {
   count       = var.enable_agent_companion_chat ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Mutation"
-  field       = "deleteAgentChatSession"
+  field       = "deleteChatSession"
   data_source = aws_appsync_datasource.delete_agent_chat_session_resolver[0].name
+}
+
+resource "aws_appsync_resolver" "update_chat_session_title" {
+  count       = var.enable_agent_companion_chat ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "updateChatSessionTitle"
+  data_source = aws_appsync_datasource.create_chat_session_resolver[0].name
 }

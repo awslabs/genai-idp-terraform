@@ -232,7 +232,10 @@ resource "aws_lambda_function" "error_analyzer_resolver" {
 }
 
 # =============================================================================
-# AppSync data source and resolver for Error Analyzer
+# AppSync data source for Error Analyzer
+# Note: The error_analyzer_resolver Lambda is invoked directly by the
+# processing pipeline. There is no dedicated AppSync field for error analysis
+# in the GraphQL schema — the Lambda is called internally, not via AppSync.
 # =============================================================================
 
 resource "aws_appsync_datasource" "error_analyzer_resolver" {
@@ -242,12 +245,4 @@ resource "aws_appsync_datasource" "error_analyzer_resolver" {
   type             = "AWS_LAMBDA"
   service_role_arn = aws_iam_role.appsync_lambda_role.arn
   lambda_config { function_arn = aws_lambda_function.error_analyzer_resolver[0].arn }
-}
-
-resource "aws_appsync_resolver" "analyze_error" {
-  count       = var.enable_error_analyzer ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "analyzeError"
-  data_source = aws_appsync_datasource.error_analyzer_resolver[0].name
 }

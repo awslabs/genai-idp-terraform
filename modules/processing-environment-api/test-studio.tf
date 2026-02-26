@@ -23,14 +23,14 @@ resource "aws_s3_bucket_versioning" "test_sets" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "test_sets" {
-  count  = var.enable_test_studio && local.encryption_key_arn != null ? 1 : 0
+  count  = var.enable_test_studio ? 1 : 0
   bucket = aws_s3_bucket.test_sets[0].id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
+      sse_algorithm     = local.encryption_key_arn != null ? "aws:kms" : "AES256"
       kms_master_key_id = local.encryption_key_arn
     }
-    bucket_key_enabled = true
+    bucket_key_enabled = local.encryption_key_arn != null
   }
 }
 
@@ -548,19 +548,52 @@ resource "aws_appsync_datasource" "delete_tests" {
   lambda_config { function_arn = aws_lambda_function.delete_tests[0].arn }
 }
 
+resource "aws_appsync_datasource" "test_set_file_copier" {
+  count            = var.enable_test_studio ? 1 : 0
+  api_id           = aws_appsync_graphql_api.api.id
+  name             = "TestSetFileCopierDS"
+  type             = "AWS_LAMBDA"
+  service_role_arn = aws_iam_role.appsync_lambda_role.arn
+  lambda_config { function_arn = aws_lambda_function.test_set_file_copier[0].arn }
+}
+
 resource "aws_appsync_resolver" "run_test" {
   count       = var.enable_test_studio ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Mutation"
-  field       = "runTest"
+  field       = "startTestRun"
   data_source = aws_appsync_datasource.test_runner[0].name
+}
+
+resource "aws_appsync_resolver" "get_test_run" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getTestRun"
+  data_source = aws_appsync_datasource.test_results_resolver[0].name
 }
 
 resource "aws_appsync_resolver" "get_test_results" {
   count       = var.enable_test_studio ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Query"
-  field       = "getTestResults"
+  field       = "getTestRuns"
+  data_source = aws_appsync_datasource.test_results_resolver[0].name
+}
+
+resource "aws_appsync_resolver" "get_test_run_status" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getTestRunStatus"
+  data_source = aws_appsync_datasource.test_results_resolver[0].name
+}
+
+resource "aws_appsync_resolver" "compare_test_runs" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "compareTestRuns"
   data_source = aws_appsync_datasource.test_results_resolver[0].name
 }
 
@@ -568,22 +601,54 @@ resource "aws_appsync_resolver" "list_test_sets" {
   count       = var.enable_test_studio ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Query"
-  field       = "listTestSets"
+  field       = "getTestSets"
   data_source = aws_appsync_datasource.test_set_resolver[0].name
+}
+
+resource "aws_appsync_resolver" "validate_test_file_name" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "validateTestFileName"
+  data_source = aws_appsync_datasource.test_set_resolver[0].name
+}
+
+resource "aws_appsync_resolver" "list_bucket_files" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "listBucketFiles"
+  data_source = aws_appsync_datasource.test_set_file_copier[0].name
 }
 
 resource "aws_appsync_resolver" "upload_test_set" {
   count       = var.enable_test_studio ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Mutation"
-  field       = "uploadTestSet"
+  field       = "addTestSetFromUpload"
   data_source = aws_appsync_datasource.test_set_zip_extractor[0].name
+}
+
+resource "aws_appsync_resolver" "add_test_set" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "addTestSet"
+  data_source = aws_appsync_datasource.test_set_resolver[0].name
+}
+
+resource "aws_appsync_resolver" "delete_tests" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "deleteTests"
+  data_source = aws_appsync_datasource.delete_tests[0].name
 }
 
 resource "aws_appsync_resolver" "delete_test_set" {
   count       = var.enable_test_studio ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Mutation"
-  field       = "deleteTestSet"
+  field       = "deleteTestSets"
   data_source = aws_appsync_datasource.delete_tests[0].name
 }
