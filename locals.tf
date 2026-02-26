@@ -92,9 +92,9 @@ locals {
   # Keep the common layer lightweight - heavy dependencies should be in function-specific layers
   base_extras = ["core", "appsync"]
   processor_extras = {
-    "bda"            = local.processor_type == "bda" && try(var.bda_processor.summarization.enabled, false) ? ["docs_service"] : [] # Use docs_service instead of summarization
-    "bedrock-llm"    = ["ocr", "classification", "extraction", "assessment", "docs_service"]                                        # Include all extras needed by bedrock-llm processor functions based on CDK implementation
-    "sagemaker-udop" = ["ocr", "docs_service"]                                                                                      # Use ocr instead of sagemaker, docs_service for API integration
+    "bda"            = local.processor_type == "bda" && try(var.bda_processor.summarization.enabled, false) ? ["docs_service"] : []
+    "bedrock-llm"    = ["ocr", "classification", "extraction", "assessment", "docs_service"] # Include all extras needed by bedrock-llm processor functions based on CDK implementation
+    "sagemaker-udop" = ["ocr", "docs_service"]                                               # Use ocr instead of sagemaker, docs_service for API integration
   }
 
   idp_common_layer_extras = concat(

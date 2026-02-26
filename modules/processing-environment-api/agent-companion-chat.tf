@@ -239,6 +239,14 @@ resource "aws_iam_role_policy" "agent_chat_processor" {
           "${local.input_bucket_arn}/*",
           "${local.output_bucket_arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = compact([local.encryption_key_arn])
       }
     ]
   })
@@ -262,11 +270,123 @@ resource "aws_cloudwatch_log_group" "agent_chat_processor" {
   tags              = var.tags
 }
 
-data "archive_file" "agent_chat_processor" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/agent_chat_processor"
-  output_path = "${path.module}/../../.terraform/archives/agent_chat_processor.zip"
+# Build agent_chat_processor with bundled deps (strands-agents, bedrock-agentcore)
+# Matches CloudFormation/SAM approach: pip install directly into the deployment package
+# This avoids Lambda layer size limits (250MB unzipped) since strands+bedrock-agentcore alone exceed it
+#
+# IMPORTANT: archive_file is a data source (runs at plan time), so we cannot use it here.
+# Instead, the null_resource builds AND zips the package, then we reference the zip directly.
+# The source_code_hash is computed from a sha256 file written by the build script.
+locals {
+  agent_chat_processor_src        = "${path.module}/../../sources/src/lambda/agent_chat_processor"
+  agent_chat_processor_build_dir  = "${path.module}/../../.terraform/tmp/agent_chat_processor_build"
+  agent_chat_processor_idp_common = "${path.module}/../../sources/lib/idp_common_pkg"
+  agent_chat_processor_zip        = "${path.module}/../../.terraform/archives/agent_chat_processor.zip"
+  agent_chat_processor_hash_file  = "${path.module}/../../.terraform/archives/agent_chat_processor.zip.sha256"
+}
+
+resource "null_resource" "build_agent_chat_processor" {
+  count = var.enable_agent_companion_chat ? 1 : 0
+
+  triggers = {
+    # Rebuild when source or idp_common changes
+    src_hash = sha256(join("", [
+      for f in fileset(local.agent_chat_processor_src, "**/*.py") :
+      filesha256("${local.agent_chat_processor_src}/${f}")
+    ]))
+    idp_hash = sha256(join("", [
+      for f in fileset("${local.agent_chat_processor_idp_common}/idp_common/agents", "**/*.py") :
+      filesha256("${local.agent_chat_processor_idp_common}/idp_common/agents/${f}")
+    ]))
+    pyproject_hash = filesha256("${local.agent_chat_processor_idp_common}/pyproject.toml")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      BUILD_DIR="${local.agent_chat_processor_build_dir}"
+      SRC_DIR="${local.agent_chat_processor_src}"
+      IDP_PKG="${local.agent_chat_processor_idp_common}"
+      ZIP_OUT="${local.agent_chat_processor_zip}"
+      HASH_OUT="${local.agent_chat_processor_hash_file}"
+
+      # Clean and recreate build dir
+      rm -rf "$BUILD_DIR"
+      mkdir -p "$BUILD_DIR"
+      mkdir -p "$(dirname "$ZIP_OUT")"
+
+      # Copy Lambda source
+      cp -r "$SRC_DIR"/. "$BUILD_DIR/"
+
+      # Resolve absolute paths for Docker volume mounts
+      ABS_BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
+      ABS_IDP_PKG="$(cd "$IDP_PKG" && pwd)"
+      ABS_ZIP_DIR="$(cd "$(dirname "$ZIP_OUT")" && pwd)"
+      ZIP_BASENAME="$(basename "$ZIP_OUT")"
+      ABS_ZIP_OUT="$ABS_ZIP_DIR/$ZIP_BASENAME"
+
+      # Build inside a Linux x86_64 container to produce Lambda-compatible binaries
+      # --platform linux/amd64 is required on Apple Silicon (arm64) hosts to produce x86_64 .so files
+      # --entrypoint bash overrides the Lambda base image's custom entrypoint
+      docker run --rm \
+        --platform linux/amd64 \
+        --entrypoint bash \
+        -v "$ABS_BUILD_DIR:/build" \
+        -v "$ABS_IDP_PKG:/idp_pkg:ro" \
+        -v "$ABS_ZIP_DIR:/output" \
+        public.ecr.aws/lambda/python:3.12 \
+        -c "
+          set -e
+          # Install pip deps from requirements.txt, skipping the ./lib reference
+          sed 's|^\./lib.*||g' /build/requirements.txt > /tmp/requirements_clean.txt
+          pip3 install -r /tmp/requirements_clean.txt -t /build --quiet --no-cache-dir 2>/dev/null || true
+
+          # Copy idp_pkg to a writable temp dir (pip needs to write egg-info during build)
+          cp -rL /idp_pkg /tmp/idp_pkg_build
+
+          # Install idp_common[agents] with all transitive deps (strands-agents, bedrock-agentcore)
+          pip3 install '/tmp/idp_pkg_build[agents]' -t /build --quiet --no-cache-dir --upgrade
+
+          # Copy idp_common source directly
+          mkdir -p /build/idp_common
+          cp -rL /tmp/idp_pkg_build/idp_common/. /build/idp_common/
+
+          # Clean up build artifacts (keep dist-info for opentelemetry entry points)
+          find /build -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
+          find /build -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+          find /build -type f -name '__editable__*' -delete 2>/dev/null || true
+          find /build -type d -name 'tests' -exec rm -rf {} + 2>/dev/null || true
+
+          # Create zip from inside the build dir (use python zipfile since zip may not be in the image)
+          cd /build && python3 -c \"
+import zipfile, os, sys
+zf = zipfile.ZipFile('/output/$ZIP_BASENAME', 'w', zipfile.ZIP_DEFLATED)
+for root, dirs, files in os.walk('.'):
+    for file in files:
+        if not file.endswith('.pyc'):
+            filepath = os.path.join(root, file)
+            zf.write(filepath)
+zf.close()
+print('Zip created: /output/$ZIP_BASENAME')
+\"
+          echo 'Docker build complete'
+        "
+
+      # Write sha256 hash file
+      shasum -a 256 "$ABS_ZIP_OUT" | awk '{print $1}' > "$HASH_OUT"
+
+      echo "Build complete: $ABS_ZIP_OUT ($(du -sh "$ABS_ZIP_OUT" | cut -f1))"
+    EOT
+  }
+}
+
+# Read the hash file written by the build — this forces Terraform to re-read it after apply
+# The null_resource triggers ensure this file is always fresh when source changes
+data "local_file" "agent_chat_processor_hash" {
+  count    = var.enable_agent_companion_chat ? 1 : 0
+  filename = local.agent_chat_processor_hash_file
+
+  depends_on = [null_resource.build_agent_chat_processor]
 }
 
 resource "aws_lambda_function" "agent_chat_processor" {
@@ -274,14 +394,16 @@ resource "aws_lambda_function" "agent_chat_processor" {
 
   function_name    = "${local.api_name}-agent-chat-processor"
   role             = aws_iam_role.agent_chat_processor[0].arn
-  filename         = data.archive_file.agent_chat_processor[0].output_path
-  source_code_hash = data.archive_file.agent_chat_processor[0].output_base64sha256
+  filename         = local.agent_chat_processor_zip
+  source_code_hash = base64encode(data.local_file.agent_chat_processor_hash[0].content)
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 600
   memory_size      = 1024
 
-  layers = compact([var.idp_common_layer_arn])
+  # No layers - all deps bundled into the zip (matches CloudFormation/SAM approach)
+  # strands-agents + bedrock-agentcore exceed Lambda's 250MB limit when combined with any layer
+  layers = []
 
   environment {
     variables = {
@@ -298,12 +420,14 @@ resource "aws_lambda_function" "agent_chat_processor" {
       LOOKUP_FUNCTION_NAME         = var.lookup_function_name != null ? var.lookup_function_name : ""
       INPUT_BUCKET                 = local.input_bucket_name
       OUTPUT_BUCKET                = local.output_bucket_name
-      APPSYNC_API_URL              = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
+      APPSYNC_API_URL              = aws_appsync_graphql_api.api.uris["GRAPHQL"]
       MAX_CONVERSATION_TURNS       = "20"
       MAX_MESSAGE_SIZE_KB          = "8.5"
       DATA_RETENTION_DAYS          = tostring(var.data_retention_in_days)
       AWS_STACK_NAME               = local.api_name
       CLOUDWATCH_LOG_GROUP_PREFIX  = "/aws/lambda/${local.api_name}"
+      ATHENA_DATABASE              = var.agent_analytics.reporting_database_name != null ? var.agent_analytics.reporting_database_name : ""
+      ATHENA_OUTPUT_LOCATION       = var.agent_analytics.reporting_bucket_arn != null ? "s3://${element(split(":", var.agent_analytics.reporting_bucket_arn), length(split(":", var.agent_analytics.reporting_bucket_arn)) - 1)}/athena-results/" : ""
     }
   }
 
@@ -362,6 +486,30 @@ resource "aws_iam_role_policy" "agent_chat_resolver" {
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
         Resource = aws_lambda_function.agent_chat_processor[0].arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          aws_dynamodb_table.agent_chat_sessions[0].arn,
+          "${aws_dynamodb_table.agent_chat_sessions[0].arn}/index/*",
+          aws_dynamodb_table.agent_chat_messages[0].arn,
+          "${aws_dynamodb_table.agent_chat_messages[0].arn}/index/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = compact([local.encryption_key_arn])
       }
     ]
   })
@@ -477,6 +625,14 @@ resource "aws_iam_role_policy" "chat_session_resolvers" {
           aws_dynamodb_table.agent_chat_messages[0].arn,
           "${aws_dynamodb_table.agent_chat_messages[0].arn}/index/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = compact([local.encryption_key_arn])
       }
     ]
   })
