@@ -63,8 +63,9 @@ resource "aws_lambda_function" "save_reporting_data" {
 
   environment {
     variables = {
-      LOG_LEVEL        = "INFO"
-      METRIC_NAMESPACE = var.metric_namespace
+      LOG_LEVEL                = "INFO"
+      METRIC_NAMESPACE         = var.metric_namespace
+      CONFIGURATION_TABLE_NAME = local.configuration_table.table_name
     }
   }
 

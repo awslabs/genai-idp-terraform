@@ -13,10 +13,10 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.26.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.2.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 4.0.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | >= 3.1.0 |
 
 ## Modules
 
@@ -51,29 +51,35 @@
 | [aws_appsync_datasource.reprocess_document_resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_datasource.test_results_resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_datasource.test_runner](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
+| [aws_appsync_datasource.test_set_file_copier](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_datasource.test_set_resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_datasource.test_set_zip_extractor](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_datasource.tracking_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_datasource.upload_resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_datasource) | resource |
 | [aws_appsync_graphql_api.api](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_graphql_api) | resource |
-| [aws_appsync_resolver.analyze_error](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.add_test_set](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.compare_test_runs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.copy_to_baseline](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
-| [aws_appsync_resolver.create_chat_session](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.create_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.delete_agent_chat_session](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.delete_agent_job](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.delete_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.delete_test_set](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.delete_tests](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_agent_chat_messages](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_agent_job_status](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.get_chat_messages](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_file_contents](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_stepfunction_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_test_results](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.get_test_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.get_test_run_status](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.list_agent_chat_sessions](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.list_agent_jobs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.list_available_agents](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.list_bucket_files](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.list_documents](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.list_documents_date_hour](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.list_documents_date_shard](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
@@ -84,10 +90,12 @@
 | [aws_appsync_resolver.send_agent_chat_message](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.submit_agent_query](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.update_agent_job_status](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.update_chat_session_title](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.update_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.update_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.upload_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.upload_test_set](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.validate_test_file_name](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_cloudformation_stack.agentcore_gateway](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudformation_stack) | resource |
 | [aws_cloudwatch_log_group.agent_chat_processor](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.agent_chat_resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |

@@ -333,8 +333,8 @@ resource "aws_lambda_function" "update_configuration" {
 
   environment {
     variables = {
-      CONFIGURATION_TABLE = local.configuration_table.table_name
-      LOG_LEVEL           = var.log_level
+      CONFIGURATION_TABLE_NAME = local.configuration_table.table_name
+      LOG_LEVEL                = var.log_level
     }
   }
 
