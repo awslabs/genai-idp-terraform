@@ -393,6 +393,12 @@ variable "state_machine_arn" {
   default     = null
 }
 
+variable "lookup_function_name" {
+  description = "Name of the LookupFunction Lambda (used by Agent Chat Processor to look up document info)"
+  type        = string
+  default     = null
+}
+
 variable "user_pool_id" {
   description = "Cognito User Pool ID (used by MCP Integration for OAuth 2.0 app client)"
   type        = string

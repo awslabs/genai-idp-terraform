@@ -21,8 +21,8 @@ phases:
     commands:
       - echo Build completed on `date`
       - echo Copying Web UI
-      - find dist -ls
-      - aws s3 cp --recursive dist s3://${WEBAPP_BUCKET}/
+      - find build -ls
+      - aws s3 cp --recursive build s3://${WEBAPP_BUCKET}/
       - |
         if [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ] && [ "$CLOUDFRONT_DISTRIBUTION_ID" != "" ]; then
           echo "Invalidating CloudFront Distribution: $CLOUDFRONT_DISTRIBUTION_ID"

@@ -330,6 +330,9 @@ module "processing_environment_api" {
   document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
   document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
 
+  # Lookup function (used by Agent Chat Processor)
+  lookup_function_name = module.processing_environment.lookup_function_name
+
   # IDP Common Layer ARN for sub-modules
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn

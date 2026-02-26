@@ -441,6 +441,19 @@ resource "aws_iam_role_policy" "process_results_lambda" {
         Resource = local.s3_bucket_arns
       },
       {
+        # Configuration table always needed — process_results reads config via get_config()
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          local.configuration_table_arn,
+          "${local.configuration_table_arn}/index/*"
+        ]
+      },
+      {
         Effect = "Allow"
         Action = [
           "appsync:GraphQL"
@@ -472,7 +485,10 @@ resource "aws_iam_role_policy" "process_results_lambda" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = [local.tracking_table_arn]
+        Resource = [
+          local.tracking_table_arn,
+          "${local.tracking_table_arn}/index/*"
+        ]
     }])
   })
 }

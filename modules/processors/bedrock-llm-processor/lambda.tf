@@ -138,12 +138,14 @@ resource "aws_lambda_function" "process_results" {
 
   environment {
     variables = {
-      METRIC_NAMESPACE       = local.metric_namespace
-      LOG_LEVEL              = local.log_level
-      TRACKING_TABLE         = local.tracking_table_name
-      WORKING_BUCKET         = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE = local.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL        = local.api_graphql_url != null ? local.api_graphql_url : ""
+      METRIC_NAMESPACE         = local.metric_namespace
+      LOG_LEVEL                = local.log_level
+      TRACKING_TABLE           = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME = local.configuration_table_name
+      WORKING_BUCKET           = local.working_bucket_name
+      OUTPUT_BUCKET            = local.output_bucket_name
+      DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
     }
   }
 

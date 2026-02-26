@@ -119,8 +119,10 @@ resource "aws_lambda_function" "error_analyzer" {
 
   environment {
     variables = {
-      LOG_LEVEL         = var.log_level
-      STATE_MACHINE_ARN = var.state_machine_arn
+      LOG_LEVEL                = var.log_level
+      STATE_MACHINE_ARN        = var.state_machine_arn
+      TRACKING_TABLE_NAME      = local.tracking_table_name != null ? local.tracking_table_name : ""
+      CONFIGURATION_TABLE_NAME = local.configuration_table_name != null ? local.configuration_table_name : ""
     }
   }
 

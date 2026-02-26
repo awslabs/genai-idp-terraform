@@ -13,7 +13,13 @@ resource "aws_dynamodb_table" "agent_chat_sessions" {
 
   name         = "${local.api_name}-agent-chat-sessions"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "sessionId"
+  hash_key     = "userId"
+  range_key    = "sessionId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
 
   attribute {
     name = "sessionId"
@@ -21,7 +27,85 @@ resource "aws_dynamodb_table" "agent_chat_sessions" {
   }
 
   ttl {
-    attribute_name = "ttl"
+    attribute_name = "ExpiresAfter"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  dynamic "server_side_encryption" {
+    for_each = local.encryption_key_arn != null ? [1] : []
+    content {
+      enabled     = true
+      kms_key_arn = local.encryption_key_arn
+    }
+  }
+
+  tags = var.tags
+}
+
+# DynamoDB Table: chat messages (PK/SK schema matching CloudFormation ChatMessagesTable)
+resource "aws_dynamodb_table" "agent_chat_messages" {
+  count = var.enable_agent_companion_chat ? 1 : 0
+
+  name         = "${local.api_name}-agent-chat-messages"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "PK"
+  range_key    = "SK"
+
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ExpiresAfter"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  dynamic "server_side_encryption" {
+    for_each = local.encryption_key_arn != null ? [1] : []
+    content {
+      enabled     = true
+      kms_key_arn = local.encryption_key_arn
+    }
+  }
+
+  tags = var.tags
+}
+
+# DynamoDB Table: conversation memory (PK/SK schema matching CloudFormation IdHelperChatMemoryTable)
+resource "aws_dynamodb_table" "agent_chat_memory" {
+  count = var.enable_agent_companion_chat ? 1 : 0
+
+  name         = "${local.api_name}-agent-chat-memory"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "PK"
+  range_key    = "SK"
+
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ExpiresAfter"
     enabled        = true
   }
 
@@ -89,15 +173,64 @@ resource "aws_iam_role_policy" "agent_chat_processor" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = [
+        Resource = compact([
           aws_dynamodb_table.agent_chat_sessions[0].arn,
-          "${aws_dynamodb_table.agent_chat_sessions[0].arn}/index/*"
-        ]
+          "${aws_dynamodb_table.agent_chat_sessions[0].arn}/index/*",
+          aws_dynamodb_table.agent_chat_messages[0].arn,
+          "${aws_dynamodb_table.agent_chat_messages[0].arn}/index/*",
+          aws_dynamodb_table.agent_chat_memory[0].arn,
+          "${aws_dynamodb_table.agent_chat_memory[0].arn}/index/*",
+          local.tracking_table_arn,
+          local.tracking_table_arn != null ? "${local.tracking_table_arn}/index/*" : null,
+          local.configuration_table_arn,
+          local.configuration_table_arn != null ? "${local.configuration_table_arn}/index/*" : null,
+        ])
       },
       {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
         Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock:GetInferenceProfile"]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+          "logs:StartQuery",
+          "logs:GetQueryResults"
+        ]
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "states:DescribeExecution",
+          "states:GetExecutionHistory",
+          "states:ListExecutions"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["appsync:GraphQL"]
+        Resource = "${aws_appsync_graphql_api.api.arn}/*"
       },
       {
         Effect = "Allow"
@@ -145,18 +278,32 @@ resource "aws_lambda_function" "agent_chat_processor" {
   source_code_hash = data.archive_file.agent_chat_processor[0].output_base64sha256
   handler          = "index.handler"
   runtime          = "python3.12"
-  timeout          = 300
-  memory_size      = 512
+  timeout          = 600
+  memory_size      = 1024
 
   layers = compact([var.idp_common_layer_arn])
 
   environment {
     variables = {
-      LOG_LEVEL           = var.log_level
-      CHAT_SESSIONS_TABLE = aws_dynamodb_table.agent_chat_sessions[0].name
-      INPUT_BUCKET        = local.input_bucket_name
-      OUTPUT_BUCKET       = local.output_bucket_name
-      APPSYNC_API_URL     = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
+      LOG_LEVEL                    = var.log_level
+      STRANDS_LOG_LEVEL            = var.log_level
+      CHAT_SESSIONS_TABLE          = aws_dynamodb_table.agent_chat_sessions[0].name
+      CHAT_MESSAGES_TABLE          = aws_dynamodb_table.agent_chat_messages[0].name
+      ID_HELPER_CHAT_MEMORY_TABLE  = aws_dynamodb_table.agent_chat_memory[0].name
+      MEMORY_METHOD                = "dynamodb"
+      STREAMING_ENABLED            = "true"
+      BEDROCK_REGION               = data.aws_region.current.id
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name != null ? local.configuration_table_name : ""
+      TRACKING_TABLE_NAME          = local.tracking_table_name != null ? local.tracking_table_name : ""
+      LOOKUP_FUNCTION_NAME         = var.lookup_function_name != null ? var.lookup_function_name : ""
+      INPUT_BUCKET                 = local.input_bucket_name
+      OUTPUT_BUCKET                = local.output_bucket_name
+      APPSYNC_API_URL              = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
+      MAX_CONVERSATION_TURNS       = "20"
+      MAX_MESSAGE_SIZE_KB          = "8.5"
+      DATA_RETENTION_DAYS          = tostring(var.data_retention_in_days)
+      AWS_STACK_NAME               = local.api_name
+      CLOUDWATCH_LOG_GROUP_PREFIX  = "/aws/lambda/${local.api_name}"
     }
   }
 
@@ -254,8 +401,12 @@ resource "aws_lambda_function" "agent_chat_resolver" {
 
   environment {
     variables = {
-      LOG_LEVEL                = var.log_level
-      AGENT_CHAT_PROCESSOR_ARN = aws_lambda_function.agent_chat_processor[0].arn
+      LOG_LEVEL                    = var.log_level
+      AGENT_CHAT_PROCESSOR_FUNCTION = aws_lambda_function.agent_chat_processor[0].function_name
+      AGENT_CHAT_PROCESSOR_ARN     = aws_lambda_function.agent_chat_processor[0].arn
+      CHAT_MESSAGES_TABLE          = aws_dynamodb_table.agent_chat_messages[0].name
+      CHAT_SESSIONS_TABLE          = aws_dynamodb_table.agent_chat_sessions[0].name
+      DATA_RETENTION_DAYS          = tostring(var.data_retention_in_days)
     }
   }
 
@@ -322,7 +473,9 @@ resource "aws_iam_role_policy" "chat_session_resolvers" {
         ]
         Resource = [
           aws_dynamodb_table.agent_chat_sessions[0].arn,
-          "${aws_dynamodb_table.agent_chat_sessions[0].arn}/index/*"
+          "${aws_dynamodb_table.agent_chat_sessions[0].arn}/index/*",
+          aws_dynamodb_table.agent_chat_messages[0].arn,
+          "${aws_dynamodb_table.agent_chat_messages[0].arn}/index/*"
         ]
       }
     ]
@@ -445,8 +598,8 @@ resource "aws_lambda_function" "get_agent_chat_messages_resolver" {
   layers           = compact([var.idp_common_layer_arn])
   environment {
     variables = {
-      LOG_LEVEL           = var.log_level
-      CHAT_SESSIONS_TABLE = aws_dynamodb_table.agent_chat_sessions[0].name
+      LOG_LEVEL            = var.log_level
+      CHAT_MESSAGES_TABLE  = aws_dynamodb_table.agent_chat_messages[0].name
     }
   }
   tracing_config { mode = var.lambda_tracing_mode }
@@ -490,6 +643,7 @@ resource "aws_lambda_function" "delete_agent_chat_session_resolver" {
   environment {
     variables = {
       LOG_LEVEL           = var.log_level
+      CHAT_MESSAGES_TABLE = aws_dynamodb_table.agent_chat_messages[0].name
       CHAT_SESSIONS_TABLE = aws_dynamodb_table.agent_chat_sessions[0].name
     }
   }
