@@ -2,13 +2,38 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SageMaker UDOP Processor
-# This processor implements an intelligent document processing workflow that uses SageMaker 
+# This processor implements an intelligent document processing workflow that uses SageMaker
 # endpoints for document classification combined with Amazon Bedrock models for information extraction.
 
 # Data sources
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 data "aws_region" "current" {}
+
+# Random suffix for unique resource names (used by CodeBuild and ECR resources)
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# ECR Repository for SageMaker UDOP processor Docker images
+resource "aws_ecr_repository" "udop_processor" {
+  name                 = "${var.name}-udop-processor"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = var.enable_ecr_image_scanning
+  }
+
+  encryption_configuration {
+    encryption_type = var.encryption_key_arn != null ? "KMS" : "AES256"
+    kms_key         = var.encryption_key_arn != null ? var.encryption_key_arn : null
+  }
+
+  tags = local.common_tags
+}
 
 # Local values
 locals {
@@ -169,6 +194,7 @@ resource "aws_sfn_state_machine" "document_processing" {
     IsSummarizationEnabled    = var.summarization_model_id != null ? "true" : "false"
     SummarizationLambdaArn    = aws_lambda_function.summarization_function.arn
     OutputBucket              = local.output_bucket_name
+    EvaluationLambdaArn       = aws_lambda_function.evaluation_function.arn
   })
 
   logging_configuration {

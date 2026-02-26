@@ -13,9 +13,9 @@ The module supports both:
 """
 
 import logging
-from typing import Any, Dict
+from typing import Optional
 
-from idp_common.utils import normalize_boolean_value
+from idp_common.config.models import IDPConfig
 
 from .granular_service import GranularAssessmentService
 from .models import AssessmentResult, AttributeAssessment
@@ -32,7 +32,7 @@ class AssessmentService:
     chooses between the original and granular implementations based on configuration.
     """
 
-    def __init__(self, region: str = None, config: Dict[str, Any] = None):
+    def __init__(self, region: str | None = None, config: IDPConfig | None = None):
         """
         Initialize the assessment service with automatic implementation selection.
 
@@ -40,6 +40,11 @@ class AssessmentService:
             region: AWS region for Bedrock
             config: Configuration dictionary
         """
+        if config is None:
+            config = IDPConfig()
+        elif isinstance(config, dict):
+            config = IDPConfig(**config)
+
         self._service = create_assessment_service(region=region, config=config)
 
     def process_document_section(self, document, section_id: str):
@@ -50,17 +55,10 @@ class AssessmentService:
         """Assess extraction confidence for all sections in a document."""
         return self._service.assess_document(document)
 
-    # Expose internal methods for compatibility
-    def _get_class_attributes(self, class_label: str):
-        """Get attributes for a specific document class from configuration."""
-        return self._service._get_class_attributes(class_label)
 
-    def _format_attribute_descriptions(self, attributes):
-        """Format attribute descriptions for the prompt."""
-        return self._service._format_attribute_descriptions(attributes)
-
-
-def create_assessment_service(region: str = None, config: Dict[str, Any] = None):
+def create_assessment_service(
+    region: Optional[str] = None, config: Optional[IDPConfig] = None
+):
     """
     Factory function to create the appropriate assessment service based on configuration.
 
@@ -72,22 +70,19 @@ def create_assessment_service(region: str = None, config: Dict[str, Any] = None)
         OriginalAssessmentService or GranularAssessmentService based on configuration
     """
     if not config:
+        config = IDPConfig()
         logger.info("No config provided, using original AssessmentService")
         return OriginalAssessmentService(region=region, config=config)
 
     # Check if granular assessment is enabled (default: False for backward compatibility)
-    assessment_config = config.get("assessment", {})
-    granular_config = assessment_config.get("granular", {})
-    granular_enabled_raw = granular_config.get("enabled", False)
 
     # Normalize the enabled value to handle both boolean and string values
-    granular_enabled = normalize_boolean_value(granular_enabled_raw)
 
     logger.info(
-        f"Granular assessment enabled check: raw_value={granular_enabled_raw} (type: {type(granular_enabled_raw)}), normalized={granular_enabled}"
+        f"Granular assessment enabled check: raw_value={config.assessment.granular.enabled} (type: {type(config.assessment.granular.enabled)})"
     )
 
-    if granular_enabled:
+    if config.assessment.granular.enabled:
         logger.info("Granular assessment enabled, using GranularAssessmentService")
         return GranularAssessmentService(region=region, config=config)
     else:

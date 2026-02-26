@@ -4,13 +4,12 @@ phases:
   pre_build:
     commands:
       - echo ${SOURCE_CODE_LOCATION}
-      - echo `ls -altr`
-      - echo `pwd`
-      - echo Installing NodeJS
-      - n 18.19.1
-      - npm install -g npm@10.2.4
+      - echo Installing NodeJS 22
+      - n 22.14.0
+      - node --version
+      - npm --version
       - echo Installing Web UI dependencies
-      - npm install
+      - npm ci
   build:
     commands:
       - echo Build started on `date`
@@ -22,8 +21,8 @@ phases:
     commands:
       - echo Build completed on `date`
       - echo Copying Web UI
-      - find build -ls
-      - aws s3 cp --recursive build s3://${WEBAPP_BUCKET}/
+      - find dist -ls
+      - aws s3 cp --recursive dist s3://${WEBAPP_BUCKET}/
       - |
         if [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ] && [ "$CLOUDFRONT_DISTRIBUTION_ID" != "" ]; then
           echo "Invalidating CloudFront Distribution: $CLOUDFRONT_DISTRIBUTION_ID"

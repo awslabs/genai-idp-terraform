@@ -110,3 +110,8 @@ output "configuration" {
     final_config = local.config_with_overrides
   }
 }
+
+output "evaluation_function_arn" {
+  description = "ARN of the evaluation Lambda function"
+  value       = aws_lambda_function.evaluation_function.arn
+}

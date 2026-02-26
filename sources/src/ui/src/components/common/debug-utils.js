@@ -29,7 +29,7 @@ export const debugSectionStructure = (section, sectionId = 'Unknown') => {
           );
 
           if (hasConfidenceFields) {
-            console.log(`Found confidence data in Output.${key}:`, value);
+            console.log(`Found confidence data in Output.${key}:`, value); // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring - Data from trusted internal source only
           }
         }
       });
@@ -64,10 +64,7 @@ export const debugDocumentStructure = (document) => {
     }
 
     if (document.mergedConfig && document.mergedConfig.assessment) {
-      console.log(
-        'Default confidence threshold from config:',
-        document.mergedConfig.assessment.default_confidence_threshold,
-      );
+      console.log('Default confidence threshold from config:', document.mergedConfig.assessment.default_confidence_threshold);
     }
 
     console.log('=== End Document Debug ===');

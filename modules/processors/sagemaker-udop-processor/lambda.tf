@@ -342,6 +342,67 @@ resource "aws_cloudwatch_log_group" "assessment_lambda" {
   tags = local.common_tags
 }
 
+# =============================================================================
+# Evaluation Function (Docker image from ECR)
+# Must be defined BEFORE the Step Functions state machine because the state
+# machine definition template references evaluation_function.arn (D-003:
+# Pattern 3 always creates this Lambda — no count/conditional).
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "evaluation_function_logs" {
+  name              = "/aws/lambda/${var.name}-evaluation-function"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "evaluation_function" {
+  function_name = "${var.name}-evaluation-function"
+  role          = aws_iam_role.evaluation_function_role.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:evaluation-function"
+  timeout       = 900
+  memory_size   = 1024
+
+  kms_key_arn = var.encryption_key_arn
+
+  environment {
+    variables = {
+      LOG_LEVEL                    = local.log_level
+      METRIC_NAMESPACE             = local.metric_namespace
+      TRACKING_TABLE               = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      WORKING_BUCKET               = local.working_bucket_name
+      BASELINE_BUCKET              = var.evaluation_baseline_bucket_name
+      REPORTING_BUCKET             = var.reporting_bucket_name
+      SAVE_REPORTING_FUNCTION_NAME = var.save_reporting_function_name
+      DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = local.api_id != null ? coalesce(local.api_graphql_url, "") : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  # ECR image must exist before Lambda creation
+  depends_on = [
+    null_resource.trigger_udop_build,
+    aws_iam_role_policy_attachment.evaluation_function_policy_attachment
+  ]
+
+  tags = local.common_tags
+}
+
 # Create module-specific build directory
 resource "null_resource" "create_module_build_dir" {
   provisioner "local-exec" {

@@ -346,3 +346,55 @@ variable "lambda_layers_bucket_arn" {
   type        = string
   default     = null
 }
+
+# =============================================================================
+# FEATURE FLAG VARIABLES (v0.4.8)
+# =============================================================================
+
+variable "enable_agent_companion_chat" {
+  description = "Enable Agent Companion Chat feature (multi-agent AI chat sessions)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_test_studio" {
+  description = "Enable Test Studio feature (automated dataset testing)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_fcc_dataset" {
+  description = "Enable FCC dataset deployer (deploys sample FCC dataset for Test Studio)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_error_analyzer" {
+  description = "Enable Error Analyzer feature (AI-powered error diagnostics)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_mcp" {
+  description = "Enable MCP Integration feature (Bedrock AgentCore Gateway with OAuth 2.0). Not supported in GovCloud regions."
+  type        = bool
+  default     = false
+}
+
+variable "post_processing_decompressor_arn" {
+  description = "ARN of the post_processing_decompressor Lambda function (from processing-environment module)"
+  type        = string
+  default     = null
+}
+
+variable "state_machine_arn" {
+  description = "ARN of the Step Functions state machine (used by Error Analyzer)"
+  type        = string
+  default     = null
+}
+
+variable "user_pool_id" {
+  description = "Cognito User Pool ID (used by MCP Integration for OAuth 2.0 app client)"
+  type        = string
+  default     = null
+}

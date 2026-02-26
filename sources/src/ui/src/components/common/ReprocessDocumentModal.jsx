@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Modal, SpaceBetween, Button } from '@awsui/components-react';
-import { Logger } from 'aws-amplify';
+import { Box, Modal, SpaceBetween, Button } from '@cloudscape-design/components';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
-const logger = new Logger('ReprocessDocumentModal');
+const logger = new ConsoleLogger('ReprocessDocumentModal');
 
 const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems = [] }) => {
   let title = 'Reprocess document';
@@ -40,9 +40,7 @@ const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems =
       }
     >
       <p>{message}</p>
-      <p>
-        This will trigger workflow reprocessing for the following {selectedItems.length > 1 ? 'documents' : 'document'}:
-      </p>
+      <p>This will trigger workflow reprocessing for the following {selectedItems.length > 1 ? 'documents' : 'document'}:</p>
       <ul>
         {selectedItems.map((item) => (
           <li key={item.objectKey}>{item.objectKey}</li>
@@ -61,10 +59,6 @@ ReprocessDocumentModal.propTypes = {
       objectKey: PropTypes.string.isRequired,
     }),
   ),
-};
-
-ReprocessDocumentModal.defaultProps = {
-  selectedItems: [],
 };
 
 export default ReprocessDocumentModal;

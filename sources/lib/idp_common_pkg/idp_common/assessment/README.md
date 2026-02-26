@@ -75,19 +75,19 @@ assessment:
   system_prompt: "You are an expert document analyst..."
   task_prompt: |
     Assess the confidence of extraction results for this {DOCUMENT_CLASS} document.
-    
+
     Text Confidence Data:
     {OCR_TEXT_CONFIDENCE}
-    
+
     Extraction Results:
     {EXTRACTION_RESULTS}
-    
+
     Attributes Definition:
     {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
-    
+
     Document Images:
     {DOCUMENT_IMAGE}
-    
+
     Respond with confidence assessments in JSON format.
 ```
 
@@ -101,6 +101,7 @@ The assessment service supports runtime enable/disable control via the `enabled`
 **Cost Optimization**: When `enabled: false`, no LLM API calls are made, resulting in zero assessment costs.
 
 **Example - Disabling Assessment:**
+
 ```yaml
 assessment:
   enabled: false  # Disables all assessment processing
@@ -110,6 +111,7 @@ assessment:
 ```
 
 **Behavior When Disabled:**
+
 - Service immediately returns with logging: "Assessment is disabled via configuration"
 - No LLM API calls or S3 operations are performed
 - Document processing continues to completion
@@ -120,15 +122,18 @@ assessment:
 The assessment service supports the following placeholders in prompt templates:
 
 ### Standard Placeholders
+
 - `{DOCUMENT_TEXT}` - Parsed document text (markdown format)
 - `{DOCUMENT_CLASS}` - Document classification (e.g., "invoice", "contract")
 - `{ATTRIBUTE_NAMES_AND_DESCRIPTIONS}` - Formatted list of attributes to extract
 - `{EXTRACTION_RESULTS}` - JSON of extraction results to assess
 
 ### OCR Confidence Data
+
 - `{OCR_TEXT_CONFIDENCE}` - **NEW** - Optimized text confidence data with 80-90% token reduction
 
 ### Image Positioning
+
 - `{DOCUMENT_IMAGE}` - Placeholder for precise image positioning in multimodal prompts
 
 ## Text Confidence Data Integration
@@ -136,19 +141,22 @@ The assessment service supports the following placeholders in prompt templates:
 The assessment service automatically uses pre-generated text confidence data when available, providing significant performance and cost benefits:
 
 ### Automatic Data Source Selection
+
 1. **Primary**: Uses pre-generated `textConfidence.json` files from OCR processing
 2. **Fallback**: Generates text confidence data on-demand from raw OCR for backward compatibility
 
 ### Token Usage Optimization
+
 ```python
 # Traditional approach (high token usage)
 prompt = f"OCR Data: {raw_textract_response}"  # ~50,000 tokens
 
-# Optimized approach (low token usage)  
+# Optimized approach (low token usage)
 prompt = f"Text Confidence Data: {text_confidence_data}"  # ~5,000 tokens
 ```
 
 ### Data Format
+
 The text confidence data provides essential information in a minimal format:
 
 ```json
@@ -181,6 +189,7 @@ The assessment service now includes **automatic spatial localization** capabilit
 ### Example Assessment with Spatial Data
 
 **LLM Response (with bbox data):**
+
 ```json
 {
   "InvoiceNumber": {
@@ -193,7 +202,7 @@ The assessment service now includes **automatic spatial localization** capabilit
     "State": {
       "confidence": 0.99,
       "confidence_reason": "State clearly visible",
-      "bbox": [230, 116, 259, 126], 
+      "bbox": [230, 116, 259, 126],
       "page": 1
     }
   }
@@ -201,6 +210,7 @@ The assessment service now includes **automatic spatial localization** capabilit
 ```
 
 **Automatic Conversion Output:**
+
 ```json
 {
   "InvoiceNumber": {
@@ -255,7 +265,7 @@ assessment:
     For each field, provide bounding box coordinates:
     - bbox: [x1, y1, x2, y2] coordinates in normalized 0-1000 scale
     - page: Page number where the field appears (starting from 1)
-    
+
     Coordinate system:
     - Use normalized scale 0-1000 for both x and y axes
     - x1, y1 = top-left corner of bounding box
@@ -263,7 +273,7 @@ assessment:
     - Ensure x2 > x1 and y2 > y1
     - Make bounding boxes tight around the actual text content
     </spatial-localization-guidelines>
-    
+
     For each attribute, provide:
     {
       "attribute_name": {
@@ -287,6 +297,7 @@ assessment:
 The service supports sophisticated multimodal prompts with precise image positioning:
 
 ### Image Placeholder Usage
+
 ```python
 task_prompt = """
 Analyze the extraction results for accuracy.
@@ -296,7 +307,7 @@ Extraction Results:
 
 {DOCUMENT_IMAGE}
 
-Based on the document image above and the OCR confidence data below, 
+Based on the document image above and the OCR confidence data below,
 assess each extracted field:
 
 {OCR_TEXT_CONFIDENCE}
@@ -304,9 +315,11 @@ assess each extracted field:
 ```
 
 ### Automatic Image Handling
+
 - Supports both single and multiple document images
-- Automatically limits to 20 images per Bedrock constraints
+- Processes all document pages without image count restrictions
 - Graceful fallback when images are unavailable
+- Info logging for image count monitoring
 
 ## Attribute Types and Assessment Formats
 
@@ -317,6 +330,7 @@ The assessment service supports three distinct attribute types, each requiring a
 For basic single-value extractions like dates, amounts, or names.
 
 **Configuration Example:**
+
 ```yaml
 attributes:
   - name: "InvoiceNumber"
@@ -328,6 +342,7 @@ attributes:
 ```
 
 **Expected Assessment Response:**
+
 ```json
 {
   "InvoiceNumber": {
@@ -346,6 +361,7 @@ attributes:
 For nested object structures with multiple related fields that are logically grouped together.
 
 **Configuration Example:**
+
 ```yaml
 attributes:
   - name: "VendorDetails"
@@ -361,6 +377,7 @@ attributes:
 ```
 
 **Expected Assessment Response:**
+
 ```json
 {
   "VendorDetails": {
@@ -385,6 +402,7 @@ attributes:
 For arrays of items where each item has the same structure, such as line items, transactions, or entries.
 
 **Configuration Example:**
+
 ```yaml
 attributes:
   - name: "LineItems"
@@ -404,6 +422,7 @@ attributes:
 ```
 
 **Expected Assessment Response:**
+
 ```json
 {
   "LineItems": [
@@ -452,16 +471,19 @@ attributes:
 The assessment service automatically handles each attribute type differently:
 
 **Simple Attributes:**
+
 - Expects a single confidence assessment object
 - Adds confidence threshold to the assessment data
 - Creates alerts for low confidence scores
 
 **Group Attributes:**
+
 - Processes each sub-attribute within the group independently
 - Applies confidence thresholds to each sub-attribute
 - Creates individual alerts for each sub-attribute that falls below threshold
 
 **List Attributes:**
+
 - Processes each array item separately (individual assessment per list item)
 - Applies the same confidence thresholds to all items in the list
 - Creates alerts using array notation (e.g., "LineItems[0].Description", "LineItems[1].Total")
@@ -525,7 +547,7 @@ Here's a comprehensive example showing all three attribute types in a single ass
       {
         "Description": "Materials",
         "Quantity": "10",
-        "UnitPrice": "$25.00", 
+        "UnitPrice": "$25.00",
         "Total": "$250.00"
       }
     ]
@@ -614,16 +636,19 @@ Here's a comprehensive example showing all three attribute types in a single ass
 The assessment service includes comprehensive error handling:
 
 ### Parsing Failures
+
 - Automatic fallback to default confidence scores (0.5) when LLM response parsing fails
 - Detailed error logging for troubleshooting
 - Continued processing of other sections
 
 ### Data Source Fallbacks
+
 - Primary: Pre-generated text confidence files
 - Secondary: On-demand text confidence generation from raw OCR
 - Tertiary: Graceful degradation without OCR confidence data
 
 ### Template Validation
+
 - Validates required placeholders in prompt templates
 - Fallback to default prompts when template validation fails
 - Flexible placeholder enforcement for partial templates
@@ -642,13 +667,13 @@ def lambda_handler(event, context):
         region=os.environ['AWS_REGION'],
         config=event.get('config', {})
     )
-    
+
     # Get document from event
     document = Document.from_dict(event['document'])
-    
+
     # Assess all sections in the document
     assessed_document = assessment_service.assess_document(document)
-    
+
     # Return updated document
     return {
         'document': assessed_document.to_dict()
@@ -658,16 +683,19 @@ def lambda_handler(event, context):
 ## Best Practices
 
 ### Prompt Design
+
 - Use `{OCR_TEXT_CONFIDENCE}` instead of raw OCR data for optimal token usage
 - Position `{DOCUMENT_IMAGE}` strategically in multimodal prompts
 - Include clear instructions for confidence scoring (0.0 to 1.0 scale)
 
 ### Configuration
+
 - Set appropriate temperature (0 for deterministic assessment)
 - Configure max_tokens based on expected response length
 - Use system prompts to establish assessment criteria
 
 ### Performance
+
 - Leverage pre-generated text confidence data for best performance
 - Monitor assessment timing and token usage through metering data
 - Consider image limits for large multi-page documents
@@ -681,10 +709,10 @@ Main service class for document assessment:
 ```python
 class AssessmentService:
     def __init__(self, region: str = None, config: Dict[str, Any] = None)
-    
+
     def process_document_section(self, document: Document, section_id: str) -> Document
     def assess_document(self, document: Document) -> Document
-    
+
     # Internal methods for text confidence data and prompt building
     def _get_text_confidence_data(self, page) -> str
     def _build_content_with_or_without_image_placeholder(...) -> List[Dict[str, Any]]
@@ -700,7 +728,7 @@ class AttributeAssessment:
     confidence: float
     confidence_reason: str
 
-@dataclass 
+@dataclass
 class AssessmentResult:
     attributes: Dict[str, AttributeAssessment]
     metadata: Dict[str, Any]

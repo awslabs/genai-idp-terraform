@@ -30,6 +30,13 @@ summarization_enabled = true
 enable_evaluation     = false
 enable_reporting      = false
 
+# v0.4.8: API feature flags
+enable_agent_companion_chat = true   # Multi-agent AI chat sessions
+enable_test_studio          = true   # Automated dataset testing
+enable_fcc_dataset          = false  # Deploy sample FCC dataset
+enable_error_analyzer       = true   # AI-powered error diagnostics
+enable_mcp                  = false  # MCP Integration (opt-in)
+
 # Discovery Configuration
 discovery = {
   enabled = false

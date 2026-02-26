@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Container, Header, Select, SpaceBetween } from '@awsui/components-react';
+import { Box, Container, Header, Select, SpaceBetween } from '@cloudscape-design/components';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -19,20 +19,9 @@ import {
 import { Bar, Line, Pie, Doughnut } from 'react-chartjs-2';
 
 // Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  Filler,
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, ArcElement, Filler);
 
-const PlotDisplay = ({ plotData }) => {
+const PlotDisplay = ({ plotData = null }) => {
   // Chart type options for the dropdown
   const chartTypeOptions = [
     { label: 'Bar Chart', value: 'bar' },
@@ -77,9 +66,7 @@ const PlotDisplay = ({ plotData }) => {
     // For pie and doughnut charts, we might need to aggregate data if there are multiple datasets
     if ((chartType === 'pie' || chartType === 'doughnut') && datasets.length > 1) {
       // Aggregate all datasets into a single dataset for pie/doughnut charts
-      const aggregatedData = stringLabels.map((_, index) =>
-        datasets.reduce((sum, dataset) => sum + (dataset.data[index] || 0), 0),
-      );
+      const aggregatedData = stringLabels.map((_, index) => datasets.reduce((sum, dataset) => sum + (dataset.data[index] || 0), 0));
 
       return {
         labels: stringLabels,
@@ -155,9 +142,7 @@ const PlotDisplay = ({ plotData }) => {
           {
             ...dataset,
             backgroundColor:
-              dataset.backgroundColor &&
-              Array.isArray(dataset.backgroundColor) &&
-              dataset.backgroundColor.length >= dataLength
+              dataset.backgroundColor && Array.isArray(dataset.backgroundColor) && dataset.backgroundColor.length >= dataLength
                 ? dataset.backgroundColor
                 : defaultColors.slice(0, dataLength),
             borderColor:
@@ -360,10 +345,6 @@ PlotDisplay.propTypes = {
       }),
     }),
   }),
-};
-
-PlotDisplay.defaultProps = {
-  plotData: null,
 };
 
 export default PlotDisplay;

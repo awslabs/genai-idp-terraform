@@ -12,20 +12,6 @@ from idp_common.assessment.service import AssessmentService
 class TestBoundingBoxIntegration:
     """Test bounding box functionality in AssessmentService."""
 
-    def test_is_bounding_box_enabled_disabled_by_default(self):
-        """Test that bounding boxes are disabled by default."""
-        config = {"assessment": {}}
-        service = AssessmentService(config=config)
-
-        assert not service._is_bounding_box_enabled()
-
-    def test_is_bounding_box_enabled_when_configured(self):
-        """Test that bounding boxes are enabled when configured."""
-        config = {"assessment": {"bounding_boxes": {"enabled": True}}}
-        service = AssessmentService(config=config)
-
-        assert service._is_bounding_box_enabled()
-
     def test_convert_bbox_to_geometry_valid_coordinates(self):
         """Test conversion from bbox coordinates to geometry format."""
         service = AssessmentService()

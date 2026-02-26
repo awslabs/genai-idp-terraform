@@ -3,15 +3,17 @@
 
 /* eslint-disable react/prop-types */
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Button, SpaceBetween } from '@awsui/components-react';
-import { API, Logger } from 'aws-amplify';
+import { Box, Button, SpaceBetween } from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import getFileContents from '../../graphql/queries/getFileContents';
 import './MarkdownViewer.css';
 
-const logger = new Logger('MarkdownViewer');
+const client = generateClient();
+const logger = new ConsoleLogger('MarkdownViewer');
 
 // Default height for the simple mode
 const MARKDOWN_DEFAULT_HEIGHT = '600px';
@@ -181,7 +183,7 @@ const MarkdownReport = ({ reportUri, documentId, title = 'Report', emptyMessage 
       try {
         logger.info(`Fetching ${title}:`, reportUri);
 
-        const response = await API.graphql({
+        const response = await client.graphql({
           query: getFileContents,
           variables: { s3Uri: reportUri },
         });
@@ -234,9 +236,7 @@ const MarkdownReport = ({ reportUri, documentId, title = 'Report', emptyMessage 
     );
   }
 
-  return (
-    reportContent && <MarkdownViewer content={reportContent} documentName={documentId || 'document'} title={title} />
-  );
+  return reportContent && <MarkdownViewer content={reportContent} documentName={documentId || 'document'} title={title} />;
 };
 
 export { MarkdownReport };

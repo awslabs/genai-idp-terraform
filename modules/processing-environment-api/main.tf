@@ -64,6 +64,9 @@ locals {
   working_bucket_name   = var.working_bucket_arn != null ? element(split(":", var.working_bucket_arn), 5) : null
   document_queue_url    = var.document_queue_url
   document_queue_arn    = var.document_queue_arn
+
+  # Post-processing decompressor (from processing-environment module, task 4.11)
+  post_processing_decompressor_arn = var.post_processing_decompressor_arn
 }
 
 resource "random_string" "suffix" {

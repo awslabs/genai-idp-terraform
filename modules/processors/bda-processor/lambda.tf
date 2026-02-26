@@ -48,7 +48,7 @@ resource "aws_cloudwatch_log_group" "bda_completion_logs" {
 #   name              = "/aws/lambda/${aws_lambda_function.evaluation[0].function_name}"
 #   retention_in_days = var.log_retention_days
 #   kms_key_id        = var.encryption_key_arn
-# 
+#
 #   tags = var.tags
 # }
 
@@ -423,7 +423,7 @@ resource "aws_lambda_function" "summarization" {
 #   type        = "zip"
 #   source_dir  = "${path.module}/../../../sources/src/lambda/evaluation_function"
 #   output_path = "${local.module_build_dir}/evaluation.zip_${random_id.build_id.hex}"
-# 
+#
 #   # Exclude any potential dependencies that might be there
 #   excludes = [
 #     "*.so",
@@ -434,7 +434,7 @@ resource "aws_lambda_function" "summarization" {
 #     "boto3/**",
 #     "botocore/**"
 #   ]
-# 
+#
 #   depends_on = [null_resource.create_module_build_dir]
 # }
 
@@ -443,20 +443,20 @@ resource "aws_lambda_function" "summarization" {
 # resource "aws_lambda_function" "evaluation" {
 #   count         = var.evaluation_baseline_bucket != null ? 1 : 0
 #   function_name = "${var.name}-evaluation-${random_string.suffix.result}"
-# 
+#
 #   filename         = data.archive_file.evaluation_code[0].output_path
 #   source_code_hash = data.archive_file.evaluation_code[0].output_base64sha256
-# 
+#
 #   # Include only idp_common layer (uses shared evaluation function)
 #   layers = [var.idp_common_layer_arn]
-# 
+#
 #   handler     = "index.handler"
 #   runtime     = "python3.12"
 #   timeout     = 300
 #   memory_size = 512
 #   role        = aws_iam_role.evaluation_role[0].arn
 #   description = "Lambda function that evaluates document processing results"
-# 
+#
 #   environment {
 #     variables = {
 #       LOG_LEVEL                    = var.log_level
@@ -472,11 +472,11 @@ resource "aws_lambda_function" "summarization" {
 #       SAVE_REPORTING_FUNCTION_NAME = "" # Reporting not supported in BDA processor evaluation
 #     }
 #   }
-# 
+#
 #   dead_letter_config {
 #     target_arn = aws_sqs_queue.evaluation_dlq[0].arn
 #   }
-# 
+#
 #   dynamic "vpc_config" {
 #     for_each = length(var.vpc_subnet_ids) > 0 ? [local.vpc_config] : []
 #     content {
@@ -484,7 +484,7 @@ resource "aws_lambda_function" "summarization" {
 #       security_group_ids = vpc_config.value.security_group_ids
 #     }
 #   }
-# 
+#
 #   tags = var.tags
 # }
 
@@ -649,4 +649,65 @@ data "archive_file" "hitl_status_update_code" {
   output_path = "${local.module_build_dir}/hitl_status_update.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
+}
+
+# =============================================================================
+# Evaluation Function (Docker image from ECR)
+# Must be defined BEFORE the Step Functions state machine (task 2.4 will
+# reference aws_lambda_function.evaluation_function.arn in the state machine
+# definition template to avoid a circular dependency).
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "evaluation_function_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.evaluation_function.function_name}"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = var.encryption_key_arn
+
+  tags = var.tags
+}
+
+resource "aws_lambda_function" "evaluation_function" {
+  function_name = "${var.name}-evaluation-function-${random_string.suffix.result}"
+  role          = aws_iam_role.evaluation_function_role.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:evaluation-function"
+  timeout       = 900
+  memory_size   = 1024
+
+  kms_key_arn = var.encryption_key_arn
+
+  environment {
+    variables = {
+      LOG_LEVEL                    = var.log_level
+      METRIC_NAMESPACE             = var.metric_namespace
+      TRACKING_TABLE               = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      WORKING_BUCKET               = local.working_bucket_name
+      BASELINE_BUCKET              = var.evaluation_baseline_bucket_name
+      REPORTING_BUCKET             = var.reporting_bucket_name
+      SAVE_REPORTING_FUNCTION_NAME = var.save_reporting_function_name
+      DOCUMENT_TRACKING_MODE       = var.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = var.api_id != null ? coalesce(var.api_graphql_url, "") : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.vpc_subnet_ids) > 0 ? [local.vpc_config] : []
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  # ECR image must exist before Lambda creation
+  depends_on = [
+    null_resource.trigger_bda_build,
+    aws_iam_role_policy_attachment.evaluation_function_policy_attachment
+  ]
+
+  tags = var.tags
 }

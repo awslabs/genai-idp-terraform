@@ -1,7 +1,7 @@
 interface DynamoDbBase {
-	PK: ID!
-	SK: ID!
-	ExpiresAfter: AWSTimestamp
+  PK: ID!
+  SK: ID!
+  ExpiresAfter: AWSTimestamp
 }
 
 type Document implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
@@ -25,11 +25,12 @@ type Document implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
   ExpiresAfter: AWSTimestamp
   HITLStatus: String
   HITLReviewURL: String
+  TraceId: String
 }
 
 type Section @aws_cognito_user_pools @aws_iam {
   Id: String
-  PageIds: [ Int ]
+  PageIds: [Int]
   Class: String
   OutputJSONUri: String
   ConfidenceThresholdAlerts: [ConfidenceThresholdAlert]
@@ -50,24 +51,64 @@ type Page @aws_cognito_user_pools @aws_iam {
 }
 
 type DocumentList @aws_cognito_user_pools @aws_iam {
-	Documents: [DocumentListItem]
-	nextToken: String
+  Documents: [DocumentListItem]
+  nextToken: String
 }
 
 type DocumentListItem implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
-	PK: ID!
-	SK: ID!
-    ObjectKey: ID
-    InitialEventTime: AWSDateTime
-    ExpiresAfter: AWSTimestamp
-    HITLStatus: String
-    HITLReviewURL: String
+  PK: ID!
+  SK: ID!
+  ObjectKey: ID
+  InitialEventTime: AWSDateTime
+  ExpiresAfter: AWSTimestamp
+  HITLStatus: String
+  HITLReviewURL: String
+}
+
+type ValidationError @aws_cognito_user_pools @aws_iam {
+  field: String
+  message: String
+  type: String
+}
+
+type ConfigurationError @aws_cognito_user_pools @aws_iam {
+  type: String
+  message: String
+  validationErrors: [ValidationError]
 }
 
 type ConfigurationResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
   Schema: AWSJSON
   Default: AWSJSON
   Custom: AWSJSON
+  error: ConfigurationError
+}
+
+type UpdateConfigurationResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  message: String
+  error: ConfigurationError
+}
+
+type ConfigurationLibraryItem @aws_cognito_user_pools @aws_iam {
+  name: String!
+  hasReadme: Boolean!
+  path: String!
+  configFileType: String
+}
+
+type ConfigurationLibraryResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  items: [ConfigurationLibraryItem]
+  error: String
+}
+
+type ConfigurationLibraryFileResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  content: String!
+  contentType: String!
+  error: String
 }
 
 type DiscoveryJobList @aws_cognito_user_pools @aws_iam {
@@ -83,7 +124,6 @@ type DiscoveryJobListItem @aws_cognito_user_pools @aws_iam {
   createdAt: String
   updatedAt: String
   errorMessage: String
-
 }
 
 input CreateDocumentInput {
@@ -92,6 +132,7 @@ input CreateDocumentInput {
   InitialEventTime: AWSDateTime
   QueuedTime: AWSDateTime
   ExpiresAfter: AWSTimestamp
+  TraceId: String
 }
 
 type CreateDocumentOutput @aws_iam {
@@ -128,11 +169,12 @@ input UpdateDocumentInput {
   SummaryReportUri: String
   HITLStatus: String
   HITLReviewURL: String
+  TraceId: String
 }
 
 input SectionInput {
   Id: String
-  PageIds: [ Int ]
+  PageIds: [Int]
   Class: String
   OutputJSONUri: String
   ConfidenceThresholdAlerts: [ConfidenceThresholdAlertInput]
@@ -202,7 +244,7 @@ type StepFunctionExecutionResponse @aws_cognito_user_pools @aws_iam {
   steps: [StepFunctionExecutionStep]
 }
 
-type DiscoveryJob  @aws_cognito_user_pools @aws_iam  {
+type DiscoveryJob @aws_cognito_user_pools @aws_iam {
   jobId: ID!
   status: String!
   errorMessage: String
@@ -217,14 +259,14 @@ type Agent @aws_cognito_user_pools @aws_iam {
 
 type AgentJob @aws_cognito_user_pools @aws_iam {
   jobId: ID!
-  status: String!  # "PENDING", "PROCESSING", "COMPLETED", "FAILED"
+  status: String! # "PENDING", "PROCESSING", "COMPLETED", "FAILED"
   query: String!
-  agentIds: String  # JSON string containing list of agent IDs used
+  agentIds: String # JSON string containing list of agent IDs used
   createdAt: AWSDateTime!
   completedAt: AWSDateTime
   result: String
   error: String
-  agent_messages: String  # JSON string containing agent conversation messages
+  agent_messages: String # JSON string containing agent conversation messages
 }
 
 type AgentJobConnection @aws_cognito_user_pools @aws_iam {
@@ -232,47 +274,247 @@ type AgentJobConnection @aws_cognito_user_pools @aws_iam {
   nextToken: String
 }
 
-type Mutation  {
+type TestRunStatus @aws_cognito_user_pools @aws_iam {
+  testRunId: String!
+  status: String!
+  filesCount: Int!
+  completedFiles: Int!
+  failedFiles: Int!
+  evaluatingFiles: Int!
+  progress: Float!
+}
+
+type TestRun @aws_cognito_user_pools @aws_iam {
+  testRunId: String!
+  testSetId: String
+  testSetName: String
+  status: String!
+  filesCount: Int!
+  completedFiles: Int
+  failedFiles: Int
+  overallAccuracy: Float
+  weightedOverallScores: AWSJSON
+  averageConfidence: Float
+  accuracyBreakdown: AWSJSON
+  totalCost: Float
+  costBreakdown: AWSJSON
+  createdAt: AWSDateTime
+  completedAt: AWSDateTime
+  context: String
+  config: AWSJSON
+}
+
+type TestRunComparison @aws_cognito_user_pools @aws_iam {
+  metrics: AWSJSON!
+  configs: [ConfigSetting]
+}
+
+type ConfigSetting @aws_cognito_user_pools @aws_iam {
+  setting: String!
+  values: AWSJSON!
+}
+
+type TestSetValidationResponse @aws_cognito_user_pools @aws_iam {
+  exists: Boolean!
+  testSetId: String
+}
+
+type TestSet @aws_cognito_user_pools @aws_iam {
+  id: String!
+  name: String!
+  filePattern: String
+  fileCount: Int
+  status: String
+  createdAt: AWSDateTime!
+  error: String
+}
+
+input TestSetUploadInput {
+  fileName: String!
+  fileSize: Int!
+}
+
+input FileUploadInfo {
+  fileName: String!
+  fileSize: Int!
+  contentType: String!
+}
+
+type TestSetUploadResponse @aws_cognito_user_pools @aws_iam {
+  testSetId: String!
+  presignedUrl: String!
+  objectKey: String!
+}
+
+type PresignedUploadUrl @aws_cognito_user_pools @aws_iam {
+  fileName: String!
+  presignedUrl: String!
+  objectKey: String!
+  usePostMethod: String!
+}
+
+input TestRunInput {
+  testSetId: String!
+  context: String
+}
+
+type AgentChatMessage @aws_cognito_user_pools @aws_iam {
+  role: String!
+  content: String!
+  timestamp: String!
+  isProcessing: Boolean
+  sessionId: String
+  messageType: String
+  toolMetadata: ToolMetadata
+}
+
+type ToolMetadata @aws_cognito_user_pools @aws_iam {
+  toolName: String
+  toolUseId: String
+}
+
+input ToolMetadataInput {
+  toolName: String
+  toolUseId: String
+}
+
+type ChatSession @aws_cognito_user_pools @aws_iam {
+  sessionId: ID!
+  title: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  messageCount: Int!
+  lastMessage: String
+}
+
+type ChatSessionConnection @aws_cognito_user_pools @aws_iam {
+  items: [ChatSession]
+  nextToken: String
+}
+
+type MessageContent {
+  text: String
+}
+
+type Mutation {
   createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
   updateDocument(input: UpdateDocumentInput!): Document @aws_iam
   deleteDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
-  updateConfiguration(customConfig: AWSJSON!): Boolean @aws_cognito_user_pools
-  uploadDocument(fileName: String!, contentType: String, prefix: String, bucket: String): PresignedUrlResponse! @aws_cognito_user_pools
-  uploadDiscoveryDocument(fileName: String!, contentType: String, prefix: String, bucket: String, groundTruthFileName: String): DisPresignedUrlResponse! @aws_cognito_user_pools
-  copyToBaseline(objectKey: String!): CopyToBaselineResponse! @aws_cognito_user_pools
+  updateConfiguration(customConfig: AWSJSON!): UpdateConfigurationResponse
+    @aws_cognito_user_pools
+  uploadDocument(
+    fileName: String!
+    contentType: String
+    prefix: String
+    bucket: String
+  ): PresignedUrlResponse! @aws_cognito_user_pools
+  uploadDiscoveryDocument(
+    fileName: String!
+    contentType: String
+    prefix: String
+    bucket: String
+    groundTruthFileName: String
+  ): DisPresignedUrlResponse! @aws_cognito_user_pools
+  copyToBaseline(objectKey: String!): CopyToBaselineResponse!
+    @aws_cognito_user_pools
   reprocessDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
-  processChanges(objectKey: String!, modifiedSections: [ModifiedSectionInput!]!): ProcessChangesResponse! @aws_cognito_user_pools
-  updateAgentJobStatus(jobId: ID!, status: String!, userId: String!, result: String): Boolean @aws_iam
-  updateDiscoveryJobStatus(jobId: ID!, status: String!, errorMessage: String): DiscoveryJob @aws_iam
+  processChanges(
+    objectKey: String!
+    modifiedSections: [ModifiedSectionInput!]!
+  ): ProcessChangesResponse! @aws_cognito_user_pools
+  updateAgentJobStatus(
+    jobId: ID!
+    status: String!
+    userId: String!
+    result: String
+  ): Boolean @aws_iam
+  updateDiscoveryJobStatus(
+    jobId: ID!
+    status: String!
+    errorMessage: String
+  ): DiscoveryJob @aws_iam
   deleteAgentJob(jobId: ID!): Boolean @aws_cognito_user_pools
+  sendAgentChatMessage(
+    prompt: String!
+    sessionId: String
+    method: String
+    enableCodeIntelligence: Boolean
+    toolMetadata: ToolMetadataInput
+  ): AgentChatMessage @aws_cognito_user_pools @aws_iam
+
+  updateAgentChatMessage(sessionId: ID!, content: String!): AgentChatMessage
+    @aws_cognito_user_pools
+    @aws_iam
+  deleteChatSession(sessionId: ID!): Boolean @aws_cognito_user_pools @aws_iam
+  updateChatSessionTitle(sessionId: ID!, title: String!): ChatSession
+    @aws_cognito_user_pools
+    @aws_iam
+  startTestRun(input: TestRunInput!): TestRun @aws_cognito_user_pools
+  deleteTests(testRunIds: [String!]!): Boolean! @aws_cognito_user_pools
+  addTestSet(name: String!, filePattern: String!, bucketType: String!, fileCount: Int!): TestSet @aws_cognito_user_pools
+  addTestSetFromUpload(input: TestSetUploadInput!): TestSetUploadResponse @aws_cognito_user_pools
+  deleteTestSets(testSetIds: [String!]!): Boolean! @aws_cognito_user_pools
 }
 
 type Query @aws_cognito_user_pools @aws_iam {
   getDocument(ObjectKey: ID!): Document
-  listDocuments(startDateTime: AWSDateTime, endDateTime: AWSDateTime): DocumentList
+  listDocuments(
+    startDateTime: AWSDateTime
+    endDateTime: AWSDateTime
+  ): DocumentList
   listDocumentsDateHour(date: AWSDate, hour: Int): DocumentList
-  listDocumentsDateShard(date: AWSDate, shard: Int): DocumentList 
+  listDocumentsDateShard(date: AWSDate, shard: Int): DocumentList
   getFileContents(s3Uri: String!): FileContentsResponse
   getConfiguration: ConfigurationResponse
   listDiscoveryJobs: DiscoveryJobList
   queryKnowledgeBase(input: String!, sessionId: String): String
-  chatWithDocument(s3Uri: String!, prompt: String!, history: AWSJSON!, modelId: String!): String
+  chatWithDocument(
+    s3Uri: String!
+    prompt: String!
+    history: AWSJSON!
+    modelId: String!
+  ): String
   getStepFunctionExecution(executionArn: String!): StepFunctionExecutionResponse
   listAvailableAgents: [Agent] @aws_cognito_user_pools @aws_iam
-  submitAgentQuery(query: String!, agentIds: [String!]!): AgentJob @aws_cognito_user_pools
+  submitAgentQuery(query: String!, agentIds: [String!]!): AgentJob
+    @aws_cognito_user_pools
   getAgentJobStatus(jobId: ID!): AgentJob @aws_cognito_user_pools
-  listAgentJobs(limit: Int, nextToken: String): AgentJobConnection @aws_cognito_user_pools
+  listAgentJobs(limit: Int, nextToken: String): AgentJobConnection
+    @aws_cognito_user_pools
+  getAgentChatMessages(sessionId: ID!): [AgentChatMessage]
+    @aws_cognito_user_pools
+    @aws_iam
+  listChatSessions(limit: Int, nextToken: String): ChatSessionConnection
+    @aws_cognito_user_pools
+    @aws_iam
+  getChatMessages(sessionId: ID!): [AgentChatMessage]
+    @aws_cognito_user_pools
+    @aws_iam
+  getTestRun(testRunId: String!): TestRun @aws_cognito_user_pools
+  getTestRuns(timePeriodHours: Int): [TestRun] @aws_cognito_user_pools
+  getTestRunStatus(testRunId: String!): TestRunStatus @aws_cognito_user_pools
+  compareTestRuns(testRunIds: [String!]!): TestRunComparison @aws_cognito_user_pools
+  getTestSets: [TestSet] @aws_cognito_user_pools
+  listBucketFiles(bucketType: String!, filePattern: String!): [String] @aws_cognito_user_pools
+  validateTestFileName(fileName: String!): TestSetValidationResponse @aws_cognito_user_pools
+  listConfigurationLibrary(pattern: String!): ConfigurationLibraryResponse @aws_cognito_user_pools
+  getConfigurationLibraryFile(
+    pattern: String!
+    configName: String!
+    fileName: String!
+  ): ConfigurationLibraryFileResponse @aws_cognito_user_pools
 }
 
 type Subscription @aws_cognito_user_pools @aws_iam {
   onCreateDocument: CreateDocumentOutput
-	@aws_subscribe(mutations: ["createDocument"])
-  onUpdateDocument: Document
-    @aws_subscribe(mutations: ["updateDocument"])
+    @aws_subscribe(mutations: ["createDocument"])
+  onUpdateDocument: Document @aws_subscribe(mutations: ["updateDocument"])
   onAgentJobComplete(jobId: ID!): Boolean
     @aws_subscribe(mutations: ["updateAgentJobStatus"])
   onDiscoveryJobStatusChange(jobId: ID!): DiscoveryJob
     @aws_subscribe(mutations: ["updateDiscoveryJobStatus"])
+  onAgentChatMessageUpdate(sessionId: String!): AgentChatMessage
+    @aws_subscribe(mutations: ["sendAgentChatMessage"])
 }
 
 schema {

@@ -28,15 +28,15 @@ def unflatten(data: dict) -> dict:
     """
     if not data:
         return data
-    
+
     # Check if any keys contain dots (indicating nested structure)
     has_nested_keys = any('.' in key for key in data.keys())
-    
+
     # If no nested keys, return data as-is
     if not has_nested_keys:
         logger.info("No nested keys found in human answers, returning flat structure")
         return data
-    
+
     result = defaultdict(lambda: defaultdict(dict))
     array_pattern = re.compile(r"^(.*?)\[(\d+)\]$")
 
@@ -121,16 +121,16 @@ def sync_explainability(inference_data, explainability_info):
     try:
         if explainability_info is None:
             return None
-        
+
         # Handle case where explainability_info is a string
         if isinstance(explainability_info, str):
             logger.warning("explainability_info is unexpectedly a string, returning as-is")
             return explainability_info
-        
+
         # Handle case where inference_data is not a dict
         if not isinstance(inference_data, dict):
             return explainability_info
-            
+
         if isinstance(explainability_info, list):
             if isinstance(inference_data, list):
                 return [
@@ -161,9 +161,9 @@ def sync_explainability(inference_data, explainability_info):
                     logger.warning(f"Error processing key '{key}': {str(e)}")
                     updated[key] = meta
             return updated
-        
+
         return explainability_info
-        
+
     except Exception as e:
         logger.error(f"Unexpected error in sync_explainability: {str(e)}")
         return explainability_info
@@ -181,11 +181,11 @@ def update_token_status(token_id, status, failure_reason, tracking_table):
             ':status': status,
             ':updated_at': datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
-        
+
         if failure_reason:
             update_expression += ", FailureReason = :reason"
             expression_values[':reason'] = failure_reason
-        
+
         tracking_table.update_item(
             Key={'PK': token_id, 'SK': 'none'},
             UpdateExpression=update_expression,
@@ -206,12 +206,12 @@ def check_all_pages_complete(document_id, section_id, tracking_table):
                 ':type': 'HITL_PAGE'
             }
         )
-        
+
         items = response.get('Items', [])
-        
+
         if not items:
             return False, []
-        
+
         failed_pages = []
         for item in items:
             status = item.get('Status')
@@ -223,7 +223,7 @@ def check_all_pages_complete(document_id, section_id, tracking_table):
                 })
             elif status != 'Completed':
                 return False, []  # Still has pending pages
-        
+
         return True, failed_pages
     except Exception as e:
         logger.error(f"Error checking page completion status: {str(e)}")
@@ -239,12 +239,12 @@ def check_all_sections_complete(document_id, tracking_table):
                 ':type': 'HITL_SECTION'
             }
         )
-        
+
         sections = response.get('Items', [])
-        
+
         if not sections:
             return False, False
-        
+
         has_failed_sections = False
         for section in sections:
             status = section.get('Status')
@@ -252,7 +252,7 @@ def check_all_sections_complete(document_id, tracking_table):
                 has_failed_sections = True
             elif status != 'Completed':
                 return False, False  # Still has pending sections
-        
+
         return True, has_failed_sections
     except Exception as e:
         logger.error(f"Error checking section completion status: {str(e)}")
@@ -264,13 +264,13 @@ def find_doc_task_token(document_id, tracking_table):
         response = tracking_table.scan(
             FilterExpression="begins_with(PK, :prefix) AND TokenType = :type AND attribute_exists(TaskToken)",
             ExpressionAttributeValues={
-                ':prefix': f"HITL#TaskToken#{document_id}", 
+                ':prefix': f"HITL#TaskToken#{document_id}",
                 ':type': 'HITL_DOC'
             }
         )
-        
+
         items = response.get('Items', [])
-        
+
         if items:
             return items[0].get('TaskToken')
         return None
@@ -286,13 +286,13 @@ def extract_ids_from_human_loop_name(human_loop_name):
     try:
         if human_loop_name.startswith('review-section-'):
             remaining = human_loop_name[15:]  # Remove 'review-section-' (15 chars)
-            
+
             # Split from right to get the last 3 parts (execution_id, section_id, page_number)
             parts = remaining.rsplit('-', 3)  # Split from right, max 3 splits
             if len(parts) == 4:
                 # parts[0] is unique_value
                 # parts[1] is execution_id
-                # parts[2] is section_id  
+                # parts[2] is section_id
                 # parts[3] is page_number
                 execution_id = parts[1]
                 section_id = parts[2]
@@ -300,7 +300,7 @@ def extract_ids_from_human_loop_name(human_loop_name):
                 return execution_id, section_id, page_number
     except Exception as e:
         logger.error(f"Error parsing human loop name {human_loop_name}: {str(e)}")
-    
+
     return None, None, None
 
 def write_content_to_s3(content, bucket, key, content_type='application/json'):
@@ -327,19 +327,19 @@ def process_completed_hitl(detail, execution_id, section_id, page_number, s3_buc
         output_data = json.loads(response['Body'].read())
 
         logger.info(f"Processing A2I output for section {section_id}")
-        
+
         # Extract required fields
         input_content = output_data['inputContent']
         human_answers = output_data['humanAnswers'][0]['answerContent']
-        
+
         # Get S3 context from input content
         s3_bucket = input_content.get('s3Bucket', s3_bucket)
         document_id = input_content.get('documentId', document_id)
         section_id = input_content.get('sectionId', section_id)
-        
+
         # Construct S3 path for section results
         section_result_key = f"{document_id}/sections/{section_id}/result.json"
-        
+
         # Read existing section result from S3
         try:
             s3_response = s3_client.get_object(Bucket=s3_bucket, Key=section_result_key)
@@ -357,11 +357,11 @@ def process_completed_hitl(detail, execution_id, section_id, page_number, s3_buc
         except Exception as e:
             logger.error(f"Error in unflatten function: {str(e)}")
             nested_update = human_answers
-        
+
         # Get existing inference result and explainability info
         existing_inference = existing_result.get('inference_result', {})
         existing_explainability = existing_result.get('explainability_info', [])
-        
+
         # Ensure existing_explainability is the correct type (list or dict, not string)
         if isinstance(existing_explainability, str):
             logger.warning("explainability_info is a string, attempting to parse as JSON")
@@ -370,21 +370,21 @@ def process_completed_hitl(detail, execution_id, section_id, page_number, s3_buc
             except json.JSONDecodeError:
                 logger.error("Failed to parse explainability_info as JSON, using empty list")
                 existing_explainability = []
-        
+
         # Merge human corrections with existing inference result
         try:
             merged_inference = deep_merge(existing_inference, nested_update)
         except Exception as e:
             logger.error(f"Error in deep_merge function: {str(e)}")
             merged_inference = nested_update
-        
+
         # Update explainability info with corrected values
         try:
             updated_explainability = sync_explainability(merged_inference, existing_explainability)
         except Exception as e:
             logger.error(f"Error in sync_explainability function: {str(e)}")
             updated_explainability = existing_explainability
-        
+
         # Update the result with corrected data
         updated_result = {
             **existing_result,
@@ -393,46 +393,46 @@ def process_completed_hitl(detail, execution_id, section_id, page_number, s3_buc
             'hitl_corrected': True,
             'hitl_correction_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
-        
+
         # Write updated result back to S3
         json_string = json.dumps(updated_result, default=decimal_default)
         write_content_to_s3(json_string, s3_bucket, section_result_key)
-        
+
         logger.info(f"Successfully updated section result for {document_id}/section/{section_id}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error processing completed HITL: {str(e)}")
         return False
 
-def lambda_handler(event, context):
+def handler(event, context):
     """
     AWS Lambda entry point for processing HITL status changes.
     """
     logger.info(f"Processing event: {json.dumps(event)}")
-    
+
     # Initialize DynamoDB tracking table
     dynamodb = boto3.resource('dynamodb')
     tracking_table = dynamodb.Table(os.environ.get('TRACKING_TABLE', ''))
-    
+
     try:
         detail = event.get('detail', {})
         human_loop_status = detail.get('humanLoopStatus')
         human_loop_name = detail.get('humanLoopName')
-        
+
         # Extract execution_id, section_id, and page_number from human loop name
         execution_id, section_id, page_number = extract_ids_from_human_loop_name(human_loop_name)
-        
+
         if not all([execution_id, section_id, page_number is not None]):
             logger.error(f"Could not extract IDs from human loop name: {human_loop_name}")
             return {"statusCode": 400, "body": "Invalid human loop name format"}
-        
+
         logger.info(f"Processing HITL status change: {human_loop_status} for execution_id: {execution_id}, section_id: {section_id}, page: {page_number}")
-        
+
         # Get S3 context from A2I input if available
         s3_bucket = None
         document_id = None
-        
+
         if human_loop_status == 'Completed':
             # Parse A2I output to get S3 context
             output_s3_uri = detail['humanLoopOutput']['outputS3Uri']
@@ -440,19 +440,19 @@ def lambda_handler(event, context):
             response = s3_client.get_object(Bucket=bucket, Key=key)
             output_data = json.loads(response['Body'].read())
             input_content = output_data['inputContent']
-            
+
             s3_bucket = input_content.get('s3Bucket')
             document_id = input_content.get('documentId')
-            
+
             if not s3_bucket or not document_id:
                 logger.error(f"Missing S3 context in A2I input: bucket={s3_bucket}, document_id={document_id}")
                 return {"statusCode": 400, "body": "Missing S3 context in A2I input"}
-            
+
             # Process completed HITL task
             success = process_completed_hitl(detail, execution_id, section_id, page_number, s3_bucket, document_id)
             if not success:
                 return {"statusCode": 500, "body": "Failed to process completed HITL"}
-        
+
         # For Failed/Stopped tasks, get document_id from A2I input if available
         if human_loop_status in ['Failed', 'Stopped'] and not document_id:
             try:
@@ -467,36 +467,36 @@ def lambda_handler(event, context):
                 logger.warning(f"Could not extract document_id from failed/stopped task: {str(e)}")
                 # Fallback: try to extract from human loop name pattern
                 document_id = execution_id  # Use execution_id as fallback
-        
+
         if not document_id:
             logger.error("Could not determine document_id")
             return {"statusCode": 400, "body": "Could not determine document_id"}
-        
+
         # Create token IDs
         page_token_id = f"HITL#{document_id}#section#{section_id}#page#{page_number}"
         section_token_id = f"HITL#{document_id}#section#{section_id}"
-        
+
         # Get failure reason for Failed/Stopped tasks
         failure_reason = detail.get('failureReason', 'Unknown failure reason') if human_loop_status in ['Failed', 'Stopped'] else None
-        
+
         # Update page task token status
         update_token_status(page_token_id, human_loop_status, failure_reason, tracking_table)
-        
+
         # Check if all pages in this section are complete
         all_pages_complete, failed_pages_in_section = check_all_pages_complete(document_id, section_id, tracking_table)
-        
+
         if all_pages_complete:
             # Update section token status
             section_status = "Failed" if failed_pages_in_section else "Completed"
             section_failure_reason = f"Section has {len(failed_pages_in_section)} failed pages" if failed_pages_in_section else None
             update_token_status(section_token_id, section_status, section_failure_reason, tracking_table)
-            
+
             # Check if all sections for this document are complete
             all_sections_complete, has_failed_sections = check_all_sections_complete(document_id, tracking_table)
-            
+
             if all_sections_complete:
                 section_task_token = find_doc_task_token(document_id, tracking_table)
-                
+
                 if section_task_token:
                     if has_failed_sections:
                         # Collect all failed pages for failure message
@@ -511,7 +511,7 @@ def lambda_handler(event, context):
                                 ':stopped_status': 'Stopped'
                             }
                         )
-                        
+
                         for item in response.get('Items', []):
                             all_failed_pages.append({
                                 'execution_id': execution_id,
@@ -519,7 +519,7 @@ def lambda_handler(event, context):
                                 'page_id': item.get('PageId'),
                                 'failure_reason': item.get('FailureReason', 'Unknown failure')
                             })
-                        
+
                         # Send task failure
                         stepfunctions.send_task_failure(
                             taskToken=section_task_token,
@@ -527,7 +527,7 @@ def lambda_handler(event, context):
                             cause=f"HITL review failed for {len(all_failed_pages)} page(s): {json.dumps(all_failed_pages)}"
                         )
                         logger.info(f"Sent task failure for execution {execution_id}")
-                        
+
                         # Update document tracking to FAILED
                         tracking_table.update_item(
                             Key={'PK': f"document#{document_id}", 'SK': 'metadata'},
@@ -537,7 +537,7 @@ def lambda_handler(event, context):
                                 ':time': datetime.datetime.now(datetime.timezone.utc).isoformat()
                             }
                         )
-                        
+
                         tracking_table.update_item(
                             Key={'PK': f"doc#{document_id}", 'SK': 'none'},
                             UpdateExpression="SET ObjectStatus = :status, HITLStatus = :hitlStatus",
@@ -557,7 +557,7 @@ def lambda_handler(event, context):
                             })
                         )
                         logger.info(f"Sent task success for execution {execution_id}")
-                        
+
                         # Update document tracking to Completed
                         tracking_table.update_item(
                             Key={'PK': f"document#{document_id}", 'SK': 'metadata'},
@@ -568,7 +568,7 @@ def lambda_handler(event, context):
                                 ':url': None
                             }
                         )
-                        
+
                         tracking_table.update_item(
                             Key={'PK': f"doc#{document_id}", 'SK': 'none'},
                             UpdateExpression="SET ObjectStatus = :status, HITLStatus = :hitlStatus, HITLReviewURL = :url",
@@ -580,7 +580,7 @@ def lambda_handler(event, context):
                         )
 
         return {"statusCode": 200, "body": f"Processing completed successfully for {human_loop_status}"}
-        
+
     except ClientError as e:
         logger.error(f"AWS service error: {e.response['Error']['Message']}")
         return {"statusCode": 500, "body": "AWS service error"}

@@ -92,6 +92,7 @@ class IDPAgent(Agent):
             enable_monitoring: Whether to enable monitoring. If None, defaults to
                              environment variable ENABLE_AGENT_MONITORING or True
                              when job_id/user_id are provided.
+            mcp_client: Optional MCP client for context management
 
         Note:
             Monitoring requires both job_id and user_id to be provided. The monitoring

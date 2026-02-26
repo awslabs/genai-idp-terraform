@@ -5,6 +5,17 @@ SPDX-License-Identifier: MIT-0
 
 The Evaluation Service component provides functionality to evaluate document extraction results by comparing extracted attributes against expected values.
 
+## Backend Integration
+
+The evaluation service uses **[Stickler](https://github.com/awslabs/stickler)** as its backend evaluation engine. Stickler is an AWS open-source library that provides sophisticated comparison algorithms and flexible configuration options. The IDP evaluation service provides an abstraction layer through `SticklerConfigMapper` that:
+
+- Translates IDP evaluation extensions (`x-aws-idp-evaluation-*`) to Stickler format
+- Maintains backend-agnostic configuration in IDP
+- Enables seamless integration with Stickler's advanced evaluation capabilities
+- Tracks Stickler version information for compatibility and debugging
+
+For version information and features available in the current Stickler integration, see `stickler_version.py`.
+
 ## Features
 
 - Compares document extraction results with expected (ground truth) results
@@ -36,6 +47,12 @@ The Evaluation Service component provides functionality to evaluate document ext
   - Confidence score columns for quality analysis
 - Supports both JSON and Markdown report formats
 - Fully integrated with the Document model architecture
+- **Document Split Classification Metrics**:
+  - Evaluates document splitting and classification accuracy
+  - Calculates page-level classification accuracy
+  - Measures split accuracy (with and without page order consideration)
+  - Provides detailed per-page and per-section analysis
+  - Generates comprehensive markdown reports with visual indicators
 
 ## Usage
 
@@ -72,7 +89,7 @@ config = {
                     "evaluation_method": "FUZZY",
                     "evaluation_threshold": 0.8
                 },
-                
+
                 # Group Attributes - nested object structures
                 {
                     "name": "Account Holder Address",
@@ -109,7 +126,7 @@ config = {
                         }
                     ]
                 },
-                
+
                 # List Attributes - arrays of items with consistent structure
                 {
                     "name": "Transactions",
@@ -191,7 +208,7 @@ The service offers two approaches for semantic evaluation:
   - Provides similarity scores without explanations
   - Great for high-volume comparisons where speed is important
   - Configurable threshold for matching sensitivity
-  
+
 - **LLM Method**: Uses Bedrock Claude or other LLM models
   - Provides detailed reasoning for why values match or don't match
   - Better at handling implicit/explicit information differences
@@ -246,6 +263,7 @@ The evaluation module produces richly formatted Markdown reports with:
    - Indications for attributes that were discovered in the data but not in the configuration
 
 Examples of method display in reports:
+
 - `EXACT` - Simple exact matching
 - `FUZZY (threshold: 0.8)` - Fuzzy matching with threshold
 - `HUNGARIAN (comparator: EXACT)` - Hungarian algorithm with exact matching
@@ -269,7 +287,7 @@ actual_results = {
 
 expected_results = {
     "invoice_number": "INV-12345",          # In configuration
-    "amount_due": "$1,250.00",              # In configuration 
+    "amount_due": "$1,250.00",              # In configuration
     "issue_date": "01/15/2023",             # Not in configuration
     "reference_number": "REF-98765"         # Not in configuration, missing in actual
 }
@@ -283,6 +301,7 @@ expected_results = {
 ```
 
 This capability is particularly useful for:
+
 - Exploratory evaluation when the complete schema is not yet defined
 - Handling variations in extraction outputs that may contain additional information
 - Identifying potential new attributes to add to the configuration
@@ -299,6 +318,7 @@ The evaluation service automatically integrates with the assessment feature to d
 ### Enhanced Report Format
 
 #### JSON Output with Confidence
+
 ```json
 {
   "attributes": [
@@ -316,6 +336,7 @@ The evaluation service automatically integrates with the assessment feature to d
 ```
 
 #### Markdown Table with Confidence
+
 ```
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :---------------: | ----- | ------ | ------ |
@@ -334,6 +355,7 @@ Confidence scores provide additional insights for evaluation analysis:
 ### Backward Compatibility
 
 The confidence integration is fully backward compatible:
+
 - Reports without assessment data show "N/A" for confidence columns
 - Evaluation logic remains unchanged when confidence data is absent
 - Existing evaluation workflows continue to work without modification
@@ -345,6 +367,7 @@ The evaluation service fully supports nested document structures including group
 ### Attribute Types and Processing
 
 #### Simple Attributes
+
 Basic single-value extractions that are evaluated directly:
 
 ```python
@@ -359,7 +382,8 @@ Basic single-value extractions that are evaluated directly:
 # Evaluation: Direct comparison using EXACT method
 ```
 
-#### Group Attributes  
+#### Group Attributes
+
 Nested object structures where each sub-attribute is evaluated individually:
 
 ```python
@@ -375,7 +399,7 @@ Nested object structures where each sub-attribute is evaluated individually:
         },
         {
             "name": "City",
-            "evaluation_method": "FUZZY", 
+            "evaluation_method": "FUZZY",
             "evaluation_threshold": 0.9
         }
     ]
@@ -387,6 +411,7 @@ Nested object structures where each sub-attribute is evaluated individually:
 ```
 
 #### List Attributes
+
 Arrays of items where each item's attributes are evaluated individually:
 
 ```python
@@ -422,6 +447,7 @@ Arrays of items where each item's attributes are evaluated individually:
 The evaluation service automatically flattens nested extraction results for comparison:
 
 #### Input Data (Nested)
+
 ```json
 {
   "Account Number": "1234567890",
@@ -438,7 +464,7 @@ The evaluation service automatically flattens nested extraction results for comp
       "Amount": "-4.50"
     },
     {
-      "Date": "01/16/2024", 
+      "Date": "01/16/2024",
       "Description": "ATM Withdrawal",
       "Amount": "-20.00"
     }
@@ -447,18 +473,19 @@ The evaluation service automatically flattens nested extraction results for comp
 ```
 
 #### Flattened Data (For Evaluation)
+
 ```json
 {
   "Account Number": "1234567890",
   "Account Holder Address.Street Number": "123",
-  "Account Holder Address.Street Name": "Main St", 
+  "Account Holder Address.Street Name": "Main St",
   "Account Holder Address.City": "Seattle",
   "Account Holder Address.State": "WA",
   "Transactions[0].Date": "01/15/2024",
   "Transactions[0].Description": "Coffee Shop",
   "Transactions[0].Amount": "-4.50",
   "Transactions[1].Date": "01/16/2024",
-  "Transactions[1].Description": "ATM Withdrawal", 
+  "Transactions[1].Description": "ATM Withdrawal",
   "Transactions[1].Amount": "-20.00"
 }
 ```
@@ -468,13 +495,14 @@ The evaluation service automatically flattens nested extraction results for comp
 The evaluation service provides detailed results for all flattened attributes:
 
 #### Sample Evaluation Output
+
 ```json
 {
   "attributes": [
     {
       "name": "Account Number",
       "expected": "1234567890",
-      "actual": "1234567890", 
+      "actual": "1234567890",
       "matched": true,
       "score": 1.0,
       "confidence": 0.95,
@@ -500,7 +528,7 @@ The evaluation service provides detailed results for all flattened attributes:
       "evaluation_method": "NUMERIC_EXACT"
     },
     {
-      "name": "Transactions[1].Description", 
+      "name": "Transactions[1].Description",
       "expected": "ATM Withdrawal",
       "actual": "ATM Cash",
       "matched": true,
@@ -514,6 +542,7 @@ The evaluation service provides detailed results for all flattened attributes:
 ```
 
 #### Markdown Report for Nested Structures
+
 ```markdown
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :--------: | ----- | ------ | ------ |
@@ -544,3 +573,300 @@ The evaluation service provides detailed results for all flattened attributes:
 - **Financial Reports**: Evaluate company info (group) and financial line items (lists)
 
 The nested structure support enables comprehensive evaluation of complex documents while maintaining the flexibility to apply appropriate evaluation methods to each type of data within the document.
+
+## Document Split Classification Metrics
+
+The evaluation service provides specialized metrics for evaluating document splitting and classification accuracy. This feature is particularly useful for assessing how well the system:
+
+- Classifies individual pages
+- Groups pages into document sections
+- Maintains correct page order within sections
+
+### Overview
+
+`DocSplitClassificationMetrics` evaluates three types of accuracy:
+
+1. **Page Level Accuracy**: Classification accuracy for individual pages
+2. **Split Accuracy (Without Order)**: Correct page grouping regardless of order
+3. **Split Accuracy (With Order)**: Correct page grouping with exact order
+
+### Usage
+
+```python
+from idp_common.evaluation.doc_split_classification_metrics import DocSplitClassificationMetrics
+
+# Initialize calculator
+doc_split_calculator = DocSplitClassificationMetrics()
+
+# Load ground truth and predicted sections
+doc_split_calculator.load_sections(
+    ground_truth_sections=expected_document.sections,
+    predicted_sections=actual_document.sections
+)
+
+# Calculate all metrics
+metrics = doc_split_calculator.calculate_all_metrics()
+
+# Generate markdown report
+report = doc_split_calculator.generate_markdown_report(metrics)
+
+# Access individual metric types
+page_level = metrics["page_level_accuracy"]
+split_no_order = metrics["split_accuracy_without_order"]
+split_with_order = metrics["split_accuracy_with_order"]
+```
+
+### Metrics Explained
+
+#### 1. Page Level Accuracy
+
+Evaluates classification accuracy for **individual pages** by comparing the `document_class` assigned to each page index.
+
+**Calculation:**
+
+- For each page index in ground truth or predicted data
+- Check if the predicted document_class matches the ground truth document_class
+- Calculate: `correct_pages / total_pages`
+
+**Use Case:** Determine if the classification model correctly identifies document types at the page level.
+
+**Example:**
+
+```python
+page_level = {
+    "accuracy": 0.95,
+    "total_pages": 20,
+    "correct_pages": 19,
+    "page_details": [
+        {
+            "page_index": 0,
+            "ground_truth_class": "Invoice",
+            "predicted_class": "Invoice",
+            "correct": True
+        },
+        {
+            "page_index": 5,
+            "ground_truth_class": "W2",
+            "predicted_class": "Receipt",
+            "correct": False
+        }
+    ]
+}
+```
+
+#### 2. Split Accuracy (Without Order)
+
+Evaluates whether the system correctly groups pages into sections with the right document class, **regardless of page order**.
+
+**Calculation:**
+
+- For each ground truth section
+- Find a predicted section with:
+  - Same set of page indices (as a set, order doesn't matter)
+  - Same document_class
+- Calculate: `matched_sections / total_ground_truth_sections`
+
+**Use Case:** Assess if the system correctly identifies which pages belong together, even if the order is different.
+
+**Example:**
+
+```python
+split_no_order = {
+    "accuracy": 0.90,
+    "total_sections": 10,
+    "correct_sections": 9,
+    "section_details": [
+        {
+            "section_id": "section_1",
+            "ground_truth_class": "Invoice",
+            "ground_truth_pages": [0, 1, 2],
+            "matched": True,
+            "predicted_class": "Invoice",
+            "predicted_pages": [2, 0, 1]  # Different order, but same pages
+        }
+    ]
+}
+```
+
+#### 3. Split Accuracy (With Order)
+
+Evaluates whether the system correctly groups pages into sections with the right document class, **including exact page order**.
+
+**Calculation:**
+
+- For each ground truth section
+- Find a predicted section with:
+  - Exact same page indices list (same order)
+  - Same document_class
+- Calculate: `matched_sections / total_ground_truth_sections`
+
+**Use Case:** Assess if the system maintains the correct page sequence within document sections.
+
+**Example:**
+
+```python
+split_with_order = {
+    "accuracy": 0.85,
+    "total_sections": 10,
+    "correct_sections": 8,  # Lower than split_no_order due to order requirement
+    "section_details": [
+        {
+            "section_id": "section_1",
+            "ground_truth_class": "Invoice",
+            "ground_truth_pages": [0, 1, 2],
+            "matched": True,
+            "order_matched": True,
+            "predicted_class": "Invoice",
+            "predicted_pages": [0, 1, 2]  # Exact match including order
+        },
+        {
+            "section_id": "section_2",
+            "ground_truth_class": "W2",
+            "ground_truth_pages": [3, 4],
+            "matched": False,
+            "order_matched": False,
+            "predicted_class": "W2",
+            "predicted_pages": [4, 3]  # Wrong order
+        }
+    ]
+}
+```
+
+### Visual Reporting
+
+The `generate_markdown_report()` method creates comprehensive visual reports with:
+
+#### Summary Dashboard
+
+```markdown
+## 🎯 Split Classification Summary
+
+- **Page Level Accuracy**: 🟢 19/20 pages [███████████████████░] 95%
+- **Split Accuracy (Without Order)**: 🟢 9/10 sections [██████████████████░░] 90%
+- **Split Accuracy (With Order)**: 🟡 8/10 sections [████████████████░░░░] 80%
+```
+
+#### Metrics Table
+
+```markdown
+| Metric | Accuracy | Rating | Correct/Total |
+| ------ | :------: | :----: | :-----------: |
+| Page Level Classification | 0.9500 | 🟢 Excellent | 19/20 pages |
+| Document Split (Without Page Order) | 0.9000 | 🟢 Excellent | 9/10 sections |
+| Document Split (With Page Order) | 0.8000 | 🟡 Good | 8/10 sections |
+```
+
+#### Combined Section Analysis
+
+```markdown
+| Section Match | Page Order Match | Section ID | Expected Class | Expected Pages | Pred Class | Pred Pages | Matched Section |
+| :-----------: | :--------------: | ---------- | -------------- | -------------- | ---------- | ---------- | --------------- |
+| ✅ | ✅ | section_1 | Invoice | [0, 1, 2] | Invoice | [0, 1, 2] | pred_section_1 |
+| ✅ | ❌ | section_2 | W2 | [3, 4] | W2 | [4, 3] | pred_section_2 |
+| ❌ | ❌ | section_3 | Receipt | [5, 6] | Invoice | [5] | N/A |
+| ❌ | ❌ | N/A | No Match | N/A | Receipt | [6, 7] | pred_section_4 |
+```
+
+**Column Definitions:**
+
+- **Section Match**: ✅ if pages match as a set with same class (order independent)
+- **Page Order Match**: ✅ if Section Match is true AND page order matches exactly
+- **Matched Section**: ID of the predicted section that corresponds to ground truth
+- **Unmatched Predicted Sections**: Rows with "N/A" for ground truth indicate over-segmentation
+
+#### Color-Coded Ratings
+
+The reports use visual indicators for quick assessment:
+
+- 🟢 **Excellent** (≥ 90% accuracy)
+- 🟡 **Good** (70-89% accuracy)
+- 🟠 **Fair** (50-69% accuracy)
+- 🔴 **Poor** (< 50% accuracy)
+
+### Integration with Evaluation Service
+
+Document split classification metrics are automatically calculated during document evaluation when both ground truth and predicted sections are available:
+
+```python
+# Automatic integration during evaluation
+result_document = evaluation_service.evaluate_document(
+    actual_document=processed_document,
+    expected_document=expected_document
+)
+
+# Split classification results are included in evaluation output
+if result_document.evaluation_result:
+    split_metrics = result_document.evaluation_result.doc_split_metrics
+    # Access page-level, split accuracy, and detailed analysis
+```
+
+### Use Cases
+
+1. **Model Validation**: Assess classification model performance at page and document levels
+2. **System Tuning**: Compare different splitting algorithms or thresholds
+3. **Quality Assurance**: Identify systematic issues in document segmentation
+4. **A/B Testing**: Compare performance of different classification approaches
+5. **Continuous Monitoring**: Track classification accuracy over time
+
+### Best Practices
+
+1. **Prepare Ground Truth**: Ensure ground truth sections have accurate:
+   - `document_class` assignments
+   - `page_indices` lists
+   - Consistent section identifiers
+
+2. **Interpret Metrics Together**:
+   - High page-level accuracy but low split accuracy → Correct classification but poor grouping
+   - Low page-level accuracy → Review classification model
+   - High split accuracy without order but low with order → Page sequencing issues
+
+3. **Use Detailed Analysis**: Review `page_details` and `section_details` to identify specific problem areas
+
+4. **Monitor Over Time**: Track metrics across multiple evaluation runs to detect regression
+
+### Error Handling
+
+The calculator gracefully handles missing or malformed data:
+
+- Missing `extraction_result_uri`: Section skipped with warning
+- Invalid page indices: Empty list with warning
+- Missing document_class: Recorded as "Unknown"
+- Errors logged in `metrics["errors"]` array
+
+### Example: Complete Workflow
+
+```python
+from idp_common.evaluation.doc_split_classification_metrics import DocSplitClassificationMetrics
+
+# Initialize
+calculator = DocSplitClassificationMetrics()
+
+# Load sections (from Document objects)
+calculator.load_sections(
+    ground_truth_sections=baseline_document.sections,
+    predicted_sections=processed_document.sections
+)
+
+# Calculate all metrics
+all_metrics = calculator.calculate_all_metrics()
+
+# Generate and save report
+report = calculator.generate_markdown_report(all_metrics)
+with open("split_classification_report.md", "w") as f:
+    f.write(report)
+
+# Access specific metrics for analysis
+page_acc = all_metrics["page_level_accuracy"]["accuracy"]
+split_acc_no_order = all_metrics["split_accuracy_without_order"]["accuracy"]
+split_acc_with_order = all_metrics["split_accuracy_with_order"]["accuracy"]
+
+print(f"Page Classification: {page_acc:.2%}")
+print(f"Split Accuracy (no order): {split_acc_no_order:.2%}")
+print(f"Split Accuracy (with order): {split_acc_with_order:.2%}")
+
+# Check for errors
+if all_metrics.get("errors"):
+    print(f"\nWarnings/Errors: {len(all_metrics['errors'])}")
+    for error in all_metrics["errors"]:
+        print(f"  - {error}")
+```

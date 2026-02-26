@@ -3,7 +3,7 @@
 #
 
 # Bedrock LLM Processor
-# This processor implements an intelligent document processing workflow that uses Amazon Bedrock 
+# This processor implements an intelligent document processing workflow that uses Amazon Bedrock
 # with Nova or Claude models for both page classification/grouping and information extraction.
 #
 # Note: The deprecated nested 'processing_environment' variable has been removed.
@@ -107,15 +107,24 @@ locals {
         }
       )
     } : {},
-    # Only override extraction model if provided
-    var.extraction_model_id != null ? {
+    # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
+    {
       extraction = merge(
         local.base_config.extraction,
-        {
-          model = var.extraction_model_id
-        }
+        var.extraction_model_id != null ? { model = var.extraction_model_id } : {},
+        var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
+        var.enable_agentic_extraction ? {
+          agentic = merge(
+            try(local.base_config.extraction.agentic, {}),
+            {
+              enabled            = true
+              review_agent       = var.review_agent_model != "" ? true : false
+              review_agent_model = var.review_agent_model
+            }
+          )
+        } : {}
       )
-    } : {},
+    },
     # Only override summarization model if provided
     var.summarization_model_id != null ? {
       summarization = merge(
@@ -172,7 +181,7 @@ resource "aws_sfn_state_machine" "document_processing" {
     IsSummarizationEnabled      = var.is_summarization_enabled ? "true" : "false"
     HITLWaitFunctionArn         = var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-wait-function"
     HITLStatusUpdateFunctionArn = var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-status-function"
-    EvaluationLambdaArn         = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-evaluation-function"
+    EvaluationLambdaArn         = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : ""
     OutputBucket                = local.output_bucket_name
   })
 

@@ -7,7 +7,7 @@
  * This module implements the BDA document processor using Amazon Bedrock Data Automation.
  * It provides a managed solution for extracting structured data from documents with
  * minimal custom code.
- * 
+ *
  * This implementation matches the AWS CDK approach by reading configuration from the
  * config.yaml file and allowing model overrides through variables.
  */
@@ -140,6 +140,24 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
+# ECR Repository for BDA processor Docker images
+resource "aws_ecr_repository" "bda_processor" {
+  name                 = "${var.name}-bda-processor"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = var.enable_ecr_image_scanning
+  }
+
+  encryption_configuration {
+    encryption_type = var.encryption_key_arn != null ? "KMS" : "AES256"
+    kms_key         = var.encryption_key_arn != null ? var.encryption_key_arn : null
+  }
+
+  tags = var.tags
+}
+
 # Determine if summarization is enabled based on config.yaml or variable override
 locals {
   # Read config.yaml to check if summarization model is defined
@@ -164,6 +182,7 @@ resource "aws_sfn_state_machine" "document_processing" {
     HITLStatusUpdateFunctionArn = aws_lambda_function.hitl_status_update.arn
     IsSummarizationEnabled      = local.is_summarization_enabled ? "true" : "false"
     SummarizationLambdaArn      = aws_lambda_function.summarization.arn
+    EvaluationLambdaArn         = aws_lambda_function.evaluation_function.arn
     OutputBucket                = local.output_bucket_name
     WorkingBucket               = local.working_bucket_name
     BDAProjectArn               = var.data_automation_project_arn
@@ -244,7 +263,7 @@ resource "aws_lambda_permission" "allow_eventbridge_to_invoke_bda_completion" {
 #   count       = var.evaluation_baseline_bucket != null ? 1 : 0
 #   name        = "${var.name}-evaluation-function-rule-${random_string.suffix.result}"
 #   description = "Rule for triggering evaluation function on successful document processing"
-# 
+#
 #   event_pattern = jsonencode({
 #     source        = ["aws.states"]
 #     "detail-type" = ["Step Functions Execution Status Change"]
@@ -255,7 +274,7 @@ resource "aws_lambda_permission" "allow_eventbridge_to_invoke_bda_completion" {
 #       status = ["SUCCEEDED"]
 #     }
 #   })
-# 
+#
 #   tags = var.tags
 # }
 

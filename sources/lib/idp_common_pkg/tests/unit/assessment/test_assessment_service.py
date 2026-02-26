@@ -23,6 +23,7 @@ sys.modules["PIL.Image"] = MagicMock()
 
 # Finally import application modules
 from idp_common.assessment.service import AssessmentService
+from idp_common.config.models import IDPConfig
 from idp_common.models import Document, Section, Status, Page
 
 
@@ -32,98 +33,100 @@ class TestAssessmentService:
 
     @pytest.fixture
     def mock_config(self):
-        """Fixture providing a mock configuration."""
+        """Fixture providing a mock configuration in JSON Schema format."""
         return {
             "classes": [
                 {
-                    "name": "invoice",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "invoice",
+                    "x-aws-idp-document-type": "invoice",
+                    "type": "object",
                     "description": "An invoice document",
-                    "attributes": [
-                        {
-                            "name": "invoice_number",
+                    "properties": {
+                        "invoice_number": {
+                            "type": "string",
                             "description": "The invoice number",
-                            "confidence_threshold": "0.95",
+                            "x-aws-idp-confidence-threshold": 0.95,
                         },
-                        {
-                            "name": "invoice_date",
+                        "invoice_date": {
+                            "type": "string",
                             "description": "The invoice date",
-                            "confidence_threshold": "0.85",
+                            "x-aws-idp-confidence-threshold": 0.85,
                         },
-                        {
-                            "name": "total_amount",
+                        "total_amount": {
+                            "type": "string",
                             "description": "The total amount",
-                            "confidence_threshold": "0.9",
+                            "x-aws-idp-confidence-threshold": 0.9,
                         },
-                    ],
+                    },
                 },
                 {
-                    "name": "bank_statement",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "bank_statement",
+                    "x-aws-idp-document-type": "bank_statement",
+                    "type": "object",
                     "description": "Monthly bank account statement",
-                    "attributes": [
-                        {
-                            "name": "account_number",
+                    "properties": {
+                        "account_number": {
+                            "type": "string",
                             "description": "Primary account identifier",
-                            "attributeType": "simple",
-                            "confidence_threshold": "0.95",
+                            "x-aws-idp-confidence-threshold": 0.95,
                         },
-                        {
-                            "name": "account_holder_address",
+                        "account_holder_address": {
+                            "type": "object",
                             "description": "Complete address information for the account holder",
-                            "attributeType": "group",
-                            "groupAttributes": [
-                                {
-                                    "name": "street_number",
+                            "properties": {
+                                "street_number": {
+                                    "type": "string",
                                     "description": "House or building number",
-                                    "confidence_threshold": "0.9",
+                                    "x-aws-idp-confidence-threshold": 0.9,
                                 },
-                                {
-                                    "name": "street_name",
+                                "street_name": {
+                                    "type": "string",
                                     "description": "Name of the street",
-                                    "confidence_threshold": "0.8",
+                                    "x-aws-idp-confidence-threshold": 0.8,
                                 },
-                                {
-                                    "name": "city",
+                                "city": {
+                                    "type": "string",
                                     "description": "City name",
-                                    "confidence_threshold": "0.9",
+                                    "x-aws-idp-confidence-threshold": 0.9,
                                 },
-                                {
-                                    "name": "state",
+                                "state": {
+                                    "type": "string",
                                     "description": "State abbreviation",
-                                    # No confidence_threshold - should use default
                                 },
-                            ],
-                        },
-                        {
-                            "name": "transactions",
-                            "description": "List of all transactions in the statement period",
-                            "attributeType": "list",
-                            "listItemTemplate": {
-                                "itemDescription": "Individual transaction record",
-                                "itemAttributes": [
-                                    {
-                                        "name": "date",
-                                        "description": "Transaction date (MM/DD/YYYY)",
-                                        "confidence_threshold": "0.9",
-                                    },
-                                    {
-                                        "name": "description",
-                                        "description": "Transaction description or merchant name",
-                                        "confidence_threshold": "0.7",
-                                    },
-                                    {
-                                        "name": "amount",
-                                        "description": "Transaction amount",
-                                        "confidence_threshold": "0.95",
-                                    },
-                                    {
-                                        "name": "balance",
-                                        "description": "Account balance after transaction",
-                                        # No confidence_threshold - should use default
-                                    },
-                                ],
                             },
                         },
-                    ],
+                        "transactions": {
+                            "type": "array",
+                            "description": "List of all transactions in the statement period",
+                            "x-aws-idp-list-item-description": "Individual transaction record",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "date": {
+                                        "type": "string",
+                                        "description": "Transaction date (MM/DD/YYYY)",
+                                        "x-aws-idp-confidence-threshold": 0.9,
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": "Transaction description or merchant name",
+                                        "x-aws-idp-confidence-threshold": 0.7,
+                                    },
+                                    "amount": {
+                                        "type": "string",
+                                        "description": "Transaction amount",
+                                        "x-aws-idp-confidence-threshold": 0.95,
+                                    },
+                                    "balance": {
+                                        "type": "string",
+                                        "description": "Account balance after transaction",
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
             ],
             "assessment": {
@@ -134,16 +137,16 @@ class TestAssessmentService:
                 "system_prompt": "You are a document assessment assistant.",
                 "task_prompt": dedent("""
                     Assess the confidence of the following extraction results from this {DOCUMENT_CLASS} document:
-                    
+
                     Expected fields:
                     {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
-                    
+
                     Extraction results:
                     {EXTRACTION_RESULTS}
-                    
+
                     Document text:
                     {DOCUMENT_TEXT}
-                    
+
                     Respond with a JSON object containing confidence scores and reasons for each field.
                 """),
             },
@@ -186,44 +189,44 @@ class TestAssessmentService:
         service = AssessmentService(region="us-west-2", config=mock_config)
 
         assert service.region == "us-west-2"
-        assert service.config == mock_config
+        # Config is converted to IDPConfig model, verify it has the expected structure
+        assert hasattr(service.config, "assessment")
+        assert service.config.assessment.model == mock_config["assessment"]["model"]
 
-    def test_get_class_attributes(self, service):
-        """Test getting attributes for a document class."""
+    def test_get_class_schema(self, service):
+        """Test getting schema for a document class."""
         # Test with existing class
-        invoice_attrs = service._get_class_attributes("invoice")
-        assert len(invoice_attrs) == 3
-        assert invoice_attrs[0]["name"] == "invoice_number"
-        assert invoice_attrs[1]["name"] == "invoice_date"
-        assert invoice_attrs[2]["name"] == "total_amount"
+        invoice_schema = service._get_class_schema("invoice")
+        assert invoice_schema.get("x-aws-idp-document-type") == "invoice"
+        assert "properties" in invoice_schema
+        assert "invoice_number" in invoice_schema["properties"]
+        assert "invoice_date" in invoice_schema["properties"]
+        assert "total_amount" in invoice_schema["properties"]
 
         # Test with non-existent class
-        unknown_attrs = service._get_class_attributes("unknown")
-        assert len(unknown_attrs) == 0
+        unknown_schema = service._get_class_schema("unknown")
+        assert unknown_schema == {}
 
         # Test case insensitivity
-        invoice_attrs_upper = service._get_class_attributes("INVOICE")
-        assert len(invoice_attrs_upper) == 3
+        invoice_schema_upper = service._get_class_schema("INVOICE")
+        assert invoice_schema_upper.get("x-aws-idp-document-type") == "invoice"
 
-    def test_format_attribute_descriptions(self, service):
-        """Test formatting attribute descriptions for simple attributes."""
-        attributes = [
-            {"name": "invoice_number", "description": "The invoice number"},
-            {"name": "invoice_date", "description": "The invoice date"},
-        ]
-
-        formatted = service._format_attribute_descriptions(attributes)
+    def test_format_property_descriptions(self, service):
+        """Test formatting property descriptions from JSON Schema."""
+        # Get invoice schema
+        invoice_schema = service._get_class_schema("invoice")
+        formatted = service._format_property_descriptions(invoice_schema)
 
         assert "invoice_number" in formatted
         assert "The invoice number" in formatted
         assert "invoice_date" in formatted
         assert "The invoice date" in formatted
 
-    def test_format_nested_attribute_descriptions(self, service):
-        """Test formatting nested attribute descriptions (group and list types)."""
-        # Get bank statement attributes with nested structures
-        bank_statement_attrs = service._get_class_attributes("bank_statement")
-        formatted = service._format_attribute_descriptions(bank_statement_attrs)
+    def test_format_nested_property_descriptions(self, service):
+        """Test formatting nested property descriptions (object and array types)."""
+        # Get bank statement schema with nested structures
+        bank_statement_schema = service._get_class_schema("bank_statement")
+        formatted = service._format_property_descriptions(bank_statement_schema)
 
         # Test that main attributes are present
         assert "account_number" in formatted
@@ -254,133 +257,73 @@ class TestAssessmentService:
         assert "  - balance" in formatted
         assert "Account balance after transaction" in formatted
 
-    def test_get_attribute_confidence_threshold_simple(self, service):
-        """Test getting confidence threshold for simple attributes."""
-        invoice_attrs = service._get_class_attributes("invoice")
-        default_threshold = 0.8
+    def test_confidence_thresholds_in_schema(self, service):
+        """Test that confidence thresholds are present in JSON Schema."""
+        # Get invoice schema
+        invoice_schema = service._get_class_schema("invoice")
+        properties = invoice_schema.get("properties", {})
 
-        # Test existing attribute with threshold
-        threshold = service._get_attribute_confidence_threshold(
-            "invoice_number", invoice_attrs, default_threshold
-        )
-        assert threshold == 0.95
+        # Test properties have confidence thresholds
+        assert properties["invoice_number"]["x-aws-idp-confidence-threshold"] == 0.95
+        assert properties["invoice_date"]["x-aws-idp-confidence-threshold"] == 0.85
+        assert properties["total_amount"]["x-aws-idp-confidence-threshold"] == 0.9
 
-        # Test existing attribute with different threshold
-        threshold = service._get_attribute_confidence_threshold(
-            "invoice_date", invoice_attrs, default_threshold
-        )
-        assert threshold == 0.85
+    def test_nested_confidence_thresholds_in_schema(self, service):
+        """Test that nested confidence thresholds are accessible in JSON Schema."""
+        bank_statement_schema = service._get_class_schema("bank_statement")
+        properties = bank_statement_schema.get("properties", {})
 
-        # Test non-existent attribute (should return default)
-        threshold = service._get_attribute_confidence_threshold(
-            "unknown_field", invoice_attrs, default_threshold
-        )
-        assert threshold == default_threshold
+        # Test top-level property
+        assert properties["account_number"]["x-aws-idp-confidence-threshold"] == 0.95
 
-    def test_get_attribute_confidence_threshold_nested(self, service):
-        """Test getting confidence threshold for nested attributes."""
-        bank_statement_attrs = service._get_class_attributes("bank_statement")
-        default_threshold = 0.8
+        # Test nested object properties
+        address_props = properties["account_holder_address"]["properties"]
+        assert address_props["street_number"]["x-aws-idp-confidence-threshold"] == 0.9
+        assert address_props["street_name"]["x-aws-idp-confidence-threshold"] == 0.8
+        assert address_props["city"]["x-aws-idp-confidence-threshold"] == 0.9
+        # state has no threshold - not set
 
-        # Test top-level attribute
-        threshold = service._get_attribute_confidence_threshold(
-            "account_number", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.95
+        # Test array item properties
+        transaction_props = properties["transactions"]["items"]["properties"]
+        assert transaction_props["date"]["x-aws-idp-confidence-threshold"] == 0.9
+        assert transaction_props["description"]["x-aws-idp-confidence-threshold"] == 0.7
+        assert transaction_props["amount"]["x-aws-idp-confidence-threshold"] == 0.95
+        # balance has no threshold - not set
 
-        # Test group nested attributes
-        threshold = service._get_attribute_confidence_threshold(
-            "street_number", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.9
-
-        threshold = service._get_attribute_confidence_threshold(
-            "street_name", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.8
-
-        threshold = service._get_attribute_confidence_threshold(
-            "city", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.9
-
-        # Test group nested attribute without threshold (should use default)
-        threshold = service._get_attribute_confidence_threshold(
-            "state", bank_statement_attrs, default_threshold
-        )
-        assert threshold == default_threshold
-
-        # Test list nested attributes
-        threshold = service._get_attribute_confidence_threshold(
-            "date", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.9
-
-        threshold = service._get_attribute_confidence_threshold(
-            "description", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.7
-
-        threshold = service._get_attribute_confidence_threshold(
-            "amount", bank_statement_attrs, default_threshold
-        )
-        assert threshold == 0.95
-
-        # Test list nested attribute without threshold (should use default)
-        threshold = service._get_attribute_confidence_threshold(
-            "balance", bank_statement_attrs, default_threshold
-        )
-        assert threshold == default_threshold
-
-        # Test completely unknown attribute
-        threshold = service._get_attribute_confidence_threshold(
-            "unknown_field", bank_statement_attrs, default_threshold
-        )
-        assert threshold == default_threshold
-
-    def test_format_attribute_descriptions_edge_cases(self, service):
-        """Test formatting attribute descriptions with edge cases."""
-        # Test empty list
-        formatted = service._format_attribute_descriptions([])
+    def test_format_property_descriptions_edge_cases(self, service):
+        """Test formatting property descriptions with edge cases."""
+        # Test empty schema
+        empty_schema = {"properties": {}}
+        formatted = service._format_property_descriptions(empty_schema)
         assert formatted == ""
 
-        # Test group with no groupAttributes
-        attributes = [
-            {
-                "name": "address",
-                "description": "Complete address information",
-                "attributeType": "group",
+        # Test object with no nested properties
+        schema_no_props = {
+            "properties": {
+                "address": {
+                    "type": "object",
+                    "description": "Complete address information",
+                }
             }
-        ]
-        formatted = service._format_attribute_descriptions(attributes)
+        }
+        formatted = service._format_property_descriptions(schema_no_props)
         assert "address" in formatted
         assert "Complete address information" in formatted
 
-        # Test list with no itemAttributes
-        attributes = [
-            {
-                "name": "items",
-                "description": "List of items",
-                "attributeType": "list",
-                "listItemTemplate": {"itemDescription": "Individual item"},
+        # Test array with no items schema
+        schema_no_items = {
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": "List of items",
+                    "x-aws-idp-list-item-description": "Individual item",
+                }
             }
-        ]
-        formatted = service._format_attribute_descriptions(attributes)
+        }
+        formatted = service._format_property_descriptions(schema_no_items)
         assert "items" in formatted
         assert "List of items" in formatted
         assert "Each item: Individual item" in formatted
-
-        # Test list with no listItemTemplate
-        attributes = [
-            {
-                "name": "items",
-                "description": "List of items",
-                "attributeType": "list",
-            }
-        ]
-        formatted = service._format_attribute_descriptions(attributes)
-        assert "items" in formatted
-        assert "List of items" in formatted
 
     @patch("idp_common.s3.get_json_content")
     @patch("idp_common.s3.get_text_content")
@@ -540,3 +483,45 @@ class TestAssessmentService:
         # Should return without error but log warning
         assert len(result.errors) == 0
         mock_get_json_content.assert_called_once()
+
+    def test_init_with_none_config(self):
+        """Test initialization with None config creates default IDPConfig."""
+        service = AssessmentService(region="us-east-1", config=None)
+
+        assert service.region == "us-east-1"
+        assert isinstance(service.config, IDPConfig)
+        # Verify default config has assessment settings
+        assert hasattr(service.config, "assessment")
+
+    def test_init_with_dict_config(self, mock_config):
+        """Test initialization with dict config converts to IDPConfig."""
+        service = AssessmentService(region="us-east-1", config=mock_config)
+
+        assert service.region == "us-east-1"
+        assert isinstance(service.config, IDPConfig)
+        # Verify config was properly converted
+        assert service.config.assessment.model == mock_config["assessment"]["model"]
+
+    def test_init_with_idpconfig_instance(self, mock_config):
+        """Test initialization with IDPConfig instance (the previously failing case)."""
+        # Create an IDPConfig instance first
+        config_instance = IDPConfig(**mock_config)
+
+        # Initialize service with IDPConfig instance
+        service = AssessmentService(region="us-east-1", config=config_instance)
+
+        assert service.region == "us-east-1"
+        assert isinstance(service.config, IDPConfig)
+        # Should use the same instance
+        assert service.config is config_instance
+        # Verify config properties are accessible
+        assert service.config.assessment.model == mock_config["assessment"]["model"]
+
+    def test_init_with_invalid_config_type(self):
+        """Test initialization with invalid config type raises ValueError."""
+        # Try to initialize with an invalid config type (e.g., a string)
+        with pytest.raises(ValueError) as exc_info:
+            AssessmentService(region="us-east-1", config="invalid_config")
+
+        # Verify error message mentions the invalid type
+        assert "Invalid config type" in str(exc_info.value)

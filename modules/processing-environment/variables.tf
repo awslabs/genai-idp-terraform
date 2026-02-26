@@ -151,3 +151,9 @@ variable "lambda_tracing_mode" {
     error_message = "Lambda tracing mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+variable "custom_post_processor_arn" {
+  description = "ARN of a custom Lambda function to invoke after document processing completes. Used by the post_processing_decompressor."
+  type        = string
+  default     = null
+}

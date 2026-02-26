@@ -15,11 +15,12 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import s3fs
 
 from idp_common import bedrock, s3, utils
+from idp_common.config.models import IDPConfig
 from idp_common.criteria_validation.models import (
     CriteriaValidationResult,
     LLMResponse,
@@ -31,23 +32,29 @@ logger = logging.getLogger(__name__)
 class CriteriaValidationService:
     """Service for validating documents against criteria using LLMs."""
 
-    def __init__(self, region: str = None, config: Dict[str, Any] = None):
+    def __init__(
+        self, region: str = None, config: Union[Dict[str, Any], IDPConfig] = None
+    ):
         """
         Initialize the criteria validation service.
 
         Args:
             region: AWS region for Bedrock
-            config: Configuration dictionary
+            config: Configuration dictionary or IDPConfig model
         """
-        self.config = config or {}
-        self.region = (
-            region or self.config.get("region") or os.environ.get("AWS_REGION")
-        )
+        # Convert dict to IDPConfig if needed
+        if config is not None and isinstance(config, dict):
+            config_model: IDPConfig = IDPConfig(**config)
+        elif config is None:
+            config_model = IDPConfig()
+        else:
+            config_model = config
 
-        # Get model_id from config
-        model_id = self.config.get("model_id") or self.config.get(
-            "criteria_validation", {}
-        ).get("model")
+        self.config = config_model
+        self.region = region or os.environ.get("AWS_REGION")
+
+        # Get model_id from typed config
+        model_id = self.config.criteria_validation.model
         logger.info(f"Initialized criteria validation service with model {model_id}")
 
         # Initialize token tracking (will be accumulated using utils.merge_metering_data)
@@ -64,19 +71,11 @@ class CriteriaValidationService:
             "criteria_processing_time": [],
         }
 
-        # Get async processing config
-        self.semaphore = asyncio.Semaphore(
-            self.config.get("criteria_validation", {}).get("semaphore", 5)
-        )
-        self.max_chunk_size = self.config.get("criteria_validation", {}).get(
-            "max_chunk_size", 10000
-        )
-        self.token_size = self.config.get("criteria_validation", {}).get(
-            "token_size", 4
-        )
-        self.overlap_percentage = self.config.get("criteria_validation", {}).get(
-            "overlap_percentage", 10
-        )
+        # Get async processing config (type-safe access, Pydantic handles conversions)
+        self.semaphore = asyncio.Semaphore(self.config.criteria_validation.semaphore)
+        self.max_chunk_size = self.config.criteria_validation.max_chunk_size
+        self.token_size = self.config.criteria_validation.token_size
+        self.overlap_percentage = self.config.criteria_validation.overlap_percentage
 
     def _chunk_text_with_overlap(
         self,
@@ -176,6 +175,7 @@ class CriteriaValidationService:
             top_k,
             top_p,
             max_tokens,
+            None,
             context,
         )
 

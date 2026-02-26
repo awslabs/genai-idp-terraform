@@ -73,3 +73,8 @@ output "lambda_functions" {
     }
   }
 }
+
+output "evaluation_function_arn" {
+  description = "ARN of the evaluation Lambda function (used by the Step Functions state machine)"
+  value       = aws_lambda_function.evaluation_function.arn
+}

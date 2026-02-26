@@ -166,7 +166,7 @@ def extract_ids_from_human_loop_name(human_loop_name):
     try:
         if human_loop_name.startswith('review-bda-'):
             remaining = human_loop_name[11:]  # Remove 'review-bda-' (11 chars)
-            
+
             # Split from right to get the last 2 parts (record_number and page_id)
             parts = remaining.rsplit('-', 2)  # Split from right, max 2 splits
             if len(parts) == 3:
@@ -175,7 +175,7 @@ def extract_ids_from_human_loop_name(human_loop_name):
                 # parts[2] is page_id
                 record_number = int(parts[1])
                 page_id = int(parts[2])-1
-                
+
                 # Now split the first part to separate human_review_id from execution_id
                 # The human_review_id is the first part before the first hyphen
                 prefix_parts = parts[0].split('-', 1)  # Split only on first hyphen
@@ -185,7 +185,7 @@ def extract_ids_from_human_loop_name(human_loop_name):
                     return execution_id, record_number, page_id
     except Exception as e:
         logger.error(f"Error parsing human loop name {human_loop_name}: {str(e)}")
-    
+
     return None, None, None
 
 def update_token_status(token_id, status, failure_reason, tracking_table):
@@ -196,11 +196,11 @@ def update_token_status(token_id, status, failure_reason, tracking_table):
             ':status': status,
             ':updated_at': datetime.datetime.now().isoformat()
         }
-        
+
         if failure_reason:
             update_expression += ", FailureReason = :reason"
             expression_values[':reason'] = failure_reason
-        
+
         tracking_table.update_item(
             Key={'PK': token_id, 'SK': 'none'},
             UpdateExpression=update_expression,
@@ -221,13 +221,13 @@ def check_all_sections_complete(document_id, tracking_table):
                 ':type': 'HITL_SECTION'
             }
         )
-        
+
         sections = response.get('Items', [])
         logger.info(f"check_all_sections_complete_sections: {sections}")
-        
+
         if not sections:
             return False, False
-        
+
         has_failed_sections = False
         for section in sections:
             status = section.get('Status')
@@ -235,7 +235,7 @@ def check_all_sections_complete(document_id, tracking_table):
                 has_failed_sections = True
             elif status != 'Completed':
                 return False, False  # Still has pending sections
-        
+
         return True, has_failed_sections
     except Exception as e:
         logger.error(f"Error checking section completion status: {str(e)}")
@@ -251,13 +251,13 @@ def check_all_pages_complete(document_id, section_id, tracking_table):
                 ':type': 'HITL_PAGE'
             }
         )
-        
+
         items = response.get('Items', [])
         logger.info(f"check_all_pages_complete_items: {items}")
-        
+
         if not items:
             return False, []
-        
+
         Failed_pages = []
         for item in items:
             status = item.get('Status')
@@ -269,7 +269,7 @@ def check_all_pages_complete(document_id, section_id, tracking_table):
                 })
             elif status != 'Completed':
                 return False, []  # Still has pending pages
-        
+
         return True, Failed_pages
     except Exception as e:
         logger.error(f"Error checking page completion status: {str(e)}")
@@ -281,14 +281,14 @@ def find_doc_task_token(document_id, tracking_table):
         response = tracking_table.scan(
             FilterExpression="begins_with(PK, :prefix) AND TokenType = :type AND attribute_exists(TaskToken)",
             ExpressionAttributeValues={
-                ':prefix': f"HITL#TaskToken#{document_id}", 
+                ':prefix': f"HITL#TaskToken#{document_id}",
                 ':type': 'HITL_DOC'
             }
         )
-        
+
         items = response.get('Items', [])
         logger.info(f"Task token items: {items}")
-        
+
         if items:
             return items[0].get('TaskToken')
         return None
@@ -306,11 +306,11 @@ def process_Completed_hitl(detail, execution_id, record_id, page_id, table, s3_c
         output_data = json.loads(response['Body'].read())
 
         logger.info(f"output_data: {output_data}")
-        
+
         # Extract required fields
         input_content = output_data['inputContent']
         human_answers = output_data['humanAnswers'][0]['answerContent']
-        
+
         # Get blueprint info
         answer_bp = human_answers.get('blueprintSelection')
         input_bp = input_content.get('blueprintName')
@@ -319,11 +319,11 @@ def process_Completed_hitl(detail, execution_id, record_id, page_id, table, s3_c
         db_response = table.get_item(
             Key={'execution_id': execution_id, 'record_number': record_id}
         )
-        
+
         if 'Item' not in db_response:
             logger.error(f"No record found for execution_id: {execution_id}, record_number: {record_id}")
             return False
-            
+
         db_item = db_response['Item']
 
         # If blueprint matches, update inference result in DynamoDB
@@ -361,7 +361,7 @@ def process_Completed_hitl(detail, execution_id, record_id, page_id, table, s3_c
                 ExpressionAttributeValues={':val': cleaned_update},
                 ReturnValues='UPDATED_NEW'
             )
-            
+
             # Update S3 result file
             result_json_key = output_object_key + 'result.json'
             try:
@@ -399,18 +399,18 @@ def process_Completed_hitl(detail, execution_id, record_id, page_id, table, s3_c
             logger.info(f"Successfully updated record {execution_id}/{record_id} for Blueprint change")
         else:
             raise ValueError("Blueprint Value is null and need to review error manual")
-            
+
         return True
     except Exception as e:
         logger.error(f"Error processing Completed HITL: {str(e)}")
         return False
 
-def lambda_handler(event, context):
+def handler(event, context):
     """
     AWS Lambda entry point for processing HITL status changes.
     """
     logger.info(f"Processing event: {json.dumps(event)}")
-    
+
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(os.environ['DYNAMODB_TABLE'])
     tracking_table = dynamodb.Table(os.environ['TRACKING_TABLE'])
@@ -419,23 +419,23 @@ def lambda_handler(event, context):
         detail = event.get('detail', {})
         human_loop_status = detail.get('humanLoopStatus')
         human_loop_name = detail.get('humanLoopName')
-        
+
         # Extract execution_id, record_number, and page_id from human loop name
         execution_id, record_id, page_id = extract_ids_from_human_loop_name(human_loop_name)
-        
+
         if not all([execution_id, record_id is not None, page_id is not None]):
             logger.error(f"Could not extract IDs from human loop name: {human_loop_name}")
             return {"statusCode": 400, "body": "Invalid human loop name format"}
-        
+
         # Get document_id from BDA metadata table
         db_response = table.get_item(
             Key={'execution_id': execution_id, 'record_number': record_id}
         )
-        
+
         if 'Item' not in db_response:
             logger.error(f"No record found for execution_id: {execution_id}, record_number: {record_id}")
             return {"statusCode": 404, "body": "Record not found"}
-        
+
         document_id = db_response['Item'].get('object_key')
         page_token_id = f"HITL#{document_id}#section#{record_id}#page#{page_id}"
         section_token_id = f"HITL#{document_id}#section#{record_id}"
@@ -451,24 +451,24 @@ def lambda_handler(event, context):
 
         # Update page task token status
         update_token_status(page_token_id, human_loop_status, failure_reason, tracking_table)
-        
+
         # Check if all pages in this section are complete
         all_pages_complete, Failed_pages_in_section = check_all_pages_complete(document_id, record_id, tracking_table)
         logger.info(f"all_pages_complete status: {all_pages_complete}, Failed_pages: {Failed_pages_in_section}")
-        
+
         if all_pages_complete:
             # Update section token status
             section_status = "Failed" if Failed_pages_in_section else "Completed"
             section_failure_reason = f"Section has {len(Failed_pages_in_section)} Failed pages" if Failed_pages_in_section else None
             update_token_status(section_token_id, section_status, section_failure_reason, tracking_table)
-            
+
             # Check if all sections for this document are complete
             all_sections_complete, has_failed_sections = check_all_sections_complete(document_id, tracking_table)
             logger.info(f"all_sections_complete: {all_sections_complete}, has_failed_sections: {has_failed_sections}")
-            
+
             if all_sections_complete:
                 section_task_token = find_doc_task_token(document_id, tracking_table)
-                
+
                 if section_task_token:
                     if has_failed_sections:
                         # Collect all failed pages for failure message
@@ -483,7 +483,7 @@ def lambda_handler(event, context):
                                 ':stopped_status': 'STOPPED'
                             }
                         )
-                        
+
                         for item in response.get('Items', []):
                             all_failed_pages.append({
                                 'execution_id': execution_id,
@@ -491,7 +491,7 @@ def lambda_handler(event, context):
                                 'page_id': item.get('PageId'),
                                 'failure_reason': item.get('FailureReason', 'Unknown failure')
                             })
-                        
+
                         # Send task failure
                         stepfunctions.send_task_failure(
                             taskToken=section_task_token,
@@ -499,7 +499,7 @@ def lambda_handler(event, context):
                             cause=f"HITL review failed for {len(all_failed_pages)} page(s): {json.dumps(all_failed_pages)}"
                         )
                         logger.info(f"Sent task failure for execution {execution_id}")
-                        
+
                         # Update document tracking to FAILED
                         tracking_table.update_item(
                             Key={'PK': f"document#{document_id}", 'SK': 'metadata'},
@@ -509,7 +509,7 @@ def lambda_handler(event, context):
                                 ':time': datetime.datetime.now(datetime.timezone.utc).isoformat()
                             }
                         )
-                        
+
                         tracking_table.update_item(
                             Key={'PK': f"doc#{document_id}", 'SK': 'none'},
                             UpdateExpression="SET ObjectStatus = :status, HITLStatus = :hitlStatus",
@@ -524,7 +524,7 @@ def lambda_handler(event, context):
                             KeyConditionExpression="execution_id = :eid",
                             ExpressionAttributeValues={":eid": execution_id}
                         )
-                        
+
                         blueprint_changes = []
                         for item in response.get('Items', []):
                             if item.get('hitl_bp_change') is not None:
@@ -533,7 +533,7 @@ def lambda_handler(event, context):
                                     'original_blueprint': item.get('blueprint_name', ''),
                                     'new_blueprint': item.get('hitl_bp_change')
                                 })
-                        
+
                         # Send task success
                         stepfunctions.send_task_success(
                             taskToken=section_task_token,
@@ -545,7 +545,7 @@ def lambda_handler(event, context):
                             })
                         )
                         logger.info(f"Sent task success for execution {execution_id}")
-                        
+
                         # Update document tracking to Completed
                         tracking_table.update_item(
                             Key={'PK': f"document#{document_id}", 'SK': 'metadata'},
@@ -556,7 +556,7 @@ def lambda_handler(event, context):
                                 ':url': None
                             }
                         )
-                        
+
                         tracking_table.update_item(
                             Key={'PK': f"doc#{document_id}", 'SK': 'none'},
                             UpdateExpression="SET ObjectStatus = :status, HITLStatus = :hitlStatus, HITLReviewURL = :url",
@@ -568,7 +568,7 @@ def lambda_handler(event, context):
                         )
 
         return {"statusCode": 200, "body": "Processing Completed successfully"}
-        
+
     except ClientError as e:
         logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
         return {"statusCode": 500, "body": "Database error"}

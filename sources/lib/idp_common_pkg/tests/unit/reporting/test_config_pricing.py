@@ -7,6 +7,7 @@ Tests that pricing is loaded exclusively from configuration dictionary.
 """
 
 import pytest
+from idp_common.config.models import IDPConfig
 from idp_common.reporting.save_reporting_data import SaveReportingData
 
 
@@ -39,8 +40,9 @@ def test_pricing_from_config_with_valid_configuration():
         ]
     }
 
-    # Create SaveReportingData instance with config dictionary
-    reporter = SaveReportingData("test-bucket", config=mock_config)
+    # Create SaveReportingData instance with IDPConfig
+    idp_config = IDPConfig.model_validate(mock_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
     # Test that pricing is loaded from configuration
     textract_cost = reporter._get_unit_cost("textract/detect_document_text", "pages")
@@ -61,9 +63,10 @@ def test_pricing_from_config_with_valid_configuration():
 def test_pricing_returns_zero_when_config_fails():
     """Test that pricing returns 0.0 when configuration processing fails"""
 
-    # Create SaveReportingData instance with invalid config
-    invalid_config = {"invalid": "config"}
-    reporter = SaveReportingData("test-bucket", config=invalid_config)
+    # Create SaveReportingData instance with config that has no pricing
+    invalid_config = {}  # Empty config, no pricing data
+    idp_config = IDPConfig.model_validate(invalid_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
     # Test that pricing returns 0.0 when configuration is invalid
     textract_cost = reporter._get_unit_cost("textract/detect_document_text", "pages")
@@ -109,7 +112,8 @@ def test_pricing_cache_functionality():
         ]
     }
 
-    reporter = SaveReportingData("test-bucket", config=mock_config)
+    idp_config = IDPConfig.model_validate(mock_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
     # Call _get_unit_cost multiple times
     cost1 = reporter._get_unit_cost("textract/detect_document_text", "pages")
@@ -133,7 +137,8 @@ def test_clear_pricing_cache():
         ]
     }
 
-    reporter = SaveReportingData("test-bucket", config=mock_config)
+    idp_config = IDPConfig.model_validate(mock_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
     # First call loads from config
     cost1 = reporter._get_unit_cost("textract/detect_document_text", "pages")
@@ -149,7 +154,8 @@ def test_clear_pricing_cache():
 
 @pytest.mark.unit
 def test_pricing_with_invalid_price_values():
-    """Test handling of invalid price values in configuration"""
+    """Test that invalid price values in configuration cause validation error"""
+    from pydantic import ValidationError
 
     mock_config = {
         "pricing": [
@@ -163,13 +169,9 @@ def test_pricing_with_invalid_price_values():
         ]
     }
 
-    reporter = SaveReportingData("test-bucket", config=mock_config)
+    # With IDPConfig validation, invalid prices should cause ValidationError
+    with pytest.raises(ValidationError) as exc_info:
+        IDPConfig.model_validate(mock_config)
 
-    # Test that invalid price is skipped and returns 0.0
-    invalid_cost = reporter._get_unit_cost("textract/detect_document_text", "pages")
-    valid_cost = reporter._get_unit_cost("textract/detect_document_text", "documents")
-
-    # Invalid price should return 0.0 (not found in pricing map)
-    assert invalid_cost == 0.0  # No valid price found
-    # Valid price should use config value
-    assert valid_cost == 0.002
+    # Verify the error is about invalid price format
+    assert "float_parsing" in str(exc_info.value)

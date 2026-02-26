@@ -3,17 +3,9 @@
 
 /* eslint-disable react/prop-types, react/destructuring-assignment, no-nested-ternary, no-use-before-define */
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import {
-  Box,
-  SpaceBetween,
-  Button,
-  Alert,
-  SegmentedControl,
-  FormField,
-  Input,
-  Checkbox,
-} from '@awsui/components-react';
-import { API, Logger } from 'aws-amplify';
+import { Box, SpaceBetween, Button, Alert, SegmentedControl, FormField, Input, Checkbox } from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import { Editor } from '@monaco-editor/react';
 import getFileContents from '../../graphql/queries/getFileContents';
 import uploadDocument from '../../graphql/queries/uploadDocument';
@@ -21,7 +13,8 @@ import { getFieldHighlightInfo, getFieldConfidenceInfo } from '../common/confide
 // Lazy load VisualEditorModal for better performance
 const VisualEditorModal = React.lazy(() => import('./VisualEditorModal'));
 
-const logger = new Logger('FileEditor');
+const client = generateClient();
+const logger = new ConsoleLogger('FileEditor');
 
 const EDITOR_DEFAULT_HEIGHT = '600px';
 
@@ -40,11 +33,7 @@ const FormEditorView = ({ jsonData, onChange, isReadOnly, sectionData }) => {
     if (typeof value === 'boolean') {
       return (
         <FormField>
-          <Checkbox
-            checked={value}
-            disabled={isReadOnly}
-            onChange={({ detail }) => !isReadOnly && onChangeValue(detail.checked)}
-          >
+          <Checkbox checked={value} disabled={isReadOnly} onChange={({ detail }) => !isReadOnly && onChangeValue(detail.checked)}>
             {String(value)}
           </Checkbox>
         </FormField>
@@ -149,9 +138,7 @@ const FormEditorView = ({ jsonData, onChange, isReadOnly, sectionData }) => {
     const highlightInfo = getFieldHighlightInfo(key, value, confidenceThresholdAlerts);
 
     const boxStyle =
-      highlightInfo.shouldHighlight || confidenceInfo.shouldHighlight
-        ? { backgroundColor: '#ffeaa7', border: '2px solid #e17055' }
-        : {};
+      highlightInfo.shouldHighlight || confidenceInfo.shouldHighlight ? { backgroundColor: '#ffeaa7', border: '2px solid #e17055' } : {};
 
     return (
       <Box padding="xxxs" borderBottom="divider-light" style={boxStyle}>
@@ -169,9 +156,7 @@ const FormEditorView = ({ jsonData, onChange, isReadOnly, sectionData }) => {
                       : 'text-status-error'
                     : undefined
                 }
-                style={
-                  confidenceInfo.displayMode === 'confidence-only' ? { color: confidenceInfo.textColor } : undefined
-                }
+                style={confidenceInfo.displayMode === 'confidence-only' ? { color: confidenceInfo.textColor } : undefined}
               >
                 {confidenceInfo.displayMode === 'with-threshold'
                   ? `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}% / Threshold: ${(
@@ -199,13 +184,7 @@ const FormEditorView = ({ jsonData, onChange, isReadOnly, sectionData }) => {
   // The main recursive renderer for JSON values
   function renderJsonValue(value, onChangeValue, fieldPath = []) {
     // Handle primitive values
-    if (
-      value === null ||
-      value === undefined ||
-      typeof value === 'boolean' ||
-      typeof value === 'number' ||
-      typeof value === 'string'
-    ) {
+    if (value === null || value === undefined || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') {
       return renderPrimitiveValue(value, onChangeValue, fieldPath);
     }
 
@@ -221,9 +200,7 @@ const FormEditorView = ({ jsonData, onChange, isReadOnly, sectionData }) => {
               {value.map((item, index) => {
                 // Create a stable key based on index only
                 const itemKey =
-                  typeof item === 'object' && item !== null && item.id
-                    ? `array-item-${item.id}-${index}`
-                    : `array-item-${index}`;
+                  typeof item === 'object' && item !== null && item.id ? `array-item-${item.id}-${index}` : `array-item-${index}`;
                 return (
                   <Box key={itemKey}>
                     {renderKeyValuePair(
@@ -387,11 +364,7 @@ const TextEditorView = ({ fileContent, onChange, isReadOnly, fileType }) => {
         <Editor
           height="100%"
           defaultLanguage={fileType === 'json' ? 'json' : fileType}
-          value={
-            fileType === 'json' && typeof fileContent === 'string'
-              ? JSON.stringify(JSON.parse(fileContent), null, 2)
-              : fileContent
-          }
+          value={fileType === 'json' && typeof fileContent === 'string' ? JSON.stringify(JSON.parse(fileContent), null, 2) : fileContent}
           onChange={onChange}
           onMount={handleEditorDidMount}
           options={{
@@ -479,14 +452,7 @@ const FileEditorView = ({ fileContent, onChange, isReadOnly = true, fileType = '
   };
 
   if (fileType !== 'json') {
-    return (
-      <TextEditorView
-        fileContent={fileContent}
-        onChange={handleTextEditorChange}
-        isReadOnly={isReadOnly}
-        fileType={fileType}
-      />
-    );
+    return <TextEditorView fileContent={fileContent} onChange={handleTextEditorChange} isReadOnly={isReadOnly} fileType={fileType} />;
   }
 
   const handleViewModeChange = ({ detail }) => {
@@ -522,12 +488,7 @@ const FileEditorView = ({ fileContent, onChange, isReadOnly = true, fileType = '
 
       {isValid && fileType === 'json' ? (
         viewMode === 'form' ? (
-          <FormEditorView
-            jsonData={jsonData}
-            onChange={handleFormChange}
-            isReadOnly={isReadOnly}
-            sectionData={memoizedSectionData}
-          />
+          <FormEditorView jsonData={jsonData} onChange={handleFormChange} isReadOnly={isReadOnly} sectionData={memoizedSectionData} />
         ) : (
           <TextEditorView
             fileContent={typeof fileContent === 'string' ? fileContent : JSON.stringify(jsonData, null, 2)}
@@ -562,7 +523,7 @@ const FileEditorView = ({ fileContent, onChange, isReadOnly = true, fileType = '
   );
 };
 
-const JSONViewer = ({ fileUri, fileType = 'text', buttonText = 'View File', sectionData }) => {
+const JSONViewer = ({ fileUri, fileType = 'text', buttonText = 'View File', sectionData, onOpen, onClose }) => {
   const [fileContent, setFileContent] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -575,7 +536,7 @@ const JSONViewer = ({ fileUri, fileType = 'text', buttonText = 'View File', sect
     try {
       logger.info('Fetching content:', fileUri);
 
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: getFileContents,
         variables: { s3Uri: fileUri },
       });
@@ -592,6 +553,11 @@ const JSONViewer = ({ fileUri, fileType = 'text', buttonText = 'View File', sect
       logger.debug('Received content:', `${fetchedContent.substring(0, 100)}...`);
       setFileContent(fetchedContent);
       setEditedContent(fetchedContent); // Initialize edited content for always-on edit mode
+
+      // Notify parent that viewer is now open
+      if (onOpen) {
+        onOpen();
+      }
     } catch (err) {
       logger.error('Error fetching content:', err);
       setError(`Failed to load ${fileType} content. Please try again.`);
@@ -619,7 +585,7 @@ const JSONViewer = ({ fileUri, fileType = 'text', buttonText = 'View File', sect
       const prefix = fullPath.substring(0, fullPath.lastIndexOf('/'));
 
       // Get presigned URL
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: uploadDocument,
         variables: {
           fileName,
@@ -679,6 +645,11 @@ const JSONViewer = ({ fileUri, fileType = 'text', buttonText = 'View File', sect
   const closeViewer = () => {
     setFileContent(null);
     setEditedContent(null);
+
+    // Notify parent that viewer is now closed
+    if (onClose) {
+      onClose();
+    }
   };
 
   if (!fileUri) {

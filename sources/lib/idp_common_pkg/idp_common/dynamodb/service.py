@@ -266,6 +266,12 @@ class DocumentDynamoDBService:
             expression_names["#SummaryReportUri"] = "SummaryReportUri"
             expression_values[":SummaryReportUri"] = document.summary_report_uri
 
+        # Add trace_id if available
+        if document.trace_id:
+            set_expressions.append("#TraceId = :TraceId")
+            expression_names["#TraceId"] = "TraceId"
+            expression_values[":TraceId"] = document.trace_id
+
         update_expression = "SET " + ", ".join(set_expressions)
         # Convert any float values to Decimal for DynamoDB compatibility
         expression_values = convert_floats_to_decimal(expression_values)
@@ -293,6 +299,7 @@ class DocumentDynamoDBService:
             workflow_execution_arn=item.get("WorkflowExecutionArn"),
             evaluation_report_uri=item.get("EvaluationReportUri"),
             summary_report_uri=item.get("SummaryReportUri"),
+            trace_id=item.get("TraceId"),
         )
 
         # Convert status

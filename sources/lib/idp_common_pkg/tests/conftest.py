@@ -5,8 +5,11 @@
 Pytest configuration file for the IDP Common package tests.
 """
 
+import os
 import sys
 from unittest.mock import MagicMock
+
+import pytest
 
 # Mock external dependencies that may not be available in test environments
 # These mocks need to be set up before any imports that might use these packages
@@ -24,3 +27,13 @@ sys.modules["bedrock_agentcore.tools.code_interpreter_client"] = MagicMock()
 
 # PIL module is now used directly for document conversion functionality
 # No mocking needed as PIL is a required dependency for the OCR module
+
+
+@pytest.fixture(scope="session", autouse=True)
+def aws_credentials():
+    """Set up AWS credentials and region for testing."""
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"
+    os.environ["AWS_SESSION_TOKEN"] = "testing"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"

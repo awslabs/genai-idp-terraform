@@ -3,12 +3,15 @@
 
 /* eslint-disable react/prop-types */
 import React, { useState, useRef } from 'react';
-import { API, Logger } from 'aws-amplify';
-import { Button, Container, SpaceBetween, FormField, Alert } from '@awsui/components-react';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
+import { Button, Container, SpaceBetween, FormField, Alert } from '@cloudscape-design/components';
+
 import chatWithDocument from '../../graphql/queries/chatWithDocument';
 import './ChatPanel.css';
 
-const logger = new Logger('chatWithDocument');
+const client = generateClient();
+const logger = new ConsoleLogger('chatWithDocument');
 
 const getChatResponse = async (s3Uri, prompt, history) => {
   logger.debug('s3URI:', s3Uri);
@@ -17,7 +20,7 @@ const getChatResponse = async (s3Uri, prompt, history) => {
   // logger.debug('modelId:', modelId);
   const modelId = 'us.amazon.nova-pro-v1:0';
   const strHistory = JSON.stringify(history);
-  const response = await API.graphql({
+  const response = await client.graphql({
     query: chatWithDocument,
     variables: { s3Uri, prompt, history: strHistory, modelId },
   });
@@ -173,7 +176,7 @@ const ChatPanel = (item) => {
             <textarea name="postContent" ref={textareaRef} rows={6} className="chat-textarea" id="chatTextarea" />
           </FormField> */}
 
-          <div style={{ gap: '8px', width: '100%' }}>
+          <SpaceBetween size="m">
             <FormField label="Your message" style={{ flex: 8 }}>
               <input
                 type="text"
@@ -192,7 +195,7 @@ const ChatPanel = (item) => {
             <Button variant="primary" onClick={handlePromptSubmit}>
               Send
             </Button>
-          </div>
+          </SpaceBetween>
 
           {/* <FormField label="Model">
             <select name="model" id="modelSelect" onChange={handleModelIdChange}>

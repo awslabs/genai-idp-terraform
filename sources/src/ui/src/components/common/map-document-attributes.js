@@ -16,10 +16,7 @@ const isHitlCompleted = (status) => {
   if (!status) return false;
   const statusLower = status.toLowerCase();
   return (
-    statusLower === 'completed' ||
-    statusLower.includes('complete') ||
-    statusLower.includes('done') ||
-    statusLower.includes('finished')
+    statusLower === 'completed' || statusLower.includes('complete') || statusLower.includes('done') || statusLower.includes('finished')
   );
 };
 
@@ -76,7 +73,11 @@ const mapDocumentsAttributes = (documents) => {
     const hitlTriggered = hitlStatus && hitlStatus !== 'N/A';
     const hitlCompleted = isHitlCompleted(hitlStatus);
 
+    // Create a unique ID combining PK and SK for proper row tracking
+    const uniqueId = listPK && listSK ? `${listPK}#${listSK}` : objectKey;
+
     const mapping = {
+      uniqueId,
       objectKey,
       objectStatus,
       initialEventTime: formatDate(initialEventTime),

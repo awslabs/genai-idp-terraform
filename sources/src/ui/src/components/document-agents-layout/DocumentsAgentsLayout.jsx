@@ -1,8 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React, { useEffect } from 'react';
-import { API, Logger } from 'aws-amplify';
-import { Container, Header, SpaceBetween, Spinner, Box } from '@awsui/components-react';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
+import { Container, Header, SpaceBetween, Spinner, Box } from '@cloudscape-design/components';
 
 import submitAgentQuery from '../../graphql/queries/submitAgentQuery';
 import getAgentJobStatus from '../../graphql/queries/getAgentJobStatus';
@@ -14,7 +15,9 @@ import AgentJobStatus from './AgentJobStatus';
 import AgentResultDisplay from './AgentResultDisplay';
 import AgentMessagesDisplay from './AgentMessagesDisplay';
 
-const logger = new Logger('DocumentsAgentsLayout');
+const client = generateClient();
+
+const logger = new ConsoleLogger('DocumentsAgentsLayout');
 
 const DocumentsAgentsLayout = () => {
   const { analyticsState, updateAnalyticsState } = useAnalyticsContext();
@@ -23,61 +26,63 @@ const DocumentsAgentsLayout = () => {
   const subscribeToJobCompletion = (id) => {
     try {
       logger.debug('Subscribing to job completion for job ID:', id);
-      const sub = API.graphql({
-        query: onAgentJobComplete,
-        variables: { jobId: id },
-      }).subscribe({
-        next: async ({ value }) => {
-          // Log the entire subscription response
-          logger.debug('Subscription response value:', JSON.stringify(value, null, 2));
+      const sub = client
+        .graphql({
+          query: onAgentJobComplete,
+          variables: { jobId: id },
+        })
+        .subscribe({
+          next: async (subscriptionData) => {
+            const data = subscriptionData?.data;
+            const jobCompleted = data?.onAgentJobComplete;
+            logger.debug('Job completion notification:', jobCompleted);
 
-          const jobCompleted = value?.data?.onAgentJobComplete;
-          logger.debug('Job completion notification:', jobCompleted);
-
-          if (jobCompleted) {
-            // Job completed, now fetch the actual job details
-            try {
-              logger.debug('Fetching job details after completion notification');
-              const jobResponse = await API.graphql({
-                query: getAgentJobStatus,
-                variables: { jobId: id },
-              });
-
-              const job = jobResponse?.data?.getAgentJobStatus;
-              logger.debug('Fetched job details:', job);
-
-              if (job) {
-                updateAnalyticsState({
-                  jobStatus: job.status,
-                  agentMessages: job.agent_messages,
+            if (jobCompleted) {
+              // Job completed, now fetch the actual job details
+              try {
+                logger.debug('Fetching job details after completion notification');
+                const jobResponse = await client.graphql({
+                  query: getAgentJobStatus,
+                  variables: { jobId: id },
                 });
 
-                if (job.status === 'COMPLETED') {
-                  updateAnalyticsState({ jobResult: job.result });
-                } else if (job.status === 'FAILED') {
-                  updateAnalyticsState({ error: job.error || 'Job processing failed' });
+                const job = jobResponse?.data?.getAgentJobStatus;
+                logger.debug('Fetched job details:', job);
+
+                if (job) {
+                  updateAnalyticsState({
+                    jobStatus: job.status,
+                    agentMessages: job.agent_messages,
+                  });
+
+                  if (job.status === 'COMPLETED') {
+                    updateAnalyticsState({ jobResult: job.result });
+                  } else if (job.status === 'FAILED') {
+                    updateAnalyticsState({ error: job.error || 'Job processing failed' });
+                  }
+                } else {
+                  logger.error('Failed to fetch job details after completion notification');
+                  updateAnalyticsState({ error: 'Failed to fetch job details after completion' });
                 }
-              } else {
-                logger.error('Failed to fetch job details after completion notification');
-                updateAnalyticsState({ error: 'Failed to fetch job details after completion' });
+              } catch (fetchError) {
+                logger.error('Error fetching job details:', fetchError);
+                updateAnalyticsState({
+                  error: `Failed to fetch job details: ${fetchError.message || 'Unknown error'}`,
+                });
               }
-            } catch (fetchError) {
-              logger.error('Error fetching job details:', fetchError);
-              updateAnalyticsState({ error: `Failed to fetch job details: ${fetchError.message || 'Unknown error'}` });
+            } else {
+              logger.error('Received invalid completion notification. Full response:', JSON.stringify(subscriptionData, null, 2));
+              updateAnalyticsState({
+                error: 'Received invalid completion notification. Check console logs for details.',
+              });
             }
-          } else {
-            logger.error('Received invalid completion notification. Full response:', JSON.stringify(value, null, 2));
-            updateAnalyticsState({
-              error: 'Received invalid completion notification. Check console logs for details.',
-            });
-          }
-        },
-        error: (err) => {
-          logger.error('Subscription error:', err);
-          logger.error('Error details:', JSON.stringify(err, null, 2));
-          updateAnalyticsState({ error: `Subscription error: ${err.message || 'Unknown error'}` });
-        },
-      });
+          },
+          error: (err) => {
+            logger.error('Subscription error:', err);
+            logger.error('Error details:', JSON.stringify(err, null, 2));
+            updateAnalyticsState({ error: `Subscription error: ${err.message || 'Unknown error'}` });
+          },
+        });
 
       updateAnalyticsState({ subscription: sub });
       return sub;
@@ -111,7 +116,7 @@ const DocumentsAgentsLayout = () => {
         updateAnalyticsState({ jobId: existingJobId });
 
         // Fetch the job status and result
-        const response = await API.graphql({
+        const response = await client.graphql({
           query: getAgentJobStatus,
           variables: { jobId: existingJobId },
         });
@@ -148,7 +153,7 @@ const DocumentsAgentsLayout = () => {
       }
 
       logger.debug('Submitting agent query:', query, 'with agents:', agentIds);
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: submitAgentQuery,
         variables: { query, agentIds: Array.isArray(agentIds) ? agentIds : [agentIds] },
       });
@@ -172,7 +177,7 @@ const DocumentsAgentsLayout = () => {
       setTimeout(async () => {
         try {
           logger.debug('Immediate poll for job ID:', job.jobId);
-          const pollResponse = await API.graphql({
+          const pollResponse = await client.graphql({
             query: getAgentJobStatus,
             variables: { jobId: job.jobId },
           });
@@ -231,7 +236,7 @@ const DocumentsAgentsLayout = () => {
       intervalId = setInterval(async () => {
         try {
           logger.debug('Polling job status for job ID:', jobId);
-          const response = await API.graphql({
+          const response = await client.graphql({
             query: getAgentJobStatus,
             variables: { jobId },
           });

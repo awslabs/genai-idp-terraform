@@ -10,26 +10,33 @@ admin_email = "admin@example.com"
 # API Configuration (New Consolidated Structure)
 api = {
   enabled = true
-  
+
+  # v0.4.8 feature flags
+  enable_agent_companion_chat = true   # Multi-agent AI chat sessions
+  enable_test_studio          = true   # Automated dataset testing
+  enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
+  enable_error_analyzer       = true   # AI-powered error diagnostics
+  enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
+
   # Enable specific API features as needed
   agent_analytics = {
     enabled  = false  # Requires reporting to be enabled
     model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
   }
-  
+
   discovery = {
     enabled = true  # Enable document discovery workflow
   }
-  
+
   chat_with_document = {
     enabled                  = true   # Enable chat with document feature
     guardrail_id_and_version = null   # Optional Bedrock Guardrail
   }
-  
+
   process_changes = {
     enabled = false  # Enable document editing and reprocessing
   }
-  
+
   knowledge_base = {
     enabled            = true  # Required for chat_with_document
     knowledge_base_arn = null  # Will be set automatically by the example

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class DynamoDBError(Exception):
     """Custom exception for DynamoDB errors"""
 
-    def __init__(self, message: str, error_code: str = None):
+    def __init__(self, message: str, error_code: str | None = None):
         super().__init__(message)
         self.error_code = error_code
 
@@ -54,7 +54,7 @@ class DynamoDBClient:
 
         try:
             self.dynamodb = boto3.resource("dynamodb", region_name=self.region)
-            self.table = self.dynamodb.Table(self.table_name)
+            self.table = self.dynamodb.Table(self.table_name)  # type: ignore[attr-defined]
         except Exception as e:
             logger.error(f"Failed to initialize DynamoDB client: {str(e)}")
             raise DynamoDBError(f"Failed to initialize DynamoDB client: {str(e)}")
@@ -132,6 +132,32 @@ class DynamoDBClient:
             raise DynamoDBError(f"Update item failed: {error_message}", error_code)
         except BotoCoreError as e:
             logger.error(f"BotoCore error during update_item: {str(e)}")
+            raise DynamoDBError(f"BotoCore error: {str(e)}")
+
+    def delete_item(self, key: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Delete an item from the DynamoDB table.
+
+        Args:
+            key: The primary key of the item to delete
+
+        Returns:
+            Dict containing the delete response
+
+        Raises:
+            DynamoDBError: If the DynamoDB operation fails
+        """
+        try:
+            response = self.table.delete_item(Key=key)
+            logger.debug(f"Successfully deleted item with key: {key}")
+            return response
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            error_message = e.response["Error"]["Message"]
+            logger.error(f"DynamoDB delete_item failed: {error_code} - {error_message}")
+            raise DynamoDBError(f"Delete failed: {error_message}", error_code)
+        except BotoCoreError as e:
+            logger.error(f"BotoCore error during delete_item: {str(e)}")
             raise DynamoDBError(f"BotoCore error: {str(e)}")
 
     def get_item(self, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -266,6 +292,68 @@ class DynamoDBClient:
             logger.error(f"BotoCore error during scan: {str(e)}")
             raise DynamoDBError(f"BotoCore error: {str(e)}")
 
+    def scan_all(
+        self,
+        filter_expression: Optional[str] = None,
+        expression_attribute_names: Optional[Dict[str, str]] = None,
+        expression_attribute_values: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Scan the DynamoDB table with automatic pagination to retrieve all items.
+
+        Args:
+            filter_expression: Optional filter expression
+            expression_attribute_names: Optional attribute name mappings
+            expression_attribute_values: Optional attribute value mappings
+
+        Returns:
+            List of all items matching the filter
+
+        Raises:
+            DynamoDBError: If the DynamoDB operation fails
+        """
+        items = []
+        last_evaluated_key = None
+
+        while True:
+            scan_params = {}
+
+            if filter_expression:
+                scan_params["FilterExpression"] = filter_expression
+
+            if expression_attribute_names:
+                scan_params["ExpressionAttributeNames"] = expression_attribute_names
+
+            if expression_attribute_values:
+                scan_params["ExpressionAttributeValues"] = expression_attribute_values
+
+            if last_evaluated_key:
+                scan_params["ExclusiveStartKey"] = last_evaluated_key
+
+            try:
+                response = self.table.scan(**scan_params)
+                items.extend(response.get("Items", []))
+
+                last_evaluated_key = response.get("LastEvaluatedKey")
+                if not last_evaluated_key:
+                    break
+
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                error_message = e.response["Error"]["Message"]
+                logger.error(
+                    f"DynamoDB scan_all failed: {error_code} - {error_message}"
+                )
+                raise DynamoDBError(f"Scan failed: {error_message}", error_code)
+            except BotoCoreError as e:
+                logger.error(f"BotoCore error during scan_all: {str(e)}")
+                raise DynamoDBError(f"BotoCore error: {str(e)}")
+
+        logger.debug(
+            f"Successfully scanned all items, returned {len(items)} total items"
+        )
+        return items
+
     def query(
         self,
         key_condition_expression: str,
@@ -291,7 +379,7 @@ class DynamoDBClient:
             DynamoDBError: If the DynamoDB operation fails
         """
         try:
-            query_params = {
+            query_params: Dict[str, Any] = {
                 "KeyConditionExpression": key_condition_expression,
             }
 
