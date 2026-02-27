@@ -383,7 +383,8 @@ module "bda_processor" {
   data_automation_project_arn = var.bda_processor.project_arn
 
   # Optional: Evaluation configuration
-  evaluation_model_id = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
   # Optional: Summarization configuration (BDA only)
   summarization_model_id = var.bda_processor.summarization.enabled ? var.bda_processor.summarization.model_id : null
@@ -501,7 +502,8 @@ module "sagemaker_udop_processor" {
   # Optional: Model configurations
   extraction_model_id    = null # Will use default from module
   summarization_model_id = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
-  evaluation_model_id    = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
   # Feature flags
 

@@ -79,6 +79,20 @@ resource "aws_iam_policy" "codebuild_policy" {
           "kms:GenerateDataKey"
         ]
         Resource = var.encryption_key_arn != null ? [var.encryption_key_arn] : ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/nonexistent"]
+      },
+      {
+        # S3 access to pull the source zip and write build artifacts
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:GetBucketAcl",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:s3:::${local.lambda_layers_bucket_name}",
+          "arn:${data.aws_partition.current.partition}:s3:::${local.lambda_layers_bucket_name}/*"
+        ]
       }
     ]
   })
@@ -89,6 +103,27 @@ resource "aws_iam_policy" "codebuild_policy" {
 resource "aws_iam_role_policy_attachment" "codebuild_policy_attachment" {
   role       = aws_iam_role.codebuild_role.name
   policy_arn = aws_iam_policy.codebuild_policy.arn
+}
+
+# =============================================================================
+# Source archive: zip sources/ and upload to S3 so CodeBuild has a workspace
+# =============================================================================
+
+locals {
+  lambda_layers_bucket_name = element(split(":", var.lambda_layers_bucket_arn), 5)
+}
+
+data "archive_file" "pattern1_sources" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../sources"
+  output_path = "${path.module}/../../../.terraform/archives/pattern1_sources.zip"
+}
+
+resource "aws_s3_object" "pattern1_sources" {
+  bucket = local.lambda_layers_bucket_name
+  key    = "codebuild-sources/pattern-1/sources.zip"
+  source = data.archive_file.pattern1_sources.output_path
+  etag   = data.archive_file.pattern1_sources.output_md5
 }
 
 # =============================================================================
@@ -129,7 +164,8 @@ resource "aws_codebuild_project" "bda_processor_build" {
   }
 
   source {
-    type      = "NO_SOURCE"
+    type      = "S3"
+    location  = "${local.lambda_layers_bucket_name}/codebuild-sources/pattern-1/sources.zip"
     buildspec = file("${path.module}/../../../sources/patterns/pattern-1/buildspec.yml")
   }
 
@@ -141,6 +177,8 @@ resource "aws_codebuild_project" "bda_processor_build" {
   }
 
   tags = var.tags
+
+  depends_on = [aws_s3_object.pattern1_sources]
 }
 
 # =============================================================================
@@ -154,6 +192,7 @@ resource "null_resource" "trigger_bda_build" {
   triggers = {
     codebuild_project_name = aws_codebuild_project.bda_processor_build.name
     ecr_repository_url     = aws_ecr_repository.bda_processor.repository_url
+    sources_hash           = data.archive_file.pattern1_sources.output_md5
   }
 
   provisioner "local-exec" {
@@ -197,6 +236,7 @@ resource "null_resource" "trigger_bda_build" {
   depends_on = [
     aws_codebuild_project.bda_processor_build,
     aws_iam_role_policy_attachment.codebuild_policy_attachment,
-    aws_ecr_repository.bda_processor
+    aws_ecr_repository.bda_processor,
+    aws_s3_object.pattern1_sources
   ]
 }

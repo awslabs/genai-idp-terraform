@@ -79,6 +79,20 @@ resource "aws_iam_policy" "codebuild_policy" {
           "kms:GenerateDataKey"
         ]
         Resource = var.encryption_key_arn != null ? [var.encryption_key_arn] : ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/nonexistent"]
+      },
+      {
+        # S3 access to pull the source zip
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:GetBucketAcl",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:s3:::${local.working_bucket_name}",
+          "arn:${data.aws_partition.current.partition}:s3:::${local.working_bucket_name}/*"
+        ]
       }
     ]
   })
@@ -89,6 +103,23 @@ resource "aws_iam_policy" "codebuild_policy" {
 resource "aws_iam_role_policy_attachment" "codebuild_policy_attachment" {
   role       = aws_iam_role.codebuild_role.name
   policy_arn = aws_iam_policy.codebuild_policy.arn
+}
+
+# =============================================================================
+# Source archive: zip sources/ and upload to S3 so CodeBuild has a workspace
+# =============================================================================
+
+data "archive_file" "pattern3_sources" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../sources"
+  output_path = "${path.module}/../../../.terraform/archives/pattern3_sources.zip"
+}
+
+resource "aws_s3_object" "pattern3_sources" {
+  bucket = local.working_bucket_name
+  key    = "codebuild-sources/pattern-3/sources.zip"
+  source = data.archive_file.pattern3_sources.output_path
+  etag   = data.archive_file.pattern3_sources.output_md5
 }
 
 # =============================================================================
@@ -129,7 +160,8 @@ resource "aws_codebuild_project" "udop_processor_build" {
   }
 
   source {
-    type      = "NO_SOURCE"
+    type      = "S3"
+    location  = "${local.working_bucket_name}/codebuild-sources/pattern-3/sources.zip"
     buildspec = file("${path.module}/../../../sources/patterns/pattern-3/buildspec.yml")
   }
 
@@ -141,6 +173,8 @@ resource "aws_codebuild_project" "udop_processor_build" {
   }
 
   tags = local.common_tags
+
+  depends_on = [aws_s3_object.pattern3_sources]
 }
 
 # =============================================================================
@@ -154,6 +188,7 @@ resource "null_resource" "trigger_udop_build" {
   triggers = {
     codebuild_project_name = aws_codebuild_project.udop_processor_build.name
     ecr_repository_url     = aws_ecr_repository.udop_processor.repository_url
+    sources_hash           = data.archive_file.pattern3_sources.output_md5
   }
 
   provisioner "local-exec" {
@@ -186,7 +221,7 @@ resource "null_resource" "trigger_udop_build" {
       echo "Verifying ECR image availability..."
       aws ecr describe-images \
         --repository-name "${aws_ecr_repository.udop_processor.name}" \
-        --image-ids imageTag=evaluation-function \
+        --image-ids imageTag=ocr-function \
         --region "${data.aws_region.current.name}" \
         --query 'imageDetails[0].imageTags' \
         --output text
@@ -197,6 +232,7 @@ resource "null_resource" "trigger_udop_build" {
   depends_on = [
     aws_codebuild_project.udop_processor_build,
     aws_iam_role_policy_attachment.codebuild_policy_attachment,
-    aws_ecr_repository.udop_processor
+    aws_ecr_repository.udop_processor,
+    aws_s3_object.pattern3_sources
   ]
 }

@@ -1075,13 +1075,14 @@ resource "aws_iam_policy" "evaluation_function_policy" {
         ]
       },
       {
-        # Write evaluation results back to output bucket
+        # Write evaluation results to working and output buckets
         Effect = "Allow"
         Action = [
           "s3:PutObject"
         ]
         Resource = [
-          "${local.output_bucket_arn}/*"
+          "${local.output_bucket_arn}/*",
+          "${local.working_bucket_arn}/*"
         ]
       },
       {
