@@ -167,16 +167,16 @@ resource "null_resource" "trigger_udop_build" {
       echo "Build started: $BUILD_ID"
 
       echo "Waiting for build to complete..."
-      aws codebuild wait build-complete \
-        --ids "$BUILD_ID" \
-        --region "${data.aws_region.current.name}"
-
-      BUILD_STATUS=$(aws codebuild batch-get-builds \
-        --ids "$BUILD_ID" \
-        --region "${data.aws_region.current.name}" \
-        --query 'builds[0].buildStatus' \
-        --output text)
-      echo "Build status: $BUILD_STATUS"
+      BUILD_STATUS="IN_PROGRESS"
+      while [ "$BUILD_STATUS" = "IN_PROGRESS" ]; do
+        sleep 30
+        BUILD_STATUS=$(aws codebuild batch-get-builds \
+          --ids "$BUILD_ID" \
+          --region "${data.aws_region.current.name}" \
+          --query 'builds[0].buildStatus' \
+          --output text)
+        echo "Build status: $BUILD_STATUS"
+      done
 
       if [ "$BUILD_STATUS" != "SUCCEEDED" ]; then
         echo "ERROR: CodeBuild project failed with status: $BUILD_STATUS"

@@ -94,11 +94,6 @@ variable "api" {
   }
 
   validation {
-    condition     = !var.api.chat_with_document.enabled || !var.api.knowledge_base.enabled || var.api.knowledge_base.knowledge_base_arn != null
-    error_message = "When api.knowledge_base.enabled is true, knowledge_base_arn must be provided."
-  }
-
-  validation {
     condition     = !var.api.agent_analytics.enabled || var.api.agent_analytics.model_id != null
     error_message = "When api.agent_analytics.enabled is true, model_id must be provided."
   }
