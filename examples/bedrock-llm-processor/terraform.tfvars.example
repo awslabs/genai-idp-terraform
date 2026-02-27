@@ -26,37 +26,30 @@ summarization_enabled = true
 enable_evaluation     = false
 enable_reporting      = false
 
-# v0.4.8: Section splitting strategy for Pattern 2
-# Options: "disabled" (default), "page", "llm_determined"
-section_splitting_strategy = "disabled"
-
-# v0.4.8: Agentic extraction (uses Strands agent framework)
-enable_agentic_extraction = false
-
-# v0.4.8: Review agent model (empty = use extraction_model_id)
-review_agent_model = ""
-
-# v0.4.8: API feature flags
-enable_agent_companion_chat = true   # Multi-agent AI chat sessions
-enable_test_studio          = true   # Automated dataset testing
-enable_fcc_dataset          = false  # Deploy sample FCC dataset
-enable_error_analyzer       = true   # AI-powered error diagnostics
-enable_mcp                  = false  # MCP Integration (opt-in)
-
-# Discovery Configuration
-discovery = {
-  enabled = false
-}
-
-# Chat with Document Configuration
-chat_with_document = {
-  enabled = false
-  # Optional: Add Bedrock Guardrail for content filtering
-  # guardrail_id_and_version = "your-guardrail-id:1"
-}
-
 # API Configuration
-enable_api = true
+api = {
+  enabled = true
+  agent_analytics = {
+    enabled  = false
+    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  }
+  discovery = {
+    enabled = false
+  }
+  chat_with_document = {
+    enabled = false
+    # Optional: requires knowledge_base.enabled = true
+    # guardrail_id_and_version = "your-guardrail-id:1"
+  }
+  knowledge_base = {
+    enabled = false
+    # Optional: enables Bedrock Knowledge Base retrieval in chat
+    # knowledge_base_arn = "arn:aws:bedrock:us-east-1:123456789012:knowledge-base/XXXXXXXXXX"
+  }
+  process_changes = {
+    enabled = false
+  }
+}
 
 # Web UI Configuration
 web_ui = {
