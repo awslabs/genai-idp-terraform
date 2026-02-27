@@ -135,6 +135,19 @@ resource "aws_iam_role_policy" "test_studio_lambdas" {
         Effect   = "Allow"
         Action   = ["states:StartExecution", "states:DescribeExecution"]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Resource = [
+          aws_sqs_queue.test_set_copy_queue[0].arn,
+          aws_sqs_queue.test_file_copy_queue[0].arn,
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
       }
     ]
   })
@@ -147,17 +160,79 @@ resource "aws_iam_role_policy_attachment" "test_studio_xray" {
 }
 
 # =============================================================================
+# SQS Queues for Test Studio async operations
+# =============================================================================
+
+resource "aws_sqs_queue" "test_set_copy_dlq" {
+  count                     = var.enable_test_studio ? 1 : 0
+  name                      = "${local.api_name}-test-set-copy-dlq"
+  message_retention_seconds = 1209600 # 14 days
+  kms_master_key_id         = local.encryption_key_arn
+  tags                      = var.tags
+}
+
+resource "aws_sqs_queue" "test_set_copy_queue" {
+  count                      = var.enable_test_studio ? 1 : 0
+  name                       = "${local.api_name}-test-set-copy-queue"
+  visibility_timeout_seconds = 900
+  kms_master_key_id          = local.encryption_key_arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.test_set_copy_dlq[0].arn
+    maxReceiveCount     = 3
+  })
+  tags = var.tags
+}
+
+resource "aws_sqs_queue" "test_file_copy_dlq" {
+  count                     = var.enable_test_studio ? 1 : 0
+  name                      = "${local.api_name}-test-file-copy-dlq"
+  message_retention_seconds = 1209600 # 14 days
+  kms_master_key_id         = local.encryption_key_arn
+  tags                      = var.tags
+}
+
+resource "aws_sqs_queue" "test_file_copy_queue" {
+  count                      = var.enable_test_studio ? 1 : 0
+  name                       = "${local.api_name}-test-file-copy-queue"
+  visibility_timeout_seconds = 900
+  kms_master_key_id          = local.encryption_key_arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.test_file_copy_dlq[0].arn
+    maxReceiveCount     = 3
+  })
+  tags = var.tags
+}
+
+# SQS event source mappings for file copier Lambdas
+resource "aws_lambda_event_source_mapping" "test_set_copy" {
+  count            = var.enable_test_studio ? 1 : 0
+  event_source_arn = aws_sqs_queue.test_set_copy_queue[0].arn
+  function_name    = aws_lambda_function.test_set_file_copier[0].arn
+  batch_size       = 1
+}
+
+resource "aws_lambda_event_source_mapping" "test_file_copy" {
+  count            = var.enable_test_studio ? 1 : 0
+  event_source_arn = aws_sqs_queue.test_file_copy_queue[0].arn
+  function_name    = aws_lambda_function.test_file_copier[0].arn
+  batch_size       = 1
+}
+
+# =============================================================================
 # Helper: local for common test studio Lambda config
 # =============================================================================
 
 locals {
   test_studio_env = var.enable_test_studio ? {
-    LOG_LEVEL        = var.log_level
-    TEST_SETS_TABLE  = aws_dynamodb_table.test_sets[0].name
-    TEST_SETS_BUCKET = aws_s3_bucket.test_sets[0].id
-    INPUT_BUCKET     = local.input_bucket_name
-    OUTPUT_BUCKET    = local.output_bucket_name
-    TRACKING_TABLE   = local.tracking_table_name
+    LOG_LEVEL               = var.log_level
+    TEST_SET_BUCKET         = aws_s3_bucket.test_sets[0].id
+    BASELINE_BUCKET         = aws_s3_bucket.test_sets[0].id
+    INPUT_BUCKET            = local.input_bucket_name
+    OUTPUT_BUCKET           = local.output_bucket_name
+    TRACKING_TABLE          = local.tracking_table_name
+    CONFIG_TABLE            = local.configuration_table_name
+    TEST_SET_COPY_QUEUE_URL = aws_sqs_queue.test_set_copy_queue[0].url
+    FILE_COPY_QUEUE_URL     = aws_sqs_queue.test_file_copy_queue[0].url
   } : {}
 }
 
@@ -503,6 +578,42 @@ resource "aws_lambda_function" "fcc_dataset_deployer" {
 # AppSync data sources and resolvers for Test Studio
 # =============================================================================
 
+# =============================================================================
+# IAM: Allow AppSync to invoke Test Studio Lambda functions
+# =============================================================================
+
+resource "aws_iam_policy" "appsync_invoke_test_studio_policy" {
+  count       = var.enable_test_studio ? 1 : 0
+  name        = "AppSyncInvokeTestStudioPolicy-${random_string.suffix.result}"
+  description = "Policy for AppSync to invoke Test Studio Lambda functions"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = [
+        aws_lambda_function.test_runner[0].arn,
+        aws_lambda_function.test_set_resolver[0].arn,
+        aws_lambda_function.test_results_resolver[0].arn,
+        aws_lambda_function.test_set_zip_extractor[0].arn,
+        aws_lambda_function.test_set_file_copier[0].arn,
+        aws_lambda_function.delete_tests[0].arn,
+      ]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "appsync_invoke_test_studio_attachment" {
+  count      = var.enable_test_studio ? 1 : 0
+  role       = aws_iam_role.appsync_lambda_role.name
+  policy_arn = aws_iam_policy.appsync_invoke_test_studio_policy[0].arn
+}
+
+# =============================================================================
+# AppSync data sources and resolvers for Test Studio
+# =============================================================================
+
 resource "aws_appsync_datasource" "test_runner" {
   count            = var.enable_test_studio ? 1 : 0
   api_id           = aws_appsync_graphql_api.api.id
@@ -618,7 +729,7 @@ resource "aws_appsync_resolver" "list_bucket_files" {
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Query"
   field       = "listBucketFiles"
-  data_source = aws_appsync_datasource.test_set_file_copier[0].name
+  data_source = aws_appsync_datasource.test_set_resolver[0].name
 }
 
 resource "aws_appsync_resolver" "upload_test_set" {
