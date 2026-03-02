@@ -1136,11 +1136,10 @@ resource "aws_iam_role_policy_attachment" "evaluation_function_basic_execution" 
 }
 
 resource "aws_iam_role_policy" "evaluation_function_kms_policy" {
-  count = var.encryption_key_arn != null ? 1 : 0
-  name  = "${local.name_prefix}-evaluation-fn-kms-policy"
-  role  = aws_iam_role.evaluation_function_role.id
+  name = "${local.name_prefix}-evaluation-fn-kms-policy"
+  role = aws_iam_role.evaluation_function_role.id
 
-  policy = jsonencode({
+  policy = var.encryption_key_arn != null ? jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
@@ -1155,6 +1154,9 @@ resource "aws_iam_role_policy" "evaluation_function_kms_policy" {
         Resource = var.encryption_key_arn
       }
     ]
+    }) : jsonencode({
+    Version   = "2012-10-17"
+    Statement = []
   })
 }
 

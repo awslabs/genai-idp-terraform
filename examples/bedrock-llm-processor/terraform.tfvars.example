@@ -45,15 +45,16 @@ api = {
     enabled = true  # Creates a dedicated discovery bucket and workflow
   }
   chat_with_document = {
-    enabled = false
+    enabled                  = false
+    guardrail_id_and_version = null
     # Optional: requires knowledge_base.enabled = true
     # guardrail_id_and_version = "your-guardrail-id:1"
   }
   knowledge_base = {
-    enabled = false
+    enabled            = false
+    knowledge_base_arn = null  # Auto-wired by the example when enabled
     # Set enabled = true to create an OpenSearch Serverless + Bedrock Knowledge Base automatically.
     # Also set chat_with_document.enabled = true to enable document Q&A in the UI.
-    # knowledge_base_arn is auto-wired by the example when enabled.
     model_id           = "amazon.nova-pro-v1:0"
     embedding_model_id = "amazon.titan-embed-text-v2:0"
   }

@@ -157,26 +157,9 @@ locals {
         }
       )
     } : {},
-    # Override classification settings
-    {
-      classification = merge(
-        try(local.base_config.classification, {}),
-        {
-          model = merge(
-            # Handle case where model might be a string in YAML - convert to object
-            try(
-              can(local.base_config.classification.model.endpoint_name) ? local.base_config.classification.model : { description = try(local.base_config.classification.model, "SageMaker UDOP endpoint") },
-              { description = "SageMaker UDOP endpoint" }
-            ),
-            {
-              endpoint_name = local.sagemaker_endpoint_name
-            }
-          )
-        }
-      )
-    },
+    # Note: SageMaker endpoint name is passed via SAGEMAKER_ENDPOINT_NAME env var to the
+    # classification Lambda - it does not need to be stored in the config table.
     # OCR settings - no overrides needed, use base config as-is
-    # Note: ocr_max_workers is passed as environment variable to OCR Lambda function only
   )
 }
 

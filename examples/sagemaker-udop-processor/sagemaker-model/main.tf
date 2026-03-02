@@ -524,13 +524,26 @@ locals {
   training_job_status = data.external.training_status.result
 }
 
-# Additional wait after training completion for model artifacts to be fully uploaded to S3
-resource "time_sleep" "model_upload_wait" {
-  depends_on = [data.external.training_status]
+# Generate the S3 model existence checker script from template
+resource "local_file" "s3_model_checker" {
+  filename = "${path.module}/check_s3_model.py"
+  content = templatefile("${path.module}/s3_model_checker.py.tpl", {
+    region = data.aws_region.current.id
+  })
+}
 
-  create_duration = "2m" # Wait 2 minutes after training completion for model upload
+# Poll S3 directly until model.tar.gz actually exists
+data "external" "s3_model_exists" {
+  program = ["python3", local_file.s3_model_checker.filename]
 
-  triggers = {
-    training_status = data.external.training_status.result.status
+  query = {
+    bucket       = aws_s3_bucket.data_bucket.bucket
+    key          = local.model_path
+    max_attempts = "40" # up to 20 minutes (40 x 30s)
   }
+
+  depends_on = [
+    data.external.training_status,
+    local_file.s3_model_checker
+  ]
 }
