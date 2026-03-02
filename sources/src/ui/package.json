@@ -43,7 +43,7 @@
     "react-scripts": "^5.0.1",
     "rehype-raw": "^6.1.1",
     "remark-gfm": "^3.0.1",
-    "serialize-javascript": "^6.0.2",
+    "serialize-javascript": "^7.0.3",
     "tmp": "^0.2.5",
     "vuera": "^0.2.7",
     "webpack-dev-server": "^5.2.2",
