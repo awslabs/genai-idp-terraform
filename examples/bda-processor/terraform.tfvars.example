@@ -25,7 +25,7 @@ api = {
   }
 
   discovery = {
-    enabled = false
+    enabled = true  # Creates a dedicated discovery bucket and workflow
   }
 
   chat_with_document = {
@@ -42,7 +42,7 @@ api = {
   knowledge_base = {
     enabled            = false
     knowledge_base_arn = null  # Auto-wired by the example when enabled
-    model_id           = "us.amazon.nova-pro-v1:0"
+    model_id           = "amazon.nova-pro-v1:0"
     embedding_model_id = "amazon.titan-embed-text-v2:0"
   }
 }

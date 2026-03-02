@@ -29,12 +29,20 @@ enable_reporting      = false
 # API Configuration
 api = {
   enabled = true
+
+  # v0.4.8 feature flags
+  enable_agent_companion_chat = false  # Multi-agent AI chat sessions
+  enable_test_studio          = false  # Automated dataset testing
+  enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
+  enable_error_analyzer       = false  # AI-powered error diagnostics
+  enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
+
   agent_analytics = {
     enabled  = false
     model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
   }
   discovery = {
-    enabled = false
+    enabled = true  # Creates a dedicated discovery bucket and workflow
   }
   chat_with_document = {
     enabled = false
@@ -43,8 +51,11 @@ api = {
   }
   knowledge_base = {
     enabled = false
-    # Optional: enables Bedrock Knowledge Base retrieval in chat
-    # knowledge_base_arn = "arn:aws:bedrock:us-east-1:123456789012:knowledge-base/XXXXXXXXXX"
+    # Set enabled = true to create an OpenSearch Serverless + Bedrock Knowledge Base automatically.
+    # Also set chat_with_document.enabled = true to enable document Q&A in the UI.
+    # knowledge_base_arn is auto-wired by the example when enabled.
+    model_id           = "amazon.nova-pro-v1:0"
+    embedding_model_id = "amazon.titan-embed-text-v2:0"
   }
   process_changes = {
     enabled = false

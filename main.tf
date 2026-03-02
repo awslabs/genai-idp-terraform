@@ -330,6 +330,13 @@ module "processing_environment_api" {
   document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
   document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
 
+  # v0.4.8 feature flags
+  enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
+  enable_test_studio          = try(var.api.enable_test_studio, false)
+  enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
+  enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
+  enable_mcp                  = try(var.api.enable_mcp, false)
+
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
 

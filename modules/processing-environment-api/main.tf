@@ -55,8 +55,13 @@ locals {
   guardrail_id  = var.guardrail != null ? var.guardrail.guardrail_id : null
   guardrail_arn = var.guardrail != null ? var.guardrail.guardrail_arn : null
 
-  # Knowledge Base Invokable
-  knowledge_base_model_id = var.knowledge_base.model_id
+  # Knowledge Base model ARN - build full ARN in Terraform so the Lambda always receives
+  # a ready-made ARN (hits the startswith("arn:") branch) regardless of model ID format.
+  # RetrieveAndGenerate only accepts foundation-model ARNs (no account ID, no inference-profile).
+  knowledge_base_model_id = var.knowledge_base.model_id != null ? (
+    startswith(var.knowledge_base.model_id, "arn:") ? var.knowledge_base.model_id :
+    "arn:aws:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
+  ) : null
 
   # Edit Sections Feature
   edit_sections_enabled = var.enable_edit_sections && var.working_bucket_arn != null && var.document_queue_url != null && var.document_queue_arn != null
