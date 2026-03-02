@@ -119,3 +119,30 @@ output "agent_table_name" {
   description = "Name of the Agent Analytics DynamoDB table (if agent analytics is enabled)"
   value       = var.agent_analytics.enabled ? module.agent_analytics[0].agent_table_name : null
 }
+
+# MCP Integration outputs
+output "mcp_enabled" {
+  description = "Whether MCP Integration is effectively enabled (false in GovCloud)"
+  value       = local.enable_mcp_effective
+}
+
+output "mcp_gateway_endpoint" {
+  description = "MCP server endpoint URL (AgentCore Gateway endpoint)"
+  value       = local.enable_mcp_effective ? try(aws_cloudformation_stack.agentcore_gateway[0].outputs["GatewayEndpoint"], null) : null
+}
+
+output "mcp_gateway_id" {
+  description = "AgentCore Gateway ID"
+  value       = local.enable_mcp_effective ? try(aws_cloudformation_stack.agentcore_gateway[0].outputs["GatewayId"], null) : null
+}
+
+output "mcp_oauth_client_id" {
+  description = "Cognito app client ID for MCP OAuth 2.0 authentication"
+  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_client[0].id, null) : null
+}
+
+output "mcp_oauth_client_secret" {
+  description = "Cognito app client secret for MCP OAuth 2.0 authentication"
+  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_client[0].client_secret, null) : null
+  sensitive   = true
+}

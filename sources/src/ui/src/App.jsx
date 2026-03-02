@@ -1,13 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState } from 'react';
-import { Amplify, Logger } from 'aws-amplify';
 import { HashRouter } from 'react-router-dom';
 import { Authenticator, ThemeProvider, useAuthenticator } from '@aws-amplify/ui-react';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import '@aws-amplify/ui-react/styles.css';
 
 import { AppContext } from './contexts/app';
 import { AnalyticsProvider } from './contexts/analytics';
+import { AgentChatProvider } from './contexts/agentChat';
 import useAwsConfig from './hooks/use-aws-config';
 import useCurrentSessionCreds from './hooks/use-current-session-creds';
 
@@ -15,8 +16,7 @@ import Routes from './routes/Routes';
 
 import './App.css';
 
-Amplify.Logger.LOG_LEVEL = process.env.NODE_ENV === 'development' ? 'DEBUG' : 'WARNING';
-const logger = new Logger('App');
+const logger = new ConsoleLogger('App', import.meta.env.DEV ? 'DEBUG' : 'WARN');
 
 const AppContent = () => {
   const awsConfig = useAwsConfig();
@@ -24,6 +24,15 @@ const AppContent = () => {
   const { currentSession, currentCredentials } = useCurrentSessionCreds({ authState });
   const [errorMessage, setErrorMessage] = useState();
   const [navigationOpen, setNavigationOpen] = useState(true);
+  const [activeTestRuns, setActiveTestRuns] = useState([]);
+
+  const addTestRun = (testRunId, testSetName, context, filesCount) => {
+    setActiveTestRuns((prev) => [...prev, { testRunId, testSetName, context, filesCount, startTime: new Date() }]);
+  };
+
+  const removeTestRun = (testRunId) => {
+    setActiveTestRuns((prev) => prev.filter((run) => run.testRunId !== testRunId));
+  };
 
   // eslint-disable-next-line react/jsx-no-constructed-context-values
   const appContextValue = {
@@ -36,16 +45,21 @@ const AppContent = () => {
     user,
     navigationOpen,
     setNavigationOpen,
+    activeTestRuns,
+    addTestRun,
+    removeTestRun,
   };
   logger.debug('appContextValue', appContextValue);
-
+  // TODO: Remove the AnalyticsProvider once we migrate full to Agent Chat
   return (
     <div className="App">
       <AppContext.Provider value={appContextValue}>
         <AnalyticsProvider>
-          <HashRouter>
-            <Routes />
-          </HashRouter>
+          <AgentChatProvider>
+            <HashRouter>
+              <Routes />
+            </HashRouter>
+          </AgentChatProvider>
         </AnalyticsProvider>
       </AppContext.Provider>
     </div>

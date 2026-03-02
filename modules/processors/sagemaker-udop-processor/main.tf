@@ -2,13 +2,38 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SageMaker UDOP Processor
-# This processor implements an intelligent document processing workflow that uses SageMaker 
+# This processor implements an intelligent document processing workflow that uses SageMaker
 # endpoints for document classification combined with Amazon Bedrock models for information extraction.
 
 # Data sources
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 data "aws_region" "current" {}
+
+# Random suffix for unique resource names (used by CodeBuild and ECR resources)
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# ECR Repository for SageMaker UDOP processor Docker images
+resource "aws_ecr_repository" "udop_processor" {
+  name                 = "${var.name}-udop-processor"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = var.enable_ecr_image_scanning
+  }
+
+  encryption_configuration {
+    encryption_type = var.encryption_key_arn != null ? "KMS" : "AES256"
+    kms_key         = var.encryption_key_arn != null ? var.encryption_key_arn : null
+  }
+
+  tags = local.common_tags
+}
 
 # Local values
 locals {
@@ -132,26 +157,9 @@ locals {
         }
       )
     } : {},
-    # Override classification settings
-    {
-      classification = merge(
-        try(local.base_config.classification, {}),
-        {
-          model = merge(
-            # Handle case where model might be a string in YAML - convert to object
-            try(
-              can(local.base_config.classification.model.endpoint_name) ? local.base_config.classification.model : { description = try(local.base_config.classification.model, "SageMaker UDOP endpoint") },
-              { description = "SageMaker UDOP endpoint" }
-            ),
-            {
-              endpoint_name = local.sagemaker_endpoint_name
-            }
-          )
-        }
-      )
-    },
+    # Note: SageMaker endpoint name is passed via SAGEMAKER_ENDPOINT_NAME env var to the
+    # classification Lambda - it does not need to be stored in the config table.
     # OCR settings - no overrides needed, use base config as-is
-    # Note: ocr_max_workers is passed as environment variable to OCR Lambda function only
   )
 }
 
@@ -169,6 +177,7 @@ resource "aws_sfn_state_machine" "document_processing" {
     IsSummarizationEnabled    = var.summarization_model_id != null ? "true" : "false"
     SummarizationLambdaArn    = aws_lambda_function.summarization_function.arn
     OutputBucket              = local.output_bucket_name
+    EvaluationLambdaArn       = aws_lambda_function.evaluation_function.arn
   })
 
   logging_configuration {

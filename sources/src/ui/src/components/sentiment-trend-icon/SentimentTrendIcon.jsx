@@ -20,10 +20,7 @@ export const SentimentTrendIcon = ({ trend = 'FLAT', size = '1.5em' }) => {
 
   return <MdTrendingFlat style={style} color="grey" size={size} title="flat" />;
 };
-SentimentTrendIcon.defaultProps = {
-  trend: 'FLAT',
-  size: '1.5em',
-};
+
 SentimentTrendIcon.propTypes = {
   trend: PropTypes.oneOf(['UP', 'DOWN', 'FLAT']),
   size: PropTypes.string,
@@ -49,9 +46,7 @@ export const SentimentTrendIndicator = ({ trend = 'FLAT' }) => (
     </span>
   </div>
 );
-SentimentTrendIndicator.defaultProps = {
-  trend: 'FLAT',
-};
+
 SentimentTrendIndicator.propTypes = {
   trend: PropTypes.oneOf(['UP', 'DOWN', 'FLAT']),
 };

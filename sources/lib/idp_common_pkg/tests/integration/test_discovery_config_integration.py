@@ -11,6 +11,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 import yaml
+from idp_common.config.models import (
+    IDPConfig,
+)
 from idp_common.discovery.classes_discovery import ClassesDiscovery
 
 
@@ -43,10 +46,14 @@ discovery:
   output_format:
     sample_json: |
       {
-        "document_class": "TestForm",
-        "document_description": "Test form description",
-        "groups": []
-      }
+                                        "$schema": "http://json-schema.org/draft-07/schema#",
+                                        "$id": "testform",
+                                        "type": "object",
+                                        "title": "TestForm",
+                                        "description": "Test form description",
+                                        "x-aws-idp-document-type": "TestForm",
+                                        "properties": {}
+                                    }
 """
 
         self.config_dict = yaml.safe_load(self.yaml_config)
@@ -114,14 +121,14 @@ discovery:
         mock_extract_text.return_value = json.dumps(expected_result)
         mock_s3_get_bytes.return_value = b"mock document content"
 
-        # Mock ConfigurationReader to return config_dict
+        # Mock ConfigurationReader to return IDPConfig model
         with patch(
             "idp_common.discovery.classes_discovery.ConfigurationReader"
         ) as mock_config_reader:
             mock_reader_instance = mock_config_reader.return_value
-            mock_reader_instance.get_merged_configuration.return_value = (
-                self.config_dict
-            )
+            # Convert dict to IDPConfig model
+            idp_config = IDPConfig(**self.config_dict)
+            mock_reader_instance.get_merged_configuration.return_value = idp_config
 
             with patch.dict("os.environ", {"CONFIGURATION_TABLE_NAME": "test-table"}):
                 # Initialize ClassesDiscovery with YAML config
@@ -229,14 +236,14 @@ discovery:
 
         mock_s3_get_bytes.side_effect = mock_s3_side_effect
 
-        # Mock ConfigurationReader to return config_dict
+        # Mock ConfigurationReader to return IDPConfig model
         with patch(
             "idp_common.discovery.classes_discovery.ConfigurationReader"
         ) as mock_config_reader:
             mock_reader_instance = mock_config_reader.return_value
-            mock_reader_instance.get_merged_configuration.return_value = (
-                self.config_dict
-            )
+            # Convert dict to IDPConfig model
+            idp_config = IDPConfig(**self.config_dict)
+            mock_reader_instance.get_merged_configuration.return_value = idp_config
 
             with patch.dict("os.environ", {"CONFIGURATION_TABLE_NAME": "test-table"}):
                 # Initialize ClassesDiscovery with YAML config
@@ -311,14 +318,14 @@ discovery:
             }
         }
 
-        # Mock ConfigurationReader to return incomplete config
+        # Mock ConfigurationReader to return IDPConfig model
         with patch(
             "idp_common.discovery.classes_discovery.ConfigurationReader"
         ) as mock_config_reader:
             mock_reader_instance = mock_config_reader.return_value
-            mock_reader_instance.get_merged_configuration.return_value = (
-                incomplete_config
-            )
+            # Convert dict to IDPConfig model - this will apply defaults
+            idp_config = IDPConfig.model_validate(incomplete_config)
+            mock_reader_instance.get_merged_configuration.return_value = idp_config
 
             with patch.dict("os.environ", {"CONFIGURATION_TABLE_NAME": "test-table"}):
                 # Initialize with incomplete config
@@ -328,20 +335,16 @@ discovery:
                     region=self.test_region,
                 )
 
-        # Verify that missing fields get default values
+        # Verify that missing fields get default values from IDPConfig
         without_gt_config = discovery.without_gt_config
 
         # Model ID should be from config
-        self.assertEqual(without_gt_config.get("model_id"), "test-model")
+        self.assertEqual(without_gt_config.model_id, "test-model")
 
-        # Missing fields should get defaults when accessed
-        temperature = without_gt_config.get("temperature", 1.0)
-        top_p = without_gt_config.get("top_p", 0.1)
-        max_tokens = without_gt_config.get("max_tokens", 10000)
-
-        self.assertEqual(temperature, 1.0)
-        self.assertEqual(top_p, 0.1)
-        self.assertEqual(max_tokens, 10000)
+        # Missing fields should have IDPConfig defaults
+        self.assertEqual(without_gt_config.temperature, 1.0)
+        self.assertEqual(without_gt_config.top_p, 0.1)
+        self.assertEqual(without_gt_config.max_tokens, 10000)
 
     # Note: bedrock_model_id parameter was removed from ClassesDiscovery constructor
     # Model configuration is now handled through the config parameter only

@@ -33,37 +33,11 @@ bedrock_client = boto3.client('bedrock-data-automation')
 SAGEMAKER_A2I_REVIEW_PORTAL_URL = os.environ.get('SAGEMAKER_A2I_REVIEW_PORTAL_URL', '')
 enable_hitl = os.environ.get('ENABLE_HITL', 'false').lower()
 
-def get_confidence_threshold_from_config(document: Document) -> float:
-    """
-    Get the HITL confidence threshold from configuration.
-    
-    Args:
-        document (Document): The document object containing configuration
-        
-    Returns:
-        float: The confidence threshold as a decimal (0.0-1.0)
-    """
-    try:
-        config = get_config()
-        threshold_value = float(config['assessment']['default_confidence_threshold'])
-        
-        # Validate that the threshold is in the expected 0.0-1.0 range
-        if threshold_value < 0.0 or threshold_value > 1.0:
-            logger.warning(f"Invalid confidence threshold value {threshold_value}. Must be between 0.0 and 1.0. Using default: 0.80")
-            return 0.80
-            
-        logger.info(f"Retrieved confidence threshold from configuration: {threshold_value}")
-        return threshold_value
-    except Exception as e:
-        logger.warning(f"Failed to retrieve confidence threshold from configuration: {e}")
-        # Return default value of 80% (0.80) if configuration is not available
-        logger.info("Using default confidence threshold: 0.80")
-        return 0.80
 
 def create_metadata_file(file_uri, class_type, file_type=None):
     """
     Creates a metadata file alongside the given URI file with the same name plus '.metadata.json'
-    
+
     Args:
         file_uri (str): The S3 URI of the file
         class_type (str): The class type to include in the metadata
@@ -74,17 +48,17 @@ def create_metadata_file(file_uri, class_type, file_type=None):
         parsed_uri = urlparse(file_uri)
         bucket = parsed_uri.netloc
         key = parsed_uri.path.lstrip('/')
-        
+
         # Create the metadata key by adding '.metadata.json' to the original key
         metadata_key = f"{key}.metadata.json"
-        
+
         # Determine the file type if not provided
         if file_type is None:
             if key.endswith('.json'):
                 file_type = 'section'
             else:
                 file_type = 'page'
-        
+
         # Create metadata content
         metadata_content = {
             "metadataAttributes": {
@@ -93,7 +67,7 @@ def create_metadata_file(file_uri, class_type, file_type=None):
                 "FileType": file_type
             }
         }
-        
+
         # Use the common library to write to S3
         write_content(
             metadata_content,
@@ -101,7 +75,7 @@ def create_metadata_file(file_uri, class_type, file_type=None):
             metadata_key,
             content_type='application/json'
         )
-        
+
         logger.info(f"Created metadata file at s3://{bucket}/{metadata_key}")
     except Exception as e:
         logger.error(f"Error creating metadata file for {file_uri}: {str(e)}")
@@ -123,7 +97,7 @@ def copy_s3_objects(bda_result_bucket, bda_result_prefix, output_bucket, object_
         for page in page_iterator:
             if not page.get('Contents'):
                 continue
-                
+
             for obj in page['Contents']:
                 bda_result_key = obj['Key']
                 relative_path = bda_result_key[len(bda_result_prefix):].lstrip('/')
@@ -136,10 +110,10 @@ def copy_s3_objects(bda_result_bucket, bda_result_prefix, output_bucket, object_
                     MetadataDirective='REPLACE'
                 )
                 copied_files += 1
-                
+
         logger.info(f"Successfully copied {copied_files} files")
         return copied_files
-        
+
     except Exception as e:
         logger.error(f"Error copying files: {str(e)}")
         raise
@@ -171,7 +145,7 @@ def create_pdf_page_images(bda_result_bucket, output_bucket, object_key):
                 output_bucket,
                 image_key,
                 ExtraArgs={'ContentType': 'image/jpeg'}
-            ) 
+            )
 
         logger.info(f"Successfully created and uploaded {len(pdf_document)} images to S3")
         return len(pdf_document)
@@ -183,7 +157,7 @@ def create_pdf_page_images(bda_result_bucket, output_bucket, object_key):
 def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, object_key, document, confidence_threshold=0.8):
     """
     Process BDA sections and build sections for the Document object
-    
+
     Args:
         bda_result_bucket (str): The BDA result bucket
         bda_result_prefix (str): The BDA result prefix
@@ -191,7 +165,7 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
         object_key (str): The object key
         document (Document): The document object to update
         confidence_threshold (float): Confidence threshold to add to explainability data
-    
+
     Returns:
         Document: The updated document
     """
@@ -199,7 +173,7 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
     bda_custom_output_prefix = f"{bda_result_prefix}/custom_output/"
     # Target path for section files
     sections_output_prefix = f"{object_key}/sections/"
-    
+
     try:
         # List all section folders in the BDA result bucket
         response = s3_client.list_objects_v2(
@@ -207,43 +181,43 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
             Prefix=bda_custom_output_prefix,
             Delimiter='/'
         )
-        
+
         # Process each section folder
         for prefix in response.get('CommonPrefixes', []):
             section_path = prefix.get('Prefix')
             if not section_path:
                 continue
-                
+
             # Extract section ID from path
             section_id = section_path.rstrip('/').split('/')[-1]
             target_section_path = f"{sections_output_prefix}{section_id}/"
-            
+
             # List all files in the section folder
             section_files = s3_client.list_objects_v2(
                 Bucket=bda_result_bucket,
                 Prefix=section_path
             )
-            
+
             # Copy each file to the output bucket
             for file_obj in section_files.get('Contents', []):
                 src_key = file_obj['Key']
                 file_name = src_key.split('/')[-1]
                 target_key = f"{target_section_path}{file_name}"
-                
+
                 # Special handling for result.json files to add confidence thresholds
                 if file_name == 'result.json':
                     try:
                         # Download the result.json file
                         result_obj = s3_client.get_object(Bucket=bda_result_bucket, Key=src_key)
                         result_data = json.loads(result_obj['Body'].read().decode('utf-8'))
-                        
+
                         # Add confidence thresholds to explainability_info if present
                         if 'explainability_info' in result_data:
                             result_data['explainability_info'] = add_confidence_thresholds_to_explainability(
                                 result_data['explainability_info'], confidence_threshold
                             )
                             logger.info(f"Added confidence threshold {confidence_threshold} to explainability_info in section {section_id}")
-                        
+
                         # Write the modified result.json to the target location
                         write_content(
                             result_data,
@@ -252,7 +226,7 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
                             content_type='application/json'
                         )
                         logger.info(f"Processed and copied {src_key} to {target_key}")
-                        
+
                     except Exception as e:
                         logger.error(f"Error processing result.json {src_key}: {str(e)}")
                         # Fallback to regular copy if processing fails
@@ -274,7 +248,7 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
                         MetadataDirective='REPLACE'
                     )
                     logger.info(f"Copied {src_key} to {target_key}")
-            
+
             # Get the result.json file
             result_path = f"{target_section_path}result.json"
             try:
@@ -283,15 +257,15 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
                     Key=result_path
                 )
                 result_data = json.loads(result_obj['Body'].read().decode('utf-8'))
-                
+
                 # Extract required fields
                 doc_class = result_data.get('document_class', {}).get('type', '')
                 page_indices = result_data.get('split_document', {}).get('page_indices', [])
                 page_ids = [str(idx) for idx in (page_indices or [])]
-                
+
                 # Create the OutputJSONUri using the utility function
                 extraction_result_uri = build_s3_uri(output_bucket, result_path)
-                
+
                 # Create Section object and add to document
                 section = Section(
                     section_id=section_id,
@@ -301,20 +275,20 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
                     extraction_result_uri=extraction_result_uri
                 )
                 document.sections.append(section)
-                
+
                 # Create metadata file for the extraction result URI
                 create_metadata_file(extraction_result_uri, doc_class, 'section')
-                
+
             except ClientError as e:
                 logger.error(f"Failed to retrieve result.json for section {section_id}: {e}")
                 continue
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in result.json for section {section_id}: {e}")
                 continue
-                
+
         logger.info(f"Processed {len(document.sections)} sections for document {object_key}")
         return document
-        
+
     except ClientError as e:
         logger.error(f"Failed to list sections in S3: {e}")
         document.errors.append(f"Failed to list sections: {str(e)}")
@@ -323,21 +297,21 @@ def process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, ob
 def extract_markdown_from_json(raw_json):
     """
     Extract markdown content from BDA result JSON
-    
+
     Args:
         raw_json (dict): The BDA result JSON
-    
+
     Returns:
         str: Concatenated markdown text
     """
     markdown_texts = []
-    
+
     # Extract from pages
     if 'pages' in raw_json:
         for page in raw_json['pages']:
             if 'representation' in page and 'markdown' in page['representation']:
                 markdown_texts.append(page['representation']['markdown'])
-       
+
     # Join with horizontal rule
     if markdown_texts:
         return '\n\n---\n\nPAGE BREAK\n\n---\n\n'.join(markdown_texts)
@@ -346,26 +320,26 @@ def extract_markdown_from_json(raw_json):
 def add_confidence_thresholds_to_explainability(explainability_data, confidence_threshold):
     """
     Add confidence thresholds to explainability data recursively.
-    
+
     Args:
         explainability_data: The explainability data (dict, list, or other)
         confidence_threshold: The confidence threshold to add
-        
+
     Returns:
         The modified explainability data with confidence thresholds added
     """
     if isinstance(explainability_data, dict):
         # Create a copy to avoid modifying the original
         result = explainability_data.copy()
-        
+
         # If this dict has a confidence field, add the confidence_threshold
         if 'confidence' in result and isinstance(result['confidence'], (int, float)):
             result['confidence_threshold'] = confidence_threshold
-        
+
         # Recursively process nested dictionaries
         for key, value in result.items():
             result[key] = add_confidence_thresholds_to_explainability(value, confidence_threshold)
-        
+
         return result
     elif isinstance(explainability_data, list):
         # Recursively process list items
@@ -377,12 +351,12 @@ def add_confidence_thresholds_to_explainability(explainability_data, confidence_
 def extract_page_from_multipage_json(raw_json, page_index, confidence_threshold=None):
     """
     Extract a single page from a multi-page result JSON
-    
+
     Args:
         raw_json (dict): The BDA result JSON
         page_index (int): The page index to extract
         confidence_threshold (float, optional): Confidence threshold to add to explainability data
-        
+
     Returns:
         dict: A new result JSON with only the specified page
     """
@@ -390,17 +364,17 @@ def extract_page_from_multipage_json(raw_json, page_index, confidence_threshold=
     single_page_json = {
         "metadata": raw_json.get("metadata", {})
     }
-    
+
     # Update metadata to reflect single page
     if "metadata" in single_page_json:
         single_page_json["metadata"]["start_page_index"] = page_index
         single_page_json["metadata"]["end_page_index"] = page_index
         single_page_json["metadata"]["number_of_pages"] = 1
-    
+
     # Include document level info
     if "document" in raw_json:
         single_page_json["document"] = raw_json["document"]
-    
+
     # Add the single page from the pages array
     single_page_json["pages"] = []
     if "pages" in raw_json:
@@ -408,7 +382,7 @@ def extract_page_from_multipage_json(raw_json, page_index, confidence_threshold=
             if page.get("page_index") == page_index:
                 single_page_json["pages"].append(page)
                 break
-    
+
     # Filter elements for only this page
     single_page_json["elements"] = []
     if "elements" in raw_json:
@@ -419,7 +393,7 @@ def extract_page_from_multipage_json(raw_json, page_index, confidence_threshold=
                 element_copy = element.copy()
                 element_copy["page_indices"] = [page_index]
                 single_page_json["elements"].append(element_copy)
-    
+
     # Include explainability_info if present and add confidence thresholds
     if "explainability_info" in raw_json:
         explainability_info = raw_json["explainability_info"]
@@ -431,16 +405,16 @@ def extract_page_from_multipage_json(raw_json, page_index, confidence_threshold=
             logger.info(f"Added confidence threshold {confidence_threshold} to explainability_info for page {page_index}")
         else:
             single_page_json["explainability_info"] = explainability_info
-    
+
     return single_page_json
 
 def extract_markdown_from_single_page_json(raw_json):
     """
     Extract markdown content from a single page BDA result JSON
-    
+
     Args:
         raw_json (dict): The BDA result JSON
-    
+
     Returns:
         str: Markdown text for the page
     """
@@ -453,7 +427,7 @@ def extract_markdown_from_single_page_json(raw_json):
 def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, object_key, document, confidence_threshold=0.8):
     """
     Process BDA page outputs and build pages for the Document object
-    
+
     Args:
         bda_result_bucket (str): The BDA result bucket
         bda_result_prefix (str): The BDA result prefix
@@ -461,7 +435,7 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
         object_key (str): The object key
         document (Document): The document object to update
         confidence_threshold (float): Confidence threshold to add to explainability data
-    
+
     Returns:
         Document: The updated document
     """
@@ -469,29 +443,29 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
     standard_output_prefix = f"{bda_result_prefix}/standard_output/"
     # Target path for page files
     pages_output_prefix = f"{object_key}/pages/"
-    
+
     # Create a mapping of page_id to class from sections
     page_to_class_map = {}
     for section in document.sections:
         section_class = section.classification
         for page_id in section.page_ids:
             page_to_class_map[page_id] = section_class
-    
+
     try:
         # List all objects in the standard output directory
         response = s3_client.list_objects_v2(
             Bucket=bda_result_bucket,
             Prefix=standard_output_prefix
         )
-        
+
         # Process all standard_output result.json files which may contain multiple pages
         for obj in response.get('Contents', []):
             obj_key = obj['Key']
-            
+
             # Only process result.json files
             if not obj_key.endswith('result.json'):
                 continue
-                
+
             try:
                 # Get the raw JSON result from the BDA result bucket
                 result_obj = s3_client.get_object(
@@ -499,7 +473,7 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
                     Key=obj_key
                 )
                 raw_json = json.loads(result_obj['Body'].read().decode('utf-8'))
-                
+
                 # Check if this contains pages
                 if 'pages' in raw_json and len(raw_json['pages']) > 0:
                     # Process each page in the multi-page result
@@ -508,16 +482,16 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
                         if page_index is None:
                             logger.warning(f"Page in {obj_key} has no page_index")
                             continue
-                            
+
                         page_id = str(page_index)
-                        
+
                         # Extract a single page result.json for this page with confidence threshold
                         single_page_json = extract_page_from_multipage_json(raw_json, page_index, confidence_threshold)
-                        
+
                         # Determine page directory path in output bucket
                         page_path = f"{pages_output_prefix}{page_id}/"
                         page_result_path = f"{page_path}result.json"
-                        
+
                         # Write the single page result.json to the page directory
                         write_content(
                             single_page_json,
@@ -525,13 +499,13 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
                             page_result_path,
                             content_type='application/json'
                         )
-                        
+
                         # Create raw text URI
                         raw_text_uri = build_s3_uri(output_bucket, page_result_path)
-                        
+
                         # Define image path
                         image_path = f"{page_path}image.jpg"
-                        
+
                         # Check if image exists
                         try:
                             s3_client.head_object(Bucket=output_bucket, Key=image_path)
@@ -539,18 +513,18 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
                         except ClientError:
                             image_uri = None
                             logger.warning(f"image.jpg not found for page {page_id}")
-                        
+
                         # Get the class from the section mapping
                         doc_class = page_to_class_map.get(page_id, '')
-                        
+
                         # Extract markdown content for this page
                         markdown_text = extract_markdown_from_single_page_json(single_page_json)
-                        
+
                         # Create parsedResult.json
                         parsed_result = {
                             "text": markdown_text
                         }
-                        
+
                         # Write parsedResult.json to S3
                         parsed_result_path = f"{page_path}parsedResult.json"
                         write_content(
@@ -559,15 +533,15 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
                             parsed_result_path,
                             content_type='application/json'
                         )
-                        
+
                         # Create S3 URI for parsed result
                         parsed_result_uri = build_s3_uri(output_bucket, parsed_result_path)
-                        
+
                         logger.info(f"Created parsedResult.json for page {page_id}")
-                        
+
                         # Create metadata file for the parsed result URI
                         create_metadata_file(parsed_result_uri, doc_class, 'page')
-                        
+
                         # Create Page object and add to document
                         page = Page(
                             page_id=page_id,
@@ -577,18 +551,18 @@ def process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, objec
                             classification=doc_class
                         )
                         document.pages[page_id] = page
-                        
+
                     logger.info(f"Processed multi-page result file {obj_key}")
-                
+
             except Exception as e:
                 logger.error(f"Error processing result file {obj_key}: {str(e)}")
                 document.errors.append(f"Error processing result file {obj_key}: {str(e)}")
-        
+
         # Update document page count
         document.num_pages = len(document.pages)
         logger.info(f"Processed {document.num_pages} pages for document {object_key}")
         return document
-        
+
     except ClientError as e:
         logger.error(f"Failed to list pages in S3: {e}")
         document.errors.append(f"Failed to list pages: {str(e)}")
@@ -706,7 +680,7 @@ def download_decimal(bucket: str, key: str) -> dict:
 def process_keyvalue_details(explainability_data: list, page_indices: list, confidence_threshold: float = 0.8) -> dict:
     """
     Process explainability data to extract key-value and bounding box details per page.
-    
+
     Args:
         explainability_data: List of explainability data from BDA
         page_indices: List of page indices
@@ -778,16 +752,16 @@ def process_keyvalue_details(explainability_data: list, page_indices: list, conf
 def create_confidence_threshold_alerts(pagespecific_details: dict, confidence_threshold: float) -> list:
     """
     Create confidence threshold alerts from page-specific key-value details.
-    
+
     Args:
         pagespecific_details: Dictionary containing key-value details per page
         confidence_threshold: Confidence threshold to check against
-        
+
     Returns:
         List of confidence threshold alert dictionaries matching AppSync service expectations
     """
     alerts = []
-    
+
     # Process key-value details from all pages
     for page_num, kv_details in pagespecific_details.get('key_value_details', {}).items():
         for kv_entry in kv_details:
@@ -799,7 +773,7 @@ def create_confidence_threshold_alerts(pagespecific_details: dict, confidence_th
                     'confidence_threshold': confidence_threshold
                 }
                 alerts.append(alert)
-    
+
     logger.info(f"Created {len(alerts)} confidence threshold alerts")
     return alerts
 
@@ -817,12 +791,12 @@ def process_segments(
     """
     dynamodb = boto3.resource('dynamodb')
     table_name = os.environ.get("DB_NAME", "")
-    
+
     if table_name:
         table = dynamodb.Table(table_name)
     else:
         logger.warning("DB_NAME environment variable not set, skipping DynamoDB operations")
-    
+
     now = datetime.datetime.now().isoformat()
     hitl_triggered = False
     overall_hitl_triggered = False
@@ -851,13 +825,13 @@ def process_segments(
                 page_indices,
                 confidence_threshold
             )
-            
+
             # Create confidence threshold alerts for UI display
             confidence_threshold_alerts = create_confidence_threshold_alerts(
-                pagespecific_details, 
+                pagespecific_details,
                 confidence_threshold
             )
-            
+
             # Update the corresponding document section with confidence alerts
             # Find the section that contains these page indices
             page_ids_str = [str(idx) for idx in page_indices]
@@ -871,7 +845,7 @@ def process_segments(
             bp_confidence = custom_output["matched_blueprint"]["confidence"]
 
             # Check if any key-value or blueprint confidence is below threshold
-            if enable_hitl == 'true': 
+            if enable_hitl == 'true':
                 low_confidence = any(
                     kv['confidence'] < confidence_threshold
                     for page_num in page_indices
@@ -881,7 +855,7 @@ def process_segments(
                 low_confidence = None
 
             logger.info(f"low_confidence: {low_confidence}")
-            
+
             item.update({
                 "page_array": page_indices,
                 "hitl_triggered": low_confidence,
@@ -924,7 +898,7 @@ def process_segments(
                         logger.info(f"Started human loop for page {page_number}: {human_loop_response}")
                     except Exception as e:
                         logger.error(f"Failed to start human loop for page {page_number}: {str(e)}")
-                
+
                 item.update({
                     "hitl_corrected_result": custom_decimal_output
                 })
@@ -933,7 +907,7 @@ def process_segments(
                 std_hitl = 'true'
                 # std_hitl = None # HITL for standard output blueprint match is disabled until we have option to choose Blueprint in A2I
             else:
-                std_hitl = None 
+                std_hitl = None
             # Process standard output if no custom output match
             std_bucket, std_key = parse_s3_path(segment['standard_output_path'])
             std_output = download_decimal(std_bucket, std_key)
@@ -959,7 +933,7 @@ def process_segments(
                 page_array=page_array,
                 review_portal_url=SAGEMAKER_A2I_REVIEW_PORTAL_URL
             )
-            
+
             # hitl_triggered = std_hitl
             hitl_triggered = None
             # if enable_hitl == 'true':
@@ -982,7 +956,7 @@ def process_segments(
             #             logger.info(f"Triggered human loop for page {page_number}: {human_loop_response}")
             #         except Exception as e:
             #             logger.error(f"Failed to start human loop for page {page_number}: {str(e)}")
-        
+
         document.hitl_metadata.append(hitl_metadata)
 
         if table_name:
@@ -991,26 +965,27 @@ def process_segments(
                 table.put_item(Item=item)
             except Exception as e:
                 logger.error(f"Error saving to DynamoDB: {str(e)}")
-    
+
     return document, overall_hitl_triggered
 
 def handler(event, context):
     """
     Process the BDA results and build a Document object with pages and sections.
     Can handle both single BDA response and arrays of BDA responses from blueprint changes.
-    
+
     Args:
         event: Event containing BDA response information (single or array)
         context: Lambda context
-        
+
     Returns:
         Dict containing the processed document
     """
     logger.info(f"Processing event: {json.dumps(event)}")
-    
+    config = get_config(as_model=True)
+
     # Check if we have a single BDA response or an array of responses
     bda_responses = []
-    
+
     if isinstance(event, list):
         # We have an array of BDA responses (from blueprint change)
         logger.info(f"Processing array of {len(event)} BDA responses")
@@ -1019,11 +994,11 @@ def handler(event, context):
         # We have a single BDA response (from initial processing)
         logger.info("Processing single BDA response")
         bda_responses = [event]
-    
+
     # Extract required information from the first response
     first_response = bda_responses[0]
     output_bucket = first_response.get('output_bucket')
-    
+
     # Handle different response formats
     if 'BDAResponse' in first_response:
         # Standard initial processing format
@@ -1037,7 +1012,7 @@ def handler(event, context):
     else:
         logger.error("Unknown response format")
         raise ValueError("Could not determine document information from response")
-    
+
     logger.info(f"Input bucket: {input_bucket}, prefix: {object_key}")
     logger.info(f"Output bucket: {output_bucket}, base path: {object_key}")
 
@@ -1052,14 +1027,14 @@ def handler(event, context):
     )
 
     # Get confidence threshold from configuration for adding to explainability data
-    confidence_threshold = get_confidence_threshold_from_config(document)
+    confidence_threshold = config.assessment.default_confidence_threshold
     logger.info(f"Using confidence threshold: {confidence_threshold}")
 
     # Update document status
     document_service = create_document_service()
     logger.info(f"Updating document status to {document.status}")
     document_service.update_document(document)
-   
+
     # Create page images (only need to do this once)
     try:
         page_count = create_pdf_page_images(input_bucket, output_bucket, object_key)
@@ -1069,14 +1044,14 @@ def handler(event, context):
         document.errors.append(f"Error creating page images: {str(e)}")
 
     # Process each BDA response
-    
+
     for response_idx, bda_response in enumerate(bda_responses):
         logger.info(f"Processing BDA response {response_idx + 1} of {len(bda_responses)}")
-        
+
         # Extract BDA result information
         bda_result_bucket = None
         bda_result_prefix = None
-        
+
         if 'BDAResponse' in bda_response:
             # Standard response format
             bda_result_bucket = bda_response['BDAResponse']['job_detail']['output_s3_location']['s3_bucket']
@@ -1094,13 +1069,13 @@ def handler(event, context):
                 except Exception as e:
                     logger.error(f"Error getting job details for job {job_id}: {str(e)}")
                     continue
-        
+
         if not bda_result_bucket or not bda_result_prefix:
             logger.error(f"Could not determine BDA result location for response {response_idx}")
             continue
-            
+
         logger.info(f"BDA Result bucket: {bda_result_bucket}, prefix: {bda_result_prefix}")
-        
+
         # Process sections and pages from BDA output
         document = process_bda_sections(bda_result_bucket, bda_result_prefix, output_bucket, object_key, document, confidence_threshold)
         document = process_bda_pages(bda_result_bucket, bda_result_prefix, output_bucket, object_key, document, confidence_threshold)
@@ -1110,7 +1085,7 @@ def handler(event, context):
     for section in document.sections:
         for page_id in section.page_ids:
             page_ids_in_sections.add(page_id)
-    
+
     custom_pages_count = len(page_ids_in_sections)
     total_pages = document.num_pages
     standard_pages_count = total_pages - custom_pages_count
@@ -1119,7 +1094,7 @@ def handler(event, context):
 
     # Process HITL if enabled
     hitl_triggered = "false"
-    
+
     try:
         # Use the confidence threshold already calculated above
         metdatafile_path = '/'.join(bda_result_prefix.split('/')[:-1])
@@ -1164,13 +1139,13 @@ def handler(event, context):
             logger.error(f"Error processing job_metadata.json: {str(e)}")
     except Exception as e:
         logger.error(f"Error in HITL processing: {str(e)}")
-    
+
     # Record metrics for processed pages
     metrics.put_metric('ProcessedDocuments', 1)
     metrics.put_metric('ProcessedPages', total_pages)
     metrics.put_metric('ProcessedCustomPages', custom_pages_count)
     metrics.put_metric('ProcessedStandardPages', standard_pages_count)
-    
+
     # Add metering information
     document.metering = {
         "BDAProject/bda/documents-custom": {
@@ -1180,7 +1155,7 @@ def handler(event, context):
             "pages": standard_pages_count
         }
     }
-    
+
     # Update document status based on HITL requirement
     if hitl_triggered == "true":
         # Set status to HITL_IN_PROGRESS when HITL is triggered
@@ -1191,21 +1166,21 @@ def handler(event, context):
         document.status = Status.COMPLETED
         document.completion_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
         logger.info(f"Document processing complete, setting status to {document.status}")
-    
+
     document_service.update_document(document)
-    
+
     # Prepare response using new serialization method
     # Use working bucket for document compression
     working_bucket = os.environ.get('WORKING_BUCKET')
     if not working_bucket:
         logger.warning("WORKING_BUCKET environment variable not set, using output_bucket for compression")
         working_bucket = output_bucket
-    
+
     response = {
         "document": document.serialize_document(working_bucket, "processresults", logger),
         "hitl_triggered": hitl_triggered,
         "bda_response_count": len(bda_responses)
     }
-    
+
     logger.info(f"Response: {json.dumps(response, default=str)}")
     return response

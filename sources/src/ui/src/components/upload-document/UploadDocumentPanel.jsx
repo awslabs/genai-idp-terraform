@@ -3,19 +3,14 @@
 
 // src/components/upload-document/UploadDocumentPanel.jsx
 import React, { useState } from 'react';
-import {
-  Button,
-  Container,
-  Header,
-  SpaceBetween,
-  FormField,
-  StatusIndicator,
-  Alert,
-  Input,
-} from '@awsui/components-react';
-import { API, graphqlOperation } from 'aws-amplify';
+import { Button, Container, Header, SpaceBetween, FormField, StatusIndicator, Alert, Input } from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+
 import uploadDocument from '../../graphql/queries/uploadDocument';
+
 import useSettingsContext from '../../contexts/settings';
+
+const client = generateClient();
 
 const UploadDocumentPanel = () => {
   const { settings } = useSettingsContext();
@@ -66,14 +61,15 @@ const UploadDocumentPanel = () => {
           console.log(`Getting upload credentials for ${file.name}...`);
           console.log(`Using prefix: ${prefix || 'none'}`);
 
-          const response = await API.graphql(
-            graphqlOperation(uploadDocument, {
+          const response = await client.graphql({
+            query: uploadDocument,
+            variables: {
               fileName: file.name,
               contentType: file.type,
               prefix: prefix || '', // Use the user-provided prefix or empty string
               bucket: settings.InputBucket, // Explicitly pass the input bucket
-            }),
-          );
+            },
+          });
 
           const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
 
@@ -152,24 +148,14 @@ const UploadDocumentPanel = () => {
 
       <SpaceBetween size="l">
         <FormField label="Optional folder prefix (e.g., invoices/2024)">
-          <Input
-            value={prefix}
-            onChange={handlePrefixChange}
-            placeholder="Leave empty for root folder"
-            disabled={isUploading}
-          />
+          <Input value={prefix} onChange={handlePrefixChange} placeholder="Leave empty for root folder" disabled={isUploading} />
         </FormField>
 
         <FormField label="Select files to upload">
           <input type="file" multiple onChange={handleFileChange} disabled={isUploading} />
         </FormField>
 
-        <Button
-          variant="primary"
-          onClick={uploadFiles}
-          loading={isUploading}
-          disabled={selectedFiles.length === 0 || isUploading}
-        >
+        <Button variant="primary" onClick={uploadFiles} loading={isUploading} disabled={selectedFiles.length === 0 || isUploading}>
           Upload {selectedFiles.length > 0 ? `(${selectedFiles.length} files)` : ''}
         </Button>
 

@@ -22,6 +22,13 @@ provider "awscc" {
   region = var.region
 }
 
+# OpenSearch provider for Knowledge Base vector index (conditional on KB enabled)
+provider "opensearch" {
+  url         = local.knowledge_base_enabled ? aws_opensearchserverless_collection.knowledge_base_collection[0].collection_endpoint : "https://placeholder.us-east-1.es.amazonaws.com"
+  aws_region  = var.region
+  healthcheck = false
+}
+
 # Data sources
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
@@ -37,6 +44,11 @@ resource "random_string" "suffix" {
 # Local values
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
+
+  # Knowledge base configuration derived from api variable
+  knowledge_base_enabled            = var.api.knowledge_base.enabled
+  knowledge_base_model_id           = var.api.knowledge_base.model_id
+  knowledge_base_embedding_model_id = var.api.knowledge_base.embedding_model_id
 }
 
 # Create KMS key for encryption
@@ -413,12 +425,24 @@ module "genai_idp_accelerator" {
 
   # API configuration (consolidated)
   api = {
-    enabled            = var.api.enabled
-    agent_analytics    = var.api.agent_analytics
-    discovery          = var.api.discovery
-    chat_with_document = var.api.chat_with_document
-    process_changes    = var.api.process_changes
-    knowledge_base     = var.api.knowledge_base
+    enabled                     = var.api.enabled
+    agent_analytics             = var.api.agent_analytics
+    discovery                   = var.api.discovery
+    chat_with_document          = var.api.chat_with_document
+    process_changes             = var.api.process_changes
+    knowledge_base = var.api.knowledge_base.enabled ? {
+      enabled            = true
+      knowledge_base_arn = aws_bedrockagent_knowledge_base.knowledge_base[0].arn
+      model_id           = var.api.knowledge_base.model_id
+      embedding_model_id = var.api.knowledge_base.embedding_model_id
+      } : {
+      enabled = false
+    }
+    enable_agent_companion_chat = var.api.enable_agent_companion_chat
+    enable_test_studio          = var.api.enable_test_studio
+    enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_error_analyzer       = var.api.enable_error_analyzer
+    enable_mcp                  = var.api.enable_mcp
   }
 
   # DEPRECATED: Individual API variables (backward compatibility)

@@ -1,28 +1,37 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { React } from 'react';
-import { Route, Switch, useLocation } from 'react-router-dom';
-import { SideNavigation } from '@awsui/components-react';
+import { useLocation } from 'react-router-dom';
+import { SideNavigation } from '@cloudscape-design/components';
 import useSettingsContext from '../../contexts/settings';
 
 import {
   DOCUMENTS_PATH,
   DOCUMENTS_KB_QUERY_PATH,
-  DOCUMENTS_ANALYTICS_PATH,
+  TEST_STUDIO_PATH,
   DEFAULT_PATH,
   UPLOAD_DOCUMENT_PATH,
   CONFIGURATION_PATH,
   DISCOVERY_PATH,
+  AGENT_CHAT_PATH,
 } from '../../routes/constants';
 
 export const documentsNavHeader = { text: 'Tools', href: `#${DEFAULT_PATH}` };
 export const documentsNavItems = [
   { type: 'link', text: 'Document List', href: `#${DOCUMENTS_PATH}` },
   { type: 'link', text: 'Document KB', href: `#${DOCUMENTS_KB_QUERY_PATH}` },
-  { type: 'link', text: 'Agent Analysis', href: `#${DOCUMENTS_ANALYTICS_PATH}` },
   { type: 'link', text: 'Upload Document(s)', href: `#${UPLOAD_DOCUMENT_PATH}` },
   { type: 'link', text: 'Discovery', href: `#${DISCOVERY_PATH}` },
   { type: 'link', text: 'View/Edit Configuration', href: `#${CONFIGURATION_PATH}` },
+  { type: 'link', text: 'Agent Companion Chat', href: `#${AGENT_CHAT_PATH}` },
+  {
+    type: 'section',
+    text: 'Test Studio',
+    items: [
+      { type: 'link', text: 'Test Sets', href: `#${TEST_STUDIO_PATH}?tab=sets` },
+      { type: 'link', text: 'Test Executions', href: `#${TEST_STUDIO_PATH}?tab=executions` },
+    ],
+  },
   {
     type: 'section',
     text: 'Resources',
@@ -55,11 +64,7 @@ const defaultOnFollowHandler = (ev) => {
 };
 
 /* eslint-disable react/prop-types */
-const Navigation = ({
-  header = documentsNavHeader,
-  items = documentsNavItems,
-  onFollowHandler = defaultOnFollowHandler,
-}) => {
+const Navigation = ({ header = documentsNavHeader, items = documentsNavItems, onFollowHandler = defaultOnFollowHandler }) => {
   const location = useLocation();
   const path = location.pathname;
   let activeHref = `#${DEFAULT_PATH}`;
@@ -70,14 +75,23 @@ const Navigation = ({
     activeHref = `#${CONFIGURATION_PATH}`;
   } else if (path.includes(DOCUMENTS_KB_QUERY_PATH)) {
     activeHref = `#${DOCUMENTS_KB_QUERY_PATH}`;
-  } else if (path.includes(DOCUMENTS_ANALYTICS_PATH)) {
-    activeHref = `#${DOCUMENTS_ANALYTICS_PATH}`;
+  } else if (path.includes(TEST_STUDIO_PATH)) {
+    // Handle Test Studio sub-navigation
+    const urlParams = new URLSearchParams(location.search);
+    const tab = urlParams.get('tab');
+    if (tab) {
+      activeHref = `#${TEST_STUDIO_PATH}?tab=${tab}`;
+    } else {
+      activeHref = `#${TEST_STUDIO_PATH}?tab=sets`;
+    }
   } else if (path.includes(UPLOAD_DOCUMENT_PATH)) {
     activeHref = `#${UPLOAD_DOCUMENT_PATH}`;
   } else if (path.includes(DISCOVERY_PATH)) {
     activeHref = `#${DISCOVERY_PATH}`;
   } else if (path.includes(DOCUMENTS_PATH)) {
     activeHref = `#${DOCUMENTS_PATH}`;
+  } else if (path === AGENT_CHAT_PATH) {
+    activeHref = `#${AGENT_CHAT_PATH}`;
   }
 
   // Create a copy of the items array to add the deployment info
@@ -128,16 +142,7 @@ const Navigation = ({
   }
 
   return (
-    <Switch>
-      <Route path={DOCUMENTS_PATH}>
-        <SideNavigation
-          items={navigationItems}
-          header={header || documentsNavHeader}
-          activeHref={activeHref}
-          onFollow={onFollowHandler}
-        />
-      </Route>
-    </Switch>
+    <SideNavigation items={navigationItems} header={header || documentsNavHeader} activeHref={activeHref} onFollow={onFollowHandler} />
   );
 };
 

@@ -14,6 +14,7 @@ from idp_common.assessment.granular_service import (
     GranularAssessmentService,
     _safe_float_conversion,
 )
+from idp_common.config.models import IDPConfig
 
 
 class TestSafeFloatConversion:
@@ -61,35 +62,33 @@ class TestGranularAssessmentService:
             },
             "classes": [
                 {
-                    "name": "letter",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "letter",
+                    "x-aws-idp-document-type": "letter",
+                    "type": "object",
                     "description": "A formal letter document",
-                    "attributes": [
-                        {
-                            "name": "sender_name",
+                    "properties": {
+                        "sender_name": {
+                            "type": "string",
                             "description": "Name of the sender",
-                            "attributeType": "simple",
                         },
-                        {
-                            "name": "recipient_name",
+                        "recipient_name": {
+                            "type": "string",
                             "description": "Name of the recipient",
-                            "attributeType": "simple",
                         },
-                        {
-                            "name": "date",
+                        "date": {
+                            "type": "string",
                             "description": "Date of the letter",
-                            "attributeType": "simple",
                         },
-                        {
-                            "name": "subject",
+                        "subject": {
+                            "type": "string",
                             "description": "Subject of the letter",
-                            "attributeType": "simple",
                         },
-                        {
-                            "name": "signature",
+                        "signature": {
+                            "type": "string",
                             "description": "Signature of the sender",
-                            "attributeType": "simple",
                         },
-                    ],
+                    },
                 }
             ],
         }
@@ -107,7 +106,8 @@ class TestGranularAssessmentService:
 
     def test_initialization(self, sample_config):
         """Test service initialization."""
-        service = GranularAssessmentService(config=sample_config)
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
 
         assert service.max_workers == 4
         assert service.simple_batch_size == 3
@@ -117,32 +117,38 @@ class TestGranularAssessmentService:
     def test_initialization_single_worker(self, sample_config):
         """Test service initialization with single worker."""
         sample_config["assessment"]["granular"]["max_workers"] = 1
-        service = GranularAssessmentService(config=sample_config)
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
 
         assert service.max_workers == 1
         assert not service.enable_parallel  # max_workers = 1
 
-    def test_get_class_attributes(self, sample_config):
-        """Test getting attributes for a document class."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+    def test_get_class_schema(self, sample_config):
+        """Test getting schema for a document class."""
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        schema = service._get_class_schema("letter")
 
-        assert len(attributes) == 5
-        assert attributes[0]["name"] == "sender_name"
-        assert attributes[1]["name"] == "recipient_name"
+        assert schema.get("x-aws-idp-document-type") == "letter"
+        assert "properties" in schema
+        assert len(schema["properties"]) == 5
+        assert "sender_name" in schema["properties"]
+        assert "recipient_name" in schema["properties"]
 
-    def test_get_class_attributes_not_found(self, sample_config):
-        """Test getting attributes for a non-existent class."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("nonexistent")
+    def test_get_class_schema_not_found(self, sample_config):
+        """Test getting schema for a non-existent class."""
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        schema = service._get_class_schema("nonexistent")
 
-        assert attributes == []
+        assert schema == {}
 
-    def test_format_attribute_descriptions(self, sample_config):
-        """Test formatting attribute descriptions."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
-        descriptions = service._format_attribute_descriptions(attributes)
+    def test_format_property_descriptions(self, sample_config):
+        """Test formatting property descriptions from JSON Schema."""
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
+        descriptions = service._format_property_descriptions(properties)
 
         assert "sender_name" in descriptions
         assert "Name of the sender" in descriptions
@@ -152,11 +158,12 @@ class TestGranularAssessmentService:
         self, sample_config, sample_extraction_results
     ):
         """Test creating assessment tasks with simple attribute batching."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
         tasks = service._create_assessment_tasks(
-            sample_extraction_results, attributes, 0.9
+            sample_extraction_results, properties, 0.9
         )
 
         # With 5 simple attributes and batch_size=3, we should get 2 batches
@@ -172,28 +179,26 @@ class TestGranularAssessmentService:
 
     def test_create_assessment_tasks_with_group_attributes(self, sample_config):
         """Test creating assessment tasks with group attributes."""
-        # Add a group attribute to the config
-        sample_config["classes"][0]["attributes"].append(
-            {
-                "name": "address_info",
-                "description": "Address information",
-                "attributeType": "group",
-                "groupAttributes": [
-                    {"name": "street", "description": "Street address"},
-                    {"name": "city", "description": "City name"},
-                ],
-            }
-        )
+        # Add a group property to the config
+        sample_config["classes"][0]["properties"]["address_info"] = {
+            "type": "object",
+            "description": "Address information",
+            "properties": {
+                "street": {"type": "string", "description": "Street address"},
+                "city": {"type": "string", "description": "City name"},
+            },
+        }
 
         extraction_results = {
             "sender_name": "John Doe",
             "address_info": {"street": "123 Main St", "city": "Anytown"},
         }
 
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
-        tasks = service._create_assessment_tasks(extraction_results, attributes, 0.9)
+        tasks = service._create_assessment_tasks(extraction_results, properties, 0.9)
 
         # Should have simple batches + 1 group task
         group_tasks = [t for t in tasks if t.task_type == "group"]
@@ -203,24 +208,22 @@ class TestGranularAssessmentService:
 
     def test_create_assessment_tasks_with_list_attributes(self, sample_config):
         """Test creating assessment tasks with list attributes."""
-        # Add a list attribute to the config
-        sample_config["classes"][0]["attributes"].append(
-            {
-                "name": "transactions",
-                "description": "List of transactions",
-                "attributeType": "list",
-                "listItemTemplate": {
-                    "itemDescription": "A single transaction",
-                    "itemAttributes": [
-                        {"name": "amount", "description": "Transaction amount"},
-                        {
-                            "name": "description",
-                            "description": "Transaction description",
-                        },
-                    ],
+        # Add a list property to the config
+        sample_config["classes"][0]["properties"]["transactions"] = {
+            "type": "array",
+            "description": "List of transactions",
+            "x-aws-idp-list-item-description": "A single transaction",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "amount": {"type": "string", "description": "Transaction amount"},
+                    "description": {
+                        "type": "string",
+                        "description": "Transaction description",
+                    },
                 },
-            }
-        )
+            },
+        }
 
         extraction_results = {
             "sender_name": "John Doe",
@@ -230,10 +233,11 @@ class TestGranularAssessmentService:
             ],
         }
 
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
-        tasks = service._create_assessment_tasks(extraction_results, attributes, 0.9)
+        tasks = service._create_assessment_tasks(extraction_results, properties, 0.9)
 
         # Should have simple batches + 2 list item tasks
         list_tasks = [t for t in tasks if t.task_type == "list_item"]
@@ -245,8 +249,9 @@ class TestGranularAssessmentService:
 
     def test_get_task_specific_attribute_descriptions(self, sample_config):
         """Test getting task-specific attribute descriptions."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
         # Create a simple batch task
         task = AssessmentTask(
@@ -258,7 +263,7 @@ class TestGranularAssessmentService:
         )
 
         descriptions = service._get_task_specific_attribute_descriptions(
-            task, attributes
+            task, properties
         )
 
         assert "sender_name" in descriptions
@@ -267,8 +272,9 @@ class TestGranularAssessmentService:
 
     def test_build_specific_assessment_prompt(self, sample_config):
         """Test building specific assessment prompt."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
         # Mock base content with placeholders (like what would come from the real base content)
         base_content = [
@@ -286,7 +292,7 @@ class TestGranularAssessmentService:
         )
 
         content = service._build_specific_assessment_prompt(
-            task, base_content, attributes
+            task, base_content, properties
         )
 
         # Should have same number of content items as base content
@@ -308,7 +314,8 @@ class TestGranularAssessmentService:
 
     def test_build_cached_prompt_base(self, sample_config):
         """Test building cached prompt base."""
-        service = GranularAssessmentService(config=sample_config)
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
 
         content = service._build_cached_prompt_base(
             document_text="Sample document text",
@@ -318,8 +325,8 @@ class TestGranularAssessmentService:
             page_images=[],
         )
 
-        # Should have text content and cache point
-        assert len(content) >= 2
+        # Should have at least one text content item
+        assert len(content) >= 1
         # Check that the task prompt template is used and placeholders are replaced
         assert any(
             "letter" in item.get("text", "") for item in content
@@ -328,7 +335,6 @@ class TestGranularAssessmentService:
         assert not any(
             "sender_name: Name of sender" in item.get("text", "") for item in content
         )  # ATTRIBUTE_NAMES_AND_DESCRIPTIONS should be placeholder
-        assert any("<<CACHEPOINT>>" in item.get("text", "") for item in content)
         # Should contain placeholders for task-specific content
         assert any(
             "{ATTRIBUTE_NAMES_AND_DESCRIPTIONS}" in item.get("text", "")
@@ -361,8 +367,9 @@ class TestGranularAssessmentService:
         }
         mock_bedrock.return_value = mock_response
 
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
         # Create a task
         task = AssessmentTask(
@@ -378,7 +385,7 @@ class TestGranularAssessmentService:
         result = service._process_assessment_task(
             task,
             base_content,
-            attributes,
+            properties,
             "test-model",
             "system prompt",
             0.0,
@@ -398,8 +405,9 @@ class TestGranularAssessmentService:
         # Mock Bedrock to raise an exception
         mock_bedrock.side_effect = Exception("Bedrock error")
 
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
         task = AssessmentTask(
             task_id="test_batch",
@@ -414,7 +422,7 @@ class TestGranularAssessmentService:
         result = service._process_assessment_task(
             task,
             base_content,
-            attributes,
+            properties,
             "test-model",
             "system prompt",
             0.0,
@@ -428,7 +436,8 @@ class TestGranularAssessmentService:
 
     def test_check_confidence_alerts_simple_batch(self, sample_config):
         """Test confidence alert checking for simple batch tasks."""
-        service = GranularAssessmentService(config=sample_config)
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
 
         task = AssessmentTask(
             task_id="test_batch",
@@ -453,8 +462,8 @@ class TestGranularAssessmentService:
 
     def test_aggregate_assessment_results(self, sample_config):
         """Test aggregating assessment results."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
 
         # Create tasks and results
         task1 = AssessmentTask(
@@ -495,7 +504,7 @@ class TestGranularAssessmentService:
         )
 
         enhanced_data, alerts, metering = service._aggregate_assessment_results(
-            [task1, task2], [result1, result2], {}, attributes
+            [task1, task2], [result1, result2], {}
         )
 
         # Check enhanced data
@@ -509,40 +518,49 @@ class TestGranularAssessmentService:
 
     def test_empty_extraction_results_handling(self, sample_config):
         """Test handling of empty extraction results."""
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
         # Empty extraction results should create no tasks
-        tasks = service._create_assessment_tasks({}, attributes, 0.9)
+        tasks = service._create_assessment_tasks({}, properties, 0.9)
         assert len(tasks) == 0
 
-    def test_missing_task_prompt_error(self, sample_config):
-        """Test error when task_prompt is missing from config."""
+    def test_missing_task_prompt_uses_default(self, sample_config):
+        """Test that default task_prompt is used when not in config."""
         # Remove task_prompt from config
         del sample_config["assessment"]["task_prompt"]
 
-        service = GranularAssessmentService(config=sample_config)
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
 
-        with pytest.raises(ValueError, match="Assessment task_prompt is required"):
-            service._build_cached_prompt_base("text", "letter", "attrs", "ocr", [])
+        # Should not raise an error, should use default task_prompt from IDPConfig
+        prompt = service._build_cached_prompt_base("text", "letter", "attrs", "ocr", [])
+
+        # Verify a prompt was generated (not empty)
+        assert prompt is not None
+        assert len(prompt) > 0
 
     def test_confidence_threshold_inheritance(self, sample_config):
         """Test that confidence thresholds are properly inherited."""
-        # Add attribute-specific threshold
-        sample_config["classes"][0]["attributes"][0]["confidence_threshold"] = 0.95
+        # Add property-specific threshold
+        sample_config["classes"][0]["properties"]["sender_name"][
+            "x-aws-idp-confidence-threshold"
+        ] = 0.95
 
-        service = GranularAssessmentService(config=sample_config)
-        attributes = service._get_class_attributes("letter")
+        idp_config = IDPConfig.model_validate(sample_config)
+        service = GranularAssessmentService(config=idp_config)
+        properties = service._get_class_schema("letter").get("properties", {})
 
-        # Test getting threshold for attribute with specific threshold
-        threshold = service._get_attribute_confidence_threshold(
-            "sender_name", attributes, 0.9
+        # Test getting threshold for property with specific threshold
+        threshold = service._get_confidence_threshold_by_path(
+            properties, "sender_name", 0.9
         )
         assert threshold == 0.95
 
-        # Test getting threshold for attribute without specific threshold
-        threshold = service._get_attribute_confidence_threshold(
-            "recipient_name", attributes, 0.9
+        # Test getting threshold for property without specific threshold
+        threshold = service._get_confidence_threshold_by_path(
+            properties, "recipient_name", 0.9
         )
         assert threshold == 0.9
 

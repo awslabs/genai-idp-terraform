@@ -148,6 +148,13 @@ resource "aws_iam_policy" "appsync_lambda_policy" {
           var.discovery.enabled ? [
             module.discovery[0].discovery_upload_resolver_function_arn,
             module.discovery[0].discovery_processor_function_arn
+          ] : [],
+          var.enable_agent_companion_chat ? [
+            aws_lambda_function.agent_chat_resolver[0].arn,
+            aws_lambda_function.create_chat_session_resolver[0].arn,
+            aws_lambda_function.list_agent_chat_sessions_resolver[0].arn,
+            aws_lambda_function.get_agent_chat_messages_resolver[0].arn,
+            aws_lambda_function.delete_agent_chat_session_resolver[0].arn
           ] : []
         )
       }

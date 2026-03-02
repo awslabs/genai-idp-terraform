@@ -9,7 +9,7 @@ import mimetypes
 import base64
 import hashlib
 import os
-import re 
+import re
 from urllib.parse import urlparse
 from botocore.exceptions import ClientError
 from idp_common.bedrock.client import BedrockClient
@@ -23,7 +23,7 @@ def remove_text_between_brackets(text):
     start = text.find('{')
     # Find position of last closing bracket
     end = text.rfind('}')
-    
+
     # If both brackets exist, remove text between them including brackets
     if start != -1 and end != -1:
         return text[:start] + text[end+1:]
@@ -46,37 +46,37 @@ def get_full_text(bucket, key):
     try:
         dynamodb = boto3.resource('dynamodb')
         tracking_table = dynamodb.Table(os.environ['TRACKING_TABLE_NAME'])
-        
+
         doc_pk = f"doc#{key}"
         response = tracking_table.get_item(
             Key={'PK': doc_pk, 'SK': 'none'}
         )
-        
+
         if 'Item' not in response:
             logger.info(f"Document {key} not found")
             raise Exception(f"Document {key} not found")
-            
+
         document = response['Item']
         pages = document.get('Pages', {})
         sorted_pages = sorted(pages, key=lambda x: x['Id'])
 
         s3 = boto3.client('s3')
         all_text = ""
-        
+
         for page in sorted_pages:
             if 'TextUri' in page:
                 # Extract S3 key from URI
                 text_key = page['TextUri'].replace(f"s3://{bucket}/", "")
-                
+
                 try:
                     response = s3.get_object(Bucket=bucket, Key=text_key)
                     page_text = response['Body'].read().decode('utf-8')
                     all_text += f"<page-number>{page['Id']}</page-number>\n{page_text}\n\n"
                 except Exception as e:
                     logger.warning(f"Failed to load page {page['Id']}: {e}")
-                    
+
         return all_text
-        
+
     except Exception as e:
         logger.error(f"Error getting document pages: {str(e)}")
         raise Exception(f"Error getting document pages: {str(e)}")
@@ -87,21 +87,21 @@ def get_summarization_model():
     try:
         dynamodb = boto3.resource('dynamodb')
         config_table = dynamodb.Table(os.environ['CONFIGURATION_TABLE_NAME'])
-        
+
         # Query for the Default configuration
         response = config_table.get_item(
             Key={'Configuration': 'Default'}
         )
-        
+
         if 'Item' in response:
             config_data = response['Item']
             # Extract summarization model from the configuration
             if 'summarization' in config_data and 'model' in config_data['summarization']:
                 return config_data['summarization']['model']
-        
+
         # Fallback to a default model if not found in config
         return 'us.amazon.nova-pro-v1:0'
-        
+
     except Exception as e:
         logger.error(f"Error getting summarization model from config: {str(e)}")
         return 'us.amazon.nova-pro-v1:0'  # Fallback default
@@ -170,7 +170,7 @@ def handler(event, context):
             # Invoke a model
             response = client.invoke_model(
                 model_id=selectedModelId,
-                system_prompt="You are an assistant that's responsible for getting details from document text attached here based on questions from the user.\n\nIf you don't know the answer, just say that you don't know. Don't try to make up an answer.\n\nAdditionally, use the user and assistant responses in the following JSON object to see what's been asked and what the resposes were in the past.\n\n",
+                system_prompt="You are an assistant that's responsible for getting details from document text attached here based on questions from the user.\n\nIf you don't know the answer, just say that you don't know. Don't try to make up an answer.\n\nAdditionally, use the user and assistant responses in the following JSON object to see what's been asked and what the resposes were in the past. Your response should always be in plain text, not JSON.\n\n",
                 content=content,
                 temperature=0.0
             )
@@ -182,25 +182,25 @@ def handler(event, context):
             # need to remove that JSON object first
             logger.info(f"New response: {remove_text_between_brackets(text).strip("\n")}")
             cleaned_up_text = remove_text_between_brackets(text).strip("\n")
-            
+
             chat_response = {"cr": {"content": [{"text": cleaned_up_text}]}}
-            
+
             return json.dumps(chat_response)
 
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
         logger.error(f"Error: {error_code} - {error_message}")
-        
+
         if error_code == 'NoSuchKey':
             raise Exception(f"File not found: {fulltext_key}")
         elif error_code == 'NoSuchBucket':
             raise Exception(f"Bucket not found: {output_bucket}")
         else:
             raise Exception(error_message)
-            
+
     except Exception as e:
         logger.error(f"{str(e)}")
         raise Exception(f"{str(e)}")
-    
+
     return response_data

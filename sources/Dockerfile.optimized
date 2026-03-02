@@ -1,0 +1,44 @@
+# Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Optimized multi-stage Dockerfile for Lambda container images.
+# Build arg FUNCTION_PATH points to the function directory relative to the sources/ root
+# (e.g. patterns/pattern-1/src/bda_invoke_function).
+# Build context must be the sources/ directory root.
+
+ARG FUNCTION_PATH
+
+# ── Stage 1: build dependencies ──────────────────────────────────────────────
+FROM public.ecr.aws/lambda/python:3.12-arm64 AS builder
+
+ARG FUNCTION_PATH
+
+WORKDIR /build
+
+# Copy the shared library package
+COPY lib/idp_common_pkg /build/lib/idp_common_pkg
+
+# Copy the function source
+COPY ${FUNCTION_PATH} /build/function
+
+# Rewrite the relative ../../lib/idp_common_pkg path in requirements.txt to an absolute path,
+# then install everything into /build/deps using a venv so that extras (e.g.
+# [evaluation,docs_service]) and their transitive dependencies are fully resolved.
+RUN python -m venv /build/venv && \
+    sed 's|../../lib/idp_common_pkg|/build/lib/idp_common_pkg|g' \
+        /build/function/requirements.txt > /tmp/requirements_resolved.txt && \
+    /build/venv/bin/pip install --no-cache-dir -r /tmp/requirements_resolved.txt && \
+    cp -r /build/venv/lib/python3.12/site-packages/. /build/deps/
+
+# ── Stage 2: final Lambda image ───────────────────────────────────────────────
+FROM public.ecr.aws/lambda/python:3.12-arm64
+
+ARG FUNCTION_PATH
+
+# Copy installed packages from builder stage
+COPY --from=builder /build/deps ${LAMBDA_TASK_ROOT}
+
+# Copy function source files
+COPY ${FUNCTION_PATH} ${LAMBDA_TASK_ROOT}
+
+CMD ["index.handler"]

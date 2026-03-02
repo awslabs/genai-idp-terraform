@@ -4,13 +4,12 @@ phases:
   pre_build:
     commands:
       - echo ${SOURCE_CODE_LOCATION}
-      - echo `ls -altr`
-      - echo `pwd`
-      - echo Installing NodeJS
-      - n 18.19.1
-      - npm install -g npm@10.2.4
+      - echo Installing NodeJS 22
+      - n 22.14.0
+      - node --version
+      - npm --version
       - echo Installing Web UI dependencies
-      - npm install
+      - npm ci
   build:
     commands:
       - echo Build started on `date`

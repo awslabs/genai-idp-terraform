@@ -184,3 +184,27 @@ variable "lambda_tracing_mode" {
   type        = string
   default     = "Active"
 }
+
+variable "enable_ecr_image_scanning" {
+  description = "Enable ECR vulnerability scanning on image push for the BDA processor Lambda images"
+  type        = bool
+  default     = false
+}
+
+variable "evaluation_baseline_bucket_name" {
+  description = "Name of the S3 bucket containing baseline documents for evaluation. Leave empty to skip evaluation."
+  type        = string
+  default     = ""
+}
+
+variable "reporting_bucket_name" {
+  description = "Name of the S3 bucket for storing evaluation reporting data."
+  type        = string
+  default     = ""
+}
+
+variable "save_reporting_function_name" {
+  description = "Name of the Lambda function that saves evaluation results to the reporting bucket."
+  type        = string
+  default     = ""
+}

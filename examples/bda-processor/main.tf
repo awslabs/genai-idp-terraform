@@ -446,11 +446,16 @@ module "genai_idp_accelerator" {
 
   # API configuration (consolidated)
   api = {
-    enabled            = var.api.enabled
-    agent_analytics    = var.api.agent_analytics
-    discovery          = var.api.discovery
-    chat_with_document = var.api.chat_with_document
-    process_changes    = var.api.process_changes
+    enabled                     = var.api.enabled
+    agent_analytics             = var.api.agent_analytics
+    discovery                   = var.api.discovery
+    chat_with_document          = var.api.chat_with_document
+    process_changes             = var.api.process_changes
+    enable_agent_companion_chat = var.api.enable_agent_companion_chat
+    enable_test_studio          = var.api.enable_test_studio
+    enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_error_analyzer       = var.api.enable_error_analyzer
+    enable_mcp                  = var.api.enable_mcp
     knowledge_base = var.api.knowledge_base.enabled ? {
       enabled            = true
       knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null

@@ -121,10 +121,17 @@ class TestIDPPublisherEnvironmentSetup:
         publisher = IDPPublisher()
         publisher.region = "us-east-1"
 
-        with patch("builtins.open", mock_open_version_file("1.0.0")):
+        with (
+            patch("builtins.open", mock_open_version_file("1.0.0")),
+            patch.object(
+                publisher, "_generate_lambda_image_version", return_value="test-version"
+            ),
+        ):
             publisher.setup_environment()
 
-            assert publisher.stat_cmd == "stat --format='%Y'"
+            # Verify setup completed successfully
+            assert publisher.version == "1.0.0"
+            assert publisher.lambda_image_version == "test-version"
 
     @patch("boto3.client")
     @patch("platform.machine")
@@ -136,10 +143,17 @@ class TestIDPPublisherEnvironmentSetup:
         publisher = IDPPublisher()
         publisher.region = "us-west-2"
 
-        with patch("builtins.open", mock_open_version_file("1.0.0")):
+        with (
+            patch("builtins.open", mock_open_version_file("1.0.0")),
+            patch.object(
+                publisher, "_generate_lambda_image_version", return_value="test-version"
+            ),
+        ):
             publisher.setup_environment()
 
-            assert publisher.stat_cmd == "stat -f %m"
+            # Verify setup completed successfully
+            assert publisher.version == "1.0.0"
+            assert publisher.lambda_image_version == "test-version"
 
     @patch("boto3.client")
     def test_setup_environment_us_east_1_udop_model(self, mock_boto_client):
@@ -149,38 +163,36 @@ class TestIDPPublisherEnvironmentSetup:
         publisher = IDPPublisher()
         publisher.region = "us-east-1"
 
-        with patch("builtins.open", mock_open_version_file("1.0.0")):
+        with (
+            patch("builtins.open", mock_open_version_file("1.0.0")),
+            patch.object(
+                publisher, "_generate_lambda_image_version", return_value="test-version"
+            ),
+        ):
             publisher.setup_environment()
 
             expected_model = "s3://aws-ml-blog-us-east-1/artifacts/genai-idp/udop-finetuning/rvl-cdip/model.tar.gz"
             assert publisher.public_sample_udop_model == expected_model
 
     @patch("boto3.client")
-    def test_setup_environment_us_west_2_udop_model(self, mock_boto_client):
-        """Test UDOP model path for us-west-2"""
-        mock_boto_client.return_value = Mock()
-
-        publisher = IDPPublisher()
-        publisher.region = "us-west-2"
-
-        with patch("builtins.open", mock_open_version_file("1.0.0")):
-            publisher.setup_environment()
-
-            expected_model = "s3://aws-ml-blog-us-west-2/artifacts/genai-idp/udop-finetuning/rvl-cdip/model.tar.gz"
-            assert publisher.public_sample_udop_model == expected_model
-
-    @patch("boto3.client")
     def test_setup_environment_other_region_udop_model(self, mock_boto_client):
-        """Test UDOP model path for other regions"""
+        """Test UDOP model path for other regions (fallback to us-east-1)"""
         mock_boto_client.return_value = Mock()
 
         publisher = IDPPublisher()
         publisher.region = "eu-west-1"
 
-        with patch("builtins.open", mock_open_version_file("1.0.0")):
+        with (
+            patch("builtins.open", mock_open_version_file("1.0.0")),
+            patch.object(
+                publisher, "_generate_lambda_image_version", return_value="test-version"
+            ),
+        ):
             publisher.setup_environment()
 
-            assert publisher.public_sample_udop_model == ""
+            # Uses the actual region (no longer falls back to us-east-1)
+            expected_model = "s3://aws-ml-blog-eu-west-1/artifacts/genai-idp/udop-finetuning/rvl-cdip/model.tar.gz"
+            assert publisher.public_sample_udop_model == expected_model
 
 
 class TestIDPPublisherVersionComparison:

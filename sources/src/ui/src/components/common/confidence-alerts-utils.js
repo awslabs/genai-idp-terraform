@@ -270,6 +270,7 @@ export const getFieldHighlightInfo = (fieldName, fieldConfidence, confidenceThre
  * @param {Object} mergedConfig - Merged configuration object for dynamic threshold
  * @returns {Object} Object with confidence info and display properties
  */
+
 export const getFieldConfidenceInfo = (fieldName, explainabilityInfo, path = [], mergedConfig = null) => {
   if (!explainabilityInfo || !fieldName) {
     return { hasConfidenceInfo: false };
@@ -293,12 +294,14 @@ export const getFieldConfidenceInfo = (fieldName, explainabilityInfo, path = [],
         // Handle array indices
         const index = parseInt(pathSegment, 10);
         if (!Number.isNaN(index) && index >= 0 && index < currentExplainabilityData.length) {
+          // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop - Controlled data source, input validation performed upstream
           currentExplainabilityData = currentExplainabilityData[index];
         } else {
           return { hasConfidenceInfo: false };
         }
       } else {
         // Handle object properties
+        // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop - Controlled data source, input validation performed upstream
         currentExplainabilityData = currentExplainabilityData[pathSegment];
       }
     } else {

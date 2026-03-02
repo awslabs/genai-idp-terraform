@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useAuthenticator } from '@aws-amplify/ui-react';
-import { Logger } from 'aws-amplify';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
-const logger = new Logger('useUserAuthState');
+const logger = new ConsoleLogger('useUserAuthState');
 
 const useUserAuthState = () => {
   const { authStatus, user } = useAuthenticator((context) => [context.authStatus, context.user]);

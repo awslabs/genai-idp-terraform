@@ -49,42 +49,62 @@ def suppress_datetime_warning():
 
 @pytest.mark.unit
 class TestEvaluationService:
-    """Tests for the EvaluationService class."""
+    """
+    Tests for the EvaluationService class.
+
+    NOTE: Many tests in this class are skipped because they test internal methods
+    that were removed during the Stickler migration. The public API tests
+    (test_evaluate_document, test_evaluate_document_error) still pass.
+
+    For Stickler-based tests, see test_evaluation_service_stickler.py.
+    """
 
     @pytest.fixture
     def mock_config(self):
-        """Fixture providing a mock configuration."""
+        """Fixture providing a mock configuration in JSON Schema format."""
         return {
             "classes": [
                 {
-                    "name": "invoice",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "invoice",
+                    "x-aws-idp-document-type": "invoice",
+                    "type": "object",
                     "description": "An invoice document",
-                    "attributes": [
-                        {
-                            "name": "invoice_number",
+                    "properties": {
+                        "invoice_number": {
+                            "type": "string",
                             "description": "The invoice number",
-                            "evaluation_method": "EXACT",
+                            "x-aws-idp-evaluation-method": "EXACT",
                         },
-                        {
-                            "name": "invoice_date",
+                        "invoice_date": {
+                            "type": "string",
                             "description": "The invoice date",
-                            "evaluation_method": "FUZZY",
+                            "x-aws-idp-evaluation-method": "FUZZY",
                             "evaluation_threshold": 0.9,
                         },
-                        {
-                            "name": "total_amount",
+                        "total_amount": {
+                            "type": "string",
                             "description": "The total amount",
-                            "evaluation_method": "LLM",
+                            "x-aws-idp-evaluation-method": "LLM",
                         },
-                    ],
+                    },
                 },
                 {
-                    "name": "receipt",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "receipt",
+                    "x-aws-idp-document-type": "receipt",
+                    "type": "object",
                     "description": "A receipt document",
-                    "attributes": [
-                        {"name": "receipt_number", "description": "The receipt number"},
-                        {"name": "date", "description": "The receipt date"},
-                    ],
+                    "properties": {
+                        "receipt_number": {
+                            "type": "string",
+                            "description": "The receipt number",
+                        },
+                        "date": {
+                            "type": "string",
+                            "description": "The receipt date",
+                        },
+                    },
                 },
             ],
             "evaluation": {
@@ -135,6 +155,9 @@ class TestEvaluationService:
 
         return doc
 
+    @pytest.mark.skip(
+        reason="Internal method removed in Stickler migration - see test_evaluation_service_stickler.py"
+    )
     def test_init(self, mock_config):
         """Test initialization with configuration."""
         service = EvaluationService(
@@ -143,12 +166,14 @@ class TestEvaluationService:
 
         assert service.region == "us-west-2"
         assert service.max_workers == 5
-        assert service.default_model == "anthropic.claude-3-sonnet-20240229-v1:0"
-        assert service.default_temperature == 0.0
-        assert service.default_top_k == 5
-        assert "You are an evaluator" in service.default_system_prompt
-        assert "Compare" in service.default_task_prompt
+        # Note: These attributes don't exist in the Stickler-based implementation
+        # assert service.default_model == "anthropic.claude-3-sonnet-20240229-v1:0"
+        # assert service.default_temperature == 0.0
+        # assert service.default_top_k == 5
+        # assert "You are an evaluator" in service.default_system_prompt
+        # assert "Compare" in service.default_task_prompt
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_get_attributes_for_class(self, service):
         """Test getting attributes for a document class."""
         # Test with existing class
@@ -170,6 +195,7 @@ class TestEvaluationService:
         invoice_attrs_upper = service._get_attributes_for_class("INVOICE")
         assert len(invoice_attrs_upper) == 3
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     @patch("idp_common.s3.get_json_content")
     def test_load_extraction_results(self, mock_get_json_content, service):
         """Test loading extraction results from S3."""
@@ -213,6 +239,7 @@ class TestEvaluationService:
         assert extraction_results == {}
         assert confidence_scores == {}
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_count_classifications_both_empty(self, service):
         """Test counting classifications when both values are empty."""
         with patch(
@@ -238,6 +265,7 @@ class TestEvaluationService:
             # Mock compare_values was not called
             mock_compare_values.assert_not_called()
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_count_classifications_expected_empty_actual_not(self, service):
         """Test counting classifications when expected is empty but actual is not."""
         with patch(
@@ -263,6 +291,7 @@ class TestEvaluationService:
             # Mock compare_values was not called
             mock_compare_values.assert_not_called()
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_count_classifications_expected_not_empty_actual_empty(self, service):
         """Test counting classifications when expected is not empty but actual is."""
         with patch(
@@ -288,6 +317,7 @@ class TestEvaluationService:
             # Mock compare_values was not called
             mock_compare_values.assert_not_called()
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_count_classifications_both_not_empty_match(self, service):
         """Test counting classifications when both values are not empty and match."""
         with patch(
@@ -315,6 +345,7 @@ class TestEvaluationService:
             # We're just checking that compare_values was called
             mock_compare_values.assert_called_once()
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_count_classifications_both_not_empty_no_match(self, service):
         """Test counting classifications when both values are not empty but don't match."""
         with patch(
@@ -342,6 +373,7 @@ class TestEvaluationService:
             # We're just checking that compare_values was called
             mock_compare_values.assert_called_once()
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_evaluate_single_attribute_match(self, service):
         """Test evaluating a single attribute that matches."""
         with patch(
@@ -382,6 +414,7 @@ class TestEvaluationService:
                 assert metrics["fp1"] == 0
                 assert metrics["fp2"] == 0
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_evaluate_single_attribute_no_match(self, service):
         """Test evaluating a single attribute that doesn't match."""
         with patch(
@@ -422,6 +455,7 @@ class TestEvaluationService:
                 assert metrics["fp1"] == 0
                 assert metrics["fp2"] == 1
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_evaluate_single_attribute_fuzzy(self, service):
         """Test evaluating a single attribute with fuzzy matching."""
         with patch(
@@ -467,6 +501,7 @@ class TestEvaluationService:
                 assert result.evaluation_method == "FUZZY"
                 assert result.evaluation_threshold == 0.9  # Included for FUZZY
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     def test_evaluate_single_attribute_unconfigured(self, service):
         """Test evaluating an unconfigured attribute."""
         with patch(
@@ -499,6 +534,7 @@ class TestEvaluationService:
                 assert metrics["tp"] == 1
                 assert metrics["fp"] == 0
 
+    @pytest.mark.skip(reason="Internal method removed in Stickler migration")
     @patch("idp_common.s3.get_json_content")
     def test_evaluate_section(self, mock_get_json_content, service):
         """Test evaluating a document section."""

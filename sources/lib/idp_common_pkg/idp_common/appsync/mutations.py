@@ -46,6 +46,7 @@ mutation UpdateDocument($input: UpdateDocumentInput!) {
             Class
             ImageUri
             TextUri
+            TextConfidenceUri
         }
         Metering
         EvaluationReportUri
@@ -54,6 +55,7 @@ mutation UpdateDocument($input: UpdateDocumentInput!) {
         ExpiresAfter
         HITLStatus
         HITLReviewURL
+        TraceId
     }
 }
 """

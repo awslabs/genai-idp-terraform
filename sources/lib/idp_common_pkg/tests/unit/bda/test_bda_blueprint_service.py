@@ -12,6 +12,7 @@ import pytest
 
 # Import standard library modules first
 import json
+from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
 # Import third-party modules
@@ -21,6 +22,29 @@ from botocore.exceptions import ClientError
 from idp_common.bda.bda_blueprint_service import BdaBlueprintService
 
 
+def build_json_schema(
+    doc_id="W-4",
+    description="Employee's Withholding Certificate form",
+    properties=None,
+    defs=None,
+):
+    """Helper to construct JSON Schema documents for tests."""
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": doc_id,
+        "x-aws-idp-document-type": doc_id,
+        "description": description,
+        "type": "object",
+    }
+
+    if properties is not None:
+        schema["properties"] = properties
+    if defs is not None:
+        schema["$defs"] = defs
+
+    return schema
+
+
 @pytest.mark.unit
 class TestBdaBlueprintService:
     """Tests for the BdaBlueprintService class."""
@@ -28,52 +52,51 @@ class TestBdaBlueprintService:
     @pytest.fixture
     def mock_custom_configuration(self):
         """Fixture providing mock custom configuration data."""
+        w4_properties = {
+            "personalInformation": {
+                "type": "object",
+                "description": "Personal information of employee",
+                "properties": {
+                    "firstName": {
+                        "type": "string",
+                        "description": "First Name of Employee",
+                    },
+                    "lastName": {
+                        "type": "string",
+                        "description": "Last Name of Employee",
+                    },
+                },
+            }
+        }
+
+        i9_properties = {
+            "employeeInfo": {
+                "type": "object",
+                "description": "Employee information section",
+                "properties": {
+                    "fullName": {
+                        "type": "string",
+                        "description": "Employee full name",
+                    }
+                },
+            }
+        }
+
         return {
             "Configuration": "Custom",
             "classes": [
+                build_json_schema(
+                    doc_id="W-4",
+                    description="Employee's Withholding Certificate form",
+                    properties=w4_properties,
+                ),
                 {
-                    "name": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "attributes": [
-                        {
-                            "name": "PersonalInformation",
-                            "description": "Personal information of employee",
-                            "attributeType": "group",
-                            "groupType": "normal",
-                            "groupAttributes": [
-                                {
-                                    "name": "FirstName",
-                                    "dataType": "string",
-                                    "description": "First Name of Employee",
-                                },
-                                {
-                                    "name": "LastName",
-                                    "dataType": "string",
-                                    "description": "Last Name of Employee",
-                                },
-                            ],
-                        }
-                    ],
-                },
-                {
-                    "name": "I-9",
-                    "description": "Employment Eligibility Verification",
+                    **build_json_schema(
+                        doc_id="I-9",
+                        description="Employment Eligibility Verification",
+                        properties=i9_properties,
+                    ),
                     "blueprint_arn": "arn:aws:bedrock:us-west-2:123456789012:blueprint/existing-i9-blueprint",
-                    "attributes": [
-                        {
-                            "name": "EmployeeInfo",
-                            "description": "Employee information section",
-                            "attributeType": "group",
-                            "groupType": "normal",
-                            "groupAttributes": [
-                                {
-                                    "name": "FullName",
-                                    "dataType": "string",
-                                    "description": "Employee full name",
-                                }
-                            ],
-                        }
-                    ],
                 },
             ],
         }
@@ -236,10 +259,10 @@ class TestBdaBlueprintService:
         self, service, mock_custom_configuration
     ):
         """Test handling when one blueprint succeeds and another fails."""
-        # Mock configuration retrieval
-        service.config_manager.get_configuration.return_value = (
-            mock_custom_configuration
-        )
+        # Mock configuration retrieval - wrap dict in object with classes attribute
+        config_obj = MagicMock()
+        config_obj.classes = mock_custom_configuration["classes"]
+        service.config_manager.get_configuration.return_value = config_obj
 
         # Mock first blueprint creation success, second failure
         success_response = {
@@ -267,239 +290,137 @@ class TestBdaBlueprintService:
 
     def test_check_for_updates_no_changes(self, service):
         """Test _check_for_updates when no changes are detected."""
-        # Mock custom class configuration
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [
-                {
-                    "name": "PersonalInformation",
-                    "description": "Personal info",
-                    "groupAttributes": [
-                        {
-                            "name": "FirstName",
-                            "dataType": "string",
-                            "description": "First Name of Employee",
-                        },
-                        {
-                            "name": "LastName",
-                            "dataType": "string",
-                            "description": "Last Name of Employee",
-                        },
-                    ],
-                }
-            ],
-        }
-
-        # Mock existing blueprint schema that matches the custom class
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {
-                        "Personalinformation": {  # Formatted section name (capitalize)
-                            "properties": {
-                                "firstname": {  # Formatted field name (lowercase)
-                                    "type": "string",
-                                    "instruction": "First Name of Employee",
-                                },
-                                "lastname": {  # Formatted field name (lowercase)
-                                    "type": "string",
-                                    "instruction": "Last Name of Employee",
-                                },
-                            }
-                        }
+        properties = {
+            "personalInformation": {
+                "type": "object",
+                "description": "Personal info",
+                "properties": {
+                    "firstName": {
+                        "type": "string",
+                        "description": "First Name of Employee",
                     },
-                }
-            )
+                    "lastName": {
+                        "type": "string",
+                        "description": "Last Name of Employee",
+                    },
+                },
+            }
         }
+        custom_class = build_json_schema(properties=properties)
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            custom_class
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
 
-        # Execute the method
-        result = service._check_for_updates(custom_class, existing_blueprint)
+        assert service._check_for_updates(custom_class, existing_blueprint) is False
 
-        # Should return False (no updates needed)
-        assert result is False
+    def test_check_for_updates_class_id_changed(self, service):
+        """Test _check_for_updates when the document class identifier changes."""
+        base_schema = build_json_schema()
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            base_schema
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
 
-    def test_check_for_updates_class_name_changed(self, service):
-        """Test _check_for_updates when class name has changed."""
-        custom_class = {
-            "name": "W-4-Updated",  # Changed name
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [],
-        }
+        updated_schema = deepcopy(base_schema)
+        updated_schema["$id"] = "W-4-Updated"
+        updated_schema["x-aws-idp-document-type"] = "W-4-Updated"
 
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",  # Original name
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {},
-                }
-            )
-        }
-
-        result = service._check_for_updates(custom_class, existing_blueprint)
-
-        # Should return True (updates needed)
-        assert result is True
+        assert service._check_for_updates(updated_schema, existing_blueprint) is True
 
     def test_check_for_updates_description_changed(self, service):
-        """Test _check_for_updates when description has changed."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Updated Employee's Withholding Certificate form",  # Changed description
-            "attributes": [],
+        """Test _check_for_updates when the schema description change is detected."""
+        base_schema = build_json_schema()
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            base_schema
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
+
+        updated_schema = deepcopy(base_schema)
+        updated_schema["description"] = (
+            "Updated Employee's Withholding Certificate form"
+        )
+
+        assert service._check_for_updates(updated_schema, existing_blueprint) is True
+
+    def test_check_for_updates_new_property_added(self, service):
+        """Test _check_for_updates when a new top-level property is added."""
+        base_schema = build_json_schema(properties={"foo": {"type": "string"}})
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            base_schema
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
+
+        updated_schema = deepcopy(base_schema)
+        updated_schema["properties"]["bar"] = {
+            "type": "string",
+            "description": "New field",
         }
 
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",  # Original description
-                    "definitions": {},
-                }
-            )
-        }
+        assert service._check_for_updates(updated_schema, existing_blueprint) is True
 
-        result = service._check_for_updates(custom_class, existing_blueprint)
-
-        # Should return True (updates needed)
-        assert result is True
-
-    def test_check_for_updates_new_group_added(self, service):
-        """Test _check_for_updates when a new group is added."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [
-                {"name": "PersonalInformation", "groupAttributes": []},
-                {
-                    "name": "NewSection",  # New group not in existing blueprint
-                    "groupAttributes": [],
-                },
-            ],
-        }
-
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {
-                        "Personalinformation": {  # Formatted section name (capitalize)
-                            "properties": {}
-                        }
-                        # Newsection is missing
-                    },
-                }
-            )
-        }
-
-        result = service._check_for_updates(custom_class, existing_blueprint)
-
-        # Should return True (updates needed)
-        assert result is True
-
-    def test_check_for_updates_field_description_changed(self, service):
-        """Test _check_for_updates when a field description has changed."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [
-                {
-                    "name": "PersonalInformation",
-                    "groupAttributes": [
-                        {
-                            "name": "FirstName",
-                            "dataType": "string",
-                            "description": "Updated first name description",  # Changed description
-                        }
-                    ],
-                }
-            ],
-        }
-
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {
-                        "Personalinformation": {  # Formatted section name (capitalize)
-                            "properties": {
-                                "firstname": {  # Formatted field name (lowercase)
-                                    "type": "string",
-                                    "instruction": "First Name of Employee",  # Original description
-                                }
-                            }
-                        }
-                    },
-                }
-            )
-        }
-
-        result = service._check_for_updates(custom_class, existing_blueprint)
-
-        # Should return True (updates needed)
-        assert result is True
-
-    def test_check_for_updates_new_field_added(self, service):
-        """Test _check_for_updates when a new field is added to existing group."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [
-                {
-                    "name": "PersonalInformation",
-                    "groupAttributes": [
-                        {
-                            "name": "FirstName",
-                            "dataType": "string",
+    def test_check_for_updates_nested_description_changed(self, service):
+        """Test _check_for_updates when a nested description changes."""
+        base_schema = build_json_schema(
+            properties={
+                "personalInformation": {
+                    "type": "object",
+                    "description": "Personal info",
+                    "properties": {
+                        "firstName": {
+                            "type": "string",
                             "description": "First Name of Employee",
-                        },
-                        {
-                            "name": "MiddleName",  # New field
-                            "dataType": "string",
-                            "description": "Middle Name of Employee",
-                        },
-                    ],
-                }
-            ],
-        }
-
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {
-                        "Personalinformation": {  # Formatted section name (capitalize)
-                            "properties": {
-                                "firstname": {  # Formatted field name (lowercase)
-                                    "type": "string",
-                                    "instruction": "First Name of Employee",
-                                }
-                                # middlename is missing
-                            }
                         }
                     },
                 }
-            )
+            }
+        )
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            base_schema
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
+
+        updated_schema = deepcopy(base_schema)
+        updated_schema["properties"]["personalInformation"]["properties"]["firstName"][
+            "description"
+        ] = "Updated first name description"
+
+        assert service._check_for_updates(updated_schema, existing_blueprint) is True
+
+    def test_check_for_updates_nested_property_added(self, service):
+        """Test _check_for_updates when a nested property is added."""
+        base_schema = build_json_schema(
+            properties={
+                "personalInformation": {
+                    "type": "object",
+                    "description": "Personal info",
+                    "properties": {
+                        "firstName": {
+                            "type": "string",
+                            "description": "First Name of Employee",
+                        }
+                    },
+                }
+            }
+        )
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            base_schema
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
+
+        updated_schema = deepcopy(base_schema)
+        updated_schema["properties"]["personalInformation"]["properties"][
+            "middleName"
+        ] = {
+            "type": "string",
+            "description": "Middle Name of Employee",
         }
 
-        result = service._check_for_updates(custom_class, existing_blueprint)
-
-        # Should return True (updates needed)
-        assert result is True
+        assert service._check_for_updates(updated_schema, existing_blueprint) is True
 
     def test_check_for_updates_blueprint_retrieval_error(self, service):
         """Test _check_for_updates when blueprint has invalid schema."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [],
-        }
+        custom_class = build_json_schema()
 
         # Invalid blueprint with malformed schema
         invalid_blueprint = {"schema": "invalid json"}
@@ -508,49 +429,113 @@ class TestBdaBlueprintService:
         with pytest.raises(json.JSONDecodeError):
             service._check_for_updates(custom_class, invalid_blueprint)
 
-    def test_check_for_updates_empty_attributes(self, service):
-        """Test _check_for_updates with empty attributes list."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            "attributes": [],  # Empty attributes
-        }
+    def test_check_for_updates_empty_properties(self, service):
+        """Test _check_for_updates with empty properties."""
+        custom_class = build_json_schema(
+            properties={}, description="Employee's Withholding Certificate form"
+        )
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            custom_class
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
 
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {},
+        assert service._check_for_updates(custom_class, existing_blueprint) is False
+
+    def test_check_for_updates_without_properties_key(self, service):
+        """Test _check_for_updates when properties key is absent."""
+        custom_class = build_json_schema()
+        custom_class.pop("properties", None)
+        blueprint_schema = service._transform_json_schema_to_bedrock_blueprint(
+            build_json_schema()
+        )
+        existing_blueprint = {"schema": json.dumps(blueprint_schema)}
+
+        assert service._check_for_updates(custom_class, existing_blueprint) is False
+
+    def test_transform_does_not_mutate_input_schema(self, service):
+        """_transform_json_schema_to_bedrock_blueprint should not mutate the original schema."""
+        schema = build_json_schema(
+            doc_id="Invoice",
+            description="Invoice schema",
+            properties={
+                "invoiceNumber": {
+                    "type": "string",
+                    "description": "Unique invoice identifier",
                 }
-            )
-        }
+            },
+        )
 
-        result = service._check_for_updates(custom_class, existing_blueprint)
+        original = deepcopy(schema)
 
-        # Should return False (no updates needed for empty attributes)
-        assert result is False
+        blueprint = service._transform_json_schema_to_bedrock_blueprint(schema)
 
-    def test_check_for_updates_missing_attributes_key(self, service):
-        """Test _check_for_updates when attributes key is missing."""
-        custom_class = {
-            "name": "W-4",
-            "description": "Employee's Withholding Certificate form",
-            # Missing attributes key
-        }
+        # Original schema should remain untouched
+        assert schema == original
+        # Blueprint should contain Bedrock fields
+        assert (
+            blueprint["properties"]["invoiceNumber"]["instruction"]
+            == "Unique invoice identifier"
+        )
+        assert blueprint["properties"]["invoiceNumber"]["inferenceType"] == "inferred"
 
-        existing_blueprint = {
-            "schema": json.dumps(
-                {
-                    "class": "W-4",
-                    "description": "Employee's Withholding Certificate form",
-                    "definitions": {},
+    def test_transform_converts_defs_to_definitions(self, service):
+        """Ensure that $defs is converted to definitions for BDA draft-07 compatibility.
+
+        BDA uses JSON Schema draft-07 which uses "definitions", not "$defs".
+        References should be preserved but updated to #/definitions/ path.
+        """
+        schema = build_json_schema(
+            doc_id="Document",
+            description="Document schema",
+            properties={
+                "address": {
+                    "$ref": "#/$defs/Address",
                 }
-            )
-        }
+            },
+            defs={
+                "Address": {
+                    "type": "object",
+                    "description": "Address information",
+                    "properties": {
+                        "street": {
+                            "type": "string",
+                            "description": "Street line",
+                        },
+                        "city": {
+                            "type": "string",
+                            "description": "City name",
+                        },
+                    },
+                }
+            },
+        )
 
-        # Should handle missing attributes gracefully
-        result = service._check_for_updates(custom_class, existing_blueprint)
+        blueprint = service._transform_json_schema_to_bedrock_blueprint(schema)
 
-        # Should return False when attributes is None
-        assert result is False
+        # Verify $defs was converted to definitions
+        assert "definitions" in blueprint
+        assert "$defs" not in blueprint
+        assert "Address" in blueprint["definitions"]
+
+        # Verify $ref path was updated
+        address_prop = blueprint["properties"]["address"]
+        assert address_prop["$ref"] == "#/definitions/Address"
+
+        # Verify definition has proper structure (object should NOT have inferenceType/instruction)
+        address_def = blueprint["definitions"]["Address"]
+        assert address_def["type"] == "object"
+        assert "inferenceType" not in address_def  # Objects should not have this
+        assert "instruction" not in address_def  # Objects should not have this
+        assert "properties" in address_def
+
+        # Verify leaf properties DO have BDA fields
+        street_prop = address_def["properties"]["street"]
+        assert street_prop["type"] == "string"
+        assert "inferenceType" in street_prop
+        assert "instruction" in street_prop
+        assert street_prop["instruction"] == "Street line"
+
+        city_prop = address_def["properties"]["city"]
+        assert city_prop["type"] == "string"
+        assert "inferenceType" in city_prop
+        assert "instruction" in city_prop

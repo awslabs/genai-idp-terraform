@@ -10,6 +10,7 @@ import {
   Table,
   StatusIndicator,
   Button,
+  ButtonDropdown,
   Header,
   FormField,
   Select,
@@ -17,13 +18,19 @@ import {
   Textarea,
   Modal,
   Alert,
-} from '@awsui/components-react';
-import { API, graphqlOperation } from 'aws-amplify';
+} from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
+
 import FileViewer from '../document-viewer/JSONViewer';
 import { getSectionConfidenceAlertCount, getSectionConfidenceAlerts } from '../common/confidence-alerts-utils';
 import useConfiguration from '../../hooks/use-configuration';
 import useSettingsContext from '../../contexts/settings';
 import processChanges from '../../graphql/queries/processChanges';
+import getFileContents from '../../graphql/queries/getFileContents';
+
+const client = generateClient();
+const logger = new ConsoleLogger('SectionsPanel');
 
 // Cell renderer components
 const IdCell = ({ item }) => <span>{item.Id}</span>;
@@ -35,11 +42,7 @@ const ConfidenceAlertsCell = ({ item, mergedConfig }) => {
   if (!mergedConfig) {
     // Fallback to original behavior - just show the count as a number
     const count = getSectionConfidenceAlertCount(item);
-    return count === 0 ? (
-      <StatusIndicator type="success">0</StatusIndicator>
-    ) : (
-      <StatusIndicator type="warning">{count}</StatusIndicator>
-    );
+    return count === 0 ? <StatusIndicator type="success">0</StatusIndicator> : <StatusIndicator type="warning">{count}</StatusIndicator>;
   }
 
   const alerts = getSectionConfidenceAlerts(item, mergedConfig);
@@ -52,14 +55,166 @@ const ConfidenceAlertsCell = ({ item, mergedConfig }) => {
   return <StatusIndicator type="warning">{alertCount}</StatusIndicator>;
 };
 
-const ActionsCell = ({ item, pages, documentItem, mergedConfig }) => (
-  <FileViewer
-    fileUri={item.OutputJSONUri}
-    fileType="json"
-    buttonText="View/Edit Data"
-    sectionData={{ ...item, pages, documentItem, mergedConfig }}
-  />
-);
+const ActionsCell = ({ item, pages, documentItem, mergedConfig }) => {
+  const [isDownloading, setIsDownloading] = React.useState(false);
+  const [isViewerOpen, setIsViewerOpen] = React.useState(false);
+  const { settings } = useSettingsContext();
+
+  // Check if baseline is available based on evaluation status
+  const isBaselineAvailable = documentItem?.evaluationStatus === 'BASELINE_AVAILABLE' || documentItem?.evaluationStatus === 'COMPLETED';
+
+  // Construct baseline URI by replacing output bucket with evaluation baseline bucket
+  const constructBaselineUri = (outputUri) => {
+    if (!outputUri) return null;
+
+    // Get actual bucket names from settings
+    const outputBucketName = settings?.OutputBucket;
+    const baselineBucketName = settings?.EvaluationBaselineBucket;
+
+    if (!outputBucketName || !baselineBucketName) {
+      logger.error('Bucket names not available in settings');
+      logger.debug('Settings:', settings);
+      return null;
+    }
+
+    // Parse the S3 URI to extract bucket and key
+    // Format: s3://bucket-name/path/to/file
+    const match = outputUri.match(/^s3:\/\/([^/]+)\/(.+)$/);
+    if (!match) {
+      logger.error('Invalid S3 URI format:', outputUri);
+      return null;
+    }
+
+    const [, bucketName, objectKey] = match;
+
+    // Verify this is actually the output bucket before replacing
+    if (bucketName !== outputBucketName) {
+      logger.warn(`URI bucket (${bucketName}) does not match expected output bucket (${outputBucketName})`);
+    }
+
+    // Replace the output bucket with the baseline bucket (same object key)
+    const baselineUri = `s3://${baselineBucketName}/${objectKey}`;
+
+    logger.info(`Converted output URI to baseline URI:`);
+    logger.info(`  Output: ${outputUri}`);
+    logger.info(`  Baseline: ${baselineUri}`);
+
+    return baselineUri;
+  };
+
+  // Generate download filename
+  const generateFilename = (documentKey, sectionId, type) => {
+    // Sanitize document key by replacing forward slashes with underscores
+    const sanitizedDocId = documentKey.replace(/\//g, '_');
+    return `${sanitizedDocId}_section${sectionId}_${type}.json`;
+  };
+
+  // Download handler for both prediction and baseline data
+  const handleDownload = async (type) => {
+    setIsDownloading(true);
+
+    try {
+      const fileUri = type === 'baseline' ? constructBaselineUri(item.OutputJSONUri) : item.OutputJSONUri;
+
+      if (!fileUri) {
+        alert('File URI not available');
+        return;
+      }
+
+      logger.info(`Downloading ${type} data from:`, fileUri);
+
+      // Fetch file contents using GraphQL
+      const response = await client.graphql({
+        query: getFileContents,
+        variables: { s3Uri: fileUri },
+      });
+
+      const result = response.data.getFileContents;
+
+      if (result.isBinary) {
+        alert('This file contains binary content that cannot be downloaded');
+        return;
+      }
+
+      const content = result.content;
+
+      // Create blob and download
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      // Generate filename
+      const documentKey = documentItem?.objectKey || documentItem?.ObjectKey || 'document';
+      const filename = generateFilename(documentKey, item.Id, type);
+
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      logger.info(`Successfully downloaded ${type} data as ${filename}`);
+    } catch (error) {
+      logger.error(`Error downloading ${type} data:`, error);
+
+      let errorMessage = `Failed to download ${type} data`;
+
+      if (type === 'baseline' && error.message?.includes('not found')) {
+        errorMessage = 'Baseline data not found. The baseline may not have been set for this document yet.';
+      } else if (error.message) {
+        errorMessage = `Failed to download ${type} data: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Build dropdown menu items
+  const downloadMenuItems = [
+    {
+      id: 'prediction',
+      text: 'Download Data',
+      iconName: 'download',
+    },
+  ];
+
+  // Add baseline option if available
+  if (isBaselineAvailable) {
+    downloadMenuItems.push({
+      id: 'baseline',
+      text: 'Download Baseline',
+      iconName: 'download',
+    });
+  }
+
+  return (
+    <SpaceBetween direction="horizontal" size="xs">
+      <FileViewer
+        fileUri={item.OutputJSONUri}
+        fileType="json"
+        buttonText="View/Edit Data"
+        sectionData={{ ...item, pages, documentItem, mergedConfig }}
+        onOpen={() => setIsViewerOpen(true)}
+        onClose={() => setIsViewerOpen(false)}
+      />
+      {!isViewerOpen && (
+        <ButtonDropdown
+          items={downloadMenuItems}
+          onItemClick={({ detail }) => handleDownload(detail.id)}
+          disabled={isDownloading}
+          loading={isDownloading}
+          variant="normal"
+          expandToViewport
+        >
+          Download
+        </ButtonDropdown>
+      )}
+    </SpaceBetween>
+  );
+};
 
 // Editable cell components for edit mode (moved outside render)
 const EditableIdCell = ({ item, validationErrors, updateSectionId }) => (
@@ -87,9 +242,7 @@ const EditableClassCell = ({ item, validationErrors, updateSection, getAvailable
 
 const EditablePageIdsCell = ({ item, validationErrors, updateSection }) => {
   // Store the raw input value separately from the parsed PageIds
-  const [inputValue, setInputValue] = React.useState(
-    item.PageIds && item.PageIds.length > 0 ? item.PageIds.join(', ') : '',
-  );
+  const [inputValue, setInputValue] = React.useState(item.PageIds && item.PageIds.length > 0 ? item.PageIds.join(', ') : '');
 
   // Update input value when item changes (e.g., when entering edit mode)
   React.useEffect(() => {
@@ -208,19 +361,11 @@ const createColumnDefinitions = (pages, documentItem, mergedConfig) => [
 ];
 
 // Edit mode column definitions - expanded to use maximum available width
-const createEditColumnDefinitions = (
-  validationErrors,
-  updateSection,
-  updateSectionId,
-  getAvailableClasses,
-  deleteSection,
-) => [
+const createEditColumnDefinitions = (validationErrors, updateSection, updateSectionId, getAvailableClasses, deleteSection) => [
   {
     id: 'id',
     header: 'Section ID',
-    cell: (item) => (
-      <EditableIdCell item={item} validationErrors={validationErrors} updateSectionId={updateSectionId} />
-    ),
+    cell: (item) => <EditableIdCell item={item} validationErrors={validationErrors} updateSectionId={updateSectionId} />,
     minWidth: 160,
     width: 300,
     isResizable: true,
@@ -243,9 +388,7 @@ const createEditColumnDefinitions = (
   {
     id: 'pageIds',
     header: 'Page IDs',
-    cell: (item) => (
-      <EditablePageIdsCell item={item} validationErrors={validationErrors} updateSection={updateSection} />
-    ),
+    cell: (item) => <EditablePageIdsCell item={item} validationErrors={validationErrors} updateSection={updateSection} />,
     minWidth: 250,
     width: 500,
     isResizable: true,
@@ -288,10 +431,19 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
   // Get available classes from configuration
   const getAvailableClasses = () => {
     if (!configuration?.classes) return [];
-    return configuration.classes.map((cls) => ({
-      label: cls.name,
-      value: cls.name,
-    }));
+    return configuration.classes
+      .map((cls) => {
+        // Support both JSON Schema and legacy formats
+        // JSON Schema: $id or x-aws-idp-document-type
+        // Legacy: name
+        const className = cls.$id || cls['x-aws-idp-document-type'] || cls.name;
+
+        return {
+          label: className,
+          value: className,
+        };
+      })
+      .filter((option) => option.value); // Remove any undefined entries
   };
 
   // Generate next sequential section ID
@@ -382,9 +534,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
         }
 
         if (nonExistentPageIds.length > 0) {
-          sectionErrors.push(
-            `Page IDs ${nonExistentPageIds.join(', ')} do not exist in this document (available: 1-${maxPageId})`,
-          );
+          sectionErrors.push(`Page IDs ${nonExistentPageIds.join(', ')} do not exist in this document (available: 1-${maxPageId})`);
         }
       }
 
@@ -604,12 +754,13 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
 
       // Call the GraphQL API with timeout
       const result = await Promise.race([
-        API.graphql(
-          graphqlOperation(processChanges, {
+        client.graphql({
+          query: processChanges,
+          variables: {
             objectKey,
             modifiedSections: allChanges,
-          }),
-        ),
+          },
+        }),
         new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Request timed out after 30 seconds')), 30000);
         }),
@@ -771,8 +922,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
           </ul>
           <Box>
             {/* eslint-disable-next-line max-len */}
-            For fine-grained section control, consider using <strong>Pattern-2</strong> or <strong>Pattern-3</strong>{' '}
-            for future documents.
+            For fine-grained section control, consider using <strong>Pattern-2</strong> or <strong>Pattern-3</strong> for future documents.
           </Box>
         </SpaceBetween>
       </Modal>
@@ -793,8 +943,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
         <SpaceBetween size="m">
           <Alert type="info" header="Feature Not Available for Pattern-1">
             <Box>
-              The Edit Sections feature is currently available for <strong>Pattern-2</strong> and{' '}
-              <strong>Pattern-3</strong> only.
+              The Edit Sections feature is currently available for <strong>Pattern-2</strong> and <strong>Pattern-3</strong> only.
             </Box>
           </Alert>
 
@@ -803,9 +952,9 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
           </Box>
 
           <Box>
-            Pattern-1 uses <strong>Bedrock Data Automation (BDA)</strong> which has its own section management approach
-            that integrates directly with Amazon Bedrock&apos;s document processing blueprints. Section boundaries are
-            automatically determined by the BDA service based on the document structure and configured blueprints.
+            Pattern-1 uses <strong>Bedrock Data Automation (BDA)</strong> which has its own section management approach that integrates
+            directly with Amazon Bedrock&apos;s document processing blueprints. Section boundaries are automatically determined by the BDA
+            service based on the document structure and configured blueprints.
           </Box>
 
           <Box>
@@ -814,22 +963,21 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onSaveChan
 
           <ul>
             <li>
-              <strong>View/Edit Data</strong>: Use the &quot;View/Edit Data&quot; buttons to review and modify extracted
-              information within each section
+              <strong>View/Edit Data</strong>: Use the &quot;View/Edit Data&quot; buttons to review and modify extracted information within
+              each section
             </li>
             <li>
               <strong>Configuration</strong>: Adjust document classes and extraction rules in the Configuration tab
             </li>
             <li>
-              <strong>Reprocess Document</strong>: Use the &quot;Reprocess&quot; button to run the document through the
-              pipeline again with updated configuration
+              <strong>Reprocess Document</strong>: Use the &quot;Reprocess&quot; button to run the document through the pipeline again with
+              updated configuration
             </li>
           </ul>
 
           <Box>
             {/* eslint-disable-next-line max-len */}
-            For fine-grained section control, consider using <strong>Pattern-2</strong> or <strong>Pattern-3</strong>{' '}
-            for future documents.
+            For fine-grained section control, consider using <strong>Pattern-2</strong> or <strong>Pattern-3</strong> for future documents.
           </Box>
         </SpaceBetween>
       </Modal>

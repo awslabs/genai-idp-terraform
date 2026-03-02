@@ -3,8 +3,9 @@
 
 /* eslint-disable react/prop-types */
 import React, { useState } from 'react';
-import { Box } from '@awsui/components-react';
-import { API, Logger } from 'aws-amplify';
+import { Box } from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import DOMPurify from 'dompurify';
 // Note: XLSX and mammoth imports removed since we're using download approach for Excel/Docx files
 import useSettingsContext from '../../contexts/settings';
@@ -12,7 +13,8 @@ import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import useAppContext from '../../contexts/app';
 import getFileContents from '../../graphql/queries/getFileContents';
 
-const logger = new Logger('FileViewer');
+const client = generateClient();
+const logger = new ConsoleLogger('FileViewer');
 
 // Helper function to create a safe data URL for HTML content
 const createSafeDataUrl = (content, contentType) => {
@@ -77,7 +79,7 @@ const FileViewer = ({ objectKey }) => {
   const fetchFileContents = async (s3Url) => {
     try {
       logger.info('Fetching file contents via GraphQL for:', s3Url);
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: getFileContents,
         variables: { s3Uri: s3Url },
       });
@@ -139,7 +141,7 @@ const FileViewer = ({ objectKey }) => {
         throw new Error('Input bucket not configured');
       }
 
-      const region = process.env.REACT_APP_AWS_REGION;
+      const region = import.meta.env.VITE_AWS_REGION;
       const s3Url = `https://${settings.InputBucket}.s3.${region}.amazonaws.com/${objectKey}`;
 
       // First fetch the content via GraphQL to determine content type
@@ -328,9 +330,7 @@ const FileViewer = ({ objectKey }) => {
                 📥 Download {fileTypeName} File
               </a>
             </p>
-            <p style={{ fontSize: '14px', color: '#666' }}>
-              The file will open in your default {fileTypeName} application.
-            </p>
+            <p style={{ fontSize: '14px', color: '#666' }}>The file will open in your default {fileTypeName} application.</p>
           </Box>
         </Box>
       );

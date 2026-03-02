@@ -14,7 +14,7 @@ output "model_data_key" {
 output "model_data_uri" {
   description = "Full S3 URI for the trained model"
   value       = "s3://${aws_s3_bucket.data_bucket.bucket}/${local.model_path}"
-  depends_on  = [time_sleep.model_upload_wait]
+  depends_on  = [data.external.s3_model_exists]
 }
 
 output "training_job_name" {

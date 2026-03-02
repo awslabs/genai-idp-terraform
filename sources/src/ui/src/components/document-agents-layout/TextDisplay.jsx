@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Container, Header } from '@awsui/components-react';
+import { Box, Container, Header } from '@cloudscape-design/components';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -80,7 +80,7 @@ const ParagraphComponent = ({ children }) => (
   </p>
 );
 
-const CodeComponent = ({ inline, children }) => {
+const CodeComponent = ({ inline = false, children }) => {
   if (inline) {
     return (
       <code
@@ -186,7 +186,7 @@ const TdComponent = ({ children }) => (
   </td>
 );
 
-const LinkComponent = ({ children, href }) => (
+const LinkComponent = ({ children, href = '#' }) => (
   <a
     href={href}
     style={{
@@ -234,10 +234,6 @@ CodeComponent.propTypes = {
   children: PropTypes.node.isRequired,
 };
 
-CodeComponent.defaultProps = {
-  inline: false,
-};
-
 PreComponent.propTypes = {
   children: PropTypes.node.isRequired,
 };
@@ -275,10 +271,6 @@ LinkComponent.propTypes = {
   href: PropTypes.string,
 };
 
-LinkComponent.defaultProps = {
-  href: '#',
-};
-
 StrongComponent.propTypes = {
   children: PropTypes.node.isRequired,
 };
@@ -287,7 +279,7 @@ EmComponent.propTypes = {
   children: PropTypes.node.isRequired,
 };
 
-const TextDisplay = ({ textData }) => {
+const TextDisplay = ({ textData = null }) => {
   if (!textData || !textData.content) {
     return null;
   }
@@ -339,10 +331,6 @@ TextDisplay.propTypes = {
     content: PropTypes.string.isRequired,
     responseType: PropTypes.string,
   }),
-};
-
-TextDisplay.defaultProps = {
-  textData: null,
 };
 
 export default TextDisplay;

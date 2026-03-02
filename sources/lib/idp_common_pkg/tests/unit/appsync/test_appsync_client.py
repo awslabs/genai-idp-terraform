@@ -80,9 +80,8 @@ class TestAppSyncClient:
         assert "X-Amz-Date" in headers
         assert "Authorization" in headers
 
-    @patch("idp_common.appsync.client.requests.post")
     @patch("idp_common.appsync.client.AppSyncClient._sign_request")
-    def test_execute_mutation_success(self, mock_sign_request, mock_post):
+    def test_execute_mutation_success(self, mock_sign_request):
         """Test successful mutation execution."""
         # Setup
         client = AppSyncClient(
@@ -101,7 +100,9 @@ class TestAppSyncClient:
         mock_response.json.return_value = {
             "data": {"createDocument": {"ObjectKey": "test-document.pdf"}}
         }
-        mock_post.return_value = mock_response
+
+        # Mock the session's post method
+        client.http_session.post = MagicMock(return_value=mock_response)
 
         # Test
         mutation = "mutation CreateDocument($input: CreateDocumentInput!) { createDocument(input: $input) { ObjectKey } }"
@@ -110,17 +111,16 @@ class TestAppSyncClient:
 
         # Verify
         mock_sign_request.assert_called_once()
-        mock_post.assert_called_once_with(
+        client.http_session.post.assert_called_once_with(
             "https://test-api.com/graphql",
             json={"query": mutation, "variables": variables},
             headers=mock_sign_request.return_value,
-            timeout=30,
+            timeout=10,
         )
         assert result == {"createDocument": {"ObjectKey": "test-document.pdf"}}
 
-    @patch("idp_common.appsync.client.requests.post")
     @patch("idp_common.appsync.client.AppSyncClient._sign_request")
-    def test_execute_mutation_graphql_error(self, mock_sign_request, mock_post):
+    def test_execute_mutation_graphql_error(self, mock_sign_request):
         """Test handling of GraphQL errors in mutation response."""
         # Setup
         client = AppSyncClient(
@@ -143,7 +143,7 @@ class TestAppSyncClient:
             ],
             "data": None,
         }
-        mock_post.return_value = mock_response
+        client.http_session.post = MagicMock(return_value=mock_response)
 
         # Test
         mutation = "mutation CreateDocument($input: CreateDocumentInput!) { createDocument(input: $input) { ObjectKey } }"
@@ -158,9 +158,8 @@ class TestAppSyncClient:
         assert len(excinfo.value.errors) == 2
         assert excinfo.value.errors[0]["message"] == "Invalid input format"
 
-    @patch("idp_common.appsync.client.requests.post")
     @patch("idp_common.appsync.client.AppSyncClient._sign_request")
-    def test_execute_mutation_http_error(self, mock_sign_request, mock_post):
+    def test_execute_mutation_http_error(self, mock_sign_request):
         """Test handling of HTTP errors in mutation request."""
         # Setup
         client = AppSyncClient(
@@ -175,7 +174,9 @@ class TestAppSyncClient:
         }
 
         # Mock the HTTP error
-        mock_post.side_effect = requests.RequestException("Connection error")
+        client.http_session.post = MagicMock(
+            side_effect=requests.RequestException("Connection error")
+        )
 
         # Test
         mutation = "mutation CreateDocument($input: CreateDocumentInput!) { createDocument(input: $input) { ObjectKey } }"
@@ -187,9 +188,8 @@ class TestAppSyncClient:
         # Verify
         assert "Connection error" in str(excinfo.value)
 
-    @patch("idp_common.appsync.client.requests.post")
     @patch("idp_common.appsync.client.AppSyncClient._sign_request")
-    def test_execute_mutation_no_data(self, mock_sign_request, mock_post):
+    def test_execute_mutation_no_data(self, mock_sign_request):
         """Test handling of response with no data."""
         # Setup
         client = AppSyncClient(
@@ -206,7 +206,7 @@ class TestAppSyncClient:
         # Mock the response with no data
         mock_response = MagicMock()
         mock_response.json.return_value = {}  # Empty response
-        mock_post.return_value = mock_response
+        client.http_session.post = MagicMock(return_value=mock_response)
 
         # Test
         mutation = "mutation CreateDocument($input: CreateDocumentInput!) { createDocument(input: $input) { ObjectKey } }"
@@ -218,9 +218,8 @@ class TestAppSyncClient:
         # Verify
         assert "No data returned from AppSync" in str(excinfo.value)
 
-    @patch("idp_common.appsync.client.requests.post")
     @patch("idp_common.appsync.client.AppSyncClient._sign_request")
-    def test_execute_mutation_null_result(self, mock_sign_request, mock_post):
+    def test_execute_mutation_null_result(self, mock_sign_request):
         """Test handling of null mutation result."""
         # Setup
         client = AppSyncClient(
@@ -237,7 +236,7 @@ class TestAppSyncClient:
         # Mock the response with null mutation result
         mock_response = MagicMock()
         mock_response.json.return_value = {"data": {"createDocument": None}}
-        mock_post.return_value = mock_response
+        client.http_session.post = MagicMock(return_value=mock_response)
 
         # Test
         mutation = "mutation CreateDocument($input: CreateDocumentInput!) { createDocument(input: $input) { ObjectKey } }"

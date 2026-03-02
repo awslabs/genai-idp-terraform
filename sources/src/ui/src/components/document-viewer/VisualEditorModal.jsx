@@ -16,13 +16,13 @@ import {
   Header,
   Spinner,
   Button,
-} from '@awsui/components-react';
-import { Logger } from 'aws-amplify';
+} from '@cloudscape-design/components';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import useAppContext from '../../contexts/app';
 import { getFieldConfidenceInfo } from '../common/confidence-alerts-utils';
 
-const logger = new Logger('VisualEditorModal');
+const logger = new ConsoleLogger('VisualEditorModal');
 
 // Memoized component to render a bounding box on an image
 const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, panOffset = { x: 0, y: 0 } }) => {
@@ -152,6 +152,8 @@ const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, pan
 
   return <div style={style} />;
 });
+
+BoundingBox.displayName = 'BoundingBox';
 
 // Memoized component to render a form field based on its type
 const FormFieldRenderer = memo(
@@ -670,6 +672,8 @@ const FormFieldRenderer = memo(
   },
 );
 
+FormFieldRenderer.displayName = 'FormFieldRenderer';
+
 const VisualEditorModal = ({ visible, onDismiss, jsonData, onChange, isReadOnly, sectionData }) => {
   const { currentCredentials } = useAppContext();
   const [pageImages, setPageImages] = useState({});
@@ -1091,16 +1095,7 @@ const VisualEditorModal = ({ visible, onDismiss, jsonData, onChange, isReadOnly,
             flex: '0 0 50%',
           }}
         >
-          <Container
-            header={<Header variant="h3">Document Pages ({pageIds.length})</Header>}
-            style={{
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              flex: 1,
-            }}
-          >
+          <Container header={<Header variant="h3">Document Pages ({pageIds.length})</Header>}>
             {(() => {
               if (loadingImages) {
                 return (
@@ -1139,7 +1134,6 @@ const VisualEditorModal = ({ visible, onDismiss, jsonData, onChange, isReadOnly,
                           }
                         }}
                         disabled={pageIds.indexOf(currentPage) === 0}
-                        style={{ pointerEvents: 'auto' }}
                       />
                       <Button
                         iconName="angle-right"
@@ -1152,7 +1146,6 @@ const VisualEditorModal = ({ visible, onDismiss, jsonData, onChange, isReadOnly,
                           }
                         }}
                         disabled={pageIds.indexOf(currentPage) === pageIds.length - 1}
-                        style={{ pointerEvents: 'auto' }}
                       />
                     </Box>
 
@@ -1338,16 +1331,7 @@ const VisualEditorModal = ({ visible, onDismiss, jsonData, onChange, isReadOnly,
             overflow: 'hidden',
           }}
         >
-          <Container
-            header={<Header variant="h3">Document Data</Header>}
-            style={{
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              flex: 1,
-            }}
-          >
+          <Container header={<Header variant="h3">Document Data</Header>}>
             <div
               style={{
                 flex: 1,

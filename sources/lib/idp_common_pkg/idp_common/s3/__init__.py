@@ -16,7 +16,7 @@ _s3_client = None
 def get_s3_client():
     """
     Get or initialize the S3 client
-    
+
     Returns:
         boto3 S3 client
     """
@@ -28,10 +28,10 @@ def get_s3_client():
 def get_text_content(s3_uri: str) -> str:
     """
     Read text content from an S3 URI
-    
+
     Args:
         s3_uri: The S3 URI in format s3://bucket/key
-        
+
     Returns:
         Text content from the S3 object
     """
@@ -40,7 +40,7 @@ def get_text_content(s3_uri: str) -> str:
         s3 = get_s3_client()
         response = s3.get_object(Bucket=bucket, Key=key)
         content_str = response['Body'].read().decode('utf-8')
-        
+
         # Check if the content is JSON or plain text
         if s3_uri.endswith('.json'):
             try:
@@ -59,10 +59,10 @@ def get_text_content(s3_uri: str) -> str:
 def get_json_content(s3_uri: str) -> Dict[str, Any]:
     """
     Read JSON content from an S3 URI
-    
+
     Args:
         s3_uri: The S3 URI in format s3://bucket/key
-        
+
     Returns:
         Parsed JSON content
     """
@@ -78,10 +78,10 @@ def get_json_content(s3_uri: str) -> Dict[str, Any]:
 def get_binary_content(s3_uri: str) -> bytes:
     """
     Read binary content from an S3 URI
-    
+
     Args:
         s3_uri: The S3 URI in format s3://bucket/key
-        
+
     Returns:
         Binary content from the S3 object
     """
@@ -94,12 +94,12 @@ def get_binary_content(s3_uri: str) -> bytes:
         logger.error(f"Error reading binary content from {s3_uri}: {e}")
         raise
 
-def write_content(content: Union[str, bytes, Dict[str, Any], List[Any]], 
-                 bucket: str, key: str, 
+def write_content(content: Union[str, bytes, Dict[str, Any], List[Any]],
+                 bucket: str, key: str,
                  content_type: Optional[str] = None) -> None:
     """
     Write content to S3
-    
+
     Args:
         content: The content to write (string, bytes, or dict that will be converted to JSON)
         bucket: The S3 bucket
@@ -108,7 +108,7 @@ def write_content(content: Union[str, bytes, Dict[str, Any], List[Any]],
     """
     try:
         s3 = get_s3_client()
-        
+
         # Handle different content types
         if isinstance(content, (dict, list)):
             body = json.dumps(content).encode('utf-8')
@@ -122,12 +122,12 @@ def write_content(content: Union[str, bytes, Dict[str, Any], List[Any]],
             body = content
             if content_type is None:
                 content_type = 'application/octet-stream'
-        
+
         # Upload to S3
         extra_args = {}
         if content_type:
             extra_args['ContentType'] = content_type
-            
+
         s3.put_object(
             Bucket=bucket,
             Key=key,
@@ -143,15 +143,15 @@ def list_images_from_path(image_path: str) -> List[str]:
     """
     List all image files from an S3 prefix or local directory.
     Returns image URIs/paths sorted by filename.
-    
+
     Args:
         image_path: S3 URI (s3://bucket/prefix/) or local directory path
-        
+
     Returns:
         List of image file paths/URIs sorted by filename
     """
     image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'}
-    
+
     if image_path.startswith('s3://'):
         return _list_s3_images(image_path, image_extensions)
     else:
@@ -160,24 +160,24 @@ def list_images_from_path(image_path: str) -> List[str]:
 def _list_s3_images(s3_prefix: str, image_extensions: set) -> List[str]:
     """
     List image files from an S3 prefix.
-    
+
     Args:
         s3_prefix: S3 URI prefix (s3://bucket/prefix/)
         image_extensions: Set of valid image file extensions
-        
+
     Returns:
         List of S3 URIs for image files sorted by filename
     """
     try:
         bucket, prefix = parse_s3_uri(s3_prefix)
-        
+
         # Ensure prefix ends with / if it's meant to be a directory
         if not prefix.endswith('/') and prefix:
             prefix += '/'
-            
+
         s3 = get_s3_client()
         paginator = s3.get_paginator('list_objects_v2')
-        
+
         image_files = []
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
             if 'Contents' in page:
@@ -186,17 +186,17 @@ def _list_s3_images(s3_prefix: str, image_extensions: set) -> List[str]:
                     # Skip the prefix itself if it's a "directory" key
                     if key == prefix:
                         continue
-                    
+
                     # Check if file has image extension
                     file_ext = os.path.splitext(key)[1].lower()
                     if file_ext in image_extensions:
                         image_files.append(f"s3://{bucket}/{key}")
-        
+
         # Sort by filename (not full path)
         image_files.sort(key=lambda x: os.path.basename(x))
         logger.info(f"Found {len(image_files)} image files in S3 prefix: {s3_prefix}")
         return image_files
-        
+
     except Exception as e:
         logger.error(f"Error listing images from S3 prefix {s3_prefix}: {e}")
         raise
@@ -204,11 +204,11 @@ def _list_s3_images(s3_prefix: str, image_extensions: set) -> List[str]:
 def _list_local_images(directory_path: str, image_extensions: set) -> List[str]:
     """
     List image files from a local directory.
-    
+
     Args:
         directory_path: Local directory path
         image_extensions: Set of valid image file extensions
-        
+
     Returns:
         List of local file paths for image files sorted by filename
     """
@@ -216,29 +216,66 @@ def _list_local_images(directory_path: str, image_extensions: set) -> List[str]:
         if not os.path.exists(directory_path):
             logger.warning(f"Local directory does not exist: {directory_path}")
             return []
-            
+
         if not os.path.isdir(directory_path):
             logger.warning(f"Path is not a directory: {directory_path}")
             return []
-        
+
         image_files = []
         for filename in os.listdir(directory_path):
             file_path = os.path.join(directory_path, filename)
-            
+
             # Skip directories
             if os.path.isdir(file_path):
                 continue
-                
+
             # Check if file has image extension
             file_ext = os.path.splitext(filename)[1].lower()
             if file_ext in image_extensions:
                 image_files.append(file_path)
-        
+
         # Sort by filename
         image_files.sort(key=os.path.basename)
         logger.info(f"Found {len(image_files)} image files in local directory: {directory_path}")
         return image_files
-        
+
     except Exception as e:
         logger.error(f"Error listing images from local directory {directory_path}: {e}")
+        raise
+
+def find_matching_files(bucket: str, pattern: str) -> List[str]:
+    """
+    Find files in S3 bucket that match a given pattern.
+
+    Args:
+        bucket: S3 bucket name
+        pattern: File pattern with wildcards (* and ?) - case sensitive, * doesn't match /
+
+    Returns:
+        List of matching file keys
+    """
+    import re
+
+    try:
+        s3 = get_s3_client()
+        paginator = s3.get_paginator('list_objects_v2')
+
+        # Convert pattern: * matches anything except /, ? matches single char except /
+        regex_pattern = pattern.replace('*', '[^/]*').replace('?', '[^/]')
+        regex = re.compile(f'^{regex_pattern}$')
+
+        matching_files = []
+
+        for page in paginator.paginate(Bucket=bucket):
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    key = obj['Key']
+                    if regex.match(key):
+                        matching_files.append(key)
+
+        logger.info(f"Found {len(matching_files)} files matching pattern '{pattern}' in bucket '{bucket}'")
+        return sorted(matching_files)
+
+    except Exception as e:
+        logger.error(f"Error finding matching files in bucket {bucket} with pattern {pattern}: {e}")
         raise

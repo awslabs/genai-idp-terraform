@@ -132,3 +132,15 @@ variable "state_machine_arn" {
   type        = string
   default     = ""
 }
+
+variable "hitl_wait_image_uri" {
+  description = "ECR image URI for the HITL wait Lambda function (Docker deployment). Required for v0.4.3+ fix. If null, falls back to zip deployment."
+  type        = string
+  default     = null
+}
+
+variable "hitl_status_update_image_uri" {
+  description = "ECR image URI for the HITL status update Lambda function (Docker deployment). Required for v0.4.3+ fix. If null, falls back to zip deployment."
+  type        = string
+  default     = null
+}

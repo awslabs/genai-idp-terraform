@@ -36,14 +36,14 @@ summarization_enabled = true
 enable_evaluation     = false
 enable_reporting      = false
 
-# API Configuration (New Consolidated Structure)
+# API Configuration
 api = {
-  enabled = false
+  enabled = true
 
   # Agent Analytics (requires reporting to be enabled)
   agent_analytics = {
     enabled  = false
-    model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
   }
 
   # Discovery Configuration
@@ -54,39 +54,23 @@ api = {
   # Chat with Document Configuration
   chat_with_document = {
     enabled = false
-    # Optional: Add Bedrock Guardrail for content filtering
+    # Optional: requires knowledge_base.enabled = true
     # guardrail_id_and_version = "your-guardrail-id:1"
+  }
+
+  # Knowledge Base Configuration (optional: enables Bedrock Knowledge Base retrieval in chat)
+  knowledge_base = {
+    enabled = false
+    # knowledge_base_arn = "arn:aws:bedrock:us-east-1:123456789012:knowledge-base/XXXXXXXXXX"
+    model_id           = "us.amazon.nova-pro-v1:0"
+    embedding_model_id = "amazon.titan-embed-text-v2:0"
   }
 
   # Process Changes Configuration
   process_changes = {
     enabled = false
   }
-
-  # Knowledge Base Configuration
-  knowledge_base = {
-    enabled            = false
-    knowledge_base_arn = null
-    model_id           = "us.amazon.nova-pro-v1:0"
-    embedding_model_id = "amazon.titan-embed-text-v2:0"
-  }
 }
-
-# DEPRECATED: Individual API feature variables (for backward compatibility)
-# Use the consolidated 'api' variable above instead. These will be removed in a future version.
-# discovery = {
-#   enabled = false
-# }
-# 
-# chat_with_document = {
-#   enabled = false
-#   # Optional: Add Bedrock Guardrail for content filtering
-#   # guardrail_id_and_version = "your-guardrail-id:1"
-# }
-#
-# process_changes = {
-#   enabled = false
-# }
 
 # Tags
 tags = {

@@ -3,7 +3,7 @@
 #
 
 # Bedrock LLM Processor
-# This processor implements an intelligent document processing workflow that uses Amazon Bedrock 
+# This processor implements an intelligent document processing workflow that uses Amazon Bedrock
 # with Nova or Claude models for both page classification/grouping and information extraction.
 #
 # Note: The deprecated nested 'processing_environment' variable has been removed.
@@ -107,15 +107,24 @@ locals {
         }
       )
     } : {},
-    # Only override extraction model if provided
-    var.extraction_model_id != null ? {
+    # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
+    {
       extraction = merge(
         local.base_config.extraction,
-        {
-          model = var.extraction_model_id
-        }
+        var.extraction_model_id != null ? { model = var.extraction_model_id } : {},
+        var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
+        var.enable_agentic_extraction ? {
+          agentic = merge(
+            try(local.base_config.extraction.agentic, {}),
+            {
+              enabled            = true
+              review_agent       = var.review_agent_model != "" ? true : false
+              review_agent_model = var.review_agent_model
+            }
+          )
+        } : {}
       )
-    } : {},
+    },
     # Only override summarization model if provided
     var.summarization_model_id != null ? {
       summarization = merge(
@@ -157,23 +166,236 @@ locals {
   } : null
 }
 
+# Local values for state machine definition
+locals {
+  # Determine which optional features are active
+  hitl_enabled       = var.enable_hitl
+  summ_enabled       = var.is_summarization_enabled
+  eval_enabled       = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null
+
+  # Retry policy shared across most task states
+  standard_retry = [
+    {
+      ErrorEquals = [
+        "Sandbox.Timedout",
+        "Lambda.ServiceException",
+        "Lambda.AWSLambdaException",
+        "Lambda.SdkClientException",
+        "Lambda.TooManyRequestsException",
+        "ServiceQuotaExceededException",
+        "ThrottlingException",
+        "ProvisionedThroughputExceededException",
+        "RequestLimitExceeded",
+        "ServiceUnavailableException"
+      ]
+      IntervalSeconds = 2
+      MaxAttempts     = 10
+      BackoffRate     = 2
+    }
+  ]
+
+  # The state after ProcessResultsStep / HITLStatusUpdate depends on whether summarization is enabled
+  post_hitl_next = local.summ_enabled ? "SummarizationStep" : (local.eval_enabled ? "EvaluationStep" : "WorkflowComplete")
+
+  # The state after SummarizationStep depends on whether evaluation is enabled
+  post_summ_next = local.eval_enabled ? "EvaluationStep" : "WorkflowComplete"
+
+  # CheckHITLRequired default (when HITL not triggered) — same logic as post_hitl_next
+  check_hitl_default = local.post_hitl_next
+
+  # Build the optional states map entries
+  hitl_states = local.hitl_enabled ? {
+    HITLReview = {
+      Type     = "Task"
+      Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+      Parameters = {
+        FunctionName    = aws_lambda_function.hitl_wait[0].arn
+        "Payload" = {
+          "taskToken.$" = "$.Task.Token"
+          "Payload.$"   = "$"
+        }
+      }
+      ResultPath = "$.HITLWaitResult"
+      Retry      = local.standard_retry
+      Next       = "HITLStatusUpdate"
+    }
+    HITLStatusUpdate = {
+      Type     = "Task"
+      Resource = aws_lambda_function.hitl_status_update[0].arn
+      Parameters = {
+        "Result.$"         = "$.Result"
+        "HITLWaitResult.$" = "$.HITLWaitResult"
+      }
+      ResultPath = "$.HITLStatusResult"
+      Retry      = local.standard_retry
+      Next       = local.post_hitl_next
+    }
+  } : {}
+
+  summ_states = local.summ_enabled ? {
+    SummarizationStep = {
+      Type     = "Task"
+      Resource = aws_lambda_function.summarization[0].arn
+      Parameters = {
+        "execution_arn.$" = "$$.Execution.Id"
+        "document.$"      = "$.Result.document"
+      }
+      ResultPath = "$.Result"
+      OutputPath = "$.Result.document"
+      Retry      = local.standard_retry
+      Next       = local.post_summ_next
+    }
+  } : {}
+
+  eval_states = local.eval_enabled ? {
+    EvaluationStep = {
+      Type     = "Task"
+      Resource = aws_lambda_function.evaluation_function[0].arn
+      Parameters = {
+        "execution_arn.$" = "$$.Execution.Id"
+        "document.$"      = "$"
+      }
+      ResultPath = "$"
+      Retry      = local.standard_retry
+      Next       = "WorkflowComplete"
+    }
+  } : {}
+
+  # Assemble the full states map
+  sfn_states = merge(
+    {
+      OCRStep = {
+        Type     = "Task"
+        Resource = aws_lambda_function.ocr.arn
+        Parameters = {
+          "execution_arn.$" = "$$.Execution.Id"
+          "document.$"      = "$.document"
+        }
+        ResultPath = "$.OCRResult"
+        Retry = [
+          {
+            ErrorEquals = [
+              "Sandbox.Timedout",
+              "Lambda.ServiceException",
+              "Lambda.AWSLambdaException",
+              "Lambda.SdkClientException",
+              "Lambda.TooManyRequestsException",
+              "ServiceQuotaExceededException",
+              "ThrottlingException",
+              "ProvisionedThroughputExceededException",
+              "RequestLimitExceeded",
+              "ServiceUnavailableException"
+            ]
+            IntervalSeconds = 2
+            MaxAttempts     = 2
+            BackoffRate     = 2
+          }
+        ]
+        Next = "ClassificationStep"
+      }
+
+      ClassificationStep = {
+        Type     = "Task"
+        Resource = aws_lambda_function.classification.arn
+        Parameters = {
+          "execution_arn.$" = "$$.Execution.Id"
+          "OCRResult.$"     = "$.OCRResult"
+        }
+        ResultPath = "$.ClassificationResult"
+        Retry      = local.standard_retry
+        Next       = "ProcessSections"
+      }
+
+      ProcessSections = {
+        Type      = "Map"
+        ItemsPath = "$.ClassificationResult.document.sections"
+        ItemSelector = {
+          "execution_arn.$" = "$$.Execution.Id"
+          "document.$"      = "$.ClassificationResult.document"
+          "section_id.$"    = "$$.Map.Item.Value"
+        }
+        MaxConcurrency = 10
+        Iterator = {
+          StartAt = "ExtractionStep"
+          States = {
+            ExtractionStep = {
+              Type     = "Task"
+              Resource = aws_lambda_function.extraction.arn
+              Retry    = local.standard_retry
+              Next     = "AssessmentStep"
+            }
+            AssessmentStep = {
+              Type     = "Task"
+              Resource = aws_lambda_function.assessment.arn
+              Parameters = {
+                "execution_arn.$" = "$$.Execution.Id"
+                "document.$"      = "$.document"
+                "section_id.$"    = "$.section_id"
+              }
+              ResultPath = "$"
+              Retry      = local.standard_retry
+              Next       = "SectionComplete"
+            }
+            SectionComplete = {
+              Type = "Pass"
+              End  = true
+            }
+          }
+        }
+        ResultPath = "$.ExtractionResults"
+        Next       = "ProcessResultsStep"
+      }
+
+      ProcessResultsStep = {
+        Type     = "Task"
+        Resource = aws_lambda_function.process_results.arn
+        Parameters = {
+          "execution_arn.$"        = "$$.Execution.Id"
+          "ClassificationResult.$" = "$.ClassificationResult"
+          "ExtractionResults.$"    = "$.ExtractionResults"
+        }
+        ResultPath = "$.Result"
+        Retry      = local.standard_retry
+        Next       = "CheckHITLRequired"
+      }
+
+      CheckHITLRequired = {
+        Type = "Choice"
+        Choices = local.hitl_enabled ? [
+          {
+            Variable      = "$.Result.hitl_triggered"
+            BooleanEquals = true
+            Next          = "HITLReview"
+          }
+        ] : [
+          {
+            Variable      = "$.Result.hitl_triggered"
+            BooleanEquals = false
+            Next          = local.check_hitl_default
+          }
+        ]
+        Default = local.check_hitl_default
+      }
+
+      WorkflowComplete = {
+        Type = "Pass"
+        End  = true
+      }
+    },
+    local.hitl_states,
+    local.summ_states,
+    local.eval_states
+  )
+}
+
 # Step Functions State Machine
 resource "aws_sfn_state_machine" "document_processing" {
   name     = "${local.name_prefix}-document-processing"
   role_arn = aws_iam_role.state_machine.arn
 
-  definition = templatefile("${path.module}/../../../sources/patterns/pattern-2/statemachine/workflow.asl.json", {
-    OCRFunctionArn              = aws_lambda_function.ocr.arn
-    ClassificationFunctionArn   = aws_lambda_function.classification.arn
-    ExtractionFunctionArn       = aws_lambda_function.extraction.arn
-    ProcessResultsLambdaArn     = aws_lambda_function.process_results.arn
-    AssessmentFunctionArn       = aws_lambda_function.assessment.arn
-    SummarizationLambdaArn      = var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-function"
-    IsSummarizationEnabled      = var.is_summarization_enabled ? "true" : "false"
-    HITLWaitFunctionArn         = var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-wait-function"
-    HITLStatusUpdateFunctionArn = var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-hitl-status-function"
-    EvaluationLambdaArn         = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-evaluation-function"
-    OutputBucket                = local.output_bucket_name
+  definition = jsonencode({
+    StartAt = "OCRStep"
+    States  = local.sfn_states
   })
 
   logging_configuration {

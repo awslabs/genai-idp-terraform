@@ -67,6 +67,12 @@ def parse_agent_response(response) -> Dict[str, Any]:
     response_str = str(response)
     logger.debug(f"Processing AgentResult as string: {response_str[:100]}...")
 
+    # Check if response looks like JSON before trying to parse
+    response_str = response_str.strip()
+    if not (response_str.startswith("{") or response_str.startswith("```")):
+        logger.debug("Response doesn't appear to be JSON, returning as text")
+        return {"responseType": "text", "content": response_str}
+
     # Extract JSON from markdown code blocks if present
     json_str = extract_json_from_markdown(response_str)
 
@@ -77,8 +83,5 @@ def parse_agent_response(response) -> Dict[str, Any]:
         )
         return parsed_response
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse extracted JSON: {e}")
-        logger.error(f"Full LLM response: {response_str}")
-        logger.error(f"Extracted content: {json_str}")
-        # Return a text response with the raw output as fallback
+        logger.warning(f"Failed to parse as JSON, returning as text: {e}")
         return {"responseType": "text", "content": response_str}

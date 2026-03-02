@@ -19,7 +19,8 @@ KB_ID = os.environ.get("KB_ID")
 KB_ACCOUNT_ID = os.environ.get("KB_ACCOUNT_ID")
 KB_REGION = os.environ.get("KB_REGION") or os.environ["AWS_REGION"]
 MODEL_ID = os.environ.get("MODEL_ID")
-MODEL_ARN = f"arn:aws:bedrock:{KB_REGION}:{KB_ACCOUNT_ID}:inference-profile/{MODEL_ID}"
+# Use MODEL_ID directly if it's already a full ARN (built by Terraform), otherwise fall back
+MODEL_ARN = MODEL_ID if (MODEL_ID and MODEL_ID.startswith("arn:")) else f"arn:aws:bedrock:{KB_REGION}:{KB_ACCOUNT_ID}:inference-profile/{MODEL_ID}"
 GUARDRAIL_ENV = os.environ.get("GUARDRAIL_ID_AND_VERSION", "")
 
 KB_CLIENT = boto3.client(

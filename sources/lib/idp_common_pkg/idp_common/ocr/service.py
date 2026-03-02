@@ -9,6 +9,8 @@ using either AWS Textract or Amazon Bedrock LLMs, with support for concurrent
 processing of multiple pages.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 import os
@@ -20,6 +22,7 @@ import fitz  # PyMuPDF
 from botocore.config import Config
 
 from idp_common import bedrock, image, s3, utils
+from idp_common.config.models import IDPConfig
 from idp_common.models import Document, Page, Status
 from idp_common.ocr.document_converter import DocumentConverter
 
@@ -32,7 +35,7 @@ class OcrService:
     def __init__(
         self,
         region: Optional[str] = None,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[Union[Dict[str, Any], "IDPConfig"]] = None,
         backend: Optional[str] = None,
         max_workers: Optional[int] = None,
         # Deprecated parameters for backward compatibility
@@ -47,7 +50,7 @@ class OcrService:
 
         Args:
             region: AWS region for services
-            config: Configuration dictionary containing all OCR settings
+            config: Configuration dictionary or IDPConfig model containing all OCR settings
             backend: OCR backend to use ("textract", "bedrock", or "none")
             max_workers: Maximum number of concurrent workers for page processing
 
@@ -85,52 +88,41 @@ class OcrService:
             self.preprocessing_config = preprocessing_config
             self.enhanced_features = enhanced_features
         else:
-            # New pattern - extract from config
-            self.region = region or os.environ.get("AWS_REGION", "us-east-1")
-            self.config = config or {}
-            ocr_config = self.config.get("ocr", {})
-
-            # Extract backend
-            self.backend = (backend or ocr_config.get("backend", "textract")).lower()
-
-            # Extract max_workers
-            self.max_workers = max_workers or ocr_config.get("max_workers", 20)
-
-            # Extract DPI from image configuration
-            image_config = ocr_config.get("image", {})
-            dpi_value = image_config.get("dpi", 150)
-
-            # Convert DPI to integer if it's a string
-            if isinstance(dpi_value, str):
-                try:
-                    self.dpi = int(dpi_value) if dpi_value.strip() else 150
-                except (ValueError, AttributeError):
-                    logger.warning(
-                        f"Invalid DPI value '{dpi_value}', using default 150"
-                    )
-                    self.dpi = 150
+            # Convert dict to IDPConfig if needed
+            if config is not None and isinstance(config, dict):
+                config_model: IDPConfig = IDPConfig(**config)
+            elif config is None:
+                config_model = IDPConfig()
             else:
-                self.dpi = int(dpi_value) if dpi_value is not None else 150
+                config_model = config
 
-            # Extract enhanced features
-            features_config = ocr_config.get("features", [])
+            # New pattern - extract from typed config (type-safe access!)
+            self.region = region or os.environ.get("AWS_REGION", "us-east-1")
+            self.config = config_model
+
+            # Extract backend (type-safe, no .get() needed)
+            self.backend = (backend or self.config.ocr.backend).lower()
+
+            # Extract max_workers (automatic int conversion)
+            self.max_workers = max_workers or self.config.ocr.max_workers
+
+            # Extract DPI from image configuration (Pydantic handles type conversion!)
+            self.dpi = self.config.ocr.image.dpi
+
+            # Extract enhanced features (type-safe access)
+            features_config = self.config.ocr.features
             if features_config:
-                self.enhanced_features = [
-                    feature["name"] for feature in features_config
-                ]
+                self.enhanced_features = [feature.name for feature in features_config]
             else:
                 self.enhanced_features = False
-
-            # Extract image configuration with sensible defaults
-            image_config = ocr_config.get("image", {})
 
             # Apply sensible defaults for image sizing when not specified
             DEFAULT_TARGET_WIDTH = 951
             DEFAULT_TARGET_HEIGHT = 1268
 
-            # Extract resize configuration
-            target_width = image_config.get("target_width")
-            target_height = image_config.get("target_height")
+            # Extract resize configuration (type-safe access)
+            target_width = self.config.ocr.image.target_width
+            target_height = self.config.ocr.image.target_height
 
             # Normalize None and empty strings to None for consistent handling
             if isinstance(target_width, str) and not target_width.strip():
@@ -149,7 +141,7 @@ class OcrService:
                     f"No image sizing configured, applying default limits: "
                     f"{DEFAULT_TARGET_WIDTH}x{DEFAULT_TARGET_HEIGHT} to optimize resource usage and token consumption"
                 )
-            elif target_width is not None and target_height is not None:
+            else:
                 # Handle empty strings by converting to None for validation
                 if isinstance(target_width, str) and not target_width.strip():
                     target_width = None
@@ -157,12 +149,16 @@ class OcrService:
                     target_height = None
 
                 # If after handling empty strings we still have values, use them
-                if target_width is not None and target_height is not None:
+                if target_width is not None or target_height is not None:
                     # Explicit configuration provided - validate and use it
                     try:
                         self.resize_config = {
-                            "target_width": int(target_width),
-                            "target_height": int(target_height),
+                            "target_width": int(target_width)
+                            if target_width is not None
+                            else None,
+                            "target_height": int(target_height)
+                            if target_height is not None
+                            else None,
                         }
                         logger.info(
                             f"Using configured image sizing: {target_width}x{target_height}"
@@ -186,16 +182,9 @@ class OcrService:
                         f"Invalid image sizing configuration provided, applying default limits: "
                         f"{DEFAULT_TARGET_WIDTH}x{DEFAULT_TARGET_HEIGHT} to optimize resource usage and token consumption"
                     )
-            else:
-                # Partial configuration (only width or height) - no defaults applied
-                # This preserves the existing behavior for partial configs
-                self.resize_config = None
-                logger.info(
-                    "Partial image sizing configuration detected, no defaults applied"
-                )
 
-            # Extract preprocessing configuration
-            preprocessing_value = image_config.get("preprocessing")
+            # Extract preprocessing configuration (type-safe)
+            preprocessing_value = self.config.ocr.image.preprocessing
             if preprocessing_value is True or (
                 isinstance(preprocessing_value, str)
                 and preprocessing_value.lower() == "true"
@@ -204,16 +193,18 @@ class OcrService:
             else:
                 self.preprocessing_config = None
 
-            # Extract Bedrock configuration
+            # Extract Bedrock configuration (type-safe)
             if self.backend == "bedrock":
-                if all(
-                    key in ocr_config
-                    for key in ["model_id", "system_prompt", "task_prompt"]
+                # Check if bedrock config has required fields
+                if (
+                    self.config.ocr.model_id
+                    and self.config.ocr.system_prompt
+                    and self.config.ocr.task_prompt
                 ):
                     self.bedrock_config = {
-                        "model_id": ocr_config["model_id"],
-                        "system_prompt": ocr_config["system_prompt"],
-                        "task_prompt": ocr_config["task_prompt"],
+                        "model_id": self.config.ocr.model_id,
+                        "system_prompt": self.config.ocr.system_prompt,
+                        "task_prompt": self.config.ocr.task_prompt,
                     }
                 else:
                     self.bedrock_config = None
@@ -643,20 +634,28 @@ class OcrService:
                 target_height = self.resize_config.get("target_height")
 
                 if target_width or target_height:
-                    # Check if image already fits within target dimensions
-                    if (
-                        original_width <= target_width
-                        and original_height <= target_height
-                    ):
-                        logger.debug(
-                            f"Image {original_width}x{original_height} already fits within "
-                            f"{target_width}x{target_height}, using original"
-                        )
-                        needs_resize = False
+                    # Only check fit if both dimensions are provided (type-safe comparison)
+                    if target_width is not None and target_height is not None:
+                        # Check if image already fits within target dimensions
+                        if (
+                            original_width <= target_width
+                            and original_height <= target_height
+                        ):
+                            logger.debug(
+                                f"Image {original_width}x{original_height} already fits within "
+                                f"{target_width}x{target_height}, using original"
+                            )
+                            needs_resize = False
+                        else:
+                            logger.debug(
+                                f"Image {original_width}x{original_height} needs resizing to fit "
+                                f"{target_width}x{target_height}"
+                            )
+                            needs_resize = True
                     else:
+                        # Partial config - always resize to calculate missing dimension
                         logger.debug(
-                            f"Image {original_width}x{original_height} needs resizing to fit "
-                            f"{target_width}x{target_height}"
+                            "Partial dimension config detected, will resize to calculate missing dimension"
                         )
                         needs_resize = True
 
@@ -693,7 +692,7 @@ class OcrService:
 
                 # Get original format info
                 img_data = pix.tobytes()
-                img_ext = pix.extension  # Get original extension (png, jpg, etc.)
+                img_ext = pix.extension  # type: ignore[attr-defined]  # Get original extension (png, jpg, etc.)
 
                 # Determine content type
                 content_type_map = {
@@ -749,7 +748,7 @@ class OcrService:
             else:
                 # Fallback: extract as rendered image
                 # This path should rarely be used since we pass original_file_content for images
-                pix = page.get_pixmap()
+                pix = page.get_pixmap()  # type: ignore[attr-defined]
                 logger.debug(
                     f"Using PyMuPDF fallback for image extraction: {pix.width}x{pix.height}"
                 )
@@ -1197,7 +1196,7 @@ class OcrService:
                             # For images, just apply the scale factor
                             matrix = fitz.Matrix(scale_factor, scale_factor)
 
-                        pix = page.get_pixmap(matrix=matrix)
+                        pix = page.get_pixmap(matrix=matrix)  # type: ignore[attr-defined]
 
                         actual_width, actual_height = pix.width, pix.height
                         logger.info(
@@ -1208,9 +1207,9 @@ class OcrService:
                         # No resize needed - image is already smaller than targets
                         if is_pdf:
                             dpi = self.dpi or 150
-                            pix = page.get_pixmap(dpi=dpi)
+                            pix = page.get_pixmap(dpi=dpi)  # type: ignore[attr-defined]
                         else:
-                            pix = page.get_pixmap()
+                            pix = page.get_pixmap()  # type: ignore[attr-defined]
 
                         # Log actual extracted dimensions
                         actual_width, actual_height = pix.width, pix.height
@@ -1221,9 +1220,9 @@ class OcrService:
                     # No valid target dimensions - use original extraction
                     if is_pdf:
                         dpi = self.dpi or 150
-                        pix = page.get_pixmap(dpi=dpi)
+                        pix = page.get_pixmap(dpi=dpi)  # type: ignore[attr-defined]
                     else:
-                        pix = page.get_pixmap()
+                        pix = page.get_pixmap()  # type: ignore[attr-defined]
 
                     # Log actual extracted dimensions
                     actual_width, actual_height = pix.width, pix.height
@@ -1234,9 +1233,9 @@ class OcrService:
                 # No resize config - extract at original size
                 if is_pdf:
                     dpi = self.dpi or 150
-                    pix = page.get_pixmap(dpi=dpi)
+                    pix = page.get_pixmap(dpi=dpi)  # type: ignore[attr-defined]
                 else:
-                    pix = page.get_pixmap()
+                    pix = page.get_pixmap()  # type: ignore[attr-defined]
 
                 # Log actual extracted dimensions
                 actual_width, actual_height = pix.width, pix.height
@@ -1568,7 +1567,7 @@ class OcrService:
         Returns:
             Dictionary with 'text' key containing extracted text
         """
-        from textractor.parsers import response_parser
+        from textractor.parsers import response_parser  # type: ignore[import-untyped]
 
         # Create page identifier for logging
         page_info = f" for page {page_id}" if page_id else ""

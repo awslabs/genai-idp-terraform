@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useState } from 'react';
-import { Table, Pagination, TextFilter } from '@awsui/components-react';
-import { useCollection } from '@awsui/collection-hooks';
-import { Logger } from 'aws-amplify';
+import { Table, Pagination, TextFilter } from '@cloudscape-design/components';
+import { useCollection } from '@cloudscape-design/collection-hooks';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
 import useDocumentsContext from '../../contexts/documents';
 import useSettingsContext from '../../contexts/settings';
@@ -20,6 +20,7 @@ import {
   DocumentsCommonHeader,
   COLUMN_DEFINITIONS_MAIN,
   KEY_COLUMN_ID,
+  UNIQUE_TRACK_ID,
   SELECTION_LABELS,
   DEFAULT_PREFERENCES,
   DEFAULT_SORT_COLUMN,
@@ -27,9 +28,9 @@ import {
 
 import { getFilterCounterText, TableEmptyState, TableNoMatchState } from '../common/table';
 
-import '@awsui/global-styles/index.css';
+import '@cloudscape-design/global-styles/index.css';
 
-const logger = new Logger('DocumentList');
+const logger = new ConsoleLogger('DocumentList');
 
 const DocumentList = () => {
   const [documentList, setDocumentList] = useState([]);
@@ -64,7 +65,7 @@ const DocumentList = () => {
     sorting: { defaultState: { sortingColumn: DEFAULT_SORT_COLUMN, isDescending: true } },
     selection: {
       keepSelection: false,
-      trackBy: KEY_COLUMN_ID,
+      trackBy: UNIQUE_TRACK_ID,
     },
   });
 
@@ -150,7 +151,7 @@ const DocumentList = () => {
         wrapLines={preferences.wrapLines}
         pagination={<Pagination {...paginationProps} ariaLabels={paginationLabels} />}
         preferences={<DocumentsPreferences preferences={preferences} setPreferences={setPreferences} />}
-        trackBy={items.objectKey}
+        trackBy={UNIQUE_TRACK_ID}
         visibleColumns={[KEY_COLUMN_ID, ...preferences.visibleContent]}
         resizableColumns
       />

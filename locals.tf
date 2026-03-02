@@ -11,34 +11,28 @@ locals {
   # New api variable takes precedence when both are provided
 
   # Core API enabled flag
-  api_enabled = var.api.enabled != null ? var.api.enabled : (
-    var.enable_api != null ? var.enable_api : true
-  )
+  # Deprecated var.enable_api takes precedence if explicitly set (non-null), otherwise use api.enabled
+  api_enabled = var.enable_api != null ? var.enable_api : var.api.enabled
 
   # Agent Analytics configuration
-  agent_analytics_config = var.api.agent_analytics != null ? var.api.agent_analytics : (
-    var.agent_analytics != null ? var.agent_analytics : { enabled = false }
-  )
+  # Deprecated var.agent_analytics takes precedence if explicitly set (non-null), otherwise use api.agent_analytics
+  agent_analytics_config = var.agent_analytics != null ? var.agent_analytics : var.api.agent_analytics
 
   # Discovery configuration
-  discovery_config = var.api.discovery != null ? var.api.discovery : (
-    var.discovery != null ? var.discovery : { enabled = false }
-  )
+  # Deprecated var.discovery takes precedence if explicitly set (non-null), otherwise use api.discovery
+  discovery_config = var.discovery != null ? var.discovery : var.api.discovery
 
   # Chat with Document configuration
-  chat_with_document_config = var.api.chat_with_document != null ? var.api.chat_with_document : (
-    var.chat_with_document != null ? var.chat_with_document : { enabled = false }
-  )
+  # Deprecated var.chat_with_document takes precedence if explicitly set (non-null), otherwise use api.chat_with_document
+  chat_with_document_config = var.chat_with_document != null ? var.chat_with_document : var.api.chat_with_document
 
   # Process Changes configuration
-  process_changes_config = var.api.process_changes != null ? var.api.process_changes : (
-    var.process_changes != null ? var.process_changes : { enabled = false }
-  )
+  # Deprecated var.process_changes takes precedence if explicitly set (non-null), otherwise use api.process_changes
+  process_changes_config = var.process_changes != null ? var.process_changes : var.api.process_changes
 
   # Knowledge Base configuration
-  knowledge_base_config = var.api.knowledge_base != null ? var.api.knowledge_base : (
-    var.knowledge_base != null ? var.knowledge_base : { enabled = false }
-  )
+  # Deprecated var.knowledge_base takes precedence if explicitly set (non-null), otherwise use api.knowledge_base
+  knowledge_base_config = var.knowledge_base != null ? var.knowledge_base : var.api.knowledge_base
 }
 
 #
@@ -92,9 +86,9 @@ locals {
   # Keep the common layer lightweight - heavy dependencies should be in function-specific layers
   base_extras = ["core", "appsync"]
   processor_extras = {
-    "bda"            = local.processor_type == "bda" && try(var.bda_processor.summarization.enabled, false) ? ["docs_service"] : [] # Use docs_service instead of summarization
-    "bedrock-llm"    = ["ocr", "classification", "extraction", "assessment", "docs_service"]                                        # Include all extras needed by bedrock-llm processor functions based on CDK implementation
-    "sagemaker-udop" = ["ocr", "docs_service"]                                                                                      # Use ocr instead of sagemaker, docs_service for API integration
+    "bda"            = local.processor_type == "bda" && try(var.bda_processor.summarization.enabled, false) ? ["docs_service"] : []
+    "bedrock-llm"    = ["ocr", "classification", "extraction", "assessment", "docs_service"] # Include all extras needed by bedrock-llm processor functions based on CDK implementation
+    "sagemaker-udop" = ["ocr", "docs_service"]                                               # Use ocr instead of sagemaker, docs_service for API integration
   }
 
   idp_common_layer_extras = concat(

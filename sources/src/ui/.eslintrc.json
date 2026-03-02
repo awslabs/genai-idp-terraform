@@ -5,19 +5,39 @@
     "jest/globals": true
   },
   "root": true,
-  "extends": ["plugin:react/recommended", "airbnb", "plugin:prettier/recommended"],
+  "extends": ["plugin:react/recommended", "plugin:jsx-a11y/recommended", "plugin:prettier/recommended"],
   "parserOptions": {
     "ecmaFeatures": {
       "jsx": true
     },
-    "ecmaVersion": 12,
+    "ecmaVersion": "latest",
     "sourceType": "module"
   },
-  "plugins": ["react", "prettier", "eslint-plugin-jest", "import"],
+  "plugins": ["react", "react-hooks", "jsx-a11y", "prettier", "eslint-plugin-jest", "import"],
+  "settings": {
+    "react": {
+      "version": "detect"
+    },
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".jsx"]
+      }
+    }
+  },
   "rules": {
     "no-console": "off",
     "no-alert": "off",
-    "max-len": ["error", { "code": 120, "ignoreUrls": true, "ignoreTemplateLiterals": true }],
+    "max-len": [
+      "error",
+      {
+        "code": 140,
+        "ignoreUrls": true,
+        "ignoreTemplateLiterals": true,
+        "ignoreComments": true,
+        "ignoreStrings": true,
+        "ignoreRegExpLiterals": true
+      }
+    ],
     "linebreak-style": ["error", "unix"],
     "react/jsx-filename-extension": [
       "warn",
@@ -28,7 +48,7 @@
     "prettier/prettier": [
       "error",
       {
-        "printWidth": 120,
+        "printWidth": 140,
         "singleQuote": true,
         "trailingComma": "all"
       }
@@ -56,6 +76,19 @@
       {
         "ignore": ["\\.css$"]
       }
-    ]
+    ],
+    "react-hooks/exhaustive-deps": "off",
+    "react/require-default-props": "off",
+    "no-shadow": "warn",
+    "import/extensions": [
+      "error",
+      "ignorePackages",
+      {
+        "js": "never",
+        "jsx": "never"
+      }
+    ],
+    "react/no-array-index-key": "warn",
+    "import/prefer-default-export": "off"
   }
 }

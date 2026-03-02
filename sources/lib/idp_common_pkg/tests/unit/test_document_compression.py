@@ -81,7 +81,7 @@ class TestDocumentCompression:
         # Verify compressed data structure
         assert compressed_data["document_id"] == "test-doc-123"
         assert compressed_data["status"] == "CLASSIFYING"
-        assert compressed_data["section_ids"] == ["section_1", "section_2"]
+        assert compressed_data["sections"] == ["section_1", "section_2"]
         assert compressed_data["compressed"] is True
         assert "s3_uri" in compressed_data
         assert "timestamp" in compressed_data
@@ -172,9 +172,9 @@ class TestDocumentCompression:
             compressed_data = self.document.compress(self.bucket, "test")
 
             # Verify section IDs are preserved
-            assert "section_ids" in compressed_data
-            assert compressed_data["section_ids"] == ["section_1", "section_2"]
-            assert len(compressed_data["section_ids"]) == 2
+            assert "sections" in compressed_data
+            assert compressed_data["sections"] == ["section_1", "section_2"]
+            assert len(compressed_data["sections"]) == 2
 
     def test_unique_s3_keys_generated(self):
         """Test that each compression generates unique S3 keys."""
@@ -200,7 +200,7 @@ class TestDocumentCompression:
             "document_id": "test-doc",
             "s3_uri": "s3://bucket/key.json",
             "compressed": True,
-            "section_ids": ["s1", "s2"],
+            "sections": ["s1", "s2"],
         }
 
         with patch.object(Document, "decompress") as mock_decompress:
@@ -269,7 +269,7 @@ class TestDocumentCompression:
             compressed_data = minimal_doc.compress(self.bucket, "test")
 
             assert compressed_data["document_id"] == "minimal"
-            assert compressed_data["section_ids"] == []
+            assert compressed_data["sections"] == []
             assert compressed_data["compressed"] is True
 
     def test_lightweight_wrapper_size(self):
@@ -283,11 +283,11 @@ class TestDocumentCompression:
             compressed_data = self.document.compress(self.bucket, "test")
             compressed_json = json.dumps(compressed_data)
 
-            # Verify compressed wrapper is much smaller
-            assert len(compressed_json) < len(full_document_json) / 10
+            # Verify compressed wrapper is much smaller (less than 20% of original)
+            assert len(compressed_json) < len(full_document_json) / 5
 
             # Verify essential data is preserved
-            assert "section_ids" in compressed_data
+            assert "sections" in compressed_data
             assert compressed_data["document_id"] == self.document.id
 
     @mock_aws

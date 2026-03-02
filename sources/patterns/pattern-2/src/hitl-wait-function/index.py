@@ -17,22 +17,22 @@ dynamodb = boto3.resource('dynamodb')
 TRACKING_TABLE = os.environ.get('TRACKING_TABLE')
 SAGEMAKER_A2I_REVIEW_PORTAL_URL = os.environ.get('SAGEMAKER_A2I_REVIEW_PORTAL_URL', '')
 
-def lambda_handler(event, context):
+def handler(event, context):
     """
     HITL wait function for Pattern-2 that:
     1. Creates task tokens for sections and pages that need human review
     2. Returns information about sections needing review
     """
     logger.info(f"Processing event: {json.dumps(event)}")
-    
+
     # Extract document information
     document_data = event.get('Payload', {}).get('Result', {}).get('document', {})
     if not document_data:
         document_data = event.get('Payload', {}).get('document', {})
-    
+
     # Get working bucket for decompression
     working_bucket = os.environ.get('WORKING_BUCKET')
-    
+
     # Load document using utility method to handle compression/decompression
     try:
         document_obj = Document.load_document(document_data, working_bucket, logger)
@@ -40,18 +40,18 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"Error loading document: {str(e)}")
         raise
-    
+
     document_id = document.get('id')
     workflow_execution_arn = document.get('workflow_execution_arn')
     execution_id = None
     doc_task_token = event.get('taskToken', {})
-    
+
     if workflow_execution_arn:
         execution_id = workflow_execution_arn.split(':')[-1]
-    
+
     # Get hitl_metadata from the document
     hitl_metadata = document.get('hitl_metadata', [])
-    
+
     if not hitl_metadata:
         logger.warning(f"No HITL metadata found for document {document_id}")
         return {
@@ -59,45 +59,45 @@ def lambda_handler(event, context):
             "message": "No human review required",
             "document": document
         }
-    
+
     tracking_table = dynamodb.Table(TRACKING_TABLE)
-    
+
     # Create a mapping of section IDs to task tokens
     section_task_tokens = {}
     page_task_tokens = {}
-    
+
     # Process each section that needs HITL (Pattern-1 approach)
     for section in hitl_metadata:
         if section.get('hitl_triggered') == True:
             section_id = str(section.get('record_number'))
             page_array = section.get('page_array', [])
             section_execution_id = section.get('execution_id')
-            
+
             if not section_execution_id:
                 section_execution_id = execution_id
-            
+
             # Create a main section token
             section_token_id = f"HITL#{document_id}#section#{section_id}"
-            
+
             # Store section-level token in tracking table
             store_token_in_tracking_table(
                 tracking_table,
                 token_id=section_token_id,
-                task_token=None, 
+                task_token=None,
                 document_id=document_id,
                 execution_id=section_execution_id,
                 section_id=section_id,
                 token_type="HITL_SECTION"
             )
-            
+
             section_task_tokens[section_id] = section_token_id
             page_task_tokens[section_id] = {}
-            
+
             # Create individual page task tokens
             for page_id in page_array:
                 page_id_str = str(page_id)
                 page_token_id = f"HITL#{document_id}#section#{section_id}#page#{page_id_str}"
-                
+
                 # Store page-level token in tracking table
                 store_token_in_tracking_table(
                     tracking_table,
@@ -109,9 +109,9 @@ def lambda_handler(event, context):
                     page_id=page_id_str,
                     token_type="HITL_PAGE"
                 )
-                
+
                 page_task_tokens[section_id][page_id_str] = page_token_id
-    
+
     # Update the document tracking record with HITL status
     try:
         # Update the HITL metadata record
@@ -127,7 +127,7 @@ def lambda_handler(event, context):
                 ':url': SAGEMAKER_A2I_REVIEW_PORTAL_URL
             }
         )
-        
+
         # Also update the main document record
         tracking_table.update_item(
             Key={
@@ -143,7 +143,7 @@ def lambda_handler(event, context):
         )
     except Exception as e:
         logger.warning(f"Could not update document tracking record: {str(e)}")
-    
+
     # Store overall document token
     document_token_key = f"HITL#TaskToken#{document_id}"
     store_token_in_tracking_table(
@@ -155,7 +155,7 @@ def lambda_handler(event, context):
         section_id=None,
         token_type="HITL_DOC"
     )
-    
+
     # Return waiting status with section and page tokens
     return {
         "status": "waiting",
@@ -177,16 +177,16 @@ def store_token_in_tracking_table(table, token_id, task_token, document_id, exec
         'CreatedAt': datetime.now(timezone.utc).isoformat(),
         'ExpiresAfter': int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp())
     }
-    
+
     if task_token:
         item['TaskToken'] = task_token
-        
+
     if section_id is not None:
         item['SectionId'] = section_id
-        
+
     if page_id is not None:
         item['PageId'] = page_id
-    
+
     try:
         table.put_item(Item=item)
         logger.info(f"Stored token information: {token_id}")

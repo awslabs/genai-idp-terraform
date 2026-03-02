@@ -15,8 +15,10 @@ def test_apply_limited_classification_transfers_metering():
     """Test that metering data is transferred from classified document to original document."""
     # Create classification service with minimal config
     config = {
-        "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
-        "classification": {"maxPagesForClassification": "2"},
+        "classification": {
+            "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "maxPagesForClassification": 2,
+        },
     }
     service = ClassificationService(region="us-east-1", config=config)
 
@@ -95,7 +97,7 @@ def test_apply_limited_classification_transfers_metering():
 @pytest.mark.unit
 def test_apply_limited_classification_merges_existing_metering():
     """Test that metering data is merged with existing metering in original document."""
-    config = {"model_id": "anthropic.claude-3-sonnet-20240229-v1:0"}
+    config = {"classification": {"model": "anthropic.claude-3-sonnet-20240229-v1:0"}}
     service = ClassificationService(region="us-east-1", config=config)
 
     # Original document with existing metering
@@ -150,7 +152,7 @@ def test_apply_limited_classification_merges_existing_metering():
 @pytest.mark.unit
 def test_apply_limited_classification_no_metering_data():
     """Test that method works correctly when classified document has no metering data."""
-    config = {"model_id": "anthropic.claude-3-sonnet-20240229-v1:0"}
+    config = {"classification": {"model": "anthropic.claude-3-sonnet-20240229-v1:0"}}
     service = ClassificationService(region="us-east-1", config=config)
 
     original_doc = Document(

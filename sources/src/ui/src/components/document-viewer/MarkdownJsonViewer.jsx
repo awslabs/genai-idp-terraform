@@ -3,14 +3,16 @@
 
 /* eslint-disable react/prop-types, react/destructuring-assignment, no-nested-ternary, no-use-before-define */
 import React, { useState, useEffect } from 'react';
-import { Box, SpaceBetween, Button, Toggle, Alert, SegmentedControl } from '@awsui/components-react';
-import { API, Logger } from 'aws-amplify';
+import { Box, SpaceBetween, Button, Toggle, Alert, SegmentedControl } from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import { Editor } from '@monaco-editor/react';
 import getFileContents from '../../graphql/queries/getFileContents';
 import uploadDocument from '../../graphql/queries/uploadDocument';
 import MarkdownViewer from './MarkdownViewer';
 
-const logger = new Logger('MarkdownJsonViewer');
+const client = generateClient();
+const logger = new ConsoleLogger('MarkdownJsonViewer');
 
 const EDITOR_DEFAULT_HEIGHT = '600px';
 
@@ -65,11 +67,7 @@ const TextEditorView = ({ fileContent, onChange, isReadOnly, fileType }) => {
         <Editor
           height="100%"
           defaultLanguage={fileType === 'json' ? 'json' : fileType}
-          value={
-            fileType === 'json' && typeof fileContent === 'string'
-              ? JSON.stringify(JSON.parse(fileContent), null, 2)
-              : fileContent
-          }
+          value={fileType === 'json' && typeof fileContent === 'string' ? JSON.stringify(JSON.parse(fileContent), null, 2) : fileContent}
           onChange={onChange}
           onMount={handleEditorDidMount}
           options={{
@@ -225,7 +223,7 @@ const MarkdownJsonViewer = ({ fileUri, textConfidenceUri, fileType = 'text', but
     try {
       logger.info('Fetching content:', uriToFetch);
 
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: getFileContents,
         variables: { s3Uri: uriToFetch },
       });
@@ -276,7 +274,7 @@ const MarkdownJsonViewer = ({ fileUri, textConfidenceUri, fileType = 'text', but
       const prefix = fullPath.substring(0, fullPath.lastIndexOf('/'));
 
       // Get presigned URL
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: uploadDocument,
         variables: {
           fileName,
@@ -403,11 +401,7 @@ const MarkdownJsonViewer = ({ fileUri, textConfidenceUri, fileType = 'text', but
                 Edit mode
               </Toggle>
               {isEditing && (
-                <Button
-                  variant="primary"
-                  onClick={handleSave}
-                  disabled={!editedContent || editedContent === fileContent}
-                >
+                <Button variant="primary" onClick={handleSave} disabled={!editedContent || editedContent === fileContent}>
                   Save Changes
                 </Button>
               )}

@@ -48,6 +48,46 @@ def get_analytics_config() -> Dict[str, Any]:
     return config
 
 
+def get_analytics_model_id() -> str:
+    """
+    Get the analytics agent model ID from configuration.
+
+    Uses the modern configuration system that reads user-changed values from DynamoDB.
+    Note: Analytics agents typically use the same model as chat companion.
+
+    Returns:
+        Model ID string
+    """
+    try:
+        from ...config import get_config
+
+        # Use the modern configuration system that reads from DynamoDB
+        config = get_config(as_model=True)
+
+        # Analytics agents typically use the chat companion model
+        # Check if there's a specific analytics model configured, otherwise use chat companion
+        if hasattr(config.agents, "analytics") and hasattr(
+            config.agents.analytics, "model_id"
+        ):
+            model_id = config.agents.analytics.model_id
+            logger.info(
+                f"Using analytics-specific model ID from configuration: {model_id}"
+            )
+        else:
+            model_id = config.agents.chat_companion.model_id
+            logger.info(f"Using chat companion model ID for analytics: {model_id}")
+
+        return model_id
+
+    except Exception as e:
+        logger.warning(f"Failed to load model ID from configuration: {e}")
+
+        # Final fallback to default
+        default_model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+        logger.info(f"Using default analytics model ID: {default_model_id}")
+        return default_model_id
+
+
 def load_python_plot_generation_examples() -> str:
     """
     Load sample python plot generation examples.

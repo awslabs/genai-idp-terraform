@@ -32,12 +32,14 @@ export default gql`
         TextUri
         TextConfidenceUri
       }
+      Metering
       EvaluationReportUri
       EvaluationStatus
       SummaryReportUri
       ExpiresAfter
       HITLStatus
       HITLReviewURL
+      TraceId
     }
   }
 `;

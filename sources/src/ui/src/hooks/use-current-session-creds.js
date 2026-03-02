@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState, useEffect } from 'react';
 
-import { Auth, Logger } from 'aws-amplify';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import { useAuthenticator } from '@aws-amplify/ui-react';
 
 const DEFAULT_CREDS_REFRESH_INTERVAL_IN_MS = 60 * 15 * 1000;
 
-const logger = new Logger('useCurrentSessionCreds');
+const logger = new ConsoleLogger('useCurrentSessionCreds');
 
 const useCurrentSessionCreds = ({ credsIntervalInMs = DEFAULT_CREDS_REFRESH_INTERVAL_IN_MS }) => {
   const { authStatus } = useAuthenticator((context) => [context.authStatus]);
@@ -17,8 +18,9 @@ const useCurrentSessionCreds = ({ credsIntervalInMs = DEFAULT_CREDS_REFRESH_INTE
 
   const refreshCredentials = async () => {
     try {
-      setCurrentSession(await Auth.currentSession());
-      setCurrentCredentials(await Auth.currentUserCredentials());
+      const session = await fetchAuthSession();
+      setCurrentSession(session);
+      setCurrentCredentials(session.credentials);
       logger.debug('successfully refreshed credentials');
     } catch (error) {
       // XXX surface credential refresh error

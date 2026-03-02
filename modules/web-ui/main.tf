@@ -81,7 +81,7 @@ locals {
     EvaluationBaselineBucket       = var.evaluation_baseline_bucket_name
     IDPPattern                     = var.idp_pattern
     ShouldUseDocumentKnowledgeBase = var.knowledge_base_enabled ? "true" : "false"
-    Version                        = "0.3.18"
+    Version                        = "0.4.8"
     StackName                      = var.display_name != null ? var.display_name : "${var.name_prefix}-processor"
     # Add other settings as needed
   }
@@ -532,9 +532,10 @@ resource "time_sleep" "wait_for_iam_propagation" {
 # No additional testing needed with Lambda-based approach
 
 resource "aws_codebuild_project" "ui_build" {
-  name         = "${var.name_prefix}-webui-build"
-  description  = "Web UI build for GenAIDP stack - ${var.name_prefix}"
-  service_role = aws_iam_role.codebuild_role.arn
+  name          = "${var.name_prefix}-webui-build"
+  description   = "Web UI build for GenAIDP stack - ${var.name_prefix}"
+  service_role  = aws_iam_role.codebuild_role.arn
+  build_timeout = 30
 
   depends_on = [
     time_sleep.wait_for_iam_propagation,
@@ -581,42 +582,42 @@ resource "aws_codebuild_project" "ui_build" {
     }
 
     environment_variable {
-      name  = "REACT_APP_SETTINGS_PARAMETER"
+      name  = "VITE_SETTINGS_PARAMETER"
       value = aws_ssm_parameter.web_ui_settings.name
     }
 
     environment_variable {
-      name  = "REACT_APP_USER_POOL_ID"
+      name  = "VITE_USER_POOL_ID"
       value = var.user_identity.user_pool.user_pool_id
     }
 
     environment_variable {
-      name  = "REACT_APP_USER_POOL_CLIENT_ID"
+      name  = "VITE_USER_POOL_CLIENT_ID"
       value = var.user_identity.user_pool_client.user_pool_client_id
     }
 
     environment_variable {
-      name  = "REACT_APP_IDENTITY_POOL_ID"
+      name  = "VITE_IDENTITY_POOL_ID"
       value = var.user_identity.identity_pool.identity_pool_id
     }
 
     environment_variable {
-      name  = "REACT_APP_APPSYNC_GRAPHQL_URL"
+      name  = "VITE_APPSYNC_GRAPHQL_URL"
       value = var.api_url
     }
 
     environment_variable {
-      name  = "REACT_APP_AWS_REGION"
+      name  = "VITE_AWS_REGION"
       value = data.aws_region.current.id
     }
 
     environment_variable {
-      name  = "REACT_APP_SHOULD_HIDE_SIGN_UP"
+      name  = "VITE_SHOULD_HIDE_SIGN_UP"
       value = var.should_allow_sign_up_email_domain ? "false" : "true"
     }
 
     environment_variable {
-      name  = "REACT_APP_CLOUDFRONT_DOMAIN"
+      name  = "VITE_CLOUDFRONT_DOMAIN"
       value = local.cloudfront_domain_name != null ? "https://${local.cloudfront_domain_name}/" : ""
     }
   }

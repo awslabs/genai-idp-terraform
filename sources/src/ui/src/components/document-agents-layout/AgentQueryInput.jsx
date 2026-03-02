@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT-0
 import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { API, Logger } from 'aws-amplify';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import {
   FormField,
   Textarea,
@@ -15,11 +16,14 @@ import {
   Modal,
   Header,
   Link,
-} from '@awsui/components-react';
+} from '@cloudscape-design/components';
+
 import listAgentJobs from '../../graphql/queries/listAgentJobs';
 import deleteAgentJob from '../../graphql/queries/deleteAgentJob';
 import listAvailableAgents from '../../graphql/queries/listAvailableAgents';
 import { useAnalyticsContext } from '../../contexts/analytics';
+
+const client = generateClient();
 
 // Custom styles for expandable textarea
 const textareaStyles = `
@@ -30,9 +34,9 @@ const textareaStyles = `
   }
 `;
 
-const logger = new Logger('AgentQueryInput');
+const logger = new ConsoleLogger('AgentQueryInput');
 
-const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
+const AgentQueryInput = ({ onSubmit, isSubmitting = false, selectedResult = null }) => {
   const { analyticsState, updateAnalyticsState, resetAnalyticsState } = useAnalyticsContext();
   const { currentInputText } = analyticsState;
 
@@ -99,7 +103,7 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
   const fetchAvailableAgents = async () => {
     try {
       setIsLoadingAgents(true);
-      const response = await API.graphql({
+      const response = await client.graphql({
         query: listAvailableAgents,
       });
 
@@ -131,7 +135,7 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
 
       let response;
       try {
-        response = await API.graphql({
+        response = await client.graphql({
           query: listAgentJobs,
           variables: { limit: 20 }, // Limit to most recent 20 queries
         });
@@ -361,7 +365,7 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
                 setIsDeletingJob(true);
 
                 try {
-                  await API.graphql({
+                  await client.graphql({
                     query: deleteAgentJob,
                     variables: {
                       jobId: job.jobId,
@@ -388,18 +392,6 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
                 }
               }}
               ariaLabel={`Delete query: ${displayText}`}
-              style={{
-                opacity: 0.7,
-                transition: 'opacity 0.2s',
-                marginLeft: 'auto',
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.opacity = 1;
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.opacity = 0.7;
-              }}
             />
           </div>
         ),
@@ -418,14 +410,7 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
               <Box fontSize="heading-xs" fontWeight="bold">
                 Select from available agents
               </Box>
-              <Button
-                variant="normal"
-                onClick={() => setShowMcpInfoModal(true)}
-                fontSize="body-s"
-                style={{
-                  borderColor: '#e9ecef',
-                }}
-              >
+              <Button variant="normal" onClick={() => setShowMcpInfoModal(true)} fontSize="body-s">
                 🚀 NEW: Integrate your own systems with MCP!
               </Button>
             </div>
@@ -618,8 +603,8 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
               What are MCP Agents?
             </Box>
             <Box>
-              Model Context Protocol (MCP) agents allow you to connect external tools and services to extend the
-              capabilities of your document analysis workflow.
+              Model Context Protocol (MCP) agents allow you to connect external tools and services to extend the capabilities of your
+              document analysis workflow.
             </Box>
           </Box>
 
@@ -628,9 +613,8 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
               Adding Custom Agents
             </Box>
             <Box>
-              You can add your own MCP agents by configuring external MCP servers in AWS Secrets Manager. This allows
-              you to integrate custom tools, APIs, and services specific to your organization&apos;s needs without any
-              code changes or redeployments.
+              You can add your own MCP agents by configuring external MCP servers in AWS Secrets Manager. This allows you to integrate
+              custom tools, APIs, and services specific to your organization&apos;s needs without any code changes or redeployments.
             </Box>
           </Box>
 
@@ -640,10 +624,7 @@ const AgentQueryInput = ({ onSubmit, isSubmitting, selectedResult }) => {
             </Box>
             <Box>
               For detailed setup instructions and examples, see the{' '}
-              <Link
-                external
-                href="https://github.com/aws-samples/genaiic-idp-accelerator/blob/main/docs/custom-MCP-agent.md"
-              >
+              <Link external href="https://github.com/aws-samples/genaiic-idp-accelerator/blob/main/docs/custom-MCP-agent.md">
                 Custom MCP Agent Documentation
               </Link>
             </Box>
@@ -661,11 +642,6 @@ AgentQueryInput.propTypes = {
     query: PropTypes.string,
     jobId: PropTypes.string,
   }),
-};
-
-AgentQueryInput.defaultProps = {
-  isSubmitting: false,
-  selectedResult: null,
 };
 
 export default AgentQueryInput;

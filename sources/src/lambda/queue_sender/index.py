@@ -9,6 +9,10 @@ from datetime import datetime, timezone, timedelta
 import logging
 from idp_common.models import Document, Status
 from idp_common.docs_service import create_document_service
+from aws_xray_sdk.core import xray_recorder, patch_all
+
+# Patch AWS SDK calls for X-Ray tracing
+patch_all()
 
 # Configure logging
 logger = logging.getLogger()
@@ -22,34 +26,42 @@ document_service = create_document_service()
 queue_url = os.environ['QUEUE_URL']
 retentionDays = int(os.environ['DATA_RETENTION_IN_DAYS'])
 
+@xray_recorder.capture('queue_sender')
 def handler(event, context):
     logger.info(f"Processing event: {json.dumps(event)}")
-    
+
     detail = event['detail']
     object_key = detail['object']['key']
     logger.info(f"Processing file: {object_key}")
-    
+
     # Get output bucket from environment for the document
     output_bucket = os.environ.get('OUTPUT_BUCKET', '')
     if output_bucket == '':
         raise Exception("OUTPUT_BUCKET environment variable not set")
-    
+
     # Create document object
     current_time = datetime.now(timezone.utc).isoformat()
     document = Document.from_s3_event(event, output_bucket)
     document.status = Status.QUEUED
     document.queued_time = current_time
-    
+
+    # Capture X-Ray trace ID for error analysis
+    current_segment = xray_recorder.current_segment()
+    if current_segment:
+        document.trace_id = current_segment.trace_id
+        xray_recorder.put_annotation('document_id', document.id)
+        logger.info(f"X-Ray trace ID captured: {document.trace_id}")
+
     # Calculate expiry date
     expires_after = int((datetime.now(timezone.utc) + timedelta(days=retentionDays)).timestamp())
 
     # Create document in DynamoDB via document service
     logger.info(f"Creating document via document service: {document.input_key}")
-    
+
     # Create document in document service with TTL
     created_key = document_service.create_document(document, expires_after=expires_after)
     logger.info(f"Document created with key: {created_key}")
-    
+
     # Send serialized document to SQS queue
     doc_json = document.to_json()
     message = {
@@ -69,5 +81,5 @@ def handler(event, context):
     logger.info(f"Sending document to SQS queue: {object_key}")
     response = sqs.send_message(**message)
     logger.info(f"SQS response: {response}")
-    
+
     return {'statusCode': 200, 'detail': detail, 'document_id': document.id}

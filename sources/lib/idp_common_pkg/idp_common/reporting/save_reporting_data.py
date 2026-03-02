@@ -17,6 +17,7 @@ import boto3
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from idp_common.config.models import IDPConfig
 from idp_common.models import Document
 from idp_common.s3 import get_json_content
 
@@ -35,8 +36,8 @@ class SaveReportingData:
     def __init__(
         self,
         reporting_bucket: str,
-        database_name: str = None,
-        config: Dict[str, Any] = None,
+        database_name: Optional[str] = None,
+        config: Optional[IDPConfig] = None,
     ):
         """
         Initialize the SaveReportingData class.
@@ -48,14 +49,14 @@ class SaveReportingData:
         """
         self.reporting_bucket = reporting_bucket
         self.database_name = database_name
-        self.config = config or {}
+        self.config = config or IDPConfig()
         self.s3_client = boto3.client("s3")
         self.glue_client = boto3.client("glue") if database_name else None
 
         # Cache for pricing data to avoid repeated processing
         self._pricing_cache = None
 
-    def _serialize_value(self, value: Any) -> str:
+    def _serialize_value(self, value: Any) -> Optional[str]:
         """
         Serialize complex values for Parquet storage as strings.
 
@@ -493,9 +494,6 @@ class SaveReportingData:
                     f"Error checking Glue table {table_name}: {str(get_table_error)}"
                 )
                 return False
-        except Exception as e:
-            logger.error(f"Error checking/updating Glue table {table_name}: {str(e)}")
-            return False
 
     def save(self, document: Document, data_to_save: List[str]) -> List[Dict[str, Any]]:
         """
@@ -572,7 +570,7 @@ class SaveReportingData:
             logger.error(error_msg)
             return {"statusCode": 500, "body": error_msg}
 
-        # Define schemas specific to evaluation results
+        # Define schemas specific to evaluation results (including doc split metrics)
         document_schema = pa.schema(
             [
                 ("document_id", pa.string()),
@@ -584,7 +582,17 @@ class SaveReportingData:
                 ("f1_score", pa.float64()),
                 ("false_alarm_rate", pa.float64()),
                 ("false_discovery_rate", pa.float64()),
+                ("weighted_overall_score", pa.float64()),
                 ("execution_time", pa.float64()),
+                # Doc split classification metrics
+                ("page_level_accuracy", pa.float64()),
+                ("split_accuracy_without_order", pa.float64()),
+                ("split_accuracy_with_order", pa.float64()),
+                ("total_pages", pa.int32()),
+                ("total_splits", pa.int32()),
+                ("correctly_classified_pages", pa.int32()),
+                ("correctly_split_without_order", pa.int32()),
+                ("correctly_split_with_order", pa.int32()),
             ]
         )
 
@@ -599,6 +607,7 @@ class SaveReportingData:
                 ("f1_score", pa.float64()),
                 ("false_alarm_rate", pa.float64()),
                 ("false_discovery_rate", pa.float64()),
+                ("weighted_overall_score", pa.float64()),
                 ("evaluation_date", pa.timestamp("ms")),
             ]
         )
@@ -617,6 +626,7 @@ class SaveReportingData:
                 ("evaluation_method", pa.string()),
                 ("confidence", pa.string()),
                 ("confidence_threshold", pa.string()),
+                ("weight", pa.float64()),
                 ("evaluation_date", pa.timestamp("ms")),
             ]
         )
@@ -647,7 +657,7 @@ class SaveReportingData:
             date_partition = evaluation_date.strftime("%Y-%m-%d")
 
         # Escape document ID by replacing slashes with underscores
-        document_id = document.id
+        document_id = document.id or document.input_key or "unknown"
         escaped_doc_id = re.sub(r"[/\\]", "_", document_id)
 
         # Create timestamp string for unique filenames (to avoid overwrites if same doc processed multiple times)
@@ -655,7 +665,10 @@ class SaveReportingData:
             :-3
         ]  # Include milliseconds
 
-        # 1. Document level metrics
+        # 1. Document level metrics (including doc split metrics)
+        # Extract doc split metrics if available
+        doc_split_metrics = eval_result.get("doc_split_metrics", {})
+
         document_record = {
             "document_id": document_id,
             "input_key": document.input_key,
@@ -670,7 +683,45 @@ class SaveReportingData:
             "false_discovery_rate": eval_result.get("overall_metrics", {}).get(
                 "false_discovery_rate", 0.0
             ),
+            "weighted_overall_score": eval_result.get("overall_metrics", {}).get(
+                "weighted_overall_score", 0.0
+            ),
             "execution_time": eval_result.get("execution_time", 0.0),
+            # Doc split classification metrics (None if not available for backward compatibility)
+            "page_level_accuracy": doc_split_metrics.get("page_level_accuracy")
+            if doc_split_metrics
+            else None,
+            "split_accuracy_without_order": doc_split_metrics.get(
+                "split_accuracy_without_order"
+            )
+            if doc_split_metrics
+            else None,
+            "split_accuracy_with_order": doc_split_metrics.get(
+                "split_accuracy_with_order"
+            )
+            if doc_split_metrics
+            else None,
+            "total_pages": doc_split_metrics.get("total_pages")
+            if doc_split_metrics
+            else None,
+            "total_splits": doc_split_metrics.get("total_splits")
+            if doc_split_metrics
+            else None,
+            "correctly_classified_pages": doc_split_metrics.get(
+                "correctly_classified_pages"
+            )
+            if doc_split_metrics
+            else None,
+            "correctly_split_without_order": doc_split_metrics.get(
+                "correctly_split_without_order"
+            )
+            if doc_split_metrics
+            else None,
+            "correctly_split_with_order": doc_split_metrics.get(
+                "correctly_split_with_order"
+            )
+            if doc_split_metrics
+            else None,
         }
 
         # Save document metrics in Parquet format
@@ -705,6 +756,9 @@ class SaveReportingData:
                 "false_discovery_rate": section_result.get("metrics", {}).get(
                     "false_discovery_rate", 0.0
                 ),
+                "weighted_overall_score": section_result.get("metrics", {}).get(
+                    "weighted_overall_score", 0.0
+                ),
                 "evaluation_date": evaluation_date,  # Use document's initial_event_time
             }
             section_records.append(section_record)
@@ -719,6 +773,10 @@ class SaveReportingData:
             logger.debug(f"Section {section_id} has {len(attributes)} attributes")
 
             for attr in attributes:
+                # Handle weight field - default to 1.0 if None or missing
+                weight_value = attr.get("weight")
+                weight = weight_value if weight_value is not None else 1.0
+
                 attribute_record = {
                     "document_id": document_id,
                     "section_id": section_id,
@@ -736,6 +794,7 @@ class SaveReportingData:
                     "confidence_threshold": self._serialize_value(
                         attr.get("confidence_threshold")
                     ),
+                    "weight": weight,  # Explicitly handle None values
                     "evaluation_date": evaluation_date,  # Use document's initial_event_time
                 }
                 attribute_records.append(attribute_record)
@@ -790,30 +849,27 @@ class SaveReportingData:
 
         # Load pricing from configuration
         try:
-            if self.config and "pricing" in self.config:
-                pricing_config = self.config["pricing"]
+            if self.config.pricing:
                 logger.info(
-                    f"Found {len(pricing_config)} pricing entries in configuration"
+                    f"Found {len(self.config.pricing)} pricing entries in configuration"
                 )
 
                 config_loaded_count = 0
                 # Convert configuration pricing to lookup dictionary (same format as UI)
-                for service in pricing_config:
-                    if "name" in service and "units" in service:
-                        service_name = service["name"]
-                        for unit_info in service["units"]:
-                            if "name" in unit_info and "price" in unit_info:
-                                unit_name = unit_info["name"]
-                                try:
-                                    price = float(unit_info["price"])
-                                    if service_name not in pricing_map:
-                                        pricing_map[service_name] = {}
-                                    pricing_map[service_name][unit_name] = price
-                                    config_loaded_count += 1
-                                except (ValueError, TypeError) as e:
-                                    logger.warning(
-                                        f"Invalid price value for {service_name}/{unit_name}: {unit_info['price']}, error: {e}. Skipping entry."
-                                    )
+                for service in self.config.pricing:
+                    service_name = service.name
+                    for unit_info in service.units:
+                        unit_name = unit_info.name
+                        try:
+                            price = unit_info.price
+                            if service_name not in pricing_map:
+                                pricing_map[service_name] = {}
+                            pricing_map[service_name][unit_name] = price
+                            config_loaded_count += 1
+                        except (ValueError, TypeError) as e:
+                            logger.warning(
+                                f"Invalid price value for {service_name}/{unit_name}: {unit_name}, error: {e}. Skipping entry."
+                            )
 
                 if config_loaded_count > 0:
                     logger.info(
@@ -1057,7 +1113,7 @@ class SaveReportingData:
             date_partition = timestamp.strftime("%Y-%m-%d")
 
         # Escape document ID by replacing slashes with underscores
-        document_id = document.id
+        document_id = document.id or document.input_key or "unknown"
         escaped_doc_id = re.sub(r"[/\\]", "_", document_id)
 
         # Create timestamp string for unique filenames (to avoid overwrites if same doc processed multiple times)
@@ -1171,7 +1227,7 @@ class SaveReportingData:
             date_partition = current_time.strftime("%Y-%m-%d")
 
         # Escape document ID by replacing slashes with underscores
-        document_id = document.id
+        document_id = document.id or document.input_key or "unknown"
         escaped_doc_id = re.sub(r"[/\\]", "_", document_id)
 
         sections_processed = 0

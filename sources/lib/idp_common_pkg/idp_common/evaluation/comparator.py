@@ -4,6 +4,20 @@
 """
 Comparator module for document evaluation.
 
+⚠️ DEPRECATED: This module is deprecated and will be removed in a future release.
+The evaluation system now uses the Stickler library for comparison logic.
+
+This module is kept for backward compatibility only. New code should use
+the Stickler-based EvaluationService directly.
+
+Legacy functions (compare_exact, compare_fuzzy, etc.) are still used internally
+by the LLMComparator wrapper but should not be called directly in new code.
+
+Migration Path:
+- Use EvaluationService (now Stickler-based) for all evaluation needs
+- Configure evaluation using x-aws-idp-evaluation-* extensions in JSON Schema
+- Stickler provides more sophisticated comparators and better list matching
+
 This module provides methods to compare expected and actual values using various comparison strategies.
 """
 
@@ -263,7 +277,9 @@ def compare_hungarian(
         return 0, 0, 0.0
 
     # Create similarity matrix for Hungarian algorithm
-    matrix = [[0 for _ in range(len(actual_list))] for _ in range(len(expected_list))]
+    matrix: List[List[float]] = [
+        [0.0 for _ in range(len(actual_list))] for _ in range(len(expected_list))
+    ]
 
     # Fill matrix with comparison scores from the provided comparator
     for i, exp_val in enumerate(expected_list):
@@ -271,7 +287,7 @@ def compare_hungarian(
             matrix[i][j] = comparator.compare(exp_val, act_val)
 
     # Convert to cost matrix (Hungarian algorithm minimizes cost)
-    cost_matrix = make_cost_matrix(matrix, lambda x: 1 - x)
+    cost_matrix = make_cost_matrix(matrix, lambda x: 1 - x)  # type: ignore[arg-type]
 
     # Compute the optimal assignment
     m = Munkres()
@@ -481,11 +497,11 @@ def compare_values(
     actual: Any,
     method: EvaluationMethod,
     threshold: float = 0.8,
-    document_class: str = None,
-    attr_name: str = None,
-    attr_description: str = None,
-    llm_config: dict = None,
-    comparator_type: str = None,  # New parameter for specifying comparator
+    document_class: Optional[str] = None,
+    attr_name: Optional[str] = None,
+    attr_description: Optional[str] = None,
+    llm_config: Optional[dict] = None,
+    comparator_type: Optional[str] = None,  # New parameter for specifying comparator
 ) -> Tuple[bool, float, Optional[str]]:
     """
     Compare values using the specified method.
@@ -580,10 +596,10 @@ def compare_values(
 def compare_llm(
     expected: Any,
     actual: Any,
-    document_class: str = None,
-    attr_name: str = None,
-    attr_description: str = None,
-    llm_config: dict = None,
+    document_class: Optional[str] = None,
+    attr_name: Optional[str] = None,
+    attr_description: Optional[str] = None,
+    llm_config: Optional[dict] = None,
     bedrock_invoker=None,
 ) -> Tuple[bool, float, Optional[str]]:
     """
@@ -609,9 +625,9 @@ def compare_llm(
 
     try:
         # Format attribute description
-        doc_class = document_class if document_class else "unknown"
-        name = attr_name if attr_name else "attribute"
-        desc = attr_description if attr_description else ""
+        doc_class = document_class if document_class is not None else "unknown"
+        name = attr_name if attr_name is not None else "attribute"
+        desc = attr_description if attr_description is not None else ""
 
         # Default LLM configuration if not provided
         config = llm_config or {}

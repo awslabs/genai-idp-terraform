@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Container, Header, SpaceBetween, Alert } from '@awsui/components-react';
-import { Logger } from 'aws-amplify';
+import { Box, Container, Header, SpaceBetween, Alert } from '@cloudscape-design/components';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
 import PlotDisplay from './PlotDisplay';
 import TableDisplay from './TableDisplay';
 import TextDisplay from './TextDisplay';
 
-const logger = new Logger('AgentResultDisplay');
+const logger = new ConsoleLogger('AgentResultDisplay');
 
-const AgentResultDisplay = ({ result, query }) => {
+const AgentResultDisplay = ({ result = null, query = '' }) => {
   if (!result) {
     return null;
   }
@@ -105,9 +105,7 @@ const AgentResultDisplay = ({ result, query }) => {
             <Alert type="warning">Unknown response type: {responseType || 'undefined'}</Alert>
             <Box padding="s">
               <Header variant="h4">Debug Information:</Header>
-              <pre style={{ fontSize: '12px', maxHeight: '300px', overflow: 'auto' }}>
-                {JSON.stringify(parsedResult, null, 2)}
-              </pre>
+              <pre style={{ fontSize: '12px', maxHeight: '300px', overflow: 'auto' }}>{JSON.stringify(parsedResult, null, 2)}</pre>
             </Box>
           </Box>
         );
@@ -139,11 +137,6 @@ AgentResultDisplay.propTypes = {
     PropTypes.object, // For parsed objects
   ]),
   query: PropTypes.string,
-};
-
-AgentResultDisplay.defaultProps = {
-  result: null,
-  query: '',
 };
 
 export default AgentResultDisplay;

@@ -1,27 +1,33 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
-import { Route, Switch, useRouteMatch } from 'react-router-dom';
-import { Logger } from 'aws-amplify';
+import { Route, Routes } from 'react-router-dom';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
 // Import the component directly from the file instead of the directory
 import DocumentsAgentsLayout from '../components/document-agents-layout/DocumentsAgentsLayout';
 import GenAIIDPLayout from '../components/genaiidp-layout';
+import GenAIIDPTopNavigation from '../components/genai-idp-top-navigation';
 
-const logger = new Logger('DocumentsAnalyticsRoutes');
+const logger = new ConsoleLogger('DocumentsAnalyticsRoutes');
 
 const DocumentsAnalyticsRoutes = () => {
-  const { path } = useRouteMatch();
-  logger.info('path ', path);
+  logger.info('DocumentsAnalyticsRoutes');
 
   return (
-    <Switch>
-      <Route path={path}>
-        <GenAIIDPLayout>
-          <DocumentsAgentsLayout />
-        </GenAIIDPLayout>
-      </Route>
-    </Switch>
+    <Routes>
+      <Route
+        path="*"
+        element={
+          <div>
+            <GenAIIDPTopNavigation />
+            <GenAIIDPLayout>
+              <DocumentsAgentsLayout />
+            </GenAIIDPLayout>
+          </div>
+        }
+      />
+    </Routes>
   );
 };
 

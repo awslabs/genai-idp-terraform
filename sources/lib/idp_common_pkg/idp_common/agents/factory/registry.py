@@ -20,6 +20,8 @@ Example:
 import logging
 
 from ..analytics.agent import create_analytics_agent
+from ..code_intelligence.agent import create_code_intelligence_agent
+from ..error_analyzer.agent import create_error_analyzer_agent
 
 # from ..sample_calculator.agent import create_sample_calculator_agent  # Commented out - kept as reference for developers
 from .agent_factory import IDPAgentFactory
@@ -31,7 +33,7 @@ agent_factory = IDPAgentFactory()
 
 # Register analytics agent
 agent_factory.register_agent(
-    agent_id="Analytics-Agent-v1",
+    agent_id="Analytics-Agent",
     agent_name="Analytics Agent",
     agent_description="""
     Converts natural language questions into SQL queries and generates visualizations from document data.
@@ -46,6 +48,50 @@ agent_factory.register_agent(
         "How many input and output tokens have I processed in each of the last 10 days?",
         "What are the most common document types processed?",
         "In extracted W2 forms, what is the average state tax paid?",
+    ],
+)
+
+# Register error analyzer agent
+agent_factory.register_agent(
+    agent_id="Error-Analyzer-Agent",
+    agent_name="Error Analyzer Agent",
+    agent_description="""
+    Provides intelligent error analysis and troubleshooting capabilities for the GenAI IDP system.
+    This agent analyzes CloudWatch logs and DynamoDB operations to identify system issues,
+    performance bottlenecks, and provides actionable recommendations for resolution.
+    Capabilities include error pattern detection, and root cause analysis.
+    """,
+    creator_func=create_error_analyzer_agent,
+    sample_queries=[
+        "Analyze recent errors in document processing",
+        "Investigate CloudWatch errors in the last 6 hours",
+        "Find DynamoDB throttling issues",
+        "Validate system performance and identify bottlenecks",
+    ],
+)
+
+# Register Code Intelligence Agent (always available, hardcoded)
+agent_factory.register_agent(
+    agent_id="Code-Intelligence-Agent",
+    agent_name="Code Intelligence Agent",
+    agent_description="""
+    Provides code intelligence for the IDP repository
+    (aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws).
+    Can answer GENERIC questions about code structure, implementation details, architecture decisions,
+    and help developers understand the codebase.
+
+    IMPORTANT SECURITY RESTRICTIONS:
+    This agent connects to an external public MCP server and has strict security guardrails.
+    It can ONLY answer generic questions about codebase architecture and structure.
+    """,
+    creator_func=create_code_intelligence_agent,
+    sample_queries=[
+        "What is this repository about?",
+        "Explain the agent architecture in this codebase",
+        "How does the document processing workflow work?",
+        "What are the main components of the system?",
+        "What AWS services does this solution use?",
+        "How is the Lambda function structured?",
     ],
 )
 
@@ -90,20 +136,14 @@ try:
 
     # Register one agent per MCP server configuration
     for i, mcp_config in enumerate(mcp_configs, 1):
-        # Validate required fields exist
-        required_fields = [
-            "mcp_url",
-            "cognito_user_pool_id",
-            "cognito_client_id",
-            "cognito_username",
-            "cognito_password",
-        ]
-        for field in required_fields:
-            if field not in mcp_config:
-                logger.warning(
-                    f"Skipping MCP config {i}: missing required field '{field}'"
-                )
-                continue
+        # Validate configuration using the agent's validation logic
+        try:
+            from ..external_mcp.agent import _validate_mcp_config
+
+            _validate_mcp_config(mcp_config)
+        except ValueError as e:
+            logger.warning(f"Skipping MCP config {i}: {str(e)}")
+            continue
 
         # Create wrapper function for this specific MCP config
         def create_mcp_agent_wrapper(mcp_server_config=mcp_config):

@@ -32,12 +32,33 @@ class TestClassificationService:
 
     @pytest.fixture
     def mock_config(self):
-        """Fixture providing a mock configuration."""
+        """Fixture providing a mock configuration in JSON Schema format."""
         return {
             "classes": [
-                {"name": "invoice", "description": "An invoice document"},
-                {"name": "receipt", "description": "A receipt document"},
-                {"name": "letter", "description": "A letter document"},
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "invoice",
+                    "x-aws-idp-document-type": "invoice",
+                    "type": "object",
+                    "description": "An invoice document",
+                    "properties": {},
+                },
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "receipt",
+                    "x-aws-idp-document-type": "receipt",
+                    "type": "object",
+                    "description": "A receipt document",
+                    "properties": {},
+                },
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "letter",
+                    "x-aws-idp-document-type": "letter",
+                    "type": "object",
+                    "description": "A letter document",
+                    "properties": {},
+                },
             ],
             "classification": {
                 "model": "anthropic.claude-3-sonnet-20240229-v1:0",
@@ -47,13 +68,13 @@ class TestClassificationService:
                 "task_prompt": dedent("""
                     Classify the following document text into one of the available classes:
                     {CLASS_NAMES_AND_DESCRIPTIONS}
-                    
+
                     Document text:
                     {DOCUMENT_TEXT}
-                    
+
                     Document image:
                     {DOCUMENT_IMAGE}
-                    
+
                     Respond with a JSON object with a single field "class" containing the document type.
                 """),
                 "classificationMethod": "multimodalPageLevelClassification",
@@ -65,7 +86,14 @@ class TestClassificationService:
         """Fixture providing a mock configuration with only one class defined."""
         return {
             "classes": [
-                {"name": "invoice", "description": "An invoice document"},
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "invoice",
+                    "x-aws-idp-document-type": "invoice",
+                    "type": "object",
+                    "description": "An invoice document",
+                    "properties": {},
+                },
             ],
             "classification": {
                 "model": "anthropic.claude-3-sonnet-20240229-v1:0",
@@ -75,13 +103,13 @@ class TestClassificationService:
                 "task_prompt": dedent("""
                     Classify the following document text into one of the available classes:
                     {CLASS_NAMES_AND_DESCRIPTIONS}
-                    
+
                     Document text:
                     {DOCUMENT_TEXT}
-                    
+
                     Document image:
                     {DOCUMENT_IMAGE}
-                    
+
                     Respond with a JSON object with a single field "class" containing the document type.
                 """),
                 "classificationMethod": "multimodalPageLevelClassification",
@@ -157,8 +185,10 @@ class TestClassificationService:
             # Create service instance without calling __init__
             service = ClassificationService()
 
-            # Set minimal config
-            service.config = {}
+            # Set minimal config using IDPConfig model
+            from idp_common.config.models import IDPConfig
+
+            service.config = IDPConfig()
 
             # Call the method directly
             doc_types = service._load_document_types()
@@ -833,3 +863,294 @@ class TestClassificationService:
         assert len(sections) == 2
         assert [p.page_id for p in sections[0].pages] == ["1", "2"]
         assert [p.page_id for p in sections[1].pages] == ["3"]
+
+    def test_section_splitting_disabled(self, mock_config):
+        """Test sectionSplitting=disabled creates single section with all pages."""
+        # Update config with disabled splitting
+        mock_config["classification"]["sectionSplitting"] = "disabled"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            doc.pages["1"] = Page(page_id="1")
+            doc.pages["2"] = Page(page_id="2")
+            doc.pages["3"] = Page(page_id="3")
+
+            # Create mock page results with different classifications
+            page_results = [
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(doc_type="invoice"),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(doc_type="receipt"),
+                ),
+                PageClassification(
+                    page_id="3",
+                    classification=DocumentClassification(doc_type="invoice"),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: Single section with all pages, using first page's class
+            assert len(result.sections) == 1
+            assert result.sections[0].classification == "invoice"  # First page's class
+            assert result.sections[0].page_ids == ["1", "2", "3"]
+
+            # Verify all pages assigned the same class
+            assert result.pages["1"].classification == "invoice"
+            assert result.pages["2"].classification == "invoice"
+            assert result.pages["3"].classification == "invoice"
+
+    def test_section_splitting_page(self, mock_config):
+        """Test sectionSplitting=page creates one section per page."""
+        # Update config with per-page splitting
+        mock_config["classification"]["sectionSplitting"] = "page"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            doc.pages["1"] = Page(page_id="1")
+            doc.pages["2"] = Page(page_id="2")
+            doc.pages["3"] = Page(page_id="3")
+
+            # Create mock page results with mixed classifications
+            page_results = [
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(
+                        doc_type="invoice", confidence=0.95
+                    ),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(
+                        doc_type="invoice", confidence=0.90
+                    ),
+                ),
+                PageClassification(
+                    page_id="3",
+                    classification=DocumentClassification(
+                        doc_type="receipt", confidence=0.85
+                    ),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: One section per page, each preserving its classification
+            assert len(result.sections) == 3
+
+            assert result.sections[0].section_id == "1"
+            assert result.sections[0].classification == "invoice"
+            assert result.sections[0].page_ids == ["1"]
+            assert result.sections[0].confidence == 0.95
+
+            assert result.sections[1].section_id == "2"
+            assert result.sections[1].classification == "invoice"
+            assert result.sections[1].page_ids == ["2"]
+            assert result.sections[1].confidence == 0.90
+
+            assert result.sections[2].section_id == "3"
+            assert result.sections[2].classification == "receipt"
+            assert result.sections[2].page_ids == ["3"]
+            assert result.sections[2].confidence == 0.85
+
+            # Verify pages maintain their individual classifications
+            assert result.pages["1"].classification == "invoice"
+            assert result.pages["2"].classification == "invoice"
+            assert result.pages["3"].classification == "receipt"
+
+    def test_section_splitting_llm_determined(self, mock_config):
+        """Test sectionSplitting=llm_determined uses boundary metadata."""
+        # Update config with LLM-determined splitting (default)
+        mock_config["classification"]["sectionSplitting"] = "llm_determined"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            doc.pages["1"] = Page(page_id="1")
+            doc.pages["2"] = Page(page_id="2")
+            doc.pages["3"] = Page(page_id="3")
+            doc.pages["4"] = Page(page_id="4")
+
+            # Create mock page results with boundary metadata
+            # Scenario: 2 invoices (same type but boundary="start" separates them)
+            page_results = [
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(
+                        doc_type="invoice",
+                        metadata={"document_boundary": "start"},
+                    ),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(
+                        doc_type="invoice",
+                        metadata={"document_boundary": "continue"},
+                    ),
+                ),
+                PageClassification(
+                    page_id="3",
+                    classification=DocumentClassification(
+                        doc_type="invoice",
+                        metadata={"document_boundary": "start"},
+                    ),
+                ),
+                PageClassification(
+                    page_id="4",
+                    classification=DocumentClassification(
+                        doc_type="invoice",
+                        metadata={"document_boundary": "continue"},
+                    ),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: Two sections (separated by boundary="start")
+            assert len(result.sections) == 2
+
+            assert result.sections[0].section_id == "1"
+            assert result.sections[0].classification == "invoice"
+            assert result.sections[0].page_ids == ["1", "2"]
+
+            assert result.sections[1].section_id == "2"
+            assert result.sections[1].classification == "invoice"
+            assert result.sections[1].page_ids == ["3", "4"]
+
+    def test_section_splitting_default_value(self, mock_config):
+        """Test that default sectionSplitting value is llm_determined."""
+        # Don't specify sectionSplitting - should default to llm_determined
+        mock_config["classification"].pop("sectionSplitting", None)
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Verify default value
+            assert service.config.classification.sectionSplitting == "llm_determined"
+
+    def test_section_splitting_invalid_value(self, mock_config):
+        """Test that invalid sectionSplitting value falls back to llm_determined."""
+        # Set invalid value
+        mock_config["classification"]["sectionSplitting"] = "invalid_value"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Verify fallback to default
+            assert service.config.classification.sectionSplitting == "llm_determined"
+
+    def test_section_splitting_page_prevents_same_type_joining(self, mock_config):
+        """Test that page splitting prevents joining of same-type documents."""
+        # This is the critical use case from GitHub Issue #146
+        mock_config["classification"]["sectionSplitting"] = "page"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create document with multiple W-2 forms (same type)
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            for i in range(1, 7):  # 6 pages
+                doc.pages[str(i)] = Page(page_id=str(i))
+
+            # All pages classified as W2
+            page_results = [
+                PageClassification(
+                    page_id=str(i),
+                    classification=DocumentClassification(doc_type="W2"),
+                )
+                for i in range(1, 7)
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: 6 separate sections (prevents unwanted joining)
+            assert len(result.sections) == 6
+            for i, section in enumerate(result.sections, start=1):
+                assert section.section_id == str(i)
+                assert section.classification == "W2"
+                assert section.page_ids == [str(i)]
+
+    def test_holistic_classification_with_section_splitting(self, mock_config):
+        """Test holistic classification respects sectionSplitting config."""
+        mock_config["classification"]["sectionSplitting"] = "page"
+
+        with (
+            patch("boto3.Session"),
+            patch("idp_common.s3.get_text_content") as mock_get_text,
+            patch(
+                "idp_common.classification.service.ClassificationService._invoke_bedrock_model"
+            ) as mock_invoke,
+        ):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+            service.classification_method = service.TEXTBASED_HOLISTIC
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            doc.pages["1"] = Page(page_id="1", parsed_text_uri="s3://bucket/text1.txt")
+            doc.pages["2"] = Page(page_id="2", parsed_text_uri="s3://bucket/text2.txt")
+
+            # Mock responses
+            mock_get_text.side_effect = ["Page 1", "Page 2"]
+            mock_invoke.return_value = {
+                "response": {
+                    "output": {
+                        "message": {
+                            "content": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "segments": [
+                                                {
+                                                    "ordinal_start_page": 1,
+                                                    "ordinal_end_page": 2,
+                                                    "type": "invoice",
+                                                }
+                                            ]
+                                        }
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                },
+                "metering": {},
+            }
+
+            # Call the method
+            result = service.holistic_classify_document(doc)
+
+            # With sectionSplitting=page, should create 2 sections (one per page)
+            assert len(result.sections) == 2
+            assert result.sections[0].page_ids == ["1"]
+            assert result.sections[1].page_ids == ["2"]
+            assert result.sections[0].classification == "invoice"
+            assert result.sections[1].classification == "invoice"

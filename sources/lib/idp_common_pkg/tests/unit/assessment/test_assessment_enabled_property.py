@@ -12,11 +12,24 @@ import unittest
 from unittest.mock import patch
 
 from idp_common.assessment.service import AssessmentService
+from idp_common.config.models import IDPConfig
 from idp_common.models import Document, Page, Section, Status
 
 
 class TestAssessmentEnabledProperty(unittest.TestCase):
     """Test assessment service enabled property behavior."""
+
+    def _create_mock_image_data(self) -> bytes:
+        """Create a valid mock image data for testing."""
+        import io
+
+        from PIL import Image
+
+        # Create a simple 100x100 white image
+        img = Image.new("RGB", (100, 100), color="white")
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format="JPEG")
+        return img_bytes.getvalue()
 
     def setUp(self):
         """Set up test fixtures."""
@@ -49,14 +62,16 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         self.base_config = {
             "classes": [
                 {
-                    "name": "Invoice",
-                    "attributes": [
-                        {
-                            "name": "invoice_number",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "Invoice",
+                    "x-aws-idp-document-type": "Invoice",
+                    "type": "object",
+                    "properties": {
+                        "invoice_number": {
+                            "type": "string",
                             "description": "The invoice number",
-                            "attributeType": "simple",
-                        }
-                    ],
+                        },
+                    },
                 }
             ],
             "assessment": {
@@ -78,7 +93,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         config["assessment"]["enabled"] = True
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         with (
             patch("idp_common.s3.get_json_content") as mock_get_json,
@@ -93,15 +109,21 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
                 "metadata": {},
             }
             mock_get_text.return_value = "Invoice #INV-12345\nAmount: $100.00"
-            mock_prepare_image.return_value = b"mock_image_data"
+            mock_prepare_image.return_value = self._create_mock_image_data()
 
             # Mock Bedrock response
             mock_invoke_model.return_value = {
-                "content": [
-                    {
-                        "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                "response": {
+                    "output": {
+                        "message": {
+                            "content": [
+                                {
+                                    "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                                }
+                            ]
+                        }
                     }
-                ],
+                },
                 "metering": {
                     "inputTokens": 1000,
                     "outputTokens": 200,
@@ -126,7 +148,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         config["assessment"]["enabled"] = False
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         with (
             patch("idp_common.s3.get_json_content") as mock_get_json,
@@ -156,7 +179,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         # Explicitly do not set 'enabled' property
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         with (
             patch("idp_common.s3.get_json_content") as mock_get_json,
@@ -171,15 +195,19 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
                 "metadata": {},
             }
             mock_get_text.return_value = "Invoice #INV-12345\nAmount: $100.00"
-            mock_prepare_image.return_value = b"mock_image_data"
+            mock_prepare_image.return_value = self._create_mock_image_data()
 
             # Mock Bedrock response
             mock_invoke_model.return_value = {
-                "content": [
-                    {
-                        "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                            }
+                        ]
                     }
-                ],
+                },
                 "metering": {
                     "inputTokens": 1000,
                     "outputTokens": 200,
@@ -204,7 +232,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         config["assessment"]["enabled"] = "true"
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         with (
             patch("idp_common.s3.get_json_content") as mock_get_json,
@@ -219,15 +248,21 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
                 "metadata": {},
             }
             mock_get_text.return_value = "Invoice #INV-12345\nAmount: $100.00"
-            mock_prepare_image.return_value = b"mock_image_data"
+            mock_prepare_image.return_value = self._create_mock_image_data()
 
             # Mock Bedrock response
             mock_invoke_model.return_value = {
-                "content": [
-                    {
-                        "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                "response": {
+                    "output": {
+                        "message": {
+                            "content": [
+                                {
+                                    "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                                }
+                            ]
+                        }
                     }
-                ],
+                },
                 "metering": {
                     "inputTokens": 1000,
                     "outputTokens": 200,
@@ -240,7 +275,7 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
                 self.document, self.section_id
             )
 
-            # Verify the service processed normally
+            # Verify the service processed normally (defaults to enabled)
             self.assertIsNotNone(result_document)
             mock_invoke_model.assert_called_once()
             mock_write_content.assert_called_once()
@@ -252,7 +287,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         config["assessment"]["enabled"] = "false"
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         with (
             patch("idp_common.s3.get_json_content") as mock_get_json,
@@ -281,7 +317,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         config = {"classes": self.base_config["classes"]}
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         with (
             patch("idp_common.s3.get_json_content") as mock_get_json,
@@ -296,15 +333,21 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
                 "metadata": {},
             }
             mock_get_text.return_value = "Invoice #INV-12345\nAmount: $100.00"
-            mock_prepare_image.return_value = b"mock_image_data"
+            mock_prepare_image.return_value = self._create_mock_image_data()
 
             # Mock Bedrock response
             mock_invoke_model.return_value = {
-                "content": [
-                    {
-                        "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                "response": {
+                    "output": {
+                        "message": {
+                            "content": [
+                                {
+                                    "text": '{"invoice_number": {"confidence": 0.95, "confidence_reason": "Clear text"}}'
+                                }
+                            ]
+                        }
                     }
-                ],
+                },
                 "metering": {
                     "inputTokens": 1000,
                     "outputTokens": 200,
@@ -330,7 +373,8 @@ class TestAssessmentEnabledProperty(unittest.TestCase):
         config["assessment"]["enabled"] = False
 
         # Initialize assessment service
-        assessment_service = AssessmentService(config=config)
+        idp_config = IDPConfig.model_validate(config)
+        assessment_service = AssessmentService(config=idp_config)
 
         # Process document section
         result_document = assessment_service.process_document_section(

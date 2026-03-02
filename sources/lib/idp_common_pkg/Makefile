@@ -3,10 +3,10 @@
 test: test-unit
 
 test-unit:
-	pytest -m "unit"
+	pytest -m "unit" --ignore=idp_common/agents/testing
 
 test-integration:
-	pytest -m "integration"
+	pytest -m "integration" --ignore=idp_common/agents/testing
 
 test-cicd: test-unit-cicd
 
@@ -24,7 +24,7 @@ clean:
 	rm -rf dist
 	rm -rf build
 	rm -rf *.egg-info
-	
+
 # A convenience target to install the idp_common library with all, dev dependencies in edit mode
 dev:
 	pip install -e ".[all, dev]"

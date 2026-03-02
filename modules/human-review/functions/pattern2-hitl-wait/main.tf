@@ -34,8 +34,10 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
-# Source code archive
+# Source code archive (used when image_uri is not provided)
 data "archive_file" "pattern2_hitl_wait_code" {
+  count = var.image_uri == null ? 1 : 0
+
   type        = "zip"
   source_dir  = "${path.module}/../../../../sources/patterns/pattern-2/src/hitl-wait-function"
   output_path = "${local.module_build_dir}/pattern2-hitl-wait.zip_${random_id.build_id.hex}"
@@ -47,17 +49,20 @@ data "archive_file" "pattern2_hitl_wait_code" {
 resource "aws_lambda_function" "pattern2_hitl_wait" {
   function_name = "${var.name_prefix}-function-${random_string.suffix.result}"
 
-  filename         = data.archive_file.pattern2_hitl_wait_code.output_path
-  source_code_hash = data.archive_file.pattern2_hitl_wait_code.output_base64sha256
+  # Docker image deployment (preferred, matches CloudFormation v0.4.3+ fix)
+  package_type = var.image_uri != null ? "Image" : "Zip"
+  image_uri    = var.image_uri
 
-  layers = [var.idp_common_layer_arn]
-
-  handler     = "index.lambda_handler"
-  runtime     = "python3.12"
-  timeout     = 300
-  memory_size = 256
-  role        = aws_iam_role.pattern2_hitl_wait_role.arn
-  description = "Lambda function that creates HITL task tokens for Pattern-2 sections needing human review"
+  # Zip deployment fallback (when image_uri not provided)
+  filename         = var.image_uri == null ? data.archive_file.pattern2_hitl_wait_code[0].output_path : null
+  source_code_hash = var.image_uri == null ? data.archive_file.pattern2_hitl_wait_code[0].output_base64sha256 : null
+  layers           = var.image_uri == null ? [var.idp_common_layer_arn] : null
+  handler          = var.image_uri == null ? "index.lambda_handler" : null
+  runtime          = var.image_uri == null ? "python3.12" : null
+  timeout          = 300
+  memory_size      = 256
+  role             = aws_iam_role.pattern2_hitl_wait_role.arn
+  description      = "Lambda function that creates HITL task tokens for Pattern-2 sections needing human review"
 
   kms_key_arn = var.encryption_key_arn
 

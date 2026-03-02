@@ -16,6 +16,7 @@
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
+| <a name="provider_aws.us-east-1"></a> [aws.us-east-1](#provider\_aws.us-east-1) | 6.27.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
 | <a name="provider_time"></a> [time](#provider\_time) | 0.13.1 |
@@ -74,12 +75,14 @@ No modules.
 | <a name="input_cloudfront_distribution_id"></a> [cloudfront\_distribution\_id](#input\_cloudfront\_distribution\_id) | CloudFront distribution ID for cache invalidation (optional - skip invalidation if not provided) | `string` | `null` | no |
 | <a name="input_create_infrastructure"></a> [create\_infrastructure](#input\_create\_infrastructure) | Whether to create CloudFront distribution and web app bucket with default settings | `bool` | `true` | no |
 | <a name="input_custom_domain_name"></a> [custom\_domain\_name](#input\_custom\_domain\_name) | Custom domain name for CloudFront distribution (only used when create\_infrastructure is true) | `string` | `null` | no |
+| <a name="input_discovery_bucket_name"></a> [discovery\_bucket\_name](#input\_discovery\_bucket\_name) | Name of the discovery S3 bucket (if discovery is enabled) | `string` | `null` | no |
 | <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Display name for the stack (passed from top-level web\_ui.display\_name configuration) | `string` | `null` | no |
 | <a name="input_enable_waf"></a> [enable\_waf](#input\_enable\_waf) | Enable WAF protection for CloudFront distribution (only used when create\_infrastructure is true) | `bool` | `true` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encryption | `string` | n/a | yes |
 | <a name="input_evaluation_baseline_bucket_name"></a> [evaluation\_baseline\_bucket\_name](#input\_evaluation\_baseline\_bucket\_name) | Name of the evaluation baseline S3 bucket (extracted from evaluation baseline bucket ARN) | `string` | `""` | no |
 | <a name="input_idp_pattern"></a> [idp\_pattern](#input\_idp\_pattern) | IDP processing pattern name (mapped from processor type) | `string` | `""` | no |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket for input files | `string` | n/a | yes |
+| <a name="input_knowledge_base_enabled"></a> [knowledge\_base\_enabled](#input\_knowledge\_base\_enabled) | Whether Knowledge Base functionality is enabled | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_logging_bucket"></a> [logging\_bucket](#input\_logging\_bucket) | Optional S3 bucket for storing CloudFront and S3 access logs (only used when create\_infrastructure is true) | <pre>object({<br/>    bucket_name = string<br/>    bucket_arn  = string<br/>  })</pre> | `null` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource naming | `string` | n/a | yes |

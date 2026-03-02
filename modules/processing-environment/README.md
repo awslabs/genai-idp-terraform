@@ -33,6 +33,7 @@
 |------|------|
 | [aws_cloudwatch_log_group.evaluation_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.lookup_function_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
+| [aws_cloudwatch_log_group.post_processing_decompressor_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.queue_sender_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.save_reporting_data_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.update_configuration_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
@@ -55,10 +56,12 @@
 | [aws_iam_policy.workflow_tracker_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_role.evaluation_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.lookup_function_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.post_processing_decompressor_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.queue_sender_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.save_reporting_data_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.update_configuration_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.workflow_tracker_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy.post_processing_decompressor_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy_attachment.evaluation_appsync_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.evaluation_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.evaluation_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
@@ -66,6 +69,7 @@
 | [aws_iam_role_policy_attachment.lookup_function_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.lookup_function_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.lookup_function_vpc_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.post_processing_decompressor_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.queue_sender_appsync_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.queue_sender_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.queue_sender_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
@@ -82,6 +86,7 @@
 | [aws_iam_role_policy_attachment.workflow_tracker_vpc_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_lambda_function.evaluation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.lookup_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
+| [aws_lambda_function.post_processing_decompressor](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.queue_sender](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.save_reporting_data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.update_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
@@ -96,6 +101,7 @@
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
 | [archive_file.evaluation_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lookup_function_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.post_processing_decompressor_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.queue_sender_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.save_reporting_data_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.update_configuration_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
@@ -111,6 +117,7 @@
 | <a name="input_api"></a> [api](#input\_api) | Optional GraphQL API that is used to track processing status and results of documents | <pre>object({<br/>    api_id           = string<br/>    api_name         = optional(string)<br/>    api_arn          = string<br/>    graphql_url      = string<br/>    realtime_url     = optional(string)<br/>    api_key          = optional(string)<br/>    lambda_functions = optional(any)<br/>  })</pre> | `null` | no |
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the table that manages concurrency limits for document processing | `string` | `null` | no |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the optional DynamoDB table for storing configuration settings | `string` | `null` | no |
+| <a name="input_custom_post_processor_arn"></a> [custom\_post\_processor\_arn](#input\_custom\_post\_processor\_arn) | ARN of a custom Lambda function to invoke after document processing completes. Used by the post\_processing\_decompressor. | `string` | `null` | no |
 | <a name="input_data_tracking_retention_days"></a> [data\_tracking\_retention\_days](#input\_data\_tracking\_retention\_days) | The retention period for document tracking data in days | `number` | `365` | no |
 | <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in for\_each/count. | `bool` | `false` | no |
 | <a name="input_enable_reporting"></a> [enable\_reporting](#input\_enable\_reporting) | Whether to enable the reporting environment for analytics and evaluation capabilities | `bool` | `false` | no |
@@ -155,6 +162,8 @@
 | <a name="output_metric_namespace"></a> [metric\_namespace](#output\_metric\_namespace) | The namespace for CloudWatch metrics emitted by the document processing system |
 | <a name="output_output_bucket_arn"></a> [output\_bucket\_arn](#output\_output\_bucket\_arn) | ARN of the S3 bucket where processed documents and extraction results are stored |
 | <a name="output_output_bucket_name"></a> [output\_bucket\_name](#output\_output\_bucket\_name) | Name of the S3 bucket where processed documents and extraction results are stored |
+| <a name="output_post_processing_decompressor_function_arn"></a> [post\_processing\_decompressor\_function\_arn](#output\_post\_processing\_decompressor\_function\_arn) | ARN of the post-processing decompressor Lambda function |
+| <a name="output_post_processing_decompressor_function_name"></a> [post\_processing\_decompressor\_function\_name](#output\_post\_processing\_decompressor\_function\_name) | Name of the post-processing decompressor Lambda function |
 | <a name="output_queue_sender_function_arn"></a> [queue\_sender\_function\_arn](#output\_queue\_sender\_function\_arn) | ARN of the Lambda function that sends documents to the processing queue |
 | <a name="output_queue_sender_function_name"></a> [queue\_sender\_function\_name](#output\_queue\_sender\_function\_name) | Name of the Lambda function that sends documents to the processing queue |
 | <a name="output_save_reporting_data_function_arn"></a> [save\_reporting\_data\_function\_arn](#output\_save\_reporting\_data\_function\_arn) | ARN of the Lambda function that saves reporting data to the reporting bucket (when reporting is enabled) |

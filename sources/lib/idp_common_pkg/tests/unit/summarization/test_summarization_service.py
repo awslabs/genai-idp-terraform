@@ -44,6 +44,7 @@ class TestSummarizationService:
         """Fixture providing a mock configuration."""
         return {
             "summarization": {
+                "enabled": True,
                 "model": "anthropic.claude-3-sonnet-20240229-v1:0",
                 "temperature": 0.0,
                 "top_k": 5,
@@ -121,9 +122,10 @@ class TestSummarizationService:
         assert service.backend == "bedrock"  # Should fall back to bedrock
 
     def test_init_missing_model(self):
-        """Test initialization with missing model ID."""
-        with pytest.raises(ValueError, match="No model ID specified"):
-            SummarizationService(region="us-west-2", config={})
+        """Test initialization with empty config uses default model."""
+        service = SummarizationService(region="us-west-2", config={})
+        # Should use default model from SummarizationConfig
+        assert service.bedrock_model == "us.amazon.nova-premier-v1:0"
 
     def test_get_summarization_config(self, service):
         """Test getting and validating summarization configuration."""
@@ -614,7 +616,7 @@ class TestSummarizationService:
         """Test that summarization proceeds when enabled property is missing (defaults to true)."""
         config = {
             "summarization": {
-                # No 'enabled' property - should default to True
+                # No 'enabled' property - defaults to True
                 "model": "anthropic.claude-3-sonnet-20240229-v1:0",
                 "temperature": 0.0,
                 "top_k": 5,

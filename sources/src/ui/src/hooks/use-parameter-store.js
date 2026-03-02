@@ -7,7 +7,7 @@ import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 // import { useState, useEffect } from 'react';
 import awsExports from '../aws-exports';
 
-const PARAMETER_NAME = process.env.REACT_APP_SETTINGS_PARAMETER;
+const PARAMETER_NAME = import.meta.env.VITE_SETTINGS_PARAMETER;
 
 const useParameterStore = (creds) => {
   const [settings, setSettings] = useState({});
@@ -27,9 +27,9 @@ const useParameterStore = (creds) => {
     setSettings(idpSettings);
   };
 
-  useEffect(async () => {
+  useEffect(() => {
     refreshSettings(creds);
-  }, []);
+  }, [creds]);
 
   return settings;
 };

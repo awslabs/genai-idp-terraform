@@ -83,3 +83,9 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+variable "image_uri" {
+  description = "ECR image URI for Docker-based Lambda deployment. When provided, uses Docker image instead of zip deployment. Required for v0.4.3+ HITL fix."
+  type        = string
+  default     = null
+}

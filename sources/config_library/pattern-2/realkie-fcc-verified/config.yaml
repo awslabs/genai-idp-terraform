@@ -1,0 +1,1220 @@
+notes: Default settings for RealKIE-FCC-Verified dataset - Pattern2
+ocr:
+  backend: textract
+  model_id: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  system_prompt: >-
+    You are an expert OCR system. Extract all text from the provided image
+    accurately, preserving layout where possible.
+  task_prompt: >-
+    Extract all text from this document image. Preserve the layout, including
+    paragraphs, tables, and formatting.
+  features:
+    - name: LAYOUT
+    - name: TABLES
+    - name: SIGNATURES
+  max_workers: 20
+  image:
+    target_width: null
+    target_height: null
+    dpi: null
+    preprocessing: null
+classification:
+  model: us.amazon.nova-pro-v1:0
+  system_prompt: >-
+    You are a multimodal document classification expert that analyzes business
+    documents using both visual layout and textual content. Your task is to
+    classify single-page documents into predefined categories based on their
+    structural patterns, visual features, and text content. Your output must be
+    valid JSON according to the requested format.
+
+    <variables> <document-ocr-data>: OCR-extracted text content from the
+    document page that provides textual information for classification
+    <document-image>: Visual representation of the document page that provides
+    layout, formatting, and visual structure information <document-types>: List
+    of valid document types with their descriptions that the document must be
+    classified into </variables>
+  task_prompt: >-
+    <task-description> Analyze the provided document using both its visual
+    layout and textual content to determine its document type and whether this
+    page begins a new document or continues the previous one.
+    </task-description>
+
+    <document-types> {CLASS_NAMES_AND_DESCRIPTIONS} </document-types>
+
+    <classification-instructions> Follow these steps to classify the document:
+    1. Examine the visual layout: headers, logos, formatting, structure, and
+    visual organization 2. Analyze the textual content: key phrases,
+    terminology, purpose, and information type 3. Identify distinctive features
+    that match the document type descriptions 4. Decide if this page starts a
+    new document (output "start") or continues the previous document (output
+    "continue") 5. Consider both visual and textual evidence together to
+    determine the best match 6. CRITICAL: Only use document types explicitly
+    listed in the <document-types> section </classification-instructions>
+
+    <output-format> {
+      "classification_reason": "Detailed reasoning including specific visual and textual evidence that led to this classification",
+      "class": "exact_document_type_from_list",
+      "document_boundary": "start or continue"
+    } </output-format>
+
+    <<CACHEPOINT>>
+
+    <document-ocr-data> {DOCUMENT_TEXT} </document-ocr-data>
+
+    <document-image> {DOCUMENT_IMAGE} </document-image>
+
+    <final-instructions> Analyze the document above by: 1. Applying the
+    <classification-instructions> to examine both visual and textual features 2.
+    Selecting ONLY from document types in <document-types> 3. Providing clear
+    reasoning with specific evidence 4. Outputting in the exact JSON format
+    specified in <output-format> </final-instructions>
+  temperature: 0
+  top_p: 0
+  top_k: 5
+  max_tokens: 4096
+  maxPagesForClassification: 0
+  classificationMethod: multimodalPageLevelClassification
+  sectionSplitting: llm_determined
+  image:
+    target_width: null
+    target_height: null
+    dpi: null
+    preprocessing: null
+extraction:
+  model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+  system_prompt: >-
+    You are a document assistant. Respond only with JSON. Never make up data,
+    only provide data found in the document being provided.
+  task_prompt: >-
+    <background>
+
+    You are an expert in document analysis and information extraction.  You can
+    understand and extract key information from documents classified as type
+
+    {DOCUMENT_CLASS}.
+
+    </background>
+
+
+    <task>
+
+    Your task is to take the unstructured text provided and convert it into a
+    well-organized table format using JSON. Identify the main entities,
+    attributes, or categories mentioned in the attributes list below and use
+    them as keys in the JSON object.  Then, extract the relevant information
+    from the text and populate the corresponding values in the JSON object.
+
+    </task>
+
+
+    <extraction-guidelines>
+
+    Guidelines:
+        1. Ensure that the data is accurately represented and properly formatted within
+        the JSON structure
+        2. Include double quotes around all keys and values
+        3. Do not make up data - only extract information explicitly found in the
+        document
+        4. Do not use /n for new lines, use a space instead
+        5. If a field is not found or if unsure, return null
+        6. All dates should be in MM/DD/YYYY format
+        7. Do not perform calculations or summations unless totals are explicitly given
+        8. If an alias is not found in the document, return null
+        9. Guidelines for checkboxes:
+         9.A. CAREFULLY examine each checkbox, radio button, and selection field:
+            - Look for marks like ✓, ✗, x, filled circles (●), darkened areas, or handwritten checks indicating selection
+            - For checkboxes and multi-select fields, ONLY INCLUDE options that show clear visual evidence of selection
+            - DO NOT list options that have no visible selection mark
+         9.B. For ambiguous or overlapping tick marks:
+            - If a mark overlaps between two or more checkboxes, determine which option contains the majority of the mark
+            - Consider a checkbox selected if the mark is primarily inside the check box or over the option text
+            - When a mark touches multiple options, analyze which option was most likely intended based on position and density. For handwritten checks, the mark typically flows from the selected checkbox outward.
+            - Carefully analyze visual cues and contextual hints. Think from a human perspective, anticipate natural tendencies, and apply thoughtful reasoning to make the best possible judgment.
+        10. Think step by step first and then answer.
+
+    </extraction-guidelines>
+
+    If the attributes section below contains a list of attribute names and
+    descriptions, then output only those attributes, using the provided
+    descriptions as guidance for finding the correct values.
+
+    <attributes>
+
+    {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+
+    </attributes>
+
+
+    <<CACHEPOINT>>
+
+
+    <document-text>
+
+    {DOCUMENT_TEXT}
+
+    </document-text>
+
+
+    <document_image>
+
+    {DOCUMENT_IMAGE}
+
+    </document_image>
+
+
+    <final-instructions>
+
+    Extract key information from the document and return a JSON object with the
+    following key steps: 1. Carefully analyze the document text to identify the
+    requested attributes 2. Extract only information explicitly found in the
+    document - never make up data 3. Format all dates as MM/DD/YYYY and replace
+    newlines with spaces 4. For checkboxes, only include options with clear
+    visual selection marks 5. Use null for any fields not found in the document
+    6. Ensure the output is properly formatted JSON with quoted keys and values
+    7. Think step by step before finalizing your answer
+
+    </final-instructions>
+  temperature: 0
+  top_p: 0
+  top_k: 5
+  max_tokens: 10000
+  image:
+    target_width: null
+    target_height: null
+    dpi: null
+    preprocessing: null
+  agentic:
+    enabled: false
+    review_agent: false
+    review_agent_model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+  custom_prompt_lambda_arn: null
+assessment:
+  enabled: false
+  model: us.amazon.nova-lite-v1:0
+  system_prompt: >-
+    You are a document analysis assessment expert. Your role is to evaluate the
+    confidence and accuracy of data extraction results by analyzing them against
+    source documents.
+
+    Provide accurate confidence scores for each assessment. When bounding boxes
+    are requested, provide precise coordinate locations where information
+    appears in the document.
+  task_prompt: >-
+    <background> You are an expert document analysis assessment system. Your
+    task is to evaluate the confidence of extraction results for a document of
+    class {DOCUMENT_CLASS} and provide precise spatial localization for each
+    field. </background>
+
+    <task> Analyze the extraction results against the source document and
+    provide confidence assessments AND bounding box coordinates for each
+    extracted attribute. Consider factors such as: 1. Text clarity and OCR
+    quality in the source regions  2. Alignment between extracted values and
+    document content  3. Presence of clear evidence supporting the extraction
+    4. Potential ambiguity or uncertainty in the source material  5.
+    Completeness and accuracy of the extracted information 6. Precise spatial
+    location of each field in the document </task>
+
+    <assessment-guidelines> For each attribute, provide:  - A confidence score
+    between 0.0 and 1.0 where:
+       - 1.0 = Very high confidence, clear and unambiguous evidence
+       - 0.8-0.9 = High confidence, strong evidence with minor uncertainty
+       - 0.6-0.7 = Medium confidence, reasonable evidence but some ambiguity
+       - 0.4-0.5 = Low confidence, weak or unclear evidence
+       - 0.0-0.3 = Very low confidence, little to no supporting evidence
+    - A clear explanation of the confidence reasoning - Precise spatial
+    coordinates where the field appears in the document
+
+    Guidelines:  - Base assessments on actual document content and OCR quality
+    - Consider both text-based evidence and visual/layout clues  - Account for
+    OCR confidence scores when provided  - Be objective and specific in
+    reasoning  - If an extraction appears incorrect, score accordingly with
+    explanation - Provide tight, accurate bounding boxes around the actual text
+    </assessment-guidelines>
+
+    <spatial-localization-guidelines> For each field, provide bounding box
+    coordinates: - bbox: [x1, y1, x2, y2] coordinates in normalized 0-1000 scale
+    - page: Page number where the field appears (starting from 1)
+
+    Coordinate system: - Use normalized scale 0-1000 for both x and y axes - x1,
+    y1 = top-left corner of bounding box   - x2, y2 = bottom-right corner of
+    bounding box - Ensure x2 > x1 and y2 > y1 - Make bounding boxes tight around
+    the actual text content - If a field spans multiple lines, create a bounding
+    box that encompasses all relevant text </spatial-localization-guidelines>
+
+    <final-instructions> Analyze the extraction results against the source
+    document and provide confidence assessments with spatial localization.
+    Return a JSON object with the following structure based on the attribute
+    type:
+
+    For SIMPLE attributes:  {
+      "simple_attribute_name": {
+        "confidence": 0.85,
+        "bbox": [100, 200, 300, 250],
+        "page": 1
+      }
+    }
+
+    For GROUP attributes (nested object structure):  {
+      "group_attribute_name": {
+        "sub_attribute_1": {
+          "confidence": 0.90,
+          "bbox": [150, 300, 250, 320],
+          "page": 1
+        },
+        "sub_attribute_2": {
+          "confidence": 0.75,
+          "bbox": [150, 325, 280, 345],
+          "page": 1
+        }
+      }
+    }
+
+    For LIST attributes (array of assessed items):  {
+      "list_attribute_name": [
+        {
+          "item_attribute_1": {
+            "confidence": 0.95,
+            "bbox": [100, 400, 200, 420],
+            "page": 1
+          },
+          "item_attribute_2": {
+            "confidence": 0.88,
+            "bbox": [250, 400, 350, 420],
+            "page": 1
+          }
+        },
+        {
+          "item_attribute_1": {
+            "confidence": 0.92,
+            "bbox": [100, 425, 200, 445],
+            "page": 1
+          },
+          "item_attribute_2": {
+            "confidence": 0.70,
+            "bbox": [250, 425, 350, 445],
+            "page": 1
+          }
+        }
+      ]
+    }
+
+    IMPORTANT:   - For LIST attributes like "Transactions", assess EACH
+    individual item in the list separately with individual bounding boxes - Each
+    transaction should be assessed as a separate object in the array with its
+    own spatial coordinates - Do NOT provide aggregate assessments for list
+    items - assess each one individually with precise locations - Include
+    assessments AND bounding boxes for ALL attributes present in the extraction
+    results - Match the exact structure of the extracted data - Provide page
+    numbers for all bounding boxes (starting from 1) </final-instructions>
+
+    <<CACHEPOINT>>
+
+    <document-image> {DOCUMENT_IMAGE} </document-image>
+
+    <ocr-text-confidence-results> {OCR_TEXT_CONFIDENCE}
+    </ocr-text-confidence-results>
+
+    <<CACHEPOINT>>
+
+    <attributes-definitions> {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+    </attributes-definitions>
+
+    <extraction-results> {EXTRACTION_RESULTS} </extraction-results>
+  temperature: 0
+  top_p: 0.1
+  top_k: 5
+  max_tokens: 10000
+  default_confidence_threshold: 0.8
+  validation_enabled: false
+  image:
+    target_width: null
+    target_height: null
+    dpi: null
+    preprocessing: null
+  granular:
+    enabled: true
+    list_batch_size: 1
+    simple_batch_size: 3
+    max_workers: 20
+summarization:
+  enabled: false
+  model: us.amazon.nova-premier-v1:0
+  system_prompt: >-
+    You are a document summarization expert who can analyze and summarize
+    documents from various domains including medical, financial, legal, and
+    general business documents. Your task is to create a summary that captures
+    the key information, main points, and important details from the document.
+    Your output must be in valid JSON format. \nSummarization Style:
+    Balanced\\nCreate a balanced summary that provides a moderate level of
+    detail. Include the main points and key supporting information, while
+    maintaining the document's overall structure. Aim for a comprehensive yet
+    concise summary.\n Your output MUST be in valid JSON format with markdown
+    content. You MUST strictly adhere to the output format specified in the
+    instructions.
+  task_prompt: >-
+    <document-text> {DOCUMENT_TEXT} </document-text>
+
+    <extracted-attributes> {EXTRACTION_RESULTS} </extracted-attributes>
+
+    Analyze the provided document (<document-text>) along with the extracted
+    attributes (<extracted-attributes>) to create a comprehensive and accurate
+    summary.
+
+    CRITICAL INSTRUCTION: You MUST return your response as valid JSON with the
+    EXACT structure shown at the end of these instructions. Do not include any
+    explanations, notes, or text outside of the JSON structure.
+
+    Create a summary that captures the essential information from the document.
+    Your summary should:
+
+    1. **Integrate Extracted Attributes**: Begin with a "Key Information"
+    section that highlights the most important extracted attributes in a
+    structured format (use tables or lists as appropriate)
+
+    2. **Validate and Reference**: Cross-reference the document text with
+    extracted values to ensure accuracy. When mentioning specific values, prefer
+    the extracted attributes when they are available
+
+    3. **Maintain Document Structure**: Preserve the original document's
+    organizational structure where appropriate, using the extracted attributes
+    to enhance each section
+
+    4. **Highlight Critical Data**: Emphasize important extracted values such
+    as:
+       - Names, addresses, and identification numbers
+       - Dates and time periods
+       - Monetary amounts and financial figures
+       - Status indicators and classifications
+       - Any calculated or derived values
+
+    5. **Use Markdown Formatting**: Apply markdown for better readability:
+       - Use headers (##, ###) for sections
+       - Create tables for structured data from extracted attributes
+       - Use **bold** for important values and *italics* for emphasis
+       - Create lists (bullet or numbered) for multiple items
+
+    6. **Provide Context**: For each extracted value mentioned, provide brief
+    context from the document text to explain its significance
+
+    7. **Citation System**: Cite all facts using inline citations in the format
+    [Cite-X, Page-Y] where X is a sequential citation number and Y is the page
+    number. Format citations as markdown links: [[Cite-1,
+    Page-3]](#cite-1-page-3)
+
+    8. **Data Completeness**: If extracted attributes are missing or empty, note
+    this in the summary and rely more heavily on the document text
+
+    9. **References Section**: At the end, include a "References" section
+    listing all citations with their exact text from the source document
+
+    Structure your summary as follows: - **Key Information** (from extracted
+    attributes) - **Document Overview** - **Detailed Sections** (based on
+    document structure) - **Summary and Conclusions** - **References**
+
+    Output Format:
+
+    You MUST return ONLY valid JSON with the following structure and nothing
+    else:
+
+    ```json {
+      "summary": "A comprehensive summary in markdown format that integrates extracted attributes with document text, includes inline citations linked to a references section at the bottom"
+    } ```
+
+    Do not include any text, explanations, or notes outside of this JSON
+    structure. The JSON must be properly formatted and parseable.
+  temperature: 0
+  top_p: 0.1
+  top_k: 5
+  max_tokens: 4096
+criteria_validation:
+  model: us.anthropic.claude-3-5-sonnet-20240620-v1:0
+  system_prompt: ''
+  task_prompt: ''
+  temperature: 0
+  top_p: 0.01
+  top_k: 20
+  max_tokens: 4096
+  semaphore: 3
+  max_chunk_size: 180000
+  token_size: 4
+  overlap_percentage: 10
+  response_prefix: <response>
+agents:
+  error_analyzer:
+    model_id: us.anthropic.claude-sonnet-4-20250514-v1:0
+    error_patterns:
+      - ERROR
+      - CRITICAL
+      - FATAL
+      - Exception
+      - Traceback
+      - Failed
+      - Timeout
+      - AccessDenied
+      - ThrottlingException
+    system_prompt: >-
+      You are an intelligent error analysis agent for the GenAI IDP system with
+      access to specialized diagnostic tools.
+
+
+      GENERAL TROUBLESHOOTING WORKFLOW:
+
+      1. Identify document status from DynamoDB
+
+      2. Find any errors reported during Step Function execution
+
+      3. Collect relevant logs from CloudWatch
+
+      4. Identify any performance issues from X-Ray traces
+
+      5. Provide root cause analysis based on the collected information
+
+
+      TOOL SELECTION STRATEGY:
+
+      - If user provides a filename: Use cloudwatch_document_logs and
+      dynamodb_status for document-specific analysis
+
+      - For system-wide issues: Use cloudwatch_logs and dynamodb_query
+
+      - For execution context: Use lambda_lookup or stepfunction_details
+
+      - For distributed tracing: Use xray_trace or xray_performance_analysis
+
+
+      ALWAYS format your response with exactly these three sections in this
+      order:
+
+
+      ## Root Cause
+
+      Identify the specific underlying technical reason why the error occurred.
+      Focus on the primary cause, not symptoms.
+
+
+      ## Recommendations
+
+      Provide specific, actionable steps to resolve the issue. Limit to top
+      three recommendations only.
+
+
+      <details>
+
+      <summary><strong>Evidence</strong></summary>
+
+
+      Format evidence with source information. Include relevant data from tool
+      responses:
+
+
+      **For CloudWatch logs:**
+
+      **Log Group:** [full log_group name]
+
+      **Log Stream:** [full log_stream name]
+
+      ```
+
+      [ERROR] timestamp message
+
+      ```
+
+
+      **For other sources (DynamoDB, Step Functions, X-Ray):**
+
+      **Source:** [service name and resource]
+
+      ```
+
+      Relevant data from tool response
+
+      ```
+
+
+      </details>
+
+
+      FORMATTING RULES:
+
+      - Use the exact three-section structure above
+
+      - Make Evidence section collapsible using HTML details tags
+
+      - Include relevant data from all tool responses (CloudWatch, DynamoDB,
+      Step Functions, X-Ray)
+
+      - For CloudWatch: Show complete log group and log stream names without
+      truncation
+
+      - Present evidence data in code blocks with appropriate source labels
+
+      ANALYSIS GUIDELINES:
+
+      - Use multiple tools for comprehensive analysis when needed
+
+      - Start with document-specific tools for targeted queries
+
+      - Use system-wide tools for pattern analysis
+
+      - Combine DynamoDB status with CloudWatch logs for complete picture
+
+      - Leverage X-Ray for distributed system issues
+
+
+      ROOT CAUSE DETERMINATION:
+
+      1. Document Status: Check dynamodb_status first
+
+      2. Execution Details: Use stepfunction_details for workflow failures
+
+      3. Log Analysis: Use cloudwatch_document_logs or cloudwatch_logs for error
+      details
+
+      4. Distributed Tracing: Use xray_performance_analysis for service
+      interaction issues
+
+      5. Context: Use lambda_lookup for execution environment
+
+
+      RECOMMENDATION GUIDELINES:
+
+      For code-related issues or system bugs:
+
+      - Do not suggest code modifications
+
+      - Include error details, timestamps, and context
+
+
+      For configuration-related issues:
+
+      - Direct users to UI configuration panel
+
+      - Specify exact configuration section and parameter names
+
+
+      For operational issues:
+
+      - Provide immediate troubleshooting steps
+
+      - Include preventive measures
+
+
+      TIME RANGE PARSING:
+
+      - recent: 1 hour
+
+      - last week: 168 hours
+
+      - last day: 24 hours
+
+      - No time specified: 24 hours (default)
+
+
+      IMPORTANT: Do not include any search quality reflections, search quality
+      scores, or meta-analysis sections in your response. Only provide the three
+      required sections: Root Cause, Recommendations, and Evidence.
+    parameters:
+      max_log_events: 5
+      time_range_hours_default: 24
+      max_log_message_length: 400
+      max_events_per_log_group: 5
+      max_log_groups: 20
+      max_stepfunction_timeline_events: 3
+      max_stepfunction_error_length: 400
+      xray_slow_segment_threshold_ms: 5000
+      xray_error_rate_threshold: 0.05
+      xray_response_time_threshold_ms: 10000
+  chat_companion:
+    model_id: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    error_patterns:
+      - ERROR
+      - CRITICAL
+      - FATAL
+      - Exception
+      - Traceback
+      - Failed
+      - Timeout
+      - AccessDenied
+      - ThrottlingException
+    system_prompt: |2-
+
+                  You are an intelligent error analysis agent for the GenAI IDP system with access to specialized diagnostic tools.
+
+                    GENERAL TROUBLESHOOTING WORKFLOW:
+                    1. Identify document status from DynamoDB
+                        2. Find any errors reported during Step Function execution
+                    3. Collect relevant logs from CloudWatch
+                    4. Identify any performance issues from X-Ray traces
+                5. Provide root cause analysis based on the collected information
+
+                TOOL SELECTION STRATEGY:
+                - If user provides a filename: Use cloudwatch_document_logs and dynamodb_status for document-specific analysis
+                - For system-wide issues: Use cloudwatch_logs and dynamodb_query
+                - For execution context: Use lambda_lookup or stepfunction_details
+                - For distributed tracing: Use xray_trace or xray_performance_analysis
+
+                ALWAYS format your response with exactly these three sections in this order:
+
+                ## Root Cause
+                Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
+
+                ## Recommendations
+                    Provide specific, actionable steps to resolve the issue. Limit to top three recommendations only.
+
+                <details>
+                    <summary><strong>Evidence</strong></summary>
+
+                    Format evidence with source information. Include relevant data from tool responses:
+
+                    **For CloudWatch logs:**
+                        **Log Group:** [full log_group name]
+                    **Log Stream:** [full log_stream name]
+                        ```
+                    [ERROR] timestamp message
+                ```
+
+                **For other sources (DynamoDB, Step Functions, X-Ray):**
+                    **Source:** [service name and resource]
+                    ```
+                Relevant data from tool response
+                    ```
+
+                </details>
+
+                    FORMATTING RULES:
+                - Use the exact three-section structure above
+                - Make Evidence section collapsible using HTML details tags
+                - Include relevant data from all tool responses (CloudWatch, DynamoDB, Step Functions, X-Ray)
+                - For CloudWatch: Show complete log group and log stream names without truncation
+                - Present evidence data in code blocks with appropriate source labels
+
+                    ANALYSIS GUIDELINES:
+                - Use multiple tools for comprehensive analysis when needed
+                    - Start with document-specific tools for targeted queries
+                    - Use system-wide tools for pattern analysis
+                    - Combine DynamoDB status with CloudWatch logs for complete picture
+                    - Leverage X-Ray for distributed system issues
+
+                        ROOT CAUSE DETERMINATION:
+                        1. Document Status: Check dynamodb_status first
+                    2. Execution Details: Use stepfunction_details for workflow failures
+                    3. Log Analysis: Use cloudwatch_document_logs or cloudwatch_logs for error details
+                    4. Distributed Tracing: Use xray_performance_analysis for service interaction issues
+                    5. Context: Use lambda_lookup for execution environment
+
+                    RECOMMENDATION GUIDELINES:
+                    For code-related issues or system bugs:
+                        - Do not suggest code modifications
+                    - Include error details, timestamps, and context
+
+                    For configuration-related issues:
+                        - Direct users to UI configuration panel
+                            - Specify exact configuration section and parameter names
+
+                            For operational issues:
+                            - Provide immediate troubleshooting steps
+                            - Include preventive measures
+
+                            TIME RANGE PARSING:
+                            - recent: 1 hour
+                    - last week: 168 hours
+                            - last day: 24 hours
+                            - No time specified: 24 hours (default)
+
+                    IMPORTANT: Do not include any search quality reflections, search quality scores, or meta-analysis sections in your response. Only provide the three required sections: Root Cause, Recommendations, and Evidence.
+    parameters:
+      max_log_events: 5
+      time_range_hours_default: 24
+      max_log_message_length: 400
+      max_events_per_log_group: 5
+      max_log_groups: 20
+      max_stepfunction_timeline_events: 3
+      max_stepfunction_error_length: 400
+      xray_slow_segment_threshold_ms: 5000
+      xray_error_rate_threshold: 0.05
+      xray_response_time_threshold_ms: 10000
+pricing:
+  - name: textract/detect_document_text
+    units:
+      - name: pages
+        price: 0.0015
+  - name: textract/analyze_document-Layout
+    units:
+      - name: pages
+        price: 0.004
+  - name: textract/analyze_document-Signatures
+    units:
+      - name: pages
+        price: 0.0035
+  - name: textract/analyze_document-Forms
+    units:
+      - name: pages
+        price: 0.05
+  - name: textract/analyze_document-Tables
+    units:
+      - name: pages
+        price: 0.015
+  - name: textract/analyze_document-Tables+Forms
+    units:
+      - name: pages
+        price: 0.065
+  - name: bedrock/us.amazon.nova-lite-v1:0
+    units:
+      - name: inputTokens
+        price: 6.e-8
+      - name: outputTokens
+        price: 2.4e-7
+      - name: cacheReadInputTokens
+        price: 1.5e-8
+      - name: cacheWriteInputTokens
+        price: 6.e-8
+  - name: bedrock/us.amazon.nova-pro-v1:0
+    units:
+      - name: inputTokens
+        price: 8.e-7
+      - name: outputTokens
+        price: 0.0000032
+      - name: cacheReadInputTokens
+        price: 2.e-7
+      - name: cacheWriteInputTokens
+        price: 8.e-7
+  - name: bedrock/us.amazon.nova-premier-v1:0
+    units:
+      - name: inputTokens
+        price: 0.0000025
+      - name: outputTokens
+        price: 0.0000125
+  - name: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
+    units:
+      - name: inputTokens
+        price: 2.5e-7
+      - name: outputTokens
+        price: 0.00000125
+  - name: bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0
+    units:
+      - name: inputTokens
+        price: 8.e-7
+      - name: outputTokens
+        price: 0.000004
+      - name: cacheReadInputTokens
+        price: 8.e-8
+      - name: cacheWriteInputTokens
+        price: 0.000001
+  - name: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+    units:
+      - name: inputTokens
+        price: 0.0000011
+      - name: outputTokens
+        price: 0.0000055
+      - name: cacheReadInputTokens
+        price: 1.1e-7
+      - name: cacheWriteInputTokens
+        price: 0.0000014
+  - name: bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 3.e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 3.e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 3.e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0:1m
+    units:
+      - name: inputTokens
+        price: 0.000006
+      - name: outputTokens
+        price: 0.0000225
+      - name: cacheReadInputTokens
+        price: 6.e-7
+      - name: cacheWriteInputTokens
+        price: 0.0000075
+  - name: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    units:
+      - name: inputTokens
+        price: 0.0000033
+      - name: outputTokens
+        price: 0.0000165
+      - name: cacheReadInputTokens
+        price: 3.3e-7
+      - name: cacheWriteInputTokens
+        price: 0.000004125
+  - name: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m
+    units:
+      - name: inputTokens
+        price: 0.0000066
+      - name: outputTokens
+        price: 0.00002475
+      - name: cacheReadInputTokens
+        price: 6.6e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000825
+  - name: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000015
+      - name: outputTokens
+        price: 0.000075
+      - name: cacheReadInputTokens
+        price: 0.0000015
+      - name: cacheWriteInputTokens
+        price: 0.00001875
+  - name: bedrock/us.anthropic.claude-opus-4-1-20250805-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000015
+      - name: outputTokens
+        price: 0.000075
+      - name: cacheReadInputTokens
+        price: 0.0000015
+      - name: cacheWriteInputTokens
+        price: 0.00001875
+  - name: bedrock/eu.amazon.nova-lite-v1:0
+    units:
+      - name: inputTokens
+        price: 7.8e-8
+      - name: outputTokens
+        price: 3.1e-7
+      - name: cacheReadInputTokens
+        price: 1.9e-8
+      - name: cacheWriteInputTokens
+        price: 7.8e-8
+  - name: bedrock/eu.amazon.nova-pro-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000001
+      - name: outputTokens
+        price: 0.0000042
+      - name: cacheReadInputTokens
+        price: 2.6e-7
+      - name: cacheWriteInputTokens
+        price: 0.000001
+  - name: bedrock/eu.anthropic.claude-3-haiku-20240307-v1:0
+    units:
+      - name: inputTokens
+        price: 2.5e-7
+      - name: outputTokens
+        price: 0.00000125
+  - name: bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0
+    units:
+      - name: inputTokens
+        price: 0.0000011
+      - name: outputTokens
+        price: 0.0000055
+      - name: cacheReadInputTokens
+        price: 1.1e-7
+      - name: cacheWriteInputTokens
+        price: 0.0000014
+  - name: bedrock/eu.anthropic.claude-3-5-sonnet-20241022-v2:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 3.e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/eu.anthropic.claude-3-7-sonnet-20250219-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 3.e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/eu.anthropic.claude-sonnet-4-20250514-v1:0
+    units:
+      - name: inputTokens
+        price: 0.000003
+      - name: outputTokens
+        price: 0.000015
+      - name: cacheReadInputTokens
+        price: 3.e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000375
+  - name: bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+    units:
+      - name: inputTokens
+        price: 0.0000033
+      - name: outputTokens
+        price: 0.0000165
+      - name: cacheReadInputTokens
+        price: 3.3e-7
+      - name: cacheWriteInputTokens
+        price: 0.000004125
+  - name: bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m
+    units:
+      - name: inputTokens
+        price: 0.0000066
+      - name: outputTokens
+        price: 0.00002475
+      - name: cacheReadInputTokens
+        price: 6.6e-7
+      - name: cacheWriteInputTokens
+        price: 0.00000825
+  - name: lambda/requests
+    units:
+      - name: invocations
+        price: 2.e-7
+  - name: lambda/duration
+    units:
+      - name: gb_seconds
+        price: 0.0000166667
+classes:
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $defs:
+      LineItem:
+        type: object
+        properties:
+          LineItemEndDate:
+            default: 'null'
+            x-aws-idp-confidence-threshold: '0.8'
+            examples:
+              - 11/06/2012
+            data_type: string
+            format: date
+            description: End date for each line item (typically in MM/DD/YY format)
+            type: string
+            x-aws-idp-evaluation-method: LEVENSHTEIN
+            x-aws-idp-evaluation-threshold: '0.7'
+          LineItemDescription:
+            data_type: string
+            description: Description of the line item
+            type: string
+            x-aws-idp-evaluation-method: LEVENSHTEIN
+            x-aws-idp-evaluation-threshold: '0.7'
+          LineItemStartDate:
+            default: 'null'
+            x-aws-idp-confidence-threshold: '0.8'
+            examples:
+              - 11/06/2012
+            data_type: string
+            format: date
+            description: Start date for each line item (typically in MM/DD/YY format)
+            type: string
+            x-aws-idp-evaluation-method: LEVENSHTEIN
+            x-aws-idp-evaluation-threshold: '0.7'
+          LineItemDays:
+            maxItems: '7'
+            x-aws-idp-confidence-threshold: '0.8'
+            uniqueItems: true
+            description: List of days of the week for the line item
+            type: array
+            items:
+              type: string
+              data_type: string
+              enum:
+                - M
+                - T
+                - W
+                - Th
+                - F
+                - S
+                - Su
+            x-aws-idp-evaluation-method: EXACT
+            x-aws-idp-evaluation-threshold: '0.7'
+          LineItemRate:
+            data_type: string
+            description: Rate of the line item
+            x-aws-idp-confidence-threshold: '0.8'
+            type: number
+            x-aws-idp-evaluation-method: NUMERIC_EXACT
+    description: Invoice document
+    type: object
+    x-aws-idp-document-type: Invoice
+    properties:
+      LineItems:
+        type: array
+        description: List of line items in the invoice
+        items:
+          $ref: '#/$defs/LineItem'
+      Agency:
+        x-aws-idp-confidence-threshold: '0.8'
+        data_type: string
+        description: The advertising agency or station. May be labelled Agency, or Station.
+        x-aws-idp-evaluation-weight: '2'
+        type: string
+        x-aws-idp-evaluation-method: LEVENSHTEIN
+        x-aws-idp-evaluation-threshold: '0.7'
+      Advertiser:
+        x-aws-idp-confidence-threshold: '0.8'
+        data_type: string
+        description: The political advertiser or campaign purchasing the broadcast time
+        x-aws-idp-evaluation-weight: '2'
+        type: string
+        x-aws-idp-evaluation-method: FUZZY
+        x-aws-idp-evaluation-threshold: '0.8'
+      GrossTotal:
+        data_type: string
+        description: >-
+          The total gross amount for all line items before any discounts or
+          adjustments
+        x-aws-idp-evaluation-weight: '2'
+        x-aws-idp-confidence-threshold: '0.8'
+        type: number
+        x-aws-idp-evaluation-method: NUMERIC_EXACT
+      PaymentTerms:
+        examples:
+          - Net 30
+        data_type: string
+        description: Payment terms
+        x-aws-idp-evaluation-weight: '0.2'
+        type: string
+        x-aws-idp-evaluation-method: FUZZY
+        x-aws-idp-evaluation-threshold: '0.7'
+      AgencyCommission:
+        data_type: string
+        description: Agency commission
+        x-aws-idp-evaluation-weight: '0.2'
+        x-aws-idp-confidence-threshold: '0.8'
+        type: number
+        x-aws-idp-evaluation-method: NUMERIC_EXACT
+      NetAmountDue:
+        data_type: string
+        description: >-
+          The final net amount due after any discounts or adjustments have been
+          applied (stored as string with commas)
+        x-aws-idp-evaluation-weight: '2'
+        x-aws-idp-confidence-threshold: '0.8'
+        type: number
+        x-aws-idp-evaluation-method: NUMERIC_EXACT
+    $id: Invoice
+discovery:
+  without_ground_truth:
+    model_id: us.amazon.nova-pro-v1:0
+    system_prompt: >-
+      You are an expert in processing forms. Extracting data from images and
+      documents. Analyze forms line by line to identify field names, data types,
+      and organizational structure. Focus on creating comprehensive blueprints
+      for document processing without extracting actual values.
+    temperature: 1
+    top_p: 0.1
+    max_tokens: 10000
+    user_prompt: >-
+      This image contains forms data. Analyze the form line by line. Image may
+      contains multiple pages, process all the pages.  Form may contain multiple
+      name value pair in one line.  Extract all the names in the form including
+      the name value pair which doesn't have value.  Organize them into groups,
+      extract field_name, data_type and field description Field_name should be
+      less than 60 characters, should not have space use '-' instead of space.
+      field_description is a brief description of the field and the location of
+      the field like box number or line number in the form and section of the
+      form. Field_name should be unique within the group. Add two fields
+      document_class and document_description.  For document_class generate a
+      short name based on the document content like W4, I-9, Paystub.  For
+      document_description generate a description about the document in less
+      than 50 words.
+
+      Group the fields based on the section they are grouped in the form. Group
+      should have attributeType as "group". If the group repeats and follows
+      table format, update the attributeType as "list". Do not extract the
+      values. Return the extracted data in JSON format. Format the extracted
+      data using the below JSON format: Format the extracted groups and fields
+      using the below JSON format:
+  with_ground_truth:
+    model_id: us.amazon.nova-pro-v1:0
+    system_prompt: >-
+      You are an expert in processing forms. Extracting data from images and
+      documents. Use provided ground truth data as reference to optimize field
+      extraction and ensure consistency with expected document structure and
+      field definitions.
+    temperature: 1
+    top_p: 0.1
+    max_tokens: 10000
+    user_prompt: >-
+      This image contains unstructured data. Analyze the data line by line using
+      the provided ground truth as reference.
+      <GROUND_TRUTH_REFERENCE> {ground_truth_json} </GROUND_TRUTH_REFERENCE>
+      Ground truth reference JSON has the fields we are interested in extracting
+      from the document/image. Use the ground truth to optimize field
+      extraction. Match field names, data types, and groupings from the
+      reference. Image may contain multiple pages, process all pages. Extract
+      all field names including those without values. Do not change the group
+      name and field name from ground truth in the extracted data json. Add
+      field_description field for every field which will contain instruction to
+      LLM to extract the field data from the image/document. Add data_type field
+      for every field.  Add two fields document_class and document_description.
+      For document_class generate a short name based on the document content
+      like W4, I-9, Paystub.  For document_description generate a description
+      about the document in less than 50 words. If the group repeats and follows
+      table format, update the attributeType as "list".
+      Do not extract the values. Format the extracted data using the below JSON
+      format: Format the extracted groups and fields using the below JSON
+      format:
+evaluation:
+  enabled: true
+  llm_method:
+    top_p: 0.1
+    max_tokens: 4096
+    top_k: 5
+    task_prompt: >-
+      I need to evaluate attribute extraction for a document of class:
+      {DOCUMENT_CLASS}.
+
+
+      For the attribute named "{ATTRIBUTE_NAME}" described as
+      "{ATTRIBUTE_DESCRIPTION}":
+
+      - Expected value: {EXPECTED_VALUE}
+
+      - Actual value: {ACTUAL_VALUE}
+
+
+      Do these values match in meaning, taking into account formatting
+      differences, word order, abbreviations, and semantic equivalence?
+
+      Provide your assessment as a JSON with three fields:
+
+      - "match": boolean (true if they match, false if not)
+
+      - "score": number between 0 and 1 representing the confidence/similarity
+      score
+
+      - "reason": brief explanation of your decision
+
+
+      Respond ONLY with the JSON and nothing else. Here's the exact format:
+
+      {
+        "match": true or false,
+        "score": 0.0 to 1.0,
+        "reason": "Your explanation here"
+      }
+    temperature: 0
+    model: us.anthropic.claude-3-haiku-20240307-v1:0
+    system_prompt: >-
+      You are an evaluator that helps determine if the predicted and expected
+      values match for document attribute extraction. You will consider the
+      context and meaning rather than just exact string matching.
+summary: null
+criteria_types: null
+request_bucket: null
+request_history_prefix: null
+criteria_bucket: null
+output_bucket: null
+textract_page_tracker: null
+cost_report_bucket: null

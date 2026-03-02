@@ -6,10 +6,10 @@ External MCP Agent implementation using Strands framework.
 """
 
 import logging
-import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import boto3
+from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
 from strands import Agent
 from strands.tools.mcp import MCPClient
@@ -18,6 +18,146 @@ from ..common.oauth_auth import get_cognito_bearer_token
 from ..common.strands_bedrock_model import create_strands_bedrock_model
 
 logger = logging.getLogger(__name__)
+
+
+def _create_mcp_client_with_transport(
+    mcp_url: str, transport: str = "http", bearer_token: Optional[str] = None
+) -> MCPClient:
+    """
+    Create MCP client with specified transport.
+
+    Args:
+        mcp_url: MCP server URL
+        transport: Transport type ("http" or "sse"), defaults to "http"
+        bearer_token: Optional bearer token for authentication
+
+    Returns:
+        MCPClient configured with specified transport
+
+    Raises:
+        ValueError: If transport type is unsupported
+    """
+    if transport == "sse":
+        logger.info(f"Creating SSE MCP client for {mcp_url}")
+        if bearer_token:
+            headers = {"authorization": f"Bearer {bearer_token}"}
+            logger.info("Using SSE transport with authentication")
+            return MCPClient(lambda: sse_client(mcp_url, headers))
+        else:
+            logger.info("Using SSE transport without authentication")
+            return MCPClient(lambda: sse_client(mcp_url))
+    elif transport == "http":
+        logger.info(f"Creating HTTP MCP client for {mcp_url}")
+        if not bearer_token:
+            raise ValueError("HTTP transport requires authentication (bearer_token)")
+        headers = {
+            "authorization": f"Bearer {bearer_token}",
+            "Content-Type": "application/json",
+        }
+        logger.info("Using HTTP transport with authentication")
+        return MCPClient(lambda: streamablehttp_client(mcp_url, headers))
+    else:
+        raise ValueError(
+            f"Unsupported transport type: {transport}. Supported types: 'http', 'sse'"
+        )
+
+
+def _validate_mcp_config(mcp_server_config: Dict[str, Any]) -> None:
+    """
+    Validate MCP server configuration based on transport type.
+
+    Args:
+        mcp_server_config: Configuration dictionary
+
+    Raises:
+        ValueError: If required fields are missing for transport type
+    """
+    # mcp_url is always required
+    if "mcp_url" not in mcp_server_config:
+        raise ValueError("mcp_url is required in MCP server configuration")
+
+    # Get transport type (default to "http" for backward compatibility)
+    transport = mcp_server_config.get("transport", "http")
+
+    # Validate transport type
+    if transport not in ["http", "sse"]:
+        raise ValueError(
+            f"Invalid transport type: {transport}. Supported types: 'http', 'sse'"
+        )
+
+    # For HTTP transport, Cognito fields are required
+    if transport == "http":
+        required_cognito_fields = [
+            "cognito_user_pool_id",
+            "cognito_client_id",
+            "cognito_username",
+            "cognito_password",
+        ]
+        missing_fields = [
+            field for field in required_cognito_fields if field not in mcp_server_config
+        ]
+        if missing_fields:
+            raise ValueError(
+                f"HTTP transport requires Cognito authentication fields: {missing_fields}"
+            )
+
+    # For SSE transport, Cognito fields are optional
+    logger.info(
+        f"Configuration validated for transport type: {transport}"
+        + (
+            " (with authentication)"
+            if transport == "sse" and "cognito_user_pool_id" in mcp_server_config
+            else ""
+        )
+    )
+
+
+def _get_bearer_token_if_needed(
+    mcp_server_config: Dict[str, Any], session: boto3.Session
+) -> Optional[str]:
+    """
+    Get bearer token if Cognito credentials are provided.
+
+    Args:
+        mcp_server_config: Configuration dictionary
+        session: Boto3 session
+
+    Returns:
+        Bearer token string or None if no auth configured
+
+    Raises:
+        Exception: If authentication fails
+    """
+    # Check if all Cognito fields are present
+    cognito_fields = [
+        "cognito_user_pool_id",
+        "cognito_client_id",
+        "cognito_username",
+        "cognito_password",
+    ]
+    has_cognito_config = all(field in mcp_server_config for field in cognito_fields)
+
+    if has_cognito_config:
+        try:
+            logger.info("Cognito credentials provided, authenticating...")
+            bearer_token = get_cognito_bearer_token(
+                user_pool_id=mcp_server_config["cognito_user_pool_id"],
+                client_id=mcp_server_config["cognito_client_id"],
+                username=mcp_server_config["cognito_username"],
+                password=mcp_server_config["cognito_password"],
+                session=session,
+            )
+            logger.info("Successfully obtained bearer token for MCP authentication")
+            return bearer_token
+        except Exception as e:
+            error_msg = f"Failed to get bearer token: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+    else:
+        logger.info(
+            "No Cognito credentials provided, proceeding without authentication"
+        )
+        return None
 
 
 def create_external_mcp_agent(
@@ -33,9 +173,9 @@ def create_external_mcp_agent(
     Args:
         config: Configuration dictionary (ignored - MCP agent uses its own config)
         session: Boto3 session for AWS operations. If None, creates default session
-        model_id: Model ID to use. If None, reads from DOCUMENT_ANALYSIS_AGENT_MODEL_ID environment variable
+        model_id: Model ID to use (required)
         mcp_server_config: Individual MCP server configuration dict (required)
-        **kwargs: Additional arguments (job_id, user_id, etc.)
+        **kwargs: Additional arguments
 
     Returns:
         Agent: Configured Strands agent instance with MCP tools
@@ -50,49 +190,26 @@ def create_external_mcp_agent(
     if session is None:
         session = boto3.Session()
 
-    logger.info("Creating External MCP Agent with provided server configuration")
-
-    # Validate required fields
-    required_fields = [
-        "mcp_url",
-        "cognito_user_pool_id",
-        "cognito_client_id",
-        "cognito_username",
-        "cognito_password",
-    ]
-    missing_fields = [
-        field for field in required_fields if field not in mcp_server_config
-    ]
-    if missing_fields:
-        error_msg = f"MCP server config missing required fields: {missing_fields}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-
-    # Get bearer token from Cognito
-    try:
-        bearer_token = get_cognito_bearer_token(
-            user_pool_id=mcp_server_config["cognito_user_pool_id"],
-            client_id=mcp_server_config["cognito_client_id"],
-            username=mcp_server_config["cognito_username"],
-            password=mcp_server_config["cognito_password"],
-            session=session,
-        )
-        logger.info("Successfully obtained bearer token for MCP authentication")
-    except Exception as e:
-        error_msg = f"Failed to get bearer token: {str(e)}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-
-    # Create MCP client with authentication headers
+    # Get transport type (default to "http" for backward compatibility)
+    transport = mcp_server_config.get("transport", "http")
     mcp_url = mcp_server_config["mcp_url"]
-    headers = {
-        "authorization": f"Bearer {bearer_token}",
-        "Content-Type": "application/json",
-    }
+
+    logger.info(f"Creating External MCP Agent with {transport} transport for {mcp_url}")
+
+    # Validate configuration based on transport type
+    try:
+        _validate_mcp_config(mcp_server_config)
+    except ValueError as e:
+        error_msg = f"Invalid MCP configuration: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+
+    # Get bearer token if Cognito credentials are provided
+    bearer_token = _get_bearer_token_if_needed(mcp_server_config, session)
 
     try:
-        # Create MCP client
-        mcp_client = MCPClient(lambda: streamablehttp_client(mcp_url, headers))
+        # Create MCP client with appropriate transport
+        mcp_client = _create_mcp_client_with_transport(mcp_url, transport, bearer_token)
 
         # Discover tools and create dynamic description within MCP context
         with mcp_client:
@@ -121,13 +238,9 @@ def create_external_mcp_agent(
 
             # Get model ID from parameter or environment variable
             if model_id is None:
-                model_id = os.environ.get("DOCUMENT_ANALYSIS_AGENT_MODEL_ID")
-                if not model_id:
-                    error_msg = (
-                        "DOCUMENT_ANALYSIS_AGENT_MODEL_ID environment variable not set"
-                    )
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
+                error_msg = "model_id parameter is required"
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
             # Create Bedrock model
             bedrock_model = create_strands_bedrock_model(
@@ -137,11 +250,11 @@ def create_external_mcp_agent(
             # Create system prompt
             system_prompt = f"""
             You are an AI agent that has access to external tools via MCP (Model Context Protocol).
-            
+
             {dynamic_description}
-            
+
             Use the available tools to help answer user questions. When using tools, provide clear explanations of what you're doing and what the results mean.
-            
+
             If a tool fails or returns an error, explain the issue to the user and suggest alternatives if possible.
             """
 
@@ -151,10 +264,12 @@ def create_external_mcp_agent(
             )
 
         # Return the Strands agent - the MCP client will be managed by IDPAgent
-        logger.info("External MCP Agent created successfully")
+        logger.info(
+            f"External MCP Agent created successfully using {transport} transport"
+        )
         return strands_agent, mcp_client
 
     except Exception as e:
-        error_msg = f"Failed to connect to MCP server at {mcp_url}: {str(e)}"
+        error_msg = f"Failed to connect to MCP server at {mcp_url} using {transport} transport: {str(e)}"
         logger.error(error_msg)
         raise Exception(error_msg)

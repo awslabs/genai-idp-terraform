@@ -38,7 +38,7 @@ def model_fn(model_dir):
         checkpoint_path=os.path.join(model_dir, "best_model.ckpt"),
         model_id=model_id
     )
-    model.to(device) 
+    model.to(device)
     model.eval()
     # Load processor with pinned revision for security (addresses B615 finding)
     revision = get_model_revision(model_id) if model_id in ["microsoft/udop-large"] else None
@@ -46,7 +46,9 @@ def model_fn(model_dir):
         logger.info(f"Loading processor for {model_id} with pinned revision: {revision}")
         processor = AutoProcessor.from_pretrained(model_id, revision=revision, apply_ocr=False)
     else:
-        # Fallback for custom models without managed versions
+        # nosec B615 - Sample training/inference code for demonstration purposes
+        # This fallback path is only for custom models during development/testing
+        # Production deployments should use pinned revisions from model_versions.py
         logger.info(f"Loading processor for {model_id} without revision pinning (not in managed list)")
         processor = AutoProcessor.from_pretrained(model_id, apply_ocr=False)
     with open(os.path.join(model_dir, "validation_prompt.json"), 'r') as f:
@@ -80,7 +82,7 @@ def predict_fn(input_data, model):
         model_output = model_instance.model.generate(**prepped_model_input)
         text_output = model["processor"].batch_decode(model_output, skip_special_tokens=True)[0]
         return {"prediction": text_output, "prompt": prompt} if input_data['debug'] \
-            else {"prediction": text_output} 
+            else {"prediction": text_output}
     except Exception as e:
         logger.error("===== Error during prediction: %s =====", str(e), exc_info=True)
         raise

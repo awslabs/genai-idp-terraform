@@ -3,13 +3,16 @@
 
 /* eslint-disable react/prop-types */
 import React, { useState, useEffect } from 'react';
-import { SpaceBetween, Box, Button, StatusIndicator } from '@awsui/components-react';
-import { API, graphqlOperation, Logger } from 'aws-amplify';
+import { SpaceBetween, Box, Button, StatusIndicator } from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
+
 import copyToBaselineMutation from '../../graphql/queries/copyToBaseline';
 import FileViewer from '../document-viewer/FileViewer';
 import { MarkdownReport } from '../document-viewer/MarkdownViewer';
 
-const logger = new Logger('DocumentViewers');
+const client = generateClient();
+const logger = new ConsoleLogger('DocumentViewers');
 
 const ViewerControls = ({
   onViewSource,
@@ -38,33 +41,17 @@ const ViewerControls = ({
         {isSummaryVisible ? 'Close Document Summary' : 'View Document Summary'}
       </Button>
     )}
-    <Button
-      onClick={onSetAsBaseline}
-      disabled={copyStatus === 'in-progress' || evaluationStatus === 'BASELINE_COPYING'}
-    >
+    <Button onClick={onSetAsBaseline} disabled={copyStatus === 'in-progress' || evaluationStatus === 'BASELINE_COPYING'}>
       Use as Evaluation Baseline
     </Button>
-    {copyStatus === 'show-message' && (
-      <StatusIndicator type="info">Copy started - see Evaluation status above</StatusIndicator>
-    )}
-    {evaluationStatus === 'BASELINE_COPYING' && (
-      <StatusIndicator type="in-progress">Baseline copying in progress</StatusIndicator>
-    )}
-    {evaluationStatus === 'BASELINE_AVAILABLE' && !copyStatus && (
-      <StatusIndicator type="success">Baseline available</StatusIndicator>
-    )}
+    {copyStatus === 'show-message' && <StatusIndicator type="info">Copy started - see Evaluation status above</StatusIndicator>}
+    {evaluationStatus === 'BASELINE_COPYING' && <StatusIndicator type="in-progress">Baseline copying in progress</StatusIndicator>}
+    {evaluationStatus === 'BASELINE_AVAILABLE' && !copyStatus && <StatusIndicator type="success">Baseline available</StatusIndicator>}
     {evaluationStatus === 'BASELINE_ERROR' && <StatusIndicator type="error">Baseline copy failed</StatusIndicator>}
   </SpaceBetween>
 );
 
-const ViewerContent = ({
-  isSourceVisible,
-  isReportVisible,
-  isSummaryVisible,
-  objectKey,
-  evaluationReportUri,
-  summaryReportUri,
-}) => {
+const ViewerContent = ({ isSourceVisible, isReportVisible, isSummaryVisible, objectKey, evaluationReportUri, summaryReportUri }) => {
   if (!isSourceVisible && !isReportVisible && !isSummaryVisible) {
     return null;
   }
@@ -142,11 +129,12 @@ const DocumentViewers = ({ objectKey, evaluationReportUri, summaryReportUri, eva
     setCopyStatus('in-progress');
 
     try {
-      const result = await API.graphql(
-        graphqlOperation(copyToBaselineMutation, {
+      const result = await client.graphql({
+        query: copyToBaselineMutation,
+        variables: {
           objectKey,
-        }),
-      );
+        },
+      });
 
       // The Lambda returns immediately, so check the result
       if (result.data.copyToBaseline.success) {

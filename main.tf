@@ -330,6 +330,16 @@ module "processing_environment_api" {
   document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
   document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
 
+  # v0.4.8 feature flags
+  enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
+  enable_test_studio          = try(var.api.enable_test_studio, false)
+  enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
+  enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
+  enable_mcp                  = try(var.api.enable_mcp, false)
+
+  # Lookup function (used by Agent Chat Processor)
+  lookup_function_name = module.processing_environment.lookup_function_name
+
   # IDP Common Layer ARN for sub-modules
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
@@ -380,7 +390,8 @@ module "bda_processor" {
   data_automation_project_arn = var.bda_processor.project_arn
 
   # Optional: Evaluation configuration
-  evaluation_model_id = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
   # Optional: Summarization configuration (BDA only)
   summarization_model_id = var.bda_processor.summarization.enabled ? var.bda_processor.summarization.model_id : null
@@ -498,7 +509,8 @@ module "sagemaker_udop_processor" {
   # Optional: Model configurations
   extraction_model_id    = null # Will use default from module
   summarization_model_id = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
-  evaluation_model_id    = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
   # Feature flags
 

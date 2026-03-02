@@ -333,8 +333,8 @@ resource "aws_lambda_function" "update_configuration" {
 
   environment {
     variables = {
-      CONFIGURATION_TABLE = local.configuration_table.table_name
-      LOG_LEVEL           = var.log_level
+      CONFIGURATION_TABLE_NAME = local.configuration_table.table_name
+      LOG_LEVEL                = var.log_level
     }
   }
 
@@ -358,4 +358,111 @@ resource "aws_lambda_function" "update_configuration" {
   ]
 
   tags = var.tags
+}
+
+# Post-Processing Decompressor Lambda
+data "archive_file" "post_processing_decompressor_code" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../sources/src/lambda/post_processing_decompressor"
+  output_path = "${local.module_build_dir}/post_processing_decompressor.zip_${random_id.build_id.hex}"
+
+  excludes = ["*.so", "*.dist-info/**", "*.egg-info/**", "__pycache__/**", "*.pyc", "boto3/**", "botocore/**"]
+
+  depends_on = [null_resource.create_module_build_dir]
+}
+
+resource "aws_lambda_function" "post_processing_decompressor" {
+  function_name = "idp-post-processing-decompressor-${random_string.suffix.result}"
+
+  filename         = data.archive_file.post_processing_decompressor_code.output_path
+  source_code_hash = data.archive_file.post_processing_decompressor_code.output_base64sha256
+
+  layers = [var.idp_common_layer_arn]
+
+  handler     = "index.handler"
+  runtime     = "python3.12"
+  timeout     = 300
+  memory_size = 512
+  role        = aws_iam_role.post_processing_decompressor_role.arn
+  description = "Decompresses documents from Step Functions and invokes custom post-processor Lambda"
+
+  kms_key_arn = var.encryption_key_arn
+
+  environment {
+    variables = {
+      LOG_LEVEL                 = var.log_level
+      WORKING_BUCKET            = local.working_bucket_name
+      CUSTOM_POST_PROCESSOR_ARN = var.custom_post_processor_arn != null ? var.custom_post_processor_arn : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_log_group" "post_processing_decompressor_log_group" {
+  name              = "/aws/lambda/${aws_lambda_function.post_processing_decompressor.function_name}"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = var.encryption_key_arn
+
+  tags = var.tags
+}
+
+resource "aws_iam_role" "post_processing_decompressor_role" {
+  name = "idp-post-proc-decomp-role-${random_string.suffix.result}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "post_processing_decompressor_policy" {
+  name = "idp-post-proc-decomp-policy-${random_string.suffix.result}"
+  role = aws_iam_role.post_processing_decompressor_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = [var.working_bucket_arn, "${var.working_bucket_arn}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = var.custom_post_processor_arn != null ? var.custom_post_processor_arn : "arn:${data.aws_partition.current.partition}:lambda:*:*:function:*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "post_processing_decompressor_vpc" {
+  count = length(var.subnet_ids) > 0 ? 1 : 0
+
+  role       = aws_iam_role.post_processing_decompressor_role.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }

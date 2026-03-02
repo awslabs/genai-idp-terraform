@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
-import { HelpPanel, Icon } from '@awsui/components-react';
+import { HelpPanel, Icon } from '@cloudscape-design/components';
 
 const ToolsPanel = () => {
   return (
@@ -23,10 +23,7 @@ const ToolsPanel = () => {
       }
     >
       <div>
-        <p>
-          Use Agent Analysis to interact with AI agents using natural language and receive interactive visualizations
-          and insights.
-        </p>
+        <p>Use Agent Analysis to interact with AI agents using natural language and receive interactive visualizations and insights.</p>
         <h3>How to use</h3>
         <ol>
           <li>Enter your query in the text box</li>

@@ -2,10 +2,21 @@
 # SPDX-License-Identifier: MIT-0
 
 # Use true lazy loading for all submodules
+from typing import TYPE_CHECKING
+
 __version__ = "0.1.0"
 
 # Cache for lazy-loaded submodules
 _submodules = {}
+
+# Type hints are only evaluated during type checking, not at runtime
+if TYPE_CHECKING:
+    from .config import get_config as get_config
+    from .config.models import IDPConfig as IDPConfig
+    from .models import Document as Document
+    from .models import Page as Page
+    from .models import Section as Section
+    from .models import Status as Status
 
 
 def __getattr__(name):
@@ -65,6 +76,7 @@ __all__ = [
     "reporting",
     "agents",
     "get_config",
+    "IDPConfig",
     "Document",
     "Page",
     "Section",

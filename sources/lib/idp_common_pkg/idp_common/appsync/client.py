@@ -57,6 +57,15 @@ class AppSyncClient:
                 "AWS region must be provided or set in AWS_REGION environment variable"
             )
 
+        # Create a requests session for connection pooling
+        self.http_session = requests.Session()
+        # Configure connection pooling and keep-alive
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10, pool_maxsize=10, max_retries=3, pool_block=False
+        )
+        self.http_session.mount("https://", adapter)
+        self.http_session.mount("http://", adapter)
+
     def _sign_request(self, request: AWSRequest) -> Dict[str, str]:
         """
         Sign a request with SigV4 authentication.
@@ -103,8 +112,9 @@ class AppSyncClient:
         signed_headers = self._sign_request(request)
 
         try:
-            response = requests.post(
-                self.api_url, json=data, headers=signed_headers, timeout=30
+            # Use the session for connection pooling and retry with shorter timeout
+            response = self.http_session.post(
+                self.api_url, json=data, headers=signed_headers, timeout=10
             )
             response.raise_for_status()  # Raises HTTPError for bad status codes
 
@@ -139,3 +149,18 @@ class AppSyncClient:
         except requests.RequestException as e:
             logger.error(f"HTTP request to AppSync failed: {str(e)}")
             raise
+
+    def close(self):
+        """Close the HTTP session and clean up resources."""
+        if hasattr(self, "http_session"):
+            self.http_session.close()
+            logger.debug("AppSync HTTP session closed")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - clean up resources."""
+        self.close()
+        return False

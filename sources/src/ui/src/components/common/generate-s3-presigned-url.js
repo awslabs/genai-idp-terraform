@@ -5,9 +5,9 @@ import { S3RequestPresigner } from '@aws-sdk/s3-request-presigner';
 import { parseUrl } from '@aws-sdk/url-parser';
 import { Sha256 } from '@aws-crypto/sha256-browser';
 import { formatUrl } from '@aws-sdk/util-format-url';
-import { Logger } from 'aws-amplify';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
-const logger = new Logger('generate-s3-presigned-url');
+const logger = new ConsoleLogger('generate-s3-presigned-url');
 
 const parseS3Url = (s3Url) => {
   if (!s3Url || typeof s3Url !== 'string' || !s3Url.startsWith('s3://')) {
@@ -61,7 +61,7 @@ const generateS3PresignedUrl = async (url, credentials, options = {}) => {
     }
 
     // Extract region from env
-    const region = process.env.REACT_APP_AWS_REGION;
+    const region = import.meta.env.VITE_AWS_REGION;
 
     // Construct the canonical S3 URL with properly encoded key
     const encodedKey = key

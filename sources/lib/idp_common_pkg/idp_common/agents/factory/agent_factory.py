@@ -93,6 +93,10 @@ class IDPAgentFactory:
             strands_agent = result
             mcp_client = None
 
+        # Extract job_id and user_id from kwargs if provided
+        job_id = kwargs.get("job_id")
+        user_id = kwargs.get("user_id")
+
         # Wrap it in IDPAgent with the registered metadata
         return IDPAgent(
             agent=strands_agent,
@@ -100,9 +104,9 @@ class IDPAgentFactory:
             agent_name=info["agent_name"],
             agent_description=info["agent_description"],
             sample_queries=info["sample_queries"],
-            job_id=kwargs.get("job_id"),
-            user_id=kwargs.get("user_id"),
             mcp_client=mcp_client,
+            job_id=job_id,
+            user_id=user_id,
         )
 
     def create_orchestrator_agent(self, agent_ids: List[str], **kwargs) -> IDPAgent:
@@ -143,6 +147,114 @@ class IDPAgentFactory:
             agent_name="Orchestrator Agent",
             agent_description=orchestrator_description,
             sample_queries=[],
-            job_id=kwargs.get("job_id"),
-            user_id=kwargs.get("user_id"),
         )
+
+    def create_conversational_orchestrator(
+        self,
+        agent_ids: List[str],
+        session_id: str,
+        config: Dict[str, Any],
+        session: Any,
+        **kwargs,
+    ) -> Any:
+        """
+        Create an orchestrator agent with memory and conversation management for multi-turn chat.
+
+        This method creates an orchestrator configured for conversational interactions:
+        - Adds DynamoDB-based memory for conversation history
+        - Adds conversation manager to optimize context size
+        - Configures for streaming responses
+        - Enables multi-turn conversations with context
+
+        Args:
+            agent_ids: List of agent IDs to include as tools in the orchestrator
+            session_id: Session ID for conversation memory
+            config: Configuration dictionary
+            session: Boto3 session for AWS operations
+            **kwargs: Additional arguments passed to orchestrator creation
+
+        Returns:
+            Strands Agent instance configured for conversational use (not wrapped in IDPAgent)
+
+        Raises:
+            ValueError: If any agent_id is not registered
+
+        Example:
+            orchestrator = factory.create_conversational_orchestrator(
+                agent_ids=["document-analysis", "analytics"],
+                session_id="user-session-123",
+                config=config,
+                session=boto3.Session()
+            )
+
+            # Use with streaming
+            async for event in orchestrator.stream_async(prompt):
+                if "data" in event:
+                    print(event["data"])
+        """
+        import logging
+        import os
+
+        logger = logging.getLogger(__name__)
+
+        # Validate all agent IDs exist
+        for agent_id in agent_ids:
+            if agent_id not in self._registry:
+                raise ValueError(f"Agent ID '{agent_id}' not found in registry")
+
+        # Import orchestrator and utilities here to avoid circular imports
+        from ..orchestrator.agent import create_orchestrator_agent
+        from ..utils.conversation_manager import DropAndSlideConversationManager
+        from ..utils.memory_provider import DynamoDBMemoryHookProvider
+
+        logger.info(
+            f"Creating conversational orchestrator for session {session_id} with agents: {agent_ids}"
+        )
+
+        # Get memory table name from environment and create memory provider BEFORE agent creation
+        memory_table_name = os.environ.get("ID_HELPER_CHAT_MEMORY_TABLE")
+        hooks = []
+
+        if not memory_table_name:
+            logger.warning(
+                "ID_HELPER_CHAT_MEMORY_TABLE not set, memory will not be persisted"
+            )
+        else:
+            # Create memory hook for conversation history
+            memory_provider = DynamoDBMemoryHookProvider(
+                table_name=memory_table_name,
+                session_id=session_id,
+                region_name=os.environ.get("BEDROCK_REGION", "us-east-1"),
+                max_message_size_kb=float(os.environ.get("MAX_MESSAGE_SIZE_KB", "8.5")),
+                max_history_turns=int(os.environ.get("MAX_CONVERSATION_TURNS", "20")),
+            )
+            hooks.append(memory_provider)
+            logger.info(f"Created memory provider for session {session_id}")
+
+        # Create the orchestrator agent with hooks passed during creation
+        # This ensures AgentInitializedEvent fires and memory is loaded automatically
+        orchestrator_agent = create_orchestrator_agent(
+            agent_ids=agent_ids,
+            config=config,
+            session=session,
+            hooks=hooks,  # Pass hooks during creation
+            **kwargs,
+        )
+
+        # Add conversation manager to optimize context
+        # Configure to drop verbose tool results but keep sub-agent responses
+        orchestrator_agent.conversation_manager = DropAndSlideConversationManager(
+            tools_to_drop=(),  # Don't drop sub-agent responses for orchestrator
+            keep_call_stub=True,
+            window_size=int(os.environ.get("MAX_CONVERSATION_TURNS", "20")),
+            should_truncate_results=True,
+        )
+        logger.info("Added conversation manager with sliding window")
+
+        logger.info(
+            f"Conversational orchestrator created successfully for session {session_id}"
+        )
+
+        # Return the raw Strands agent (not wrapped in IDPAgent)
+        # This is because the conversational system doesn't use the IDPAgent wrapper
+        return orchestrator_agent

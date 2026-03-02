@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 # Import application modules
 from idp_common.discovery.classes_discovery import ClassesDiscovery
+from idp_common.config.models import IDPConfig
 
 
 @pytest.mark.unit
@@ -25,7 +26,7 @@ class TestClassesDiscoveryIntegration:
 
     @pytest.fixture
     def mock_w4_bedrock_response(self):
-        """Fixture providing a realistic W-4 form Bedrock response."""
+        """Fixture providing a realistic W-4 form Bedrock response in JSON Schema format."""
         return {
             "response": {
                 "output": {
@@ -34,89 +35,76 @@ class TestClassesDiscoveryIntegration:
                             {
                                 "text": json.dumps(
                                     {
-                                        "document_class": "W-4",
-                                        "document_description": "Employee's Withholding Certificate form for federal tax withholding",
-                                        "groups": [
-                                            {
-                                                "name": "PersonalInformation",
+                                        "$schema": "http://json-schema.org/draft-07/schema#",
+                                        "$id": "w4",
+                                        "type": "object",
+                                        "title": "W-4",
+                                        "description": "Employee's Withholding Certificate form for federal tax withholding",
+                                        "x-aws-idp-document-type": "W-4",
+                                        "properties": {
+                                            "PersonalInformation": {
+                                                "type": "object",
                                                 "description": "Personal information of employee",
-                                                "attributeType": "group",
-                                                "groupType": "normal",
-                                                "groupAttributes": [
-                                                    {
-                                                        "name": "FirstName",
-                                                        "dataType": "string",
+                                                "properties": {
+                                                    "FirstName": {
+                                                        "type": "string",
                                                         "description": "First Name of Employee from line 1",
                                                     },
-                                                    {
-                                                        "name": "LastName",
-                                                        "dataType": "string",
+                                                    "LastName": {
+                                                        "type": "string",
                                                         "description": "Last Name of Employee from line 1",
                                                     },
-                                                    {
-                                                        "name": "SSN",
-                                                        "dataType": "string",
+                                                    "SSN": {
+                                                        "type": "string",
                                                         "description": "Social Security Number from line 1",
                                                     },
-                                                ],
+                                                },
                                             },
-                                            {
-                                                "name": "AddressInformation",
+                                            "AddressInformation": {
+                                                "type": "object",
                                                 "description": "Address information of employee",
-                                                "attributeType": "group",
-                                                "groupType": "normal",
-                                                "groupAttributes": [
-                                                    {
-                                                        "name": "Address",
-                                                        "dataType": "string",
+                                                "properties": {
+                                                    "Address": {
+                                                        "type": "string",
                                                         "description": "Home address from line 2",
                                                     },
-                                                    {
-                                                        "name": "City",
-                                                        "dataType": "string",
+                                                    "City": {
+                                                        "type": "string",
                                                         "description": "City from line 2",
                                                     },
-                                                    {
-                                                        "name": "State",
-                                                        "dataType": "string",
+                                                    "State": {
+                                                        "type": "string",
                                                         "description": "State from line 2",
                                                     },
-                                                    {
-                                                        "name": "ZipCode",
-                                                        "dataType": "string",
+                                                    "ZipCode": {
+                                                        "type": "string",
                                                         "description": "ZIP code from line 2",
                                                     },
-                                                ],
+                                                },
                                             },
-                                            {
-                                                "name": "WithholdingInformation",
+                                            "WithholdingInformation": {
+                                                "type": "object",
                                                 "description": "Tax withholding preferences",
-                                                "attributeType": "group",
-                                                "groupType": "normal",
-                                                "groupAttributes": [
-                                                    {
-                                                        "name": "FilingStatus",
-                                                        "dataType": "string",
+                                                "properties": {
+                                                    "FilingStatus": {
+                                                        "type": "string",
                                                         "description": "Filing status from step 1",
                                                     },
-                                                    {
-                                                        "name": "MultipleJobs",
-                                                        "dataType": "boolean",
+                                                    "MultipleJobs": {
+                                                        "type": "boolean",
                                                         "description": "Multiple jobs checkbox from step 2",
                                                     },
-                                                    {
-                                                        "name": "Dependents",
-                                                        "dataType": "number",
+                                                    "Dependents": {
+                                                        "type": "number",
                                                         "description": "Number of dependents from step 3",
                                                     },
-                                                    {
-                                                        "name": "ExtraWithholding",
-                                                        "dataType": "number",
+                                                    "ExtraWithholding": {
+                                                        "type": "number",
                                                         "description": "Extra withholding amount from step 4",
                                                     },
-                                                ],
+                                                },
                                             },
-                                        ],
+                                        },
                                     }
                                 )
                             }
@@ -162,24 +150,31 @@ class TestClassesDiscoveryIntegration:
             mock_client = MagicMock()
             mock_bedrock_client.return_value = mock_client
 
-            # Mock ConfigurationReader to return a default config
+            # Mock ConfigurationReader to return an IDPConfig model
+            from idp_common.config.models import (
+                IDPConfig,
+                DiscoveryConfig,
+                DiscoveryModelConfig,
+            )
+
+            mock_config = IDPConfig(
+                discovery=DiscoveryConfig(
+                    without_ground_truth=DiscoveryModelConfig(
+                        model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                        temperature=1.0,
+                        top_p=0.1,
+                        max_tokens=10000,
+                    ),
+                    with_ground_truth=DiscoveryModelConfig(
+                        model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                        temperature=1.0,
+                        top_p=0.1,
+                        max_tokens=10000,
+                    ),
+                )
+            )
             mock_reader_instance = mock_config_reader.return_value
-            mock_reader_instance.get_merged_configuration.return_value = {
-                "discovery": {
-                    "without_ground_truth": {
-                        "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
-                        "temperature": 1.0,
-                        "top_p": 0.1,
-                        "max_tokens": 10000,
-                    },
-                    "with_ground_truth": {
-                        "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
-                        "temperature": 1.0,
-                        "top_p": 0.1,
-                        "max_tokens": 10000,
-                    },
-                }
-            }
+            mock_reader_instance.get_merged_configuration.return_value = mock_config
 
             service = ClassesDiscovery(
                 input_bucket="test-discovery-bucket",
@@ -261,22 +256,23 @@ class TestClassesDiscoveryIntegration:
         classes = put_item_args["Item"]["classes"]
         assert len(classes) == 1
 
+        # Verify JSON Schema format
         w4_class = classes[0]
-        assert w4_class["name"] == "W-4"
+        assert w4_class["$id"] == "w4"
+        assert w4_class["title"] == "W-4"
         assert (
             w4_class["description"]
             == "Employee's Withholding Certificate form for federal tax withholding"
         )
+        assert w4_class["x-aws-idp-document-type"] == "W-4"
         assert (
-            len(w4_class["attributes"]) == 3
+            len(w4_class["properties"]) == 3
         )  # PersonalInformation, AddressInformation, WithholdingInformation
 
-        # Verify group structure
-        personal_info = next(
-            g for g in w4_class["attributes"] if g["name"] == "PersonalInformation"
-        )
-        assert personal_info["attributeType"] == "group"
-        assert len(personal_info["groupAttributes"]) == 3  # FirstName, LastName, SSN
+        # Verify properties structure (JSON Schema format)
+        personal_info = w4_class["properties"]["PersonalInformation"]
+        assert personal_info["type"] == "object"
+        assert len(personal_info["properties"]) == 3  # FirstName, LastName, SSN
 
     @patch("idp_common.utils.s3util.S3Util.get_bytes")
     @patch("idp_common.bedrock.extract_text_from_response")
@@ -352,19 +348,34 @@ class TestClassesDiscoveryIntegration:
         ]["content"][0]["text"]
         service_with_mocks._mock_bedrock_client.return_value = mock_w4_bedrock_response
 
-        # Mock existing configuration with different forms
-        existing_config = {
-            "Configuration": "Custom",
-            "classes": [
+        # Mock existing configuration with different forms in JSON Schema format
+        existing_item = IDPConfig(
+            classes=[
                 {
-                    "name": "I-9",
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "i9",
+                    "type": "object",
+                    "title": "I-9",
                     "description": "Employment Eligibility Verification",
-                    "attributes": [],
+                    "x-aws-idp-document-type": "I-9",
+                    "properties": {},
                 },
-                {"name": "W-4", "description": "Old W-4 description", "attributes": []},
-            ],
-        }
-        service_with_mocks._mock_table.get_item.return_value = {"Item": existing_config}
+                {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "w4",
+                    "type": "object",
+                    "title": "W-4",
+                    "description": "Old W-4 description",
+                    "x-aws-idp-document-type": "W-4",
+                    "properties": {},
+                },
+            ]
+        )
+        # Create mocks for config_manager methods
+        service_with_mocks.config_manager.get_configuration = MagicMock(
+            return_value=existing_item
+        )
+        service_with_mocks.config_manager.save_configuration = MagicMock()
 
         # Execute discovery
         result = service_with_mocks.discovery_classes_with_document(
@@ -374,23 +385,25 @@ class TestClassesDiscoveryIntegration:
         # Verify successful completion
         assert result["status"] == "SUCCESS"
 
-        # Verify configuration was updated
-        put_item_args = service_with_mocks._mock_table.put_item.call_args[1]
-        updated_classes = put_item_args["Item"]["classes"]
+        # Verify configuration was saved
+        save_config_args = (
+            service_with_mocks.config_manager.save_configuration.call_args[0]
+        )
+        updated_classes = save_config_args[1].classes
 
         # Should have 2 classes: I-9 (unchanged) + W-4 (updated)
         assert len(updated_classes) == 2
 
-        # Find and verify the updated W-4 class
-        w4_class = next(cls for cls in updated_classes if cls["name"] == "W-4")
+        # Find and verify the updated W-4 class (JSON Schema format)
+        w4_class = next(cls for cls in updated_classes if cls["$id"] == "w4")
         assert (
             w4_class["description"]
             == "Employee's Withholding Certificate form for federal tax withholding"
         )
-        assert len(w4_class["attributes"]) == 3
+        assert len(w4_class["properties"]) == 3
 
-        # Verify I-9 class is still present
-        i9_class = next(cls for cls in updated_classes if cls["name"] == "I-9")
+        # Verify I-9 class is still present (JSON Schema format)
+        i9_class = next(cls for cls in updated_classes if cls["$id"] == "i9")
         assert i9_class["description"] == "Employment Eligibility Verification"
 
     def test_error_handling_and_recovery(self, service_with_mocks):
@@ -427,9 +440,13 @@ class TestClassesDiscoveryIntegration:
         ):
             mock_get_bytes.return_value = b"fake image content"
             expected_response = {
-                "document_class": "Receipt",
-                "document_description": "Purchase receipt",
-                "groups": [],
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "$id": "receipt",
+                "type": "object",
+                "title": "Receipt",
+                "description": "Purchase receipt",
+                "x-aws-idp-document-type": "Receipt",
+                "properties": {},
             }
             mock_extract_text.return_value = json.dumps(expected_response)
             service_with_mocks._mock_bedrock_client.invoke_model.return_value = {

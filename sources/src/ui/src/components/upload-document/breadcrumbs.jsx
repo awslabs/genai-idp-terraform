@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
-import { BreadcrumbGroup } from '@awsui/components-react';
+import { BreadcrumbGroup } from '@cloudscape-design/components';
 import { DOCUMENTS_PATH, UPLOAD_DOCUMENT_PATH, DEFAULT_PATH } from '../../routes/constants';
 
 export const uploadDocumentBreadcrumbItems = [
