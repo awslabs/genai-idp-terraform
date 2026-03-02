@@ -82,6 +82,13 @@ variable "api" {
       model_id           = optional(string, "us.amazon.nova-pro-v1:0")
       embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
     }), { enabled = false })
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = optional(bool, false)
+    enable_test_studio          = optional(bool, false)
+    enable_fcc_dataset          = optional(bool, false)
+    enable_error_analyzer       = optional(bool, false)
+    enable_mcp                  = optional(bool, false)
   })
 
   default = {
@@ -91,11 +98,6 @@ variable "api" {
     chat_with_document = { enabled = false }
     process_changes    = { enabled = false }
     knowledge_base     = { enabled = true } # Enable by default for BDA example
-  }
-
-  validation {
-    condition     = !var.api.chat_with_document.enabled || var.api.knowledge_base.enabled
-    error_message = "When api.chat_with_document.enabled is true, api.knowledge_base.enabled must also be true."
   }
 
   validation {

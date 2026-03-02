@@ -1,26 +1,32 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
-import { Route, Switch, useRouteMatch } from 'react-router-dom';
-import { Logger } from 'aws-amplify';
+import { Route, Routes } from 'react-router-dom';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
 import DocumentsQueryLayout from '../components/document-kb-query-layout';
 import GenAIIDPLayout from '../components/genaiidp-layout';
+import GenAIIDPTopNavigation from '../components/genai-idp-top-navigation';
 
-const logger = new Logger('DocumentsQueryRoutes');
+const logger = new ConsoleLogger('DocumentsQueryRoutes');
 
 const DocumentsQueryRoutes = () => {
-  const { path } = useRouteMatch();
-  logger.info('path ', path);
+  logger.info('DocumentsQueryRoutes');
 
   return (
-    <Switch>
-      <Route path={path}>
-        <GenAIIDPLayout>
-          <DocumentsQueryLayout />
-        </GenAIIDPLayout>
-      </Route>
-    </Switch>
+    <Routes>
+      <Route
+        path="*"
+        element={
+          <div>
+            <GenAIIDPTopNavigation />
+            <GenAIIDPLayout>
+              <DocumentsQueryLayout />
+            </GenAIIDPLayout>
+          </div>
+        }
+      />
+    </Routes>
   );
 };
 

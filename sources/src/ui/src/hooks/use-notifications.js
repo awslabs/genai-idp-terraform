@@ -1,11 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from 'react';
-import { Logger } from 'aws-amplify';
+import { ConsoleLogger } from 'aws-amplify/utils';
 
 import useAppContext from '../contexts/app';
 
-const logger = new Logger('useNotifications');
+const logger = new ConsoleLogger('useNotifications');
 
 const dismissedInitialNotificationsStorageKey = 'dismissedInitialNotifications';
 const initialNotifications = [
@@ -44,9 +44,7 @@ const useNotifications = () => {
     };
 
     const dismissedInitialNotificationIds = getDissmissedNotificationIdsFromStorage();
-    const initialNotificationsNotDismissed = initialNotifications.filter(
-      (n) => !dismissedInitialNotificationIds.includes(n.id),
-    );
+    const initialNotificationsNotDismissed = initialNotifications.filter((n) => !dismissedInitialNotificationIds.includes(n.id));
 
     const notificationIds = notifications.map((n) => n.id);
     // prettier-ignore

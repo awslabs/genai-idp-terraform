@@ -233,112 +233,60 @@ phases:
     commands:
       - echo "Building layers from requirements files"
       - |
-        set -e  # Exit immediately if a command fails
-        # Install common system dependencies
+        set -e
         echo "Installing system dependencies..."
         yum install -y gcc gcc-c++ python3-devel zlib-devel libjpeg-devel libpng-devel
-        
+
         for req_file in $(find . -name "requirements.txt"); do
           LAYER_NAME=$(basename $(dirname $req_file))
           echo "=========================================="
-          echo "Building layer for $LAYER_NAME"
-          echo "Requirements file: $req_file"
-          echo "Contents of requirements file:"
+          echo "Building layer: $LAYER_NAME"
           cat $req_file
-          
-          # Create layer directory
-          mkdir -p /tmp/$LAYER_NAME/python
-          
-          # Check if requirements file is empty
-          if [ -s "$req_file" ]; then
-            # File is not empty, install dependencies
-            echo "Installing dependencies for $LAYER_NAME..."
-            
-            # Special handling for Pillow/PIL
-            if grep -q -i "pillow\|PIL" "$req_file"; then
-              echo "Detected Pillow/PIL requirement - using special installation method"
-              
-              # Create lib directory for shared libraries
-              mkdir -p /tmp/$LAYER_NAME/lib
-              
-              # Copy required shared libraries
-              echo "Copying required shared libraries..."
-              cp -P /usr/lib64/libjpeg.so* /tmp/$LAYER_NAME/lib/
-              cp -P /usr/lib64/libpng.so* /tmp/$LAYER_NAME/lib/
-              cp -P /usr/lib64/libz.so* /tmp/$LAYER_NAME/lib/
-              cp -P /usr/lib64/libtiff.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || echo "libtiff not available"
-              cp -P /usr/lib64/libfreetype.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || echo "libfreetype not available"
-              cp -P /usr/lib64/liblcms2.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || echo "liblcms2 not available"
-              cp -P /usr/lib64/libwebp.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || echo "libwebp not available"
-              
-              # List copied libraries
-              echo "Copied libraries:"
-              ls -la /tmp/$LAYER_NAME/lib/
-              
-              # Create a virtual environment to properly compile Pillow
-              python -m venv /tmp/venv
-              source /tmp/venv/bin/activate
-              
-              # Install wheel first
-              pip install wheel
-              
-              # Install Pillow with proper compilation flags
-              CFLAGS="-I/usr/include/libjpeg-turbo" pip install Pillow --no-cache-dir
-              
-              # Install other requirements
-              pip install -r $req_file --no-deps --no-cache-dir
-              
-              # Copy the compiled packages to the layer directory
-              cp -r /tmp/venv/lib/python3.12/site-packages/* /tmp/$LAYER_NAME/python/
-              
-              # Deactivate virtual environment
-              deactivate
-            else
-              # Normal installation for other packages
-              pip install -r $req_file -t /tmp/$LAYER_NAME/python --no-cache-dir
-            fi
 
-            # Check if installation was successful
-            if [ $? -ne 0 ]; then
-              echo "Failed to install dependencies for $LAYER_NAME"
-              exit 1
-            fi
-          else
-            # File is empty, create minimal layer
-            echo "Requirements file is empty, creating minimal layer"
+          mkdir -p /tmp/$LAYER_NAME/python
+
+          # Strip local path refs (./...), inline comments, and blank lines
+          CLEAN_REQ="/tmp/$${LAYER_NAME}_clean.txt"
+          sed 's/#.*//' "$req_file" | grep -v '^\s*\.' | grep -v '^\s*$' > "$CLEAN_REQ" || true
+          echo "Installable requirements:"
+          cat "$CLEAN_REQ"
+
+          if [ ! -s "$CLEAN_REQ" ]; then
+            echo "No installable requirements, creating minimal layer"
             touch /tmp/$LAYER_NAME/python/__init__.py
-          fi
-          
-          # List installed packages
-          echo "Installed packages for $LAYER_NAME:"
-          ls -la /tmp/$LAYER_NAME/python/
-          
-          # Create zip file
-          echo "Creating zip file for $LAYER_NAME..."
-          cd /tmp/$LAYER_NAME
-          zip -r /tmp/layers/$LAYER_NAME.zip python/ lib/
-          
-          # Check if zip was successful
-          if [ $? -ne 0 ]; then
-            echo "Failed to create zip file for $LAYER_NAME"
-            exit 1
-          fi
-          
-          # Check zip file size
-          echo "Zip file size for $LAYER_NAME:"
-          ls -lh /tmp/layers/$LAYER_NAME.zip
-          
-          # Return to original directory - use CODEBUILD_SRC_DIR or fallback
-          if [ -d "$CODEBUILD_SRC_DIR" ]; then
-            cd $CODEBUILD_SRC_DIR
+          elif grep -q -i "pillow\|PIL" "$CLEAN_REQ"; then
+            echo "Pillow detected - using special build method"
+            mkdir -p /tmp/$LAYER_NAME/lib
+            cp -P /usr/lib64/libjpeg.so* /tmp/$LAYER_NAME/lib/
+            cp -P /usr/lib64/libpng.so* /tmp/$LAYER_NAME/lib/
+            cp -P /usr/lib64/libz.so* /tmp/$LAYER_NAME/lib/
+            cp -P /usr/lib64/libtiff.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || true
+            cp -P /usr/lib64/libfreetype.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || true
+            cp -P /usr/lib64/liblcms2.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || true
+            cp -P /usr/lib64/libwebp.so* /tmp/$LAYER_NAME/lib/ 2>/dev/null || true
+            python -m venv /tmp/venv
+            source /tmp/venv/bin/activate
+            pip install wheel
+            CFLAGS="-I/usr/include/libjpeg-turbo" pip install Pillow --no-cache-dir
+            pip install -r $CLEAN_REQ --no-deps --no-cache-dir
+            cp -r /tmp/venv/lib/python3.12/site-packages/* /tmp/$LAYER_NAME/python/
+            deactivate
           else
-            # Just continue without changing directory if the path doesn't exist
-            echo "Source directory not found, continuing..."
+            pip install -r $CLEAN_REQ -t /tmp/$LAYER_NAME/python --no-cache-dir
           fi
+
+          echo "Installed packages:"
+          ls -la /tmp/$LAYER_NAME/python/
+
+          echo "Creating zip for $LAYER_NAME..."
+          cd /tmp/$LAYER_NAME
+          zip -r /tmp/layers/$LAYER_NAME.zip python/ $([ -d lib ] && echo lib/)
+          ls -lh /tmp/layers/$LAYER_NAME.zip
+
+          cd $CODEBUILD_SRC_DIR 2>/dev/null || true
           echo "=========================================="
         done
       - echo "All layers built successfully"
-      - echo "Contents of /tmp/layers/:"
       - ls -lh /tmp/layers/
   post_build:
     commands:

@@ -13,7 +13,7 @@ output "function_name" {
 
 output "source_hash" {
   description = "Source code hash of the function"
-  value       = data.archive_file.pattern2_hitl_status_update_code.output_base64sha256
+  value       = var.image_uri == null ? data.archive_file.pattern2_hitl_status_update_code[0].output_base64sha256 : null
 }
 
 output "role_arn" {

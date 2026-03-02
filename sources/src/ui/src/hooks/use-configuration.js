@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: MIT-0
 
 import { useState, useEffect } from 'react';
-import { API, graphqlOperation, Logger } from 'aws-amplify';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import getConfigurationQuery from '../graphql/queries/getConfiguration';
 import updateConfigurationMutation from '../graphql/queries/updateConfiguration';
 
-const logger = new Logger('useConfiguration');
+const client = generateClient();
+const logger = new ConsoleLogger('useConfiguration');
 
 // Utility function to normalize boolean values from strings
 const normalizeBooleans = (obj, schema) => {
@@ -53,29 +55,86 @@ const normalizeBooleans = (obj, schema) => {
   return normalized;
 };
 
-// Deep merge function for combining default and custom configurations
-const deepMerge = (target, source) => {
-  const result = { ...target };
+// Utility: Get value at path in nested object
+const getValueAtPath = (obj, path) => {
+  if (!obj || !path) return undefined;
+  const segments = path.split(/[.[\]]+/).filter(Boolean);
+  return segments.reduce((acc, segment) => {
+    if (acc === null || acc === undefined) return undefined;
+    return acc[segment];
+  }, obj);
+};
 
-  if (!source) {
-    return result;
+// Utility: Set value at path in nested object (immutable)
+const setValueAtPath = (obj, path, value) => {
+  if (!obj || !path) return obj;
+  const segments = path.split(/[.[\]]+/).filter(Boolean);
+  const result = JSON.parse(JSON.stringify(obj)); // Deep clone
+
+  let current = result;
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    const segment = segments[i];
+    if (!(segment in current)) {
+      // Create intermediate object or array
+      const nextSegment = segments[i + 1];
+      current[segment] = /^\d+$/.test(nextSegment) ? [] : {};
+    }
+    current = current[segment];
   }
 
-  Object.keys(source)
-    .filter((key) => Object.hasOwn(source, key))
-    .forEach((key) => {
-      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-        if (Object.hasOwn(target, key) && target[key] && typeof target[key] === 'object') {
-          result[key] = deepMerge(target[key], source[key]);
-        } else {
-          result[key] = { ...source[key] };
-        }
-      } else {
-        result[key] = source[key];
+  current[segments[segments.length - 1]] = value;
+  return result;
+};
+
+// Utility: Compute diff between two configs (returns only changes)
+// Note: This only returns CHANGED values, never deletions
+// Custom config is always complete, never has missing keys
+const getDiff = (oldConfig, newConfig) => {
+  const diff = {};
+
+  const computeDiff = (oldObj, newObj, path = []) => {
+    // Only check for new or changed keys (no deletions)
+    Object.keys(newObj).forEach((key) => {
+      const newValue = newObj[key];
+      const oldValue = oldObj ? oldObj[key] : undefined;
+      const currentPath = [...path, key];
+
+      // Nested objects - recurse
+      if (
+        newValue &&
+        oldValue &&
+        typeof newValue === 'object' &&
+        typeof oldValue === 'object' &&
+        !Array.isArray(newValue) &&
+        !Array.isArray(oldValue)
+      ) {
+        computeDiff(oldValue, newValue, currentPath);
+      }
+      // Value changed or is new
+      else if (JSON.stringify(newValue) !== JSON.stringify(oldValue)) {
+        setDiffValue(diff, currentPath, newValue);
       }
     });
 
-  return result;
+    // Note: We do NOT check for deleted keys
+    // Custom config should always be complete
+    // "Reset to default" means setting the default VALUE, not deleting the key
+  };
+
+  const setDiffValue = (obj, path, value) => {
+    let current = obj;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const segment = path[i];
+      if (!(segment in current)) {
+        current[segment] = {};
+      }
+      current = current[segment];
+    }
+    current[path[path.length - 1]] = value;
+  };
+
+  computeDiff(oldConfig, newConfig);
+  return diff;
 };
 
 const useConfiguration = () => {
@@ -84,17 +143,30 @@ const useConfiguration = () => {
   const [customConfig, setCustomConfig] = useState(null);
   const [mergedConfig, setMergedConfig] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchConfiguration = async () => {
-    setLoading(true);
+  const fetchConfiguration = async (silent = false) => {
+    // Use different loading states for initial load vs background refresh
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       logger.debug('Fetching configuration...');
-      const result = await API.graphql(graphqlOperation(getConfigurationQuery));
+      const result = await client.graphql({ query: getConfigurationQuery });
       logger.debug('API response:', result);
 
-      const { Schema, Default, Custom } = result.data.getConfiguration;
+      const response = result.data.getConfiguration;
+
+      if (!response.success) {
+        const errorMsg = response.error?.message || 'Failed to load configuration';
+        throw new Error(errorMsg);
+      }
+
+      const { Schema, Default, Custom } = response;
 
       // Log raw data types
       logger.debug('Raw data types:', {
@@ -117,6 +189,12 @@ const useConfiguration = () => {
           logger.error('Error parsing schema string:', e);
           throw new Error(`Failed to parse schema data: ${e.message}`);
         }
+      }
+
+      // Unwrap nested Schema object if present
+      if (schemaObj && schemaObj.Schema) {
+        schemaObj = schemaObj.Schema;
+        logger.debug('Unwrapped nested Schema object');
       }
 
       // Parse default config if it's a string
@@ -167,22 +245,32 @@ const useConfiguration = () => {
       setDefaultConfig(normalizedDefaultObj);
       setCustomConfig(normalizedCustomObj);
 
-      // Merge default and custom configurations
-      const merged = deepMerge(normalizedDefaultObj, normalizedCustomObj);
-      console.log('Merged configuration result:', merged);
+      // IMPORTANT: Frontend only uses Custom config
+      // Backend ensures Custom is always populated (copies Default on first read)
+      // This way frontend always diffs against a complete config
+      const activeConfig = normalizedCustomObj;
+
+      console.log('Active configuration (Custom only):', activeConfig);
       // Double check the classification and extraction sections
-      if (merged.classification) {
-        console.log('Final classification data:', merged.classification);
+      if (activeConfig.classification) {
+        console.log('Final classification data:', activeConfig.classification);
       }
-      if (merged.extraction) {
-        console.log('Final extraction data:', merged.extraction);
+      if (activeConfig.extraction) {
+        console.log('Final extraction data:', activeConfig.extraction);
       }
-      setMergedConfig(merged);
+      if (activeConfig.classes) {
+        console.log('Final classes (JSON Schema) data:', activeConfig.classes);
+      }
+      setMergedConfig(activeConfig);
     } catch (err) {
       logger.error('Error fetching configuration', err);
       setError(`Failed to load configuration: ${err.message}`);
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -206,16 +294,24 @@ const useConfiguration = () => {
 
       logger.debug('Sending customConfig string:', configString);
 
-      const result = await API.graphql(graphqlOperation(updateConfigurationMutation, { customConfig: configString }));
+      const result = await client.graphql({
+        query: updateConfigurationMutation,
+        variables: { customConfig: configString },
+      });
 
-      if (result.data.updateConfiguration) {
-        setCustomConfig(configToUpdate);
-        // Update merged config
-        const merged = deepMerge(defaultConfig, configToUpdate);
-        setMergedConfig(merged);
-        return true;
+      const response = result.data.updateConfiguration;
+
+      if (!response.success) {
+        const errorMsg = response.error?.message || 'Failed to update configuration';
+        throw new Error(errorMsg);
       }
-      return false;
+
+      // Refetch silently to ensure backend and frontend are in sync
+      // Silent mode prevents loading state changes that cause re-renders
+      // The component will handle rehydration without full re-render
+      await fetchConfiguration(true);
+
+      return true;
     } catch (err) {
       logger.error('Error updating configuration', err);
       setError(`Failed to update configuration: ${err.message}`);
@@ -224,304 +320,56 @@ const useConfiguration = () => {
   };
 
   // Reset a specific configuration path back to default
+  // Frontend computes the new custom config and sends diff to backend
   const resetToDefault = async (path) => {
-    if (!customConfig || !path) return false;
+    if (!path || !customConfig || !defaultConfig) return false;
 
-    // Create a copy of the custom config
-    const newCustomConfig = { ...customConfig };
+    setError(null);
+    try {
+      logger.debug(`Resetting path to default: ${path}`);
 
-    // Handle both dot notation and bracket notation
-    // First, normalize the path to handle array indices properly
-    const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
+      // Get the default value for this path
+      const defaultValue = getValueAtPath(defaultConfig, path);
+      logger.debug(`Default value at ${path}:`, defaultValue);
 
-    // Split the path into segments and handle array indices
-    let pathSegments;
+      // Create new custom config with default value
+      const newCustomConfig = setValueAtPath(customConfig, path, defaultValue);
 
-    // Check if the path already contains bracket notation for arrays
-    if (path.includes('[')) {
-      // Use regex to split properly on both dots and brackets
-      pathSegments = normalizedPath.split('.');
-    } else {
-      // Regular dot notation
-      pathSegments = path.split('.');
+      // Compute diff between old and new custom config
+      const diff = getDiff(customConfig, newCustomConfig);
+      logger.debug('Computed diff:', diff);
+
+      // Send only the diff to backend
+      const result = await client.graphql({
+        query: updateConfigurationMutation,
+        variables: { customConfig: JSON.stringify(diff) },
+      });
+
+      const response = result.data.updateConfiguration;
+
+      if (!response.success) {
+        const errorMsg = response.error?.message || 'Failed to reset to default';
+        throw new Error(errorMsg);
+      }
+
+      logger.debug(`Successfully reset path ${path} to default`);
+
+      // Optimistic update: update local state immediately
+      setCustomConfig(newCustomConfig);
+      setMergedConfig(newCustomConfig);
+
+      return true;
+    } catch (err) {
+      logger.error('Error resetting to default', err);
+      setError(`Failed to reset to default: ${err.message}`);
+      // Refetch on error to ensure consistency
+      await fetchConfiguration(true);
+      return false;
     }
-
-    // Look for any numeric segments which indicate array indices
-    const arrayIndices = [];
-    pathSegments.forEach((segment, index) => {
-      if (/^\d+$/.test(segment)) {
-        arrayIndices.push(index);
-      }
-    });
-
-    // Special handling for list items using name property as a key
-    if (arrayIndices.length > 0) {
-      // For nested arrays, we need to handle the deepest array first
-      // Get the index of the last array in the path
-      const lastArrayIndex = arrayIndices[arrayIndices.length - 1];
-
-      // Build the path to the parent array of the item we want to reset
-      const arrayPath = pathSegments.slice(0, lastArrayIndex).join('.');
-
-      // Get the array item index
-      const itemIndex = parseInt(pathSegments[lastArrayIndex], 10);
-
-      // Check if this is a property of an array item
-      const isItemProperty = pathSegments.length > lastArrayIndex + 1;
-
-      // Get the property name if this is an item property
-      const propertyName = isItemProperty ? pathSegments[lastArrayIndex + 1] : null;
-
-      // For debugging
-      logger.debug(`Handling nested array. Full path: ${path}`);
-      logger.debug(`Array path: ${arrayPath}, item index: ${itemIndex}, property: ${propertyName || 'none'}`);
-      logger.debug(`Array indices in path: ${arrayIndices.join(', ')}`);
-      logger.debug(`Last array index position: ${lastArrayIndex}`);
-
-      logger.debug(`Detected array path: ${arrayPath}, index: ${itemIndex}, property: ${propertyName || 'none'}`);
-
-      // Helper function to get value at a path
-      const getValueAtPath = (obj, pathStr) => {
-        if (!pathStr) return obj;
-        return pathStr.split('.').reduce((acc, part) => {
-          if (acc === undefined || acc === null) return undefined;
-          return acc[part];
-        }, obj);
-      };
-
-      // Helper function to set value at a path
-      const setValueAtPath = (obj, pathStr, value) => {
-        if (!pathStr) return false;
-
-        const parts = pathStr.split('.');
-        let current = obj;
-
-        // Navigate to the parent object
-        for (let i = 0; i < parts.length - 1; i += 1) {
-          const part = parts[i];
-          if (current[part] === undefined) {
-            current[part] = {};
-          }
-          current = current[part];
-        }
-
-        // Set the value
-        current[parts[parts.length - 1]] = value;
-        return true;
-      };
-
-      const customArray = getValueAtPath(customConfig, arrayPath);
-      const defaultArray = getValueAtPath(defaultConfig, arrayPath);
-
-      // Check if both arrays exist
-      if (Array.isArray(customArray) && Array.isArray(defaultArray)) {
-        // Get current array in our modified copy
-        let customArrayInNew = getValueAtPath(newCustomConfig, arrayPath);
-
-        // If the array doesn't exist in our copy or is no longer an array, recreate it
-        if (!Array.isArray(customArrayInNew)) {
-          logger.debug(`Array at ${arrayPath} doesn't exist in the copy. Creating it.`);
-          setValueAtPath(newCustomConfig, arrayPath, [...customArray]);
-          customArrayInNew = getValueAtPath(newCustomConfig, arrayPath);
-        }
-
-        // If the property being reset is 'name', handle differently
-        if (propertyName === 'name') {
-          // Case 1: Name was modified - consider it a new item
-          // Get the current item's name (before reset)
-          const currentItemName = customArray[itemIndex]?.name;
-          const defaultValue = customArray[itemIndex]
-            ? defaultArray.find((item) => JSON.stringify(item) === JSON.stringify(customArray[itemIndex]))?.name
-            : null;
-
-          logger.debug(`Resetting name property. Current: ${currentItemName}, Default: ${defaultValue}`);
-
-          if (currentItemName) {
-            if (defaultValue) {
-              // This was a renamed existing item - restore original name
-              logger.debug(`Restoring original name: ${defaultValue}`);
-              customArrayInNew[itemIndex].name = defaultValue;
-            } else {
-              // This is a new item that doesn't exist in defaults - remove it
-              logger.debug(`Removing new item with name: ${currentItemName}`);
-              customArrayInNew.splice(itemIndex, 1);
-            }
-          }
-        } else if (propertyName) {
-          // Case 2: Regular property modification of an array item
-
-          // Find the item by looking at its name
-          const currentItemName = customArray[itemIndex]?.name;
-
-          if (currentItemName) {
-            // Find matching default item by name
-            const matchingDefaultItem = defaultArray.find((item) => item.name === currentItemName);
-
-            if (matchingDefaultItem) {
-              // Reset only the specified property to its default value
-              logger.debug(`Resetting property ${propertyName} for item with name: ${currentItemName}`);
-
-              if (matchingDefaultItem[propertyName] !== undefined) {
-                // Set to default value
-                customArrayInNew[itemIndex][propertyName] = matchingDefaultItem[propertyName];
-              } else {
-                // Property doesn't exist in default - remove it
-                delete customArrayInNew[itemIndex][propertyName];
-              }
-            } else {
-              // No matching default - this is a completely new item
-              // For new items, just delete the property if it's not 'name'
-              logger.debug(`No matching default found. Removing property: ${propertyName}`);
-              delete customArrayInNew[itemIndex][propertyName];
-            }
-          }
-        } else {
-          // Case 3: Resetting an entire array item (not a specific property)
-          const currentItemName = customArray[itemIndex]?.name;
-
-          if (currentItemName) {
-            // Find the matching default item by name
-            const matchingDefaultItem = defaultArray.find((item) => item.name === currentItemName);
-
-            if (matchingDefaultItem) {
-              // Replace with default values
-              logger.debug(`Resetting entire item with name: ${currentItemName}`);
-              customArrayInNew[itemIndex] = { ...matchingDefaultItem };
-            } else {
-              // No matching default - this is a new item, remove it
-              logger.debug(`No matching default found. Removing item: ${currentItemName}`);
-              customArrayInNew.splice(itemIndex, 1);
-            }
-          }
-        }
-
-        // Check if this is a nested array (within another array)
-        const isNestedArray = arrayPath.includes('.') && /\d+/.test(arrayPath);
-
-        // For nested arrays, ONLY reset the specific property requested - NEVER remove the item
-        if (isNestedArray) {
-          logger.debug(`This is a nested array. Using minimal targeted reset.`);
-
-          // If we have a property name and the item exists in our array
-          if (propertyName && customArrayInNew[itemIndex]) {
-            const currentItemName = customArrayInNew[itemIndex].name;
-            const matchingDefaultItem = defaultArray.find((item) => item.name === currentItemName);
-
-            if (matchingDefaultItem && matchingDefaultItem[propertyName] !== undefined) {
-              logger.debug(`Resetting property '${propertyName}' to default value for item '${currentItemName}'`);
-
-              // Simply restore the default value for this property - don't delete anything
-              customArrayInNew[itemIndex][propertyName] = JSON.parse(JSON.stringify(matchingDefaultItem[propertyName]));
-
-              logger.debug(
-                `Property has been reset, but item is preserved: ${JSON.stringify(customArrayInNew[itemIndex])}`,
-              );
-            } else {
-              logger.debug(
-                `No matching default found for property '${propertyName}' in item '${currentItemName}'. Keeping current value.`,
-              );
-              // Do nothing - we want to keep the current value
-            }
-          } else {
-            logger.debug(`No property name or item not found. Skipping reset for nested array item.`);
-          }
-        }
-        // For top-level arrays, we can be more aggressive with cleanup
-        else if (JSON.stringify(getValueAtPath(newCustomConfig, arrayPath)) === JSON.stringify(defaultArray)) {
-          logger.debug(`Array at ${arrayPath} now matches default. Removing customization.`);
-
-          // Navigate to the parent of array and remove the array
-          const arrayPathSegments = arrayPath.split('.');
-          let current = newCustomConfig;
-          let arrayParent = null;
-          let arrayKey = null;
-
-          arrayPathSegments.forEach((segment, index) => {
-            if (index === arrayPathSegments.length - 1) {
-              arrayParent = current;
-              arrayKey = segment;
-            } else if (current[segment] !== undefined) {
-              current = current[segment];
-            }
-          });
-
-          if (arrayParent && arrayKey) {
-            delete arrayParent[arrayKey];
-          }
-        }
-
-        // Update configuration
-        logger.debug('Custom config after reset:', JSON.stringify(newCustomConfig));
-        return updateConfiguration(newCustomConfig);
-      }
-
-      // Fallback to original behavior if special handling doesn't apply
-      logger.debug(`Fallback: Resetting array at path: ${arrayPath}`);
-      if (arrayPath) {
-        // Only reset entire array if we can't handle it more granularly
-        return resetToDefault(arrayPath);
-      }
-    }
-
-    // Handle non-array paths normally
-    let current = newCustomConfig;
-    let parent = null;
-    let lastKey = null;
-
-    pathSegments.forEach((segment, index) => {
-      if (index === pathSegments.length - 1) {
-        parent = current;
-        lastKey = segment;
-      } else if (current[segment] === undefined || current[segment] === null) {
-        // Path doesn't exist in the custom config, nothing to reset
-      } else {
-        current = current[segment];
-      }
-    });
-
-    // Remove the property from the custom config
-    if (parent && lastKey) {
-      logger.debug(`Removing customization at path: ${path}, key: ${lastKey}`);
-      delete parent[lastKey];
-
-      // Clean up empty objects
-      let cleanupPath = pathSegments.slice(0, -1);
-      while (cleanupPath.length > 0) {
-        const tempObj = cleanupPath.reduce(
-          (acc, segment) => (acc && acc[segment] ? acc[segment] : undefined),
-          newCustomConfig,
-        );
-
-        // If object is empty, remove it
-        if (tempObj && Object.keys(tempObj).length === 0) {
-          const parentPath = cleanupPath.slice(0, -1);
-          const lastSegment = cleanupPath[cleanupPath.length - 1];
-
-          const parentObj = parentPath.reduce(
-            (acc, segment) => (acc && acc[segment] ? acc[segment] : undefined),
-            newCustomConfig,
-          );
-
-          if (parentObj) {
-            delete parentObj[lastSegment];
-            cleanupPath = parentPath;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
-
-      // For debugging
-      logger.debug('Custom config after reset:', JSON.stringify(newCustomConfig));
-
-      // Update the custom configuration
-      return updateConfiguration(newCustomConfig);
-    }
-
-    return false;
   };
+
+  // REMOVED: Old 287-line complex reset logic
+  // Now uses simple diff-based approach above
 
   // Check if a value is customized or default
   const isCustomized = (path) => {
@@ -533,8 +381,8 @@ const useConfiguration = () => {
       // Split the path into segments, handling array indices properly
       const pathSegments = path.split(/[.[\]]+/).filter(Boolean);
 
-      // Helper function to get value at path for comparison
-      const getValueAtPath = (obj, segments) => {
+      // Helper function to get value at path segments for comparison
+      const getValueAtPathSegments = (obj, segments) => {
         return segments.reduce((acc, segment) => {
           if (acc === null || acc === undefined || !Object.hasOwn(acc, segment)) {
             return undefined;
@@ -544,8 +392,8 @@ const useConfiguration = () => {
       };
 
       // Get values from both custom and default configs
-      const customValue = getValueAtPath(customConfig, pathSegments);
-      const defaultValue = getValueAtPath(defaultConfig, pathSegments);
+      const customValue = getValueAtPathSegments(customConfig, pathSegments);
+      const defaultValue = getValueAtPathSegments(defaultConfig, pathSegments);
 
       // First check if the custom value exists
       const customValueExists = customValue !== undefined;
@@ -608,6 +456,7 @@ const useConfiguration = () => {
     customConfig,
     mergedConfig,
     loading,
+    refreshing,
     error,
     fetchConfiguration,
     updateConfiguration,

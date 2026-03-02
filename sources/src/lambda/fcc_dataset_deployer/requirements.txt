@@ -1,0 +1,11 @@
+# Lightweight HuggingFace file download (no heavy datasets library)
+huggingface-hub>=0.20.0
+
+# For reading parquet metadata files efficiently
+pyarrow>=20.0.0
+
+# AWS SDK (boto3 is already available in Lambda runtime, but specified for local testing)
+boto3>=1.34.0
+
+# For CloudFormation custom resource responses
+cfnresponse

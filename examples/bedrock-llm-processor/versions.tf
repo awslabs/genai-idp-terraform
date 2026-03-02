@@ -6,8 +6,9 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
+      source                = "hashicorp/aws"
+      version               = ">= 5.0"
+      configuration_aliases = [aws.us-east-1]
     }
     random = {
       source  = "hashicorp/random"
@@ -16,6 +17,10 @@ terraform {
     time = {
       source  = "hashicorp/time"
       version = ">= 0.9"
+    }
+    opensearch = {
+      source  = "opensearch-project/opensearch"
+      version = "2.2.0"
     }
   }
 }

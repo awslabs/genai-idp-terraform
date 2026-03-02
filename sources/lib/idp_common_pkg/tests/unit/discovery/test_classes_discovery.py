@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch, call
 
 # Import application modules
 from idp_common.discovery.classes_discovery import ClassesDiscovery
+from idp_common.config.models import IDPConfig, DiscoveryConfig, DiscoveryModelConfig
 
 
 @pytest.mark.unit
@@ -27,22 +28,22 @@ class TestClassesDiscovery:
     @pytest.fixture
     def mock_config(self):
         """Fixture providing a mock configuration."""
-        return {
-            "discovery": {
-                "without_ground_truth": {
-                    "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
-                    "temperature": 1.0,
-                    "top_p": 0.1,
-                    "max_tokens": 10000,
-                },
-                "with_ground_truth": {
-                    "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
-                    "temperature": 1.0,
-                    "top_p": 0.1,
-                    "max_tokens": 10000,
-                },
-            }
-        }
+        return IDPConfig(
+            discovery=DiscoveryConfig(
+                without_ground_truth=DiscoveryModelConfig(
+                    model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                    temperature=1.0,
+                    top_p=0.1,
+                    max_tokens=10000,
+                ),
+                with_ground_truth=DiscoveryModelConfig(
+                    model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                    temperature=1.0,
+                    top_p=0.1,
+                    max_tokens=10000,
+                ),
+            )
+        )
 
     @pytest.fixture
     def mock_bedrock_response(self):
@@ -55,28 +56,27 @@ class TestClassesDiscovery:
                             {
                                 "text": json.dumps(
                                     {
-                                        "document_class": "W-4",
-                                        "document_description": "Employee's Withholding Certificate form",
-                                        "groups": [
-                                            {
-                                                "name": "PersonalInformation",
+                                        "$schema": "http://json-schema.org/draft-07/schema#",
+                                        "$id": "w4",
+                                        "type": "object",
+                                        "title": "W-4",
+                                        "description": "Employee's Withholding Certificate form",
+                                        "properties": {
+                                            "PersonalInformation": {
+                                                "type": "object",
                                                 "description": "Personal information of employee",
-                                                "attributeType": "group",
-                                                "groupType": "normal",
-                                                "groupAttributes": [
-                                                    {
-                                                        "name": "FirstName",
-                                                        "dataType": "string",
+                                                "properties": {
+                                                    "FirstName": {
+                                                        "type": "string",
                                                         "description": "First Name of Employee",
                                                     },
-                                                    {
-                                                        "name": "LastName",
-                                                        "dataType": "string",
+                                                    "LastName": {
+                                                        "type": "string",
                                                         "description": "Last Name of Employee",
                                                     },
-                                                ],
+                                                },
                                             }
-                                        ],
+                                        },
                                     }
                                 )
                             }
@@ -105,9 +105,8 @@ class TestClassesDiscovery:
     @pytest.fixture
     def mock_configuration_item(self):
         """Fixture providing a mock configuration item."""
-        return {
-            "Configuration": "Custom",
-            "classes": [
+        return IDPConfig(
+            classes=[
                 {
                     "name": "W-4",
                     "description": "Employee's Withholding Certificate form",
@@ -119,8 +118,8 @@ class TestClassesDiscovery:
                         }
                     ],
                 }
-            ],
-        }
+            ]
+        )
 
     @pytest.fixture
     def service(self, mock_config):
@@ -191,11 +190,11 @@ class TestClassesDiscovery:
             assert service.input_prefix == "test-document.pdf"
             # Verify config is loaded correctly
             assert (
-                service.without_gt_config["model_id"]
+                service.without_gt_config.model_id
                 == "anthropic.claude-3-sonnet-20240229-v1:0"
             )
             assert (
-                service.with_gt_config["model_id"]
+                service.with_gt_config.model_id
                 == "anthropic.claude-3-sonnet-20240229-v1:0"
             )
             assert service.region == "us-west-2"
@@ -243,31 +242,32 @@ class TestClassesDiscovery:
         mock_file_content = b"fake_pdf_content"
         mock_get_bytes.return_value = mock_file_content
 
-        # Mock Bedrock response
+        # Mock Bedrock response with JSON Schema format
         service._mock_bedrock_client.return_value = mock_bedrock_response
         mock_extract_text.return_value = json.dumps(
             {
-                "document_class": "W-4",
-                "document_description": "Employee's Withholding Certificate form",
-                "groups": [
-                    {
-                        "name": "PersonalInformation",
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "$id": "w4",
+                "type": "object",
+                "title": "W-4",
+                "description": "Employee's Withholding Certificate form",
+                "x-aws-idp-document-type": "W-4",
+                "properties": {
+                    "PersonalInformation": {
+                        "type": "object",
                         "description": "Personal information of employee",
-                        "attributeType": "group",
-                        "groupAttributes": [
-                            {
-                                "name": "FirstName",
-                                "dataType": "string",
+                        "properties": {
+                            "FirstName": {
+                                "type": "string",
                                 "description": "First Name of Employee",
                             },
-                            {
-                                "name": "LastName",
-                                "dataType": "string",
+                            "LastName": {
+                                "type": "string",
                                 "description": "Last Name of Employee",
                             },
-                        ],
+                        },
                     }
-                ],
+                },
             }
         )
 
@@ -290,8 +290,8 @@ class TestClassesDiscovery:
         # Verify Bedrock was called
         service._mock_bedrock_client.invoke_model.assert_called_once()
 
-        # Verify configuration was updated via configuration manager
-        service.config_manager.update_configuration.assert_called_once()
+        # Verify configuration was saved via configuration manager
+        service.config_manager.save_configuration.assert_called_once()
 
     @patch("idp_common.utils.s3util.S3Util.get_bytes")
     def test_discovery_classes_with_document_s3_error(self, mock_get_bytes, service):
@@ -348,16 +348,20 @@ class TestClassesDiscovery:
         mock_ground_truth_content = json.dumps(mock_ground_truth_data).encode()
         mock_get_bytes.side_effect = [mock_ground_truth_content, mock_file_content]
 
-        # Mock Bedrock response
+        # Mock Bedrock response with JSON Schema format
         service._mock_bedrock_client.return_value = {
             "response": {"output": {"message": {"content": [{"text": "{}"}]}}},
             "metering": {"tokens": 500},
         }
         mock_extract_text.return_value = json.dumps(
             {
-                "document_class": "W-4",
-                "document_description": "Employee's Withholding Certificate form",
-                "groups": [],
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "$id": "w4",
+                "type": "object",
+                "title": "W-4",
+                "description": "Employee's Withholding Certificate form",
+                "x-aws-idp-document-type": "W-4",
+                "properties": {},
             }
         )
 
@@ -418,13 +422,16 @@ class TestClassesDiscovery:
     ):
         """Test successful data extraction from document."""
         mock_document_content = b"fake_image_content"
-        mock_extract_text.return_value = json.dumps(
-            {
-                "document_class": "W-4",
-                "document_description": "Test document",
-                "groups": [],
-            }
-        )
+        # Return valid JSON Schema
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "$id": "w4",
+            "type": "object",
+            "description": "Test document",
+            "x-aws-idp-document-type": "W-4",
+            "properties": {},
+        }
+        mock_extract_text.return_value = json.dumps(schema)
         service._mock_bedrock_client.return_value = {
             "response": {"output": {"message": {"content": [{"text": "{}"}]}}},
             "metering": {"tokens": 500},
@@ -440,9 +447,10 @@ class TestClassesDiscovery:
 
         result = service._extract_data_from_document(mock_document_content, "jpg")
 
-        assert result["document_class"] == "W-4"
-        assert result["document_description"] == "Test document"
-        assert result["groups"] == []
+        # Verify JSON Schema format
+        assert result["$id"] == "w4"
+        assert result["description"] == "Test document"
+        assert result["$schema"] == "http://json-schema.org/draft-07/schema#"
 
         # Verify Bedrock was called with correct parameters
         service._mock_bedrock_client.invoke_model.assert_called_once()
@@ -458,7 +466,15 @@ class TestClassesDiscovery:
         """Test data extraction from PDF document."""
         mock_document_content = b"fake_pdf_content"
         mock_extract_text.return_value = json.dumps(
-            {"document_class": "Form", "groups": []}
+            {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "$id": "form",
+                "type": "object",
+                "title": "Form",
+                "description": "Generic form",
+                "x-aws-idp-document-type": "Form",
+                "properties": {},
+            }
         )
         service._mock_bedrock_client.return_value = {
             "response": {"output": {"message": {"content": [{"text": "{}"}]}}},
@@ -527,13 +543,16 @@ class TestClassesDiscovery:
     ):
         """Test successful data extraction with ground truth."""
         mock_document_content = b"fake_image_content"
-        mock_extract_text.return_value = json.dumps(
-            {
-                "document_class": "W-4",
-                "document_description": "Test document",
-                "groups": [],
-            }
-        )
+        # Return valid JSON Schema
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "$id": "w4",
+            "type": "object",
+            "description": "Test document",
+            "x-aws-idp-document-type": "W-4",
+            "properties": {},
+        }
+        mock_extract_text.return_value = json.dumps(schema)
         service._mock_bedrock_client.return_value = {
             "response": {"output": {"message": {"content": [{"text": "{}"}]}}},
             "metering": {"tokens": 500},
@@ -549,8 +568,9 @@ class TestClassesDiscovery:
             mock_document_content, "jpg", mock_ground_truth_data
         )
 
-        assert result["document_class"] == "W-4"
-        assert result["document_description"] == "Test document"
+        # Verify JSON Schema format
+        assert result["$id"] == "w4"
+        assert result["description"] == "Test document"
 
         # Verify Bedrock was called with ground truth context
         service._mock_bedrock_client.invoke_model.assert_called_once()
@@ -579,27 +599,32 @@ class TestClassesDiscovery:
 
         assert "GROUND_TRUTH_REFERENCE" in result
         assert json.dumps(mock_ground_truth_data, indent=2) in result
-        assert "document_class" in result
-        assert "document_description" in result
-        assert "groups" in result
+        # Now generates JSON Schema format
+        assert "$schema" in result
+        assert "$id" in result
+        # JSON Schema uses "description" not "document_description"
+        assert "description" in result
 
     def test_prompt_classes_discovery(self, service):
         """Test basic prompt generation for classes discovery."""
         result = service._prompt_classes_discovery()
 
         assert "forms data" in result
-        assert "document_class" in result
-        assert "document_description" in result
-        assert "groups" in result
-        assert "JSON format" in result
+        # Now generates JSON Schema format
+        assert "$schema" in result
+        assert "$id" in result
+        assert "properties" in result
+        assert "JSON Schema" in result
 
     def test_sample_output_format(self, service):
         """Test sample output format generation."""
         result = service._sample_output_format()
 
-        assert "document_class" in result
-        assert "document_description" in result
-        assert "groups" in result
+        # Now generates JSON Schema format
+        assert "$schema" in result
+        assert "$id" in result
+        assert "description" in result
+        assert "properties" in result
         assert "PersonalInformation" in result
         assert "FirstName" in result
         assert "Age" in result
@@ -608,14 +633,28 @@ class TestClassesDiscovery:
         self, service, mock_configuration_item
     ):
         """Test that discovery updates existing class configuration."""
-        # Mock existing configuration with the same class name
-        existing_config = {
-            "Configuration": "Custom",
-            "classes": [
-                {"name": "W-4", "description": "Old description", "attributes": []},
-                {"name": "Other-Form", "description": "Other form", "attributes": []},
-            ],
-        }
+        # Mock existing configuration object with classes attribute in JSON Schema format
+        existing_config = MagicMock()
+        existing_config.classes = [
+            {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "$id": "w4",
+                "type": "object",
+                "title": "W-4",
+                "description": "Old description",
+                "x-aws-idp-document-type": "W-4",
+                "properties": {},
+            },
+            {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "$id": "other_form",
+                "type": "object",
+                "title": "Other-Form",
+                "description": "Other form",
+                "x-aws-idp-document-type": "Other-Form",
+                "properties": {},
+            },
+        ]
 
         with (
             patch("idp_common.utils.s3util.S3Util.get_bytes") as mock_get_bytes,
@@ -624,9 +663,13 @@ class TestClassesDiscovery:
             mock_get_bytes.return_value = b"fake_content"
             mock_extract_text.return_value = json.dumps(
                 {
-                    "document_class": "W-4",
-                    "document_description": "Updated description",
-                    "groups": [],
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "w4",
+                    "type": "object",
+                    "title": "W-4",
+                    "description": "Updated description",
+                    "x-aws-idp-document-type": "W-4",
+                    "properties": {},
                 }
             )
             service._mock_bedrock_client.return_value = {
@@ -641,17 +684,25 @@ class TestClassesDiscovery:
 
             assert result["status"] == "SUCCESS"
 
-            # Verify that configuration manager was called to update configuration
-            service.config_manager.update_configuration.assert_called_once()
-            call_args = service.config_manager.update_configuration.call_args[0]
-            updated_classes = call_args[1]["classes"]
+            # Verify that configuration manager was called to update/save configuration
+            assert (
+                service.config_manager.save_configuration.called
+                or service.config_manager.update_configuration.called
+            )
+            # Get the call args - might be save_configuration or update_configuration
+            if service.config_manager.save_configuration.called:
+                call_args = service.config_manager.save_configuration.call_args[0]
+                updated_classes = call_args[1].classes
+            else:
+                call_args = service.config_manager.update_configuration.call_args[0]
+                updated_classes = call_args[1].classes
 
             # Should have 2 classes (Other-Form + updated W-4)
             assert len(updated_classes) == 2
 
-            # Find the W-4 class and verify it was updated
+            # Find the W-4 class and verify it was updated (by $id)
             w4_class = next(
-                (cls for cls in updated_classes if cls["name"] == "W-4"), None
+                (cls for cls in updated_classes if cls.get("$id") == "w4"), None
             )
             assert w4_class is not None
             assert w4_class["description"] == "Updated description"
@@ -665,9 +716,13 @@ class TestClassesDiscovery:
             mock_get_bytes.return_value = b"fake_content"
             mock_extract_text.return_value = json.dumps(
                 {
-                    "document_class": "W-4",
-                    "document_description": "New form",
-                    "groups": [],
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "w4",
+                    "type": "object",
+                    "title": "W-4",
+                    "description": "New form",
+                    "x-aws-idp-document-type": "W-4",
+                    "properties": {},
                 }
             )
             service._mock_bedrock_client.return_value = {
@@ -685,11 +740,19 @@ class TestClassesDiscovery:
             assert result["status"] == "SUCCESS"
 
             # Verify configuration was created via configuration manager
-            service.config_manager.update_configuration.assert_called_once()
-            call_args = service.config_manager.update_configuration.call_args[0]
-            updated_classes = call_args[1]["classes"]
+            assert (
+                service.config_manager.save_configuration.called
+                or service.config_manager.update_configuration.called
+            )
+            # Get the call args - might be save_configuration or update_configuration
+            if service.config_manager.save_configuration.called:
+                call_args = service.config_manager.save_configuration.call_args[0]
+                updated_classes = call_args[1].classes
+            else:
+                call_args = service.config_manager.update_configuration.call_args[0]
+                updated_classes = call_args[1].classes
 
             # Should have 1 class
             assert len(updated_classes) == 1
-            assert updated_classes[0]["name"] == "W-4"
+            assert updated_classes[0]["$id"] == "w4"
             assert updated_classes[0]["description"] == "New form"

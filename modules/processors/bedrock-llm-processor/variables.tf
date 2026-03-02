@@ -161,6 +161,12 @@ variable "evaluation_enabled" {
   default     = false
 }
 
+variable "evaluation_baseline_bucket_arn" {
+  description = "ARN of the S3 bucket containing baseline documents for evaluation. Required when evaluation_enabled is true."
+  type        = string
+  default     = null
+}
+
 variable "evaluation_model_id" {
   description = "Optional model ID for evaluating extraction results. If not provided, the model from config.yaml will be used."
   type        = string
@@ -221,6 +227,29 @@ variable "assessment_guardrail" {
     guardrail_version = string
   })
   default = null
+}
+
+variable "section_splitting_strategy" {
+  description = "Strategy for splitting documents into sections before extraction. Valid values: disabled, page, llm_determined"
+  type        = string
+  default     = "disabled"
+
+  validation {
+    condition     = contains(["disabled", "page", "llm_determined"], var.section_splitting_strategy)
+    error_message = "section_splitting_strategy must be one of: disabled, page, llm_determined."
+  }
+}
+
+variable "enable_agentic_extraction" {
+  description = "Whether to enable agentic extraction using Strands agent framework"
+  type        = bool
+  default     = false
+}
+
+variable "review_agent_model" {
+  description = "Bedrock model ID for the review agent. If empty, uses the extraction model."
+  type        = string
+  default     = ""
 }
 
 variable "lambda_tracing_mode" {

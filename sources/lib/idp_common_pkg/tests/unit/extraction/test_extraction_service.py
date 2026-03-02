@@ -33,80 +33,92 @@ class TestExtractionService:
         return {
             "classes": [
                 {
-                    "name": "invoice",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "invoice",
+                    "x-aws-idp-document-type": "invoice",
+                    "type": "object",
                     "description": "An invoice document",
-                    "attributes": [
-                        {"name": "invoice_number", "description": "The invoice number"},
-                        {"name": "invoice_date", "description": "The invoice date"},
-                        {"name": "total_amount", "description": "The total amount"},
-                    ],
+                    "properties": {
+                        "invoice_number": {
+                            "type": "string",
+                            "description": "The invoice number",
+                        },
+                        "invoice_date": {
+                            "type": "string",
+                            "description": "The invoice date",
+                        },
+                        "total_amount": {
+                            "type": "number",
+                            "description": "The total amount",
+                        },
+                    },
                 },
                 {
-                    "name": "receipt",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "receipt",
+                    "x-aws-idp-document-type": "receipt",
+                    "type": "object",
                     "description": "A receipt document",
-                    "attributes": [
-                        {"name": "receipt_number", "description": "The receipt number"},
-                        {"name": "date", "description": "The receipt date"},
-                        {"name": "amount", "description": "The total amount"},
-                    ],
+                    "properties": {
+                        "receipt_number": {
+                            "type": "string",
+                            "description": "The receipt number",
+                        },
+                        "date": {"type": "string", "description": "The receipt date"},
+                        "amount": {"type": "number", "description": "The total amount"},
+                    },
                 },
                 {
-                    "name": "bank_statement",
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "bank_statement",
+                    "x-aws-idp-document-type": "bank_statement",
+                    "type": "object",
                     "description": "Monthly bank account statement",
-                    "attributes": [
-                        {
-                            "name": "account_number",
+                    "properties": {
+                        "account_number": {
+                            "type": "string",
                             "description": "Primary account identifier",
-                            "attributeType": "simple",
                         },
-                        {
-                            "name": "account_holder_address",
+                        "account_holder_address": {
+                            "type": "object",
                             "description": "Complete address information for the account holder",
-                            "attributeType": "group",
-                            "groupAttributes": [
-                                {
-                                    "name": "street_number",
+                            "properties": {
+                                "street_number": {
+                                    "type": "string",
                                     "description": "House or building number",
-                                    "confidence_threshold": "0.9",
                                 },
-                                {
-                                    "name": "street_name",
+                                "street_name": {
+                                    "type": "string",
                                     "description": "Name of the street",
-                                    "confidence_threshold": "0.8",
                                 },
-                                {
-                                    "name": "city",
+                                "city": {
+                                    "type": "string",
                                     "description": "City name",
-                                    "confidence_threshold": "0.9",
                                 },
-                            ],
-                        },
-                        {
-                            "name": "transactions",
-                            "description": "List of all transactions in the statement period",
-                            "attributeType": "list",
-                            "listItemTemplate": {
-                                "itemDescription": "Individual transaction record",
-                                "itemAttributes": [
-                                    {
-                                        "name": "date",
-                                        "description": "Transaction date (MM/DD/YYYY)",
-                                        "confidence_threshold": "0.9",
-                                    },
-                                    {
-                                        "name": "description",
-                                        "description": "Transaction description or merchant name",
-                                        "confidence_threshold": "0.7",
-                                    },
-                                    {
-                                        "name": "amount",
-                                        "description": "Transaction amount",
-                                        "confidence_threshold": "0.95",
-                                    },
-                                ],
                             },
                         },
-                    ],
+                        "transactions": {
+                            "type": "array",
+                            "description": "List of all transactions in the statement period",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "date": {
+                                        "type": "string",
+                                        "description": "Transaction date (MM/DD/YYYY)",
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": "Transaction description or merchant name",
+                                    },
+                                    "amount": {
+                                        "type": "number",
+                                        "description": "Transaction amount",
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
             ],
             "extraction": {
@@ -116,15 +128,15 @@ class TestExtractionService:
                 "system_prompt": "You are a document extraction assistant.",
                 "task_prompt": dedent("""
                     Extract the following fields from this {DOCUMENT_CLASS} document:
-                    
+
                     {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
-                    
+
                     Document text:
                     {DOCUMENT_TEXT}
-                    
+
                     Document image:
                     {DOCUMENT_IMAGE}
-                    
+
                     Respond with a JSON object containing each field name and its extracted value.
                 """),
             },
@@ -170,149 +182,26 @@ class TestExtractionService:
         service = ExtractionService(region="us-west-2", config=mock_config)
 
         assert service.region == "us-west-2"
-        assert service.config == mock_config
+        # Config is converted to IDPConfig model, verify it has the expected structure
+        assert hasattr(service.config, "extraction")
+        assert service.config.extraction.model == mock_config["extraction"]["model"]
 
-    def test_get_class_attributes(self, service):
-        """Test getting attributes for a document class."""
+    def test_get_class_schema(self, service):
+        """Test getting JSON Schema for a document class."""
         # Test with existing class
-        invoice_attrs = service._get_class_attributes("invoice")
-        assert len(invoice_attrs) == 3
-        assert invoice_attrs[0]["name"] == "invoice_number"
-        assert invoice_attrs[1]["name"] == "invoice_date"
-        assert invoice_attrs[2]["name"] == "total_amount"
+        invoice_schema = service._get_class_schema("invoice")
+        assert "properties" in invoice_schema
+        assert "invoice_number" in invoice_schema["properties"]
+        assert "invoice_date" in invoice_schema["properties"]
+        assert "total_amount" in invoice_schema["properties"]
 
         # Test with non-existent class
-        unknown_attrs = service._get_class_attributes("unknown")
-        assert len(unknown_attrs) == 0
+        unknown_schema = service._get_class_schema("unknown")
+        assert unknown_schema == {}
 
         # Test case insensitivity
-        invoice_attrs_upper = service._get_class_attributes("INVOICE")
-        assert len(invoice_attrs_upper) == 3
-
-    def test_format_attribute_descriptions(self, service):
-        """Test formatting attribute descriptions."""
-        attributes = [
-            {"name": "invoice_number", "description": "The invoice number"},
-            {"name": "invoice_date", "description": "The invoice date"},
-        ]
-
-        formatted = service._format_attribute_descriptions(attributes)
-
-        assert "invoice_number" in formatted
-        assert "The invoice number" in formatted
-        assert "invoice_date" in formatted
-        assert "The invoice date" in formatted
-
-    def test_format_nested_attribute_descriptions(self, service):
-        """Test formatting nested attribute descriptions (group and list types)."""
-        # Get bank statement attributes with nested structures
-        bank_statement_attrs = service._get_class_attributes("bank_statement")
-        formatted = service._format_attribute_descriptions(bank_statement_attrs)
-
-        # Test that main attributes are present
-        assert "account_number" in formatted
-        assert "Primary account identifier" in formatted
-        assert "account_holder_address" in formatted
-        assert "Complete address information" in formatted
-        assert "transactions" in formatted
-        assert "List of all transactions" in formatted
-
-        # Test that group nested attributes are properly indented
-        assert "  - street_number" in formatted
-        assert "House or building number" in formatted
-        assert "  - street_name" in formatted
-        assert "Name of the street" in formatted
-        assert "  - city" in formatted
-        assert "City name" in formatted
-
-        # Test that list nested attributes are properly formatted
-        assert "Each item: Individual transaction record" in formatted
-        assert "  - date" in formatted
-        assert "Transaction date (MM/DD/YYYY)" in formatted
-        assert "  - description" in formatted
-        assert "Transaction description or merchant name" in formatted
-        assert "  - amount" in formatted
-        assert "Transaction amount" in formatted
-
-    def test_format_attribute_descriptions_empty_list(self, service):
-        """Test formatting attribute descriptions with empty list."""
-        formatted = service._format_attribute_descriptions([])
-        assert formatted == ""
-
-    def test_format_attribute_descriptions_group_only(self, service):
-        """Test formatting attribute descriptions with group type only."""
-        attributes = [
-            {
-                "name": "address",
-                "description": "Complete address information",
-                "attributeType": "group",
-                "groupAttributes": [
-                    {"name": "street", "description": "Street name"},
-                    {"name": "city", "description": "City name"},
-                ],
-            }
-        ]
-
-        formatted = service._format_attribute_descriptions(attributes)
-
-        assert "address" in formatted
-        assert "Complete address information" in formatted
-        assert "  - street" in formatted
-        assert "Street name" in formatted
-        assert "  - city" in formatted
-        assert "City name" in formatted
-
-    def test_format_attribute_descriptions_list_only(self, service):
-        """Test formatting attribute descriptions with list type only."""
-        attributes = [
-            {
-                "name": "items",
-                "description": "List of items",
-                "attributeType": "list",
-                "listItemTemplate": {
-                    "itemDescription": "Individual item",
-                    "itemAttributes": [
-                        {"name": "name", "description": "Item name"},
-                        {"name": "price", "description": "Item price"},
-                    ],
-                },
-            }
-        ]
-
-        formatted = service._format_attribute_descriptions(attributes)
-
-        assert "items" in formatted
-        assert "List of items" in formatted
-        assert "Each item: Individual item" in formatted
-        assert "  - name" in formatted
-        assert "Item name" in formatted
-        assert "  - price" in formatted
-        assert "Item price" in formatted
-
-    def test_format_attribute_descriptions_list_without_item_description(self, service):
-        """Test formatting list attributes without itemDescription."""
-        attributes = [
-            {
-                "name": "items",
-                "description": "List of items",
-                "attributeType": "list",
-                "listItemTemplate": {
-                    "itemAttributes": [
-                        {"name": "name", "description": "Item name"},
-                    ],
-                },
-            }
-        ]
-
-        formatted = service._format_attribute_descriptions(attributes)
-
-        assert "items" in formatted
-        assert "List of items" in formatted
-        assert (
-            "Each item:" not in formatted
-        )  # Should not appear when itemDescription is missing
-        assert "  - name" in formatted
-        assert "Item name" in formatted
+        invoice_schema_upper = service._get_class_schema("INVOICE")
+        assert "properties" in invoice_schema_upper
 
     @patch("idp_common.s3.get_text_content")
     @patch("idp_common.image.prepare_image")

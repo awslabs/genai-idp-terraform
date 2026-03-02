@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT-0
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Table, Box, Container, Header, Pagination, CollectionPreferences } from '@awsui/components-react';
+import { Table, Box, Container, Header, Pagination, CollectionPreferences } from '@cloudscape-design/components';
 
-const TableDisplay = ({ tableData }) => {
+const TableDisplay = ({ tableData = null }) => {
   const [preferences, setPreferences] = useState({
     pageSize: 10,
     visibleContent: ['all'],
@@ -106,10 +106,6 @@ TableDisplay.propTypes = {
       }),
     ),
   }),
-};
-
-TableDisplay.defaultProps = {
-  tableData: null,
 };
 
 export default TableDisplay;

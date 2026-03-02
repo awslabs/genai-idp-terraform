@@ -283,6 +283,7 @@ module "pattern2_hitl_wait_function" {
   working_bucket_name             = var.working_bucket_name
   working_bucket_arn              = var.working_bucket_arn
   sagemaker_a2i_review_portal_url = try(aws_ssm_parameter.workforce_portal_url.value, "")
+  image_uri                       = var.hitl_wait_image_uri
 
   log_level          = var.log_level
   log_retention_days = var.log_retention_days
@@ -328,6 +329,7 @@ module "pattern2_hitl_status_update_function" {
 
   name_prefix       = "${var.name_prefix}-p2-hitl-status"
   output_bucket_arn = var.output_bucket_arn
+  image_uri         = var.hitl_status_update_image_uri
 
   log_level          = var.log_level
   log_retention_days = var.log_retention_days

@@ -2,30 +2,72 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Lambda Functions for SageMaker UDOP Processor
+# All functions use Docker images from ECR (arm64).
 
-# Common Lambda layer for IDP utilities
-# Use the provided layer ARN instead of data source
 locals {
   idp_common_layer_arn = var.idp_common_layer_arn
   module_build_dir     = "${path.module}/.terraform-build"
   module_instance_id   = substr(md5("${path.module}-sagemaker-udop"), 0, 8)
 }
 
-# OCR Function
+resource "aws_cloudwatch_log_group" "ocr_function_logs" {
+  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-ocr"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "classification_function_logs" {
+  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-classification"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "extraction_function_logs" {
+  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-extraction"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "process_results_function_logs" {
+  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-process-results"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "summarization_function_logs" {
+  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-summarization"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "assessment_lambda" {
+  name              = "/aws/lambda/${aws_lambda_function.assessment_function.function_name}"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "evaluation_function_logs" {
+  name              = "/aws/lambda/${var.name}-evaluation-function"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = local.common_tags
+}
+
 resource "aws_lambda_function" "ocr_function" {
   function_name = "${local.name_prefix}-sagemaker-udop-ocr"
   role          = aws_iam_role.ocr_function_role.arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:ocr-function"
+  architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 3008
-
-  filename         = data.archive_file.ocr_lambda.output_path
-  source_code_hash = data.archive_file.ocr_lambda.output_base64sha256
-
-  layers = [local.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
+  memory_size   = 4096
+  kms_key_arn   = var.encryption_key_arn
 
   environment {
     variables = {
@@ -48,33 +90,26 @@ resource "aws_lambda_function" "ocr_function" {
     }
   }
 
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
+  tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
+    null_resource.trigger_udop_build,
     aws_iam_role_policy_attachment.ocr_function_basic_execution,
     aws_cloudwatch_log_group.ocr_function_logs,
   ]
+
+  tags = local.common_tags
 }
 
-# Classification Function
 resource "aws_lambda_function" "classification_function" {
   function_name = "${local.name_prefix}-sagemaker-udop-classification"
   role          = aws_iam_role.classification_function_role.arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:classification-function"
+  architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 3008
-
-  filename         = data.archive_file.classification_lambda.output_path
-  source_code_hash = data.archive_file.classification_lambda.output_base64sha256
-
-  layers = [local.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
+  memory_size   = 4096
+  kms_key_arn   = var.encryption_key_arn
 
   environment {
     variables = {
@@ -99,33 +134,26 @@ resource "aws_lambda_function" "classification_function" {
     }
   }
 
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
+  tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
+    null_resource.trigger_udop_build,
     aws_iam_role_policy_attachment.classification_function_basic_execution,
     aws_cloudwatch_log_group.classification_function_logs,
   ]
+
+  tags = local.common_tags
 }
 
-# Extraction Function
 resource "aws_lambda_function" "extraction_function" {
   function_name = "${local.name_prefix}-sagemaker-udop-extraction"
   role          = aws_iam_role.extraction_function_role.arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:extraction-function"
+  architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 3008
-
-  filename         = data.archive_file.extraction_lambda.output_path
-  source_code_hash = data.archive_file.extraction_lambda.output_base64sha256
-
-  layers = [local.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
+  memory_size   = 512
+  kms_key_arn   = var.encryption_key_arn
 
   environment {
     variables = {
@@ -149,33 +177,26 @@ resource "aws_lambda_function" "extraction_function" {
     }
   }
 
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
+  tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
+    null_resource.trigger_udop_build,
     aws_iam_role_policy_attachment.extraction_function_basic_execution,
     aws_cloudwatch_log_group.extraction_function_logs,
   ]
+
+  tags = local.common_tags
 }
 
-# Process Results Function
 resource "aws_lambda_function" "process_results_function" {
   function_name = "${local.name_prefix}-sagemaker-udop-process-results"
   role          = aws_iam_role.process_results_function_role.arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:processresults-function"
+  architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 1024
-
-  filename         = data.archive_file.process_results_lambda.output_path
-  source_code_hash = data.archive_file.process_results_lambda.output_base64sha256
-
-  layers = [local.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
+  memory_size   = 4096
+  kms_key_arn   = var.encryption_key_arn
 
   environment {
     variables = {
@@ -196,33 +217,26 @@ resource "aws_lambda_function" "process_results_function" {
     }
   }
 
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
+  tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
+    null_resource.trigger_udop_build,
     aws_iam_role_policy_attachment.process_results_function_basic_execution,
     aws_cloudwatch_log_group.process_results_function_logs,
   ]
+
+  tags = local.common_tags
 }
 
-# Summarization Function
 resource "aws_lambda_function" "summarization_function" {
   function_name = "${local.name_prefix}-sagemaker-udop-summarization"
   role          = aws_iam_role.summarization_function_role.arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:summarization-function"
+  architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 1024
-
-  filename         = data.archive_file.summarization_lambda.output_path
-  source_code_hash = data.archive_file.summarization_lambda.output_base64sha256
-
-  layers = [local.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
+  memory_size   = 4096
+  kms_key_arn   = var.encryption_key_arn
 
   environment {
     variables = {
@@ -245,75 +259,26 @@ resource "aws_lambda_function" "summarization_function" {
     }
   }
 
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
+  tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
+    null_resource.trigger_udop_build,
     aws_iam_role_policy_attachment.summarization_function_basic_execution,
     aws_cloudwatch_log_group.summarization_function_logs,
   ]
-}
-
-# CloudWatch Log Groups
-resource "aws_cloudwatch_log_group" "ocr_function_logs" {
-  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-ocr"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
 
   tags = local.common_tags
 }
 
-resource "aws_cloudwatch_log_group" "classification_function_logs" {
-  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-classification"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "extraction_function_logs" {
-  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-extraction"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "process_results_function_logs" {
-  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-process-results"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "summarization_function_logs" {
-  name              = "/aws/lambda/${local.name_prefix}-sagemaker-udop-summarization"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
-
-# Lambda deployment packages
-# Assessment Function (always deployed, controlled by configuration)
 resource "aws_lambda_function" "assessment_function" {
   function_name = "${local.name_prefix}-assessment"
   role          = aws_iam_role.assessment_lambda.arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:assessment-function"
+  architectures = ["arm64"]
   timeout       = 900
   memory_size   = 512
-
-  filename         = data.archive_file.assessment_lambda.output_path
-  source_code_hash = data.archive_file.assessment_lambda.output_base64sha256
-
-  layers = [var.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
+  kms_key_arn   = var.encryption_key_arn
 
   environment {
     variables = {
@@ -327,83 +292,66 @@ resource "aws_lambda_function" "assessment_function" {
     }
   }
 
-  tracing_config {
-    mode = var.lambda_tracing_mode
+  tracing_config { mode = var.lambda_tracing_mode }
+
+  depends_on = [null_resource.trigger_udop_build]
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "evaluation_function" {
+  function_name = "${var.name}-evaluation-function"
+  role          = aws_iam_role.evaluation_function_role.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.udop_processor.repository_url}:evaluation-function"
+  architectures = ["arm64"]
+  timeout       = 900
+  memory_size   = 1024
+  kms_key_arn   = var.encryption_key_arn
+
+  environment {
+    variables = {
+      LOG_LEVEL                    = local.log_level
+      METRIC_NAMESPACE             = local.metric_namespace
+      TRACKING_TABLE               = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME     = local.configuration_table_name
+      WORKING_BUCKET               = local.working_bucket_name
+      BASELINE_BUCKET              = var.evaluation_baseline_bucket_name
+      REPORTING_BUCKET             = var.reporting_bucket_name
+      SAVE_REPORTING_FUNCTION_NAME = var.save_reporting_function_name
+      DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL              = local.api_id != null ? coalesce(local.api_graphql_url, "") : ""
+    }
   }
 
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
+  tracing_config { mode = var.lambda_tracing_mode }
+
+  depends_on = [
+    null_resource.trigger_udop_build,
+    aws_iam_role_policy_attachment.evaluation_function_policy_attachment
+  ]
+
   tags = local.common_tags
 }
 
-resource "aws_cloudwatch_log_group" "assessment_lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.assessment_function.function_name}"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
-
-# Create module-specific build directory
 resource "null_resource" "create_module_build_dir" {
   provisioner "local-exec" {
     command = "mkdir -p ${local.module_build_dir}"
   }
 }
 
-# Generate unique build ID for this module instance
 resource "random_id" "build_id" {
   byte_length = 8
   keepers = {
-    # Include module instance ID for uniqueness
     module_instance_id = local.module_instance_id
-    # Trigger rebuild when content changes
-    content_hash = md5("sagemaker-udop-processor-lambda")
+    content_hash       = md5("sagemaker-udop-processor-lambda")
   }
-}
-
-data "archive_file" "assessment_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-3/src/assessment_function"
-  output_path = "${path.module}/assessment_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-data "archive_file" "ocr_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-3/src/ocr_function"
-  output_path = "${path.module}/ocr_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-data "archive_file" "classification_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-3/src/classification_function"
-  output_path = "${path.module}/classification_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-data "archive_file" "extraction_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-3/src/extraction_function"
-  output_path = "${path.module}/extraction_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-data "archive_file" "process_results_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-3/src/processresults_function"
-  output_path = "${path.module}/process_results_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-data "archive_file" "summarization_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-3/src/summarization_function"
-  output_path = "${path.module}/summarization_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
 }

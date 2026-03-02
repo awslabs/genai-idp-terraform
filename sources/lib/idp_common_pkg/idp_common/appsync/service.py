@@ -55,13 +55,19 @@ class DocumentAppSyncService:
         Returns:
             Dictionary compatible with CreateDocumentInput GraphQL type
         """
-        return {
+        input_data = {
             "ObjectKey": document.input_key,
             "ObjectStatus": document.status.value,
             "InitialEventTime": document.initial_event_time,
             "QueuedTime": document.queued_time,
             "ExpiresAfter": expires_after,
         }
+
+        # Add trace_id if available
+        if document.trace_id:
+            input_data["TraceId"] = document.trace_id
+
+        return input_data
 
     def _document_to_update_input(self, document: Document) -> Dict[str, Any]:
         """
@@ -199,6 +205,10 @@ class DocumentAppSyncService:
                 elif latest_hitl.hitl_triggered:
                     input_data["HITLStatus"] = "IN_PROGRESS"
 
+        # Add trace_id if available
+        if document.trace_id:
+            input_data["TraceId"] = document.trace_id
+
         return input_data
 
     def _appsync_to_document(self, appsync_data: Dict[str, Any]) -> Document:
@@ -222,6 +232,7 @@ class DocumentAppSyncService:
             workflow_execution_arn=appsync_data.get("WorkflowExecutionArn"),
             evaluation_report_uri=appsync_data.get("EvaluationReportUri"),
             summary_report_uri=appsync_data.get("SummaryReportUri"),
+            trace_id=appsync_data.get("TraceId"),
         )
 
         # Handle HITL fields - create HITL metadata if HITL fields are present
@@ -295,11 +306,19 @@ class DocumentAppSyncService:
         if pages_data is not None:  # Ensure pages_data is not None before iterating
             for page_data in pages_data:
                 page_id = str(page_data.get("Id"))
+
+                # Get URI values and handle empty strings
+                # Note: TextUri in AppSync schema contains the parsed text URI
+                text_uri = page_data.get("TextUri") or None
+                text_conf_uri = page_data.get("TextConfidenceUri") or None
+                image_uri = page_data.get("ImageUri") or None
+
                 doc.pages[page_id] = Page(
                     page_id=page_id,
-                    image_uri=page_data.get("ImageUri"),
-                    raw_text_uri=page_data.get("TextUri"),
-                    text_confidence_uri=page_data.get("TextConfidenceUri"),
+                    image_uri=image_uri,
+                    raw_text_uri=text_uri,  # TextUri maps to both for backward compatibility
+                    parsed_text_uri=text_uri,  # Fix: TextUri contains parsed text URI
+                    text_confidence_uri=text_conf_uri,  # Fix: Convert empty strings to None
                     classification=page_data.get("Class"),
                 )
 

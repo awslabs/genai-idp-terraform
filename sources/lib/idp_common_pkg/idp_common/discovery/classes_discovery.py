@@ -3,11 +3,15 @@
 import json
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional, cast
+
+import jsonschema
+from jsonschema import Draft202012Validator
 
 from idp_common import bedrock, image
 from idp_common.config import ConfigurationReader
 from idp_common.config.configuration_manager import ConfigurationManager
+from idp_common.config.models import IDPConfig
 from idp_common.utils.s3util import S3Util
 
 logger = logging.getLogger(__name__)
@@ -27,17 +31,19 @@ class ClassesDiscovery:
         try:
             self.config_reader = ConfigurationReader()
             self.config_manager = ConfigurationManager()
-            self.config = self.config_reader.get_merged_configuration()
+            self.config: IDPConfig = cast(
+                IDPConfig, self.config_reader.get_merged_configuration(as_model=True)
+            )
         except Exception as e:
             logger.error(f"Failed to load configuration from DynamoDB: {e}")
             raise Exception(f"Failed to load configuration from DynamoDB: {str(e)}")
 
-        # Get discovery configuration
-        self.discovery_config = self.config.get("discovery", {})
+        # Get discovery configuration from IDPConfig model
+        self.discovery_config = self.config.discovery
 
         # Get model configuration for both scenarios
-        self.without_gt_config = self.discovery_config.get("without_ground_truth", {})
-        self.with_gt_config = self.discovery_config.get("with_ground_truth", {})
+        self.without_gt_config = self.discovery_config.without_ground_truth
+        self.with_gt_config = self.discovery_config.with_ground_truth
 
         # Initialize Bedrock client using the common pattern
         self.bedrock_client = bedrock.BedrockClient(region=self.region)
@@ -84,30 +90,41 @@ class ClassesDiscovery:
             if model_response is None:
                 raise Exception("Failed to extract data from document")
 
-            document_class = model_response.pop("document_class")
-            document_description = model_response.pop("document_description")
-            # Add/Update custom configuration
-            current_class = {}
-            current_class["name"] = document_class
-            current_class["description"] = document_description
-            groups = model_response.get("groups")
-            # remove duplicates
-            groups = self._remove_duplicates(groups)
-            current_class["attributes"] = groups
+            # Model response is now a JSON Schema
+            # No need to transform - it's already in the right format
+            current_class = model_response
 
-            custom_item = self.config_manager.get_configuration("Custom")
+            custom_item_raw = self.config_manager.get_configuration("Custom")
+            custom_item = cast(Optional[IDPConfig], custom_item_raw)
             classes = []
-            if custom_item and "classes" in custom_item:
-                classes = custom_item["classes"]
-                for class_obj in classes:
-                    if class_obj["name"] == current_class["name"]:
-                        classes.remove(class_obj)
+            if custom_item and custom_item.classes:
+                classes = list(custom_item.classes)
+                # Check for existing class by $id or x-aws-idp-document-type
+                class_id = current_class.get("$id") or current_class.get(
+                    "x-aws-idp-document-type"
+                )
+                for i, class_obj in enumerate(classes):
+                    existing_id = class_obj.get("$id") or class_obj.get(
+                        "x-aws-idp-document-type"
+                    )
+                    if existing_id == class_id:
+                        classes[i] = current_class  # Replace existing
                         break
-            classes.append(current_class)
+                else:
+                    classes.append(current_class)  # Add new if not found
+            else:
+                classes.append(current_class)
 
             # Update configuration with new classes
-            config_data = {"classes": classes}
-            self.config_manager.update_configuration("Custom", config_data)
+            # Load existing custom config to preserve all other fields
+            if not custom_item:
+                # If no custom config exists, get default as base
+                default_raw = self.config_manager.get_configuration("Default")
+                custom_item = cast(Optional[IDPConfig], default_raw) or IDPConfig()
+
+            # Update only the classes field, preserving all other config
+            custom_item.classes = classes
+            self.config_manager.save_configuration("Custom", custom_item)
 
             return {"status": "SUCCESS"}
 
@@ -154,31 +171,41 @@ class ClassesDiscovery:
             if model_response is None:
                 raise Exception("Failed to extract data from document")
 
-            document_class = model_response.pop("document_class")
-            document_description = model_response.pop("document_description")
+            # Model response is now a JSON Schema
+            # No need to transform - it's already in the right format
+            current_class = model_response
 
-            # Add/Update custom configuration
-            current_class = {}
-            current_class["name"] = document_class
-            current_class["description"] = document_description
-            groups = model_response.get("groups")
-            # remove duplicates
-            groups = self._remove_duplicates(groups)
-            current_class["attributes"] = groups
-
-            custom_item = self.config_manager.get_configuration("Custom")
+            custom_item_raw = self.config_manager.get_configuration("Custom")
+            custom_item = cast(Optional[IDPConfig], custom_item_raw)
             classes = []
-            if custom_item and "classes" in custom_item:
-                classes = custom_item["classes"]
-                for class_obj in classes:
-                    if class_obj["name"] == current_class["name"]:
-                        classes.remove(class_obj)
+            if custom_item and custom_item.classes:
+                classes = list(custom_item.classes)
+                # Check for existing class by $id or x-aws-idp-document-type
+                class_id = current_class.get("$id") or current_class.get(
+                    "x-aws-idp-document-type"
+                )
+                for i, class_obj in enumerate(classes):
+                    existing_id = class_obj.get("$id") or class_obj.get(
+                        "x-aws-idp-document-type"
+                    )
+                    if existing_id == class_id:
+                        classes[i] = current_class  # Replace existing
                         break
-            classes.append(current_class)
+                else:
+                    classes.append(current_class)  # Add new if not found
+            else:
+                classes.append(current_class)
 
             # Update configuration with new classes
-            config_data = {"classes": classes}
-            self.config_manager.update_configuration("Custom", config_data)
+            # Load existing custom config to preserve all other fields
+            if not custom_item:
+                # If no custom config exists, get default as base
+                default_raw = self.config_manager.get_configuration("Default")
+                custom_item = cast(Optional[IDPConfig], default_raw) or IDPConfig()
+
+            # Update only the classes field, preserving all other config
+            custom_item.classes = classes
+            self.config_manager.save_configuration("Custom", custom_item)
 
             return {"status": "SUCCESS"}
 
@@ -188,6 +215,43 @@ class ClassesDiscovery:
                 exc_info=True,
             )
             raise Exception(f"Failed to process document {input_prefix}: {str(e)}")
+
+    def _validate_json_schema(self, schema: Dict[str, Any]) -> tuple[bool, str]:
+        """
+        Validate that the response is a valid JSON Schema.
+
+        Args:
+            schema: The schema to validate
+
+        Returns:
+            tuple: (is_valid, error_message)
+        """
+        try:
+            # Check required fields for our document schema
+            required_fields = ["$schema", "$id", "type", "properties"]
+            for field in required_fields:
+                if field not in schema:
+                    return False, f"Missing required field: {field}"
+
+            # Validate it's a proper JSON Schema
+            Draft202012Validator.check_schema(schema)
+
+            # Check our AWS IDP specific requirements
+            if "x-aws-idp-document-type" not in schema:
+                return False, "Missing x-aws-idp-document-type field"
+
+            if schema.get("type") != "object":
+                return False, "Root type must be 'object'"
+
+            if not isinstance(schema.get("properties"), dict):
+                return False, "Properties must be an object"
+
+            return True, ""
+
+        except jsonschema.SchemaError as e:
+            return False, f"Invalid JSON Schema: {str(e)}"
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
 
     def _remove_duplicates(self, groups):
         for group in groups:
@@ -216,54 +280,97 @@ class ClassesDiscovery:
             logger.error(f"Failed to load ground truth from s3://{bucket}/{key}: {e}")
             raise
 
-    def _extract_data_from_document(self, document_content, file_extension):
-        try:
-            # Get configuration for without ground truth
-            model_id = self.without_gt_config.get("model_id", "us.amazon.nova-pro-v1:0")
-            system_prompt = self.without_gt_config.get(
-                "system_prompt",
-                "You are an expert in processing forms. Extracting data from images and documents",
-            )
-            temperature = self.without_gt_config.get("temperature", 1.0)
-            top_p = self.without_gt_config.get("top_p", 0.1)
-            max_tokens = self.without_gt_config.get("max_tokens", 10000)
+    def _extract_data_from_document(
+        self, document_content, file_extension, max_retries: int = 3
+    ):
+        """Extract data from document with retry logic for invalid schemas."""
+        # Get configuration for without ground truth
+        model_id = self.without_gt_config.model_id
+        system_prompt = (
+            self.without_gt_config.system_prompt
+            or "You are an expert in processing forms. Extracting data from images and documents"
+        )
+        temperature = self.without_gt_config.temperature
+        top_p = self.without_gt_config.top_p
+        max_tokens = self.without_gt_config.max_tokens
 
-            # Create user prompt with sample format
-            user_prompt = self.without_gt_config.get(
-                "user_prompt", self._prompt_classes_discovery()
-            )
-            sample_format = self.discovery_config.get("output_format", {}).get(
-                "sample_json", self._sample_output_format()
-            )
-            full_prompt = f"{user_prompt}\nFormat the extracted data using the below JSON format:\n{sample_format}"
+        # Create user prompt with sample format
+        user_prompt = (
+            self.without_gt_config.user_prompt or self._prompt_classes_discovery()
+        )
+        sample_format = self._sample_output_format()
 
-            # Create content for the user message
-            content = self._create_content_list(
-                prompt=full_prompt,
-                document_content=document_content,
-                file_extension=file_extension,
-            )
+        validation_feedback = ""
+        for attempt in range(max_retries):
+            try:
+                # Add validation feedback if this is a retry
+                retry_prompt = ""
+                if attempt > 0 and validation_feedback:
+                    retry_prompt = f"\n\nPREVIOUS ATTEMPT FAILED: {validation_feedback}\nPlease fix the issue and generate a valid JSON Schema.\n\n"
 
-            # Use the configured parameters
-            response = self.bedrock_client.invoke_model(
-                model_id=model_id,
-                system_prompt=system_prompt,
-                content=content,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                context="ClassesDiscovery",
-            )
+                full_prompt = f"{retry_prompt}{user_prompt}\nFormat the extracted data using the below JSON format:\n{sample_format}"
 
-            # Extract text from response using the common pattern
-            content_text = bedrock.extract_text_from_response(response)
+                # Create content for the user message
+                content = self._create_content_list(
+                    prompt=full_prompt,
+                    document_content=document_content,
+                    file_extension=file_extension,
+                )
 
-            logger.debug(f"Bedrock response: {content_text}")
-            return json.loads(content_text)
+                # Use the configured parameters
+                response = self.bedrock_client.invoke_model(
+                    model_id=model_id,
+                    system_prompt=system_prompt,
+                    content=content,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                    context="ClassesDiscovery",
+                )
 
-        except Exception as e:
-            logger.error(f"Error extracting data with Bedrock: {e}")
-            return None
+                # Extract text from response using the common pattern
+                content_text = bedrock.extract_text_from_response(response)
+                logger.debug(
+                    f"Bedrock response (attempt {attempt + 1}): {content_text}"
+                )
+
+                # Parse JSON response
+                schema = json.loads(content_text)
+
+                # Validate the schema
+                is_valid, error_msg = self._validate_json_schema(schema)
+                if is_valid:
+                    logger.info(
+                        f"Successfully generated valid JSON Schema on attempt {attempt + 1}"
+                    )
+                    return schema
+                else:
+                    validation_feedback = error_msg
+                    logger.warning(
+                        f"Invalid schema on attempt {attempt + 1}: {error_msg}"
+                    )
+                    if attempt == max_retries - 1:
+                        logger.error(
+                            f"Failed to generate valid schema after {max_retries} attempts"
+                        )
+                        return None
+
+            except json.JSONDecodeError as e:
+                validation_feedback = f"Invalid JSON format: {str(e)}"
+                logger.warning(f"JSON parse error on attempt {attempt + 1}: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(
+                        f"Failed to generate valid JSON after {max_retries} attempts"
+                    )
+                    return None
+            except Exception as e:
+                logger.error(
+                    f"Error extracting data with Bedrock on attempt {attempt + 1}: {e}"
+                )
+                if attempt == max_retries - 1:
+                    return None
+
+        return None
 
     def _create_content_list(self, prompt, document_content, file_extension):
         """Create content list for BedrockClient API."""
@@ -289,88 +396,138 @@ class ClassesDiscovery:
         return content
 
     def _extract_data_from_document_with_ground_truth(
-        self, document_content, file_extension, ground_truth_data
+        self, document_content, file_extension, ground_truth_data, max_retries: int = 3
     ):
-        """Extract data from document using ground truth as reference."""
-        try:
-            # Get configuration for with ground truth
-            model_id = self.with_gt_config.get("model_id", "us.amazon.nova-pro-v1:0")
-            system_prompt = self.with_gt_config.get(
-                "system_prompt",
-                "You are an expert in processing forms. Extracting data from images and documents",
-            )
-            temperature = self.with_gt_config.get("temperature", 1.0)
-            top_p = self.with_gt_config.get("top_p", 0.1)
-            max_tokens = self.with_gt_config.get("max_tokens", 10000)
+        """Extract data from document using ground truth as reference with retry logic."""
+        # Get configuration for with ground truth
+        model_id = self.with_gt_config.model_id
+        system_prompt = (
+            self.with_gt_config.system_prompt
+            or "You are an expert in processing forms. Extracting data from images and documents"
+        )
+        temperature = self.with_gt_config.temperature
+        top_p = self.with_gt_config.top_p
+        max_tokens = self.with_gt_config.max_tokens
 
-            # Create enhanced prompt with ground truth
-            user_prompt = self.with_gt_config.get(
-                "user_prompt",
-                self._prompt_classes_discovery_with_ground_truth(ground_truth_data),
+        # Create enhanced prompt with ground truth
+        user_prompt = (
+            self.with_gt_config.user_prompt
+            or self._prompt_classes_discovery_with_ground_truth(ground_truth_data)
+        )
+
+        # If user_prompt contains placeholder, replace it with ground truth
+        if "{ground_truth_json}" in user_prompt:
+            ground_truth_json = json.dumps(ground_truth_data, indent=2)
+            base_prompt = user_prompt.replace("{ground_truth_json}", ground_truth_json)
+        else:
+            base_prompt = self._prompt_classes_discovery_with_ground_truth(
+                ground_truth_data
             )
 
-            # If user_prompt contains placeholder, replace it with ground truth
-            if "{ground_truth_json}" in user_prompt:
-                ground_truth_json = json.dumps(ground_truth_data, indent=2)
-                prompt = user_prompt.replace("{ground_truth_json}", ground_truth_json)
-            else:
-                prompt = self._prompt_classes_discovery_with_ground_truth(
-                    ground_truth_data
+        sample_format = self._sample_output_format()
+
+        validation_feedback = ""
+        for attempt in range(max_retries):
+            try:
+                # Add validation feedback if this is a retry
+                retry_prompt = ""
+                if attempt > 0 and validation_feedback:
+                    retry_prompt = f"\n\nPREVIOUS ATTEMPT FAILED: {validation_feedback}\nPlease fix the issue and generate a valid JSON Schema.\n\n"
+
+                full_prompt = f"{retry_prompt}{base_prompt}\nFormat the extracted data using the below JSON format:\n{sample_format}"
+
+                # Create content for the user message
+                content = self._create_content_list(
+                    prompt=full_prompt,
+                    document_content=document_content,
+                    file_extension=file_extension,
                 )
 
-            sample_format = self.discovery_config.get("output_format", {}).get(
-                "sample_json", self._sample_output_format()
-            )
-            full_prompt = f"{prompt}\nFormat the extracted data using the below JSON format:\n{sample_format}"
+                # Use the configured parameters
+                response = self.bedrock_client.invoke_model(
+                    model_id=model_id,
+                    system_prompt=system_prompt,
+                    content=content,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                    context="ClassesDiscoveryWithGroundTruth",
+                )
 
-            # Create content for the user message
-            content = self._create_content_list(
-                prompt=full_prompt,
-                document_content=document_content,
-                file_extension=file_extension,
-            )
+                # Extract text from response using the common pattern
+                content_text = bedrock.extract_text_from_response(response)
+                logger.debug(
+                    f"Bedrock response with ground truth (attempt {attempt + 1}): {content_text}"
+                )
 
-            # Use the configured parameters - Fix: use invoke_model not direct call
-            response = self.bedrock_client.invoke_model(
-                model_id=model_id,
-                system_prompt=system_prompt,
-                content=content,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                context="ClassesDiscoveryWithGroundTruth",
-            )
+                # Parse JSON response
+                schema = json.loads(content_text)
 
-            # Extract text from response using the common pattern
-            content_text = bedrock.extract_text_from_response(response)
+                # Validate the schema
+                is_valid, error_msg = self._validate_json_schema(schema)
+                if is_valid:
+                    logger.info(
+                        f"Successfully generated valid JSON Schema with ground truth on attempt {attempt + 1}"
+                    )
+                    return schema
+                else:
+                    validation_feedback = error_msg
+                    logger.warning(
+                        f"Invalid schema with ground truth on attempt {attempt + 1}: {error_msg}"
+                    )
+                    if attempt == max_retries - 1:
+                        logger.error(
+                            f"Failed to generate valid schema with ground truth after {max_retries} attempts"
+                        )
+                        return None
 
-            logger.debug(f"Bedrock response with ground truth: {content_text}")
-            return json.loads(content_text)
+            except json.JSONDecodeError as e:
+                validation_feedback = f"Invalid JSON format: {str(e)}"
+                logger.warning(
+                    f"JSON parse error with ground truth on attempt {attempt + 1}: {e}"
+                )
+                if attempt == max_retries - 1:
+                    logger.error(
+                        f"Failed to generate valid JSON with ground truth after {max_retries} attempts"
+                    )
+                    return None
+            except Exception as e:
+                logger.error(
+                    f"Error extracting data with ground truth on attempt {attempt + 1}: {e}"
+                )
+                if attempt == max_retries - 1:
+                    return None
 
-        except Exception as e:
-            logger.error(f"Error extracting data with Bedrock using ground truth: {e}")
-            return None
+        return None
 
     def _prompt_classes_discovery_with_ground_truth(self, ground_truth_data):
         ground_truth_json = json.dumps(ground_truth_data, indent=2)
         sample_output_format = self._sample_output_format()
         return f"""
-                        This image contains unstructured data. Analyze the data line by line using the provided ground truth as reference.                        
+                        This image contains unstructured data. Analyze the data line by line using the provided ground truth as reference.
                         <GROUND_TRUTH_REFERENCE>
                         {ground_truth_json}
                         </GROUND_TRUTH_REFERENCE>
-                        Ground truth reference JSON has the fields we are interested in extracting from the document/image. Use the ground truth to optimize field extraction. Match field names, data types, and groupings from the reference.
+
+                        Generate a JSON Schema that describes the document structure using the ground truth as reference:
+                        - Use "$schema": "https://json-schema.org/draft/2020-12/schema"
+                        - Set "$id" to a short document class name (e.g., "W4", "I-9", "Paystub")
+                        - Set "x-aws-idp-document-type" to the same document class name
+                        - Set "type": "object"
+                        - Add "description" with a brief summary of the document (less than 50 words)
+
+                        For the "properties" object:
+                        - Preserve the exact field names and groupings from ground truth
+                        - Use nested objects (type: "object") for grouped fields with their own "properties"
+                        - For repeating/table data, use type: "array" with "items" containing object schema
+                        - Each field should have appropriate "type" based on ground truth values
+                        - Add "description" for each field with extraction instructions and location hints
+
+                        Match field names, data types, and structure from the ground truth reference.
                         Image may contain multiple pages, process all pages.
-                        Extract all field names including those without values.
-                        Do not change the group name and field name from ground truth in the extracted data json.
-                        Add field_description field for every field which will contain instruction to LLM to extract the field data from the image/document. Add data_type field for every field. 
-                        Add two fields document_class and document_description. 
-                        For document_class generate a short name based on the document content like W4, I-9, Paystub. 
-                        For document_description generate a description about the document in less than 50 words.
-                        If the group repeats and follows table format, update the attributeType as "list".                         
-                        Do not extract the values.
-                        Format the extracted data using the below JSON format:
-                        Format the extracted groups and fields using the below JSON format:
+                        Do not extract the actual values, only the schema structure.
+
+                        Return the extracted schema in the exact JSON Schema format below:
                         {sample_output_format}
                         """
 
@@ -378,68 +535,69 @@ class ClassesDiscovery:
         sample_output_format = self._sample_output_format()
         return f"""
                         This image contains forms data. Analyze the form line by line.
-                        Image may contains multiple pages, process all the pages. 
-                        Form may contain multiple name value pair in one line. 
-                        Extract all the names in the form including the name value pair which doesn't have value. 
-                        Organize them into groups, extract field_name, data_type and field description
-                        Field_name should be less than 60 characters, should not have space use '-' instead of space.
-                        field_description is a brief description of the field and the location of the field like box number or line number in the form and section of the form.
-                        Field_name should be unique within the group.
-                        Add two fields document_class and document_description. 
-                        For document_class generate a short name based on the document content like W4, I-9, Paystub. 
-                        For document_description generate a description about the document in less than 50 words. 
+                        Image may contains multiple pages, process all the pages.
+                        Form may contain multiple name value pair in one line.
+                        Extract all the names in the form including the name value pair which doesn't have value.
 
-                        Group the fields based on the section they are grouped in the form. Group should have attributeType as "group".
-                        If the group repeats and follows table format, update the attributeType as "list".
-                        Do not extract the values.
-                        Return the extracted data in JSON format.
-                        Format the extracted data using the below JSON format:
-                        Format the extracted groups and fields using the below JSON format:
+                        Generate a JSON Schema that describes the document structure:
+                        - Use "$schema": "https://json-schema.org/draft/2020-12/schema"
+                        - Set "$id" to a short document class name (e.g., "W4", "I-9", "Paystub")
+                        - Set "x-aws-idp-document-type" to the same document class name
+                        - Set "type": "object"
+                        - Add "description" with a brief summary of the document (less than 50 words)
+
+                        For the "properties" object:
+                        - Group related fields as nested objects (type: "object") with their own "properties"
+                        - For repeating/table data, use type: "array" with "items" containing object schema
+                        - Each field should have "type" (string, number, boolean, etc.) and "description"
+                        - Field names should be less than 60 characters, use camelCase or snake_case
+                        - Field descriptions should include location hints (box number, line number, section)
+
+                        Do not extract the actual values, only the schema structure.
+                        Return the extracted schema in the exact JSON Schema format below:
                         {sample_output_format}
                     """
 
     def _sample_output_format(self):
         return """
         {
-            "document_class" : "Form-1040",
-            "document_description" : "Brief summary of the document",
-            "groups" : [
-                {
-                    "name" : "PersonalInformation",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id" : "Form-1040",
+            "x-aws-idp-document-type" : "Form-1040",
+            "type": "object",
+            "description" : "Brief summary of the document",
+            "properties" : {
+                "PersonalInformation": {
+                    "type": "object",
                     "description" : "Personal information of Tax payer",
-                    "attributeType" : "group",
-                    "groupAttributes" : [
-                        {
-                            "name": "FirstName",
-                            "dataType" : "string",
+                    "properties" : {
+                        "FirstName": {
+                            "type": "string",
                             "description" : "First Name of Taxpayer"
                         },
-                        {
-                            "name": "Age",
-                            "dataType" : "number",
+                        "Age": {
+                            "type": "number",
                             "description" : "Age of Taxpayer"
                         }
-                    ]
+                    }
                 },
-                {
-                    "name" : "Dependents",
+                "Dependents": {
+                    "type": "array",
                     "description" : "Dependents of taxpayer",
-                    "attributeType" : "list",
-                    "listItemTemplate": {
-                        "itemAttributes" : [
-                            {
-                                "name": "FirstName",
-                                "dataType" : "string",
+                    "items": {
+                        "type": "object",
+                        "properties" : {
+                            "FirstName": {
+                                "type": "string",
                                 "description" : "Dependent first name"
                             },
-                            {
-                                "name": "Age",
-                                "dataType" : "number",
+                            "Age": {
+                                "type": "number",
                                 "description" : "Dependent Age"
                             }
-                        ]
+                        }
                     }
                 }
-            ]
+            }
         }
         """

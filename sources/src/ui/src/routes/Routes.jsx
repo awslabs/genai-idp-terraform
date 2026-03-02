@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Logger } from 'aws-amplify';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import { useAuthenticator } from '@aws-amplify/ui-react';
 
 import UnauthRoutes from './UnauthRoutes';
@@ -12,7 +12,7 @@ import AuthRoutes from './AuthRoutes';
 
 import { REDIRECT_URL_PARAM } from './constants';
 
-const logger = new Logger('Routes');
+const logger = new ConsoleLogger('Routes');
 
 const Routes = () => {
   const { user, currentCredentials } = useAppContext();

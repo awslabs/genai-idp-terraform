@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import React from 'react';
-import { Box, SpaceBetween } from '@awsui/components-react';
+import { Box, SpaceBetween } from '@cloudscape-design/components';
 import ConfidenceDisplay from './ConfidenceDisplay';
 
 /**
@@ -60,8 +60,7 @@ const ConfidenceDisplayTest = () => {
               {scenario.name}
             </Box>
             <Box>
-              Field Name:{' '}
-              <ConfidenceDisplay confidenceInfo={scenario.confidenceInfo} variant="detailed" showThreshold />
+              Field Name: <ConfidenceDisplay confidenceInfo={scenario.confidenceInfo} variant="detailed" showThreshold />
             </Box>
             <Box margin={{ top: 'xs' }}>
               Inline: <ConfidenceDisplay confidenceInfo={scenario.confidenceInfo} variant="inline" showThreshold />

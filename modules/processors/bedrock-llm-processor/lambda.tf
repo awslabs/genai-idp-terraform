@@ -138,12 +138,14 @@ resource "aws_lambda_function" "process_results" {
 
   environment {
     variables = {
-      METRIC_NAMESPACE       = local.metric_namespace
-      LOG_LEVEL              = local.log_level
-      TRACKING_TABLE         = local.tracking_table_name
-      WORKING_BUCKET         = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE = local.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL        = local.api_graphql_url != null ? local.api_graphql_url : ""
+      METRIC_NAMESPACE         = local.metric_namespace
+      LOG_LEVEL                = local.log_level
+      TRACKING_TABLE           = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME = local.configuration_table_name
+      WORKING_BUCKET           = local.working_bucket_name
+      OUTPUT_BUCKET            = local.output_bucket_name
+      DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
     }
   }
 
@@ -456,4 +458,71 @@ data "archive_file" "hitl_status_update_lambda" {
   output_path = "${path.module}/hitl_status_update_function.zip"
 
   depends_on = [null_resource.create_module_build_dir]
+}
+
+# Evaluation Function (conditional on evaluation_enabled and baseline bucket)
+data "archive_file" "evaluation_lambda" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+
+  type        = "zip"
+  source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/evaluation_function"
+  output_path = "${path.module}/evaluation_function.zip"
+
+  depends_on = [null_resource.create_module_build_dir]
+}
+
+resource "aws_lambda_function" "evaluation_function" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+
+  function_name = "${local.name_prefix}-evaluation"
+  role          = aws_iam_role.evaluation_lambda[0].arn
+  handler       = "index.handler"
+  runtime       = "python3.12"
+  timeout       = 900
+  memory_size   = 1024
+
+  filename         = data.archive_file.evaluation_lambda[0].output_path
+  source_code_hash = data.archive_file.evaluation_lambda[0].output_base64sha256
+
+  layers = [var.idp_common_layer_arn]
+
+  kms_key_arn = var.encryption_key_arn
+
+  environment {
+    variables = {
+      LOG_LEVEL                = local.log_level
+      METRIC_NAMESPACE         = local.metric_namespace
+      TRACKING_TABLE           = local.tracking_table_name
+      CONFIGURATION_TABLE_NAME = local.configuration_table_name
+      PROCESSING_OUTPUT_BUCKET = local.output_bucket_name
+      EVALUATION_OUTPUT_BUCKET = local.output_bucket_name
+      BASELINE_BUCKET          = element(split(":", var.evaluation_baseline_bucket_arn), 5)
+      DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "evaluation_lambda" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+
+  name              = "/aws/lambda/${aws_lambda_function.evaluation_function[0].function_name}"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+
+  tags = local.common_tags
 }

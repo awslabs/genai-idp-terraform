@@ -20,10 +20,7 @@ export const SentimentIcon = ({ sentiment = 'NEUTRAL', size = '1.5em' }) => {
 
   return <FiMeh style={style} color="grey" size={size} tille={sentiment.toLowerCase()} />;
 };
-SentimentIcon.defaultProps = {
-  sentiment: 'NEUTRAL',
-  size: '1.5em',
-};
+
 SentimentIcon.propTypes = {
   sentiment: PropTypes.oneOf(['POSITIVE', 'NEGATIVE', 'NEUTRAL', 'MIXED']),
   size: PropTypes.string,
@@ -49,9 +46,7 @@ export const SentimentIndicator = ({ sentiment = 'NEUTRAL' }) => (
     </span>
   </div>
 );
-SentimentIndicator.defaultProps = {
-  sentiment: 'NEUTRAL',
-};
+
 SentimentIndicator.propTypes = {
   sentiment: PropTypes.oneOf(['POSITIVE', 'NEGATIVE', 'NEUTRAL', 'MIXED']),
 };

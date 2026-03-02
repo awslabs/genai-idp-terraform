@@ -152,6 +152,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.reprocess_document_resolver_role.arn
+  layers      = compact([var.idp_common_layer_arn])
   description = "Lambda function to reprocess documents via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -253,6 +254,7 @@ resource "aws_lambda_function" "configuration_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.configuration_resolver_role.arn
+  layers      = compact([var.idp_common_layer_arn])
   description = "Lambda function to manage configuration through GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -413,6 +415,7 @@ resource "aws_lambda_function" "copy_to_baseline_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.copy_to_baseline_resolver_role["enabled"].arn
+  layers      = compact([var.idp_common_layer_arn])
   description = "Lambda function to copy documents to baseline via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn

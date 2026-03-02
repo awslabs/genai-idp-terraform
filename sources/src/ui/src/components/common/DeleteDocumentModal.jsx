@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Modal, Box, SpaceBetween, Button } from '@awsui/components-react';
+import { Modal, Box, SpaceBetween, Button } from '@cloudscape-design/components';
 
 const DeleteDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems }) => {
   const documentCount = selectedItems.length;
@@ -27,8 +27,7 @@ const DeleteDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems }) =
       }
     >
       <p>
-        Are you sure you want to delete {isMultiple ? `these ${documentCount} documents` : 'this document'}? This action
-        cannot be undone.
+        Are you sure you want to delete {isMultiple ? `these ${documentCount} documents` : 'this document'}? This action cannot be undone.
       </p>
       {isMultiple && (
         <ul>

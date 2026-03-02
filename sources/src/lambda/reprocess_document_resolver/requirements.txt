@@ -1,1 +1,1 @@
-boto3>=1.28.0
+./lib/idp_common_pkg[docs_service]  # idp_common package with Document model and document service integration

@@ -1,0 +1,103 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import PropTypes from 'prop-types';
+import { v4 as uuidv4 } from 'uuid';
+
+const AgentChatContext = createContext(null);
+
+export const AgentChatProvider = ({ children }) => {
+  // State for the agent chat
+  const [agentChatState, setAgentChatState] = useState({
+    messages: [], // Current chat messages
+    sessionId: uuidv4(), // Current session ID
+    isLoading: false,
+    waitingForResponse: false,
+    error: null,
+    expandedSections: new Set(),
+    lastMessageCount: 0,
+    enableCodeIntelligence: true,
+    inputValue: '',
+  });
+
+  // Function to update agent chat state
+  const updateAgentChatState = useCallback((updates) => {
+    setAgentChatState((prevState) => ({
+      ...prevState,
+      ...updates,
+    }));
+  }, []);
+
+  // Function to reset agent chat state (new session)
+  const resetAgentChatState = useCallback(() => {
+    setAgentChatState({
+      messages: [],
+      sessionId: uuidv4(),
+      isLoading: false,
+      waitingForResponse: false,
+      error: null,
+      expandedSections: new Set(),
+      lastMessageCount: 0,
+      enableCodeIntelligence: true,
+      inputValue: '',
+    });
+  }, []);
+
+  // Function to load a specific session
+  const loadAgentChatSession = useCallback((sessionId, messages) => {
+    setAgentChatState((prevState) => ({
+      ...prevState,
+      messages,
+      sessionId,
+      expandedSections: new Set(),
+      lastMessageCount: messages.length,
+      error: null,
+      waitingForResponse: false,
+      isLoading: false,
+    }));
+  }, []);
+
+  // Function to add a message to the current session
+  const addMessageToSession = useCallback((message) => {
+    setAgentChatState((prevState) => ({
+      ...prevState,
+      messages: [...prevState.messages, message],
+    }));
+  }, []);
+
+  // Function to update messages (for streaming updates)
+  const updateMessages = useCallback((updaterFunction) => {
+    setAgentChatState((prevState) => ({
+      ...prevState,
+      messages: updaterFunction(prevState.messages),
+    }));
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      agentChatState,
+      updateAgentChatState,
+      resetAgentChatState,
+      loadAgentChatSession,
+      addMessageToSession,
+      updateMessages,
+    }),
+    [agentChatState, updateAgentChatState, resetAgentChatState, loadAgentChatSession, addMessageToSession, updateMessages],
+  );
+
+  return <AgentChatContext.Provider value={contextValue}>{children}</AgentChatContext.Provider>;
+};
+
+AgentChatProvider.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
+export const useAgentChatContext = () => {
+  const context = useContext(AgentChatContext);
+  if (!context) {
+    throw new Error('useAgentChatContext must be used within an AgentChatProvider');
+  }
+  return context;
+};
+
+export default AgentChatContext;

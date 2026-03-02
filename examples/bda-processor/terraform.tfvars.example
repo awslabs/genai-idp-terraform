@@ -1,4 +1,5 @@
-# Example configuration for BDA Processor with new API variable structure
+# Example configuration for BDA Processor
+# Copy this file to terraform.tfvars and update the values
 
 # Basic configuration
 region = "us-east-1"
@@ -7,33 +8,41 @@ prefix = "my-idp"
 # Admin user (optional)
 admin_email = "admin@example.com"
 
-# API Configuration (New Consolidated Structure)
+# API Configuration
 api = {
   enabled = true
-  
-  # Enable specific API features as needed
+
+  # v0.4.8 feature flags
+  enable_agent_companion_chat = false  # Multi-agent AI chat sessions
+  enable_test_studio          = false  # Automated dataset testing
+  enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
+  enable_error_analyzer       = false  # AI-powered error diagnostics
+  enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
+
   agent_analytics = {
-    enabled  = false  # Requires reporting to be enabled
+    enabled  = false
     model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
   }
-  
+
   discovery = {
-    enabled = true  # Enable document discovery workflow
+    enabled = true  # Creates a dedicated discovery bucket and workflow
   }
-  
+
   chat_with_document = {
-    enabled                  = true   # Enable chat with document feature
-    guardrail_id_and_version = null   # Optional Bedrock Guardrail
+    enabled                  = false
+    guardrail_id_and_version = null
   }
-  
+
   process_changes = {
-    enabled = false  # Enable document editing and reprocessing
+    enabled = false
   }
-  
+
+  # When enabled, the example creates an OpenSearch Serverless + Bedrock Knowledge Base automatically.
+  # Set chat_with_document.enabled = true together with this to enable document Q&A.
   knowledge_base = {
-    enabled            = true  # Required for chat_with_document
-    knowledge_base_arn = null  # Will be set automatically by the example
-    model_id           = "us.amazon.nova-pro-v1:0"
+    enabled            = false
+    knowledge_base_arn = null  # Auto-wired by the example when enabled
+    model_id           = "amazon.nova-pro-v1:0"
     embedding_model_id = "amazon.titan-embed-text-v2:0"
   }
 }
@@ -47,7 +56,7 @@ web_ui = {
 }
 
 # BDA Processor Configuration
-summarization_enabled = true
+summarization_enabled  = true
 summarization_model_id = "us.amazon.nova-pro-v1:0"
 
 # Optional Features

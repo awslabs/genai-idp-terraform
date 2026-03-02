@@ -45,7 +45,8 @@ resource "aws_iam_policy" "state_machine_policy" {
         Resource = [
           aws_lambda_function.invoke_bda.arn,
           aws_lambda_function.process_results.arn,
-          aws_lambda_function.summarization.arn
+          aws_lambda_function.summarization.arn,
+          aws_lambda_function.evaluation_function.arn
         ]
       },
       {
@@ -950,7 +951,7 @@ resource "aws_iam_role_policy_attachment" "hitl_status_update_kms_attachment" {
 # resource "aws_iam_role" "evaluation_role" {
 #   count = var.evaluation_baseline_bucket != null ? 1 : 0
 #   name  = "${var.name}-evaluation-role-${random_string.suffix.result}"
-# 
+#
 #   assume_role_policy = jsonencode({
 #     Version = "2012-10-17"
 #     Statement = [
@@ -963,7 +964,7 @@ resource "aws_iam_role_policy_attachment" "hitl_status_update_kms_attachment" {
 #       }
 #     ]
 #   })
-# 
+#
 #   tags = var.tags
 # }
 
@@ -973,7 +974,7 @@ resource "aws_iam_role_policy_attachment" "hitl_status_update_kms_attachment" {
 #   count       = var.evaluation_baseline_bucket != null ? 1 : 0
 #   name        = "${var.name}-evaluation-policy-${random_string.suffix.result}"
 #   description = "Policy for BDA processor evaluation function"
-# 
+#
 #   policy = jsonencode({
 #     Version = "2012-10-17"
 #     Statement = [
@@ -1053,7 +1054,7 @@ resource "aws_iam_role_policy_attachment" "hitl_status_update_kms_attachment" {
 #   count       = var.evaluation_baseline_bucket != null && var.evaluation_model_id != null ? 1 : 0
 #   name        = "${var.name}-evaluation-bedrock-policy-${random_string.suffix.result}"
 #   description = "Bedrock policy for evaluation function"
-# 
+#
 #   policy = jsonencode({
 #     Version = "2012-10-17"
 #     Statement = [
@@ -1202,5 +1203,126 @@ resource "aws_iam_role_policy_attachment" "hitl_process_vpc_attachment" {
 resource "aws_iam_role_policy_attachment" "hitl_status_update_vpc_attachment" {
   count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
   role       = aws_iam_role.hitl_status_update_role.name
+  policy_arn = aws_iam_policy.vpc_policy[0].arn
+}
+
+# =============================================================================
+# IAM Role and Policy for Evaluation Function
+# =============================================================================
+
+resource "aws_iam_role" "evaluation_function_role" {
+  name = "${var.name}-evaluation-fn-${random_string.suffix.result}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "evaluation_function_policy" {
+  name        = "${var.name}-evaluation-fn-policy-${random_string.suffix.result}"
+  description = "Policy for BDA processor evaluation function"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+      },
+      {
+        # Read processing output and baseline documents
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          var.output_bucket_arn,
+          "${var.output_bucket_arn}/*",
+          var.working_bucket_arn,
+          "${var.working_bucket_arn}/*"
+        ]
+      },
+      {
+        # Write evaluation results to working and output buckets
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = [
+          "${var.output_bucket_arn}/*",
+          "${var.working_bucket_arn}/*"
+        ]
+      },
+      {
+        # Read tracking and configuration tables
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = [
+          var.tracking_table_arn,
+          "${var.tracking_table_arn}/index/*",
+          var.configuration_table_arn,
+          "${var.configuration_table_arn}/index/*"
+        ]
+      },
+      {
+        # AppSync document status updates
+        Effect   = "Allow"
+        Action   = ["appsync:GraphQL"]
+        Resource = var.api_arn != null ? "${var.api_arn}/types/Mutation/*" : "arn:${data.aws_partition.current.partition}:appsync:*:*:apis/*/types/Mutation/*"
+      },
+      {
+        # Invoke SaveReportingData Lambda for analytics
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = var.metric_namespace
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_function_policy_attachment" {
+  role       = aws_iam_role.evaluation_function_role.name
+  policy_arn = aws_iam_policy.evaluation_function_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_function_kms_attachment" {
+  for_each   = toset(["enabled"])
+  role       = aws_iam_role.evaluation_function_role.name
+  policy_arn = aws_iam_policy.kms_policy["enabled"].arn
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_function_vpc_attachment" {
+  count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  role       = aws_iam_role.evaluation_function_role.name
   policy_arn = aws_iam_policy.vpc_policy[0].arn
 }

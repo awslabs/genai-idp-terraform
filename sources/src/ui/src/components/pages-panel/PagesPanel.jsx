@@ -3,13 +3,13 @@
 
 /* eslint-disable react/prop-types */
 import React, { useState } from 'react';
-import { Box, Container, SpaceBetween, Table } from '@awsui/components-react';
-import { Logger } from 'aws-amplify';
+import { Box, Container, SpaceBetween, Table } from '@cloudscape-design/components';
+import { ConsoleLogger } from 'aws-amplify/utils';
 import useAppContext from '../../contexts/app';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import MarkdownJsonViewer from '../document-viewer/MarkdownJsonViewer';
 
-const logger = new Logger('PagesPanel');
+const logger = new ConsoleLogger('PagesPanel');
 
 // Cell renderer components
 const IdCell = ({ item }) => <span>{item.Id}</span>;
@@ -43,12 +43,7 @@ const ThumbnailCell = ({ imageUrl }) => (
 
 const ActionsCell = ({ item }) =>
   item.TextUri ? (
-    <MarkdownJsonViewer
-      fileUri={item.TextUri}
-      textConfidenceUri={item.TextConfidenceUri}
-      fileType="text"
-      buttonText="View/Edit Data"
-    />
+    <MarkdownJsonViewer fileUri={item.TextUri} textConfidenceUri={item.TextConfidenceUri} fileType="text" buttonText="View/Edit Data" />
   ) : (
     <Box color="text-status-inactive">No text available</Box>
   );

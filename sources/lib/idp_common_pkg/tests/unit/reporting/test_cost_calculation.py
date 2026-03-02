@@ -8,6 +8,7 @@ Unit tests for cost calculation functionality
 from datetime import datetime
 
 import pytest
+from idp_common.config.models import IDPConfig
 from idp_common.models import Document
 from idp_common.reporting.save_reporting_data import SaveReportingData
 
@@ -40,7 +41,8 @@ def test_cost_calculation_pricing_lookup():
     }
 
     # Create SaveReportingData instance with pricing config
-    reporter = SaveReportingData("test-bucket", config=pricing_config)
+    idp_config = IDPConfig.model_validate(pricing_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
     # Test Bedrock pricing lookup
     claude_input_cost = reporter._get_unit_cost(
@@ -103,7 +105,8 @@ def test_cost_calculation_with_document():
     }
 
     # Create SaveReportingData instance with pricing config
-    reporter = SaveReportingData("test-bucket", config=pricing_config)
+    idp_config = IDPConfig.model_validate(pricing_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
     # Get unit costs
     claude_input_cost = reporter._get_unit_cost(

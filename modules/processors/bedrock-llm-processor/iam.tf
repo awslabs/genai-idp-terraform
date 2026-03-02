@@ -43,7 +43,8 @@ resource "aws_iam_role_policy" "state_machine" {
           var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "",
           aws_lambda_function.assessment.arn,
           var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "",
-          var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : ""
+          var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : "",
+          var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : ""
         ])
       },
       {
@@ -440,6 +441,19 @@ resource "aws_iam_role_policy" "process_results_lambda" {
         Resource = local.s3_bucket_arns
       },
       {
+        # Configuration table always needed — process_results reads config via get_config()
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          local.configuration_table_arn,
+          "${local.configuration_table_arn}/index/*"
+        ]
+      },
+      {
         Effect = "Allow"
         Action = [
           "appsync:GraphQL"
@@ -471,7 +485,10 @@ resource "aws_iam_role_policy" "process_results_lambda" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = [local.tracking_table_arn]
+        Resource = [
+          local.tracking_table_arn,
+          "${local.tracking_table_arn}/index/*"
+        ]
     }])
   })
 }
@@ -1056,5 +1073,90 @@ resource "aws_iam_role_policy_attachment" "hitl_status_update_lambda_vpc" {
 resource "aws_iam_role_policy_attachment" "hitl_status_update_kms_attachment" {
   count      = var.enable_hitl ? 1 : 0
   role       = aws_iam_role.hitl_status_update_lambda[0].name
+  policy_arn = aws_iam_policy.kms_policy.arn
+}
+
+# Evaluation Lambda IAM Role
+resource "aws_iam_role" "evaluation_lambda" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+
+  name = "${local.name_prefix}-evaluation-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "evaluation_lambda" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+
+  name = "${local.name_prefix}-evaluation-lambda-policy"
+  role = aws_iam_role.evaluation_lambda[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:ListBucket"]
+        Resource = [var.evaluation_baseline_bucket_arn, "${var.evaluation_baseline_bucket_arn}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = [local.output_bucket_arn, "${local.output_bucket_arn}/*", local.working_bucket_arn, "${local.working_bucket_arn}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
+        Resource = [local.tracking_table_arn, "${local.tracking_table_arn}/index/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:Query"]
+        Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
+        Resource = "*"
+      },
+      {
+        Effect    = "Allow"
+        Action    = ["cloudwatch:PutMetricData"]
+        Resource  = "*"
+        Condition = { StringEquals = { "cloudwatch:namespace" = local.metric_namespace } }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_lambda_vpc" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null && length(local.vpc_subnet_ids) > 0 ? 1 : 0
+
+  role       = aws_iam_role.evaluation_lambda[0].name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_lambda_kms" {
+  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+
+  role       = aws_iam_role.evaluation_lambda[0].name
   policy_arn = aws_iam_policy.kms_policy.arn
 }

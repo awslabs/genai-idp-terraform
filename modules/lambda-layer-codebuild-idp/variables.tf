@@ -71,10 +71,10 @@ variable "idp_common_extras" {
       for extra in var.idp_common_extras : contains([
         "core", "dev", "image", "ocr", "classification", "extraction",
         "assessment", "evaluation", "criteria_validation", "reporting",
-        "appsync", "docs_service", "test", "all"
+        "appsync", "docs_service", "agents", "analytics", "code_intel", "test", "all"
       ], extra)
     ])
-    error_message = "Variable idp_common_extras contains invalid extras. Valid options are: core, dev, image, ocr, classification, extraction, assessment, evaluation, criteria_validation, reporting, appsync, docs_service, test, all."
+    error_message = "Variable idp_common_extras contains invalid extras. Valid options are: core, dev, image, ocr, classification, extraction, assessment, evaluation, criteria_validation, reporting, appsync, docs_service, agents, analytics, code_intel, test, all."
   }
 }
 

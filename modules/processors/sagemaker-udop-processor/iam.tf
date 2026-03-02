@@ -113,7 +113,8 @@ resource "aws_iam_role_policy" "step_functions_policy" {
           aws_lambda_function.extraction_function.arn,
           aws_lambda_function.process_results_function.arn,
           aws_lambda_function.summarization_function.arn,
-          aws_lambda_function.assessment_function.arn
+          aws_lambda_function.assessment_function.arn,
+          aws_lambda_function.evaluation_function.arn
         ])
       },
       {
@@ -1017,5 +1018,148 @@ resource "aws_iam_role_policy_attachment" "process_results_function_vpc" {
 resource "aws_iam_role_policy_attachment" "summarization_function_vpc" {
   count      = var.summarization_model_id != null && length(var.vpc_subnet_ids) > 0 ? 1 : 0
   role       = aws_iam_role.summarization_function_role.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# =============================================================================
+# IAM Role and Policy for Evaluation Function
+# =============================================================================
+
+resource "aws_iam_role" "evaluation_function_role" {
+  name = "${local.name_prefix}-evaluation-fn-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_policy" "evaluation_function_policy" {
+  name        = "${local.name_prefix}-evaluation-fn-policy"
+  description = "Policy for SageMaker UDOP processor evaluation function"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+      },
+      {
+        # Read processing output and baseline documents
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          local.output_bucket_arn,
+          "${local.output_bucket_arn}/*",
+          local.working_bucket_arn,
+          "${local.working_bucket_arn}/*"
+        ]
+      },
+      {
+        # Write evaluation results to working and output buckets
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = [
+          "${local.output_bucket_arn}/*",
+          "${local.working_bucket_arn}/*"
+        ]
+      },
+      {
+        # Read tracking and configuration tables
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = [
+          local.tracking_table_arn,
+          "${local.tracking_table_arn}/index/*",
+          local.configuration_table_arn,
+          "${local.configuration_table_arn}/index/*"
+        ]
+      },
+      {
+        # AppSync document status updates
+        Effect   = "Allow"
+        Action   = ["appsync:GraphQL"]
+        Resource = local.api_arn != null ? "${local.api_arn}/types/Mutation/*" : "arn:${data.aws_partition.current.partition}:appsync:*:*:apis/*/types/Mutation/*"
+      },
+      {
+        # Invoke SaveReportingData Lambda for analytics
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = local.metric_namespace
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_function_policy_attachment" {
+  role       = aws_iam_role.evaluation_function_role.name
+  policy_arn = aws_iam_policy.evaluation_function_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_function_basic_execution" {
+  role       = aws_iam_role.evaluation_function_role.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "evaluation_function_kms_policy" {
+  count = var.encryption_key_arn != null ? 1 : 0
+  name  = "${local.name_prefix}-evaluation-fn-kms-policy"
+  role  = aws_iam_role.evaluation_function_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = var.encryption_key_arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "evaluation_function_vpc_attachment" {
+  count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  role       = aws_iam_role.evaluation_function_role.name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }

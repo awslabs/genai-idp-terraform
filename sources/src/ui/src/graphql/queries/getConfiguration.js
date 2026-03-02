@@ -5,9 +5,19 @@ import gql from 'graphql-tag';
 export default gql`
   query GetConfiguration {
     getConfiguration {
+      success
       Schema
       Default
       Custom
+      error {
+        type
+        message
+        validationErrors {
+          field
+          message
+          type
+        }
+      }
     }
   }
 `;

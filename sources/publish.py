@@ -1510,6 +1510,7 @@ except Exception as e:
                                     or name
                                     in {
                                         "Dockerfile",
+                                        "Dockerfile.optimized",
                                         "Makefile",
                                         "requirements.txt",
                                         "setup.py",

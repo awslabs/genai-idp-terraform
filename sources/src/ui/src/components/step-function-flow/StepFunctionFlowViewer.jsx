@@ -4,8 +4,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { API, graphqlOperation, Logger } from 'aws-amplify';
-import { Container, Header, SpaceBetween, Box, Alert, Spinner, Button, Modal, Badge } from '@awsui/components-react';
+import { Container, Header, SpaceBetween, Box, Alert, Spinner, Button, Modal, Badge } from '@cloudscape-design/components';
 import {
   FaPlay,
   FaCheck,
@@ -19,14 +18,43 @@ import {
   FaList,
   FaExclamationTriangle,
 } from 'react-icons/fa';
+import { generateClient } from 'aws-amplify/api';
+import { ConsoleLogger } from 'aws-amplify/utils';
+
 import getStepFunctionExecution from '../../graphql/queries/getStepFunctionExecution';
 import FlowDiagram from './FlowDiagram';
 import StepDetails from './StepDetails';
+
 import './StepFunctionFlowViewer.css';
 
-const logger = new Logger('StepFunctionFlowViewer');
+const client = generateClient();
+const logger = new ConsoleLogger('StepFunctionFlowViewer');
 
-const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
+// Helper function to check if a step is disabled based on configuration
+const isStepDisabled = (stepName, config) => {
+  if (!config) return false;
+
+  const stepNameLower = stepName.toLowerCase();
+
+  // Check if this is a summarization step
+  if (stepNameLower.includes('summarization') || stepNameLower.includes('summary')) {
+    return config.summarization?.enabled === false;
+  }
+
+  // Check if this is an assessment step
+  if (stepNameLower.includes('assessment') || stepNameLower.includes('assess')) {
+    return config.assessment?.enabled === false;
+  }
+
+  // Check if this is an evaluation step
+  if (stepNameLower.includes('evaluation') || stepNameLower.includes('evaluate')) {
+    return config.evaluation?.enabled === false;
+  }
+
+  return false;
+};
+
+const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss, mergedConfig }) => {
   const [selectedStep, setSelectedStep] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -83,7 +111,7 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
       logger.info('Fetching Step Function execution with ARN:', executionArn);
       console.log('Fetching Step Function execution with ARN:', executionArn);
 
-      const result = await API.graphql(graphqlOperation(getStepFunctionExecution, { executionArn }));
+      const result = await client.graphql({ query: getStepFunctionExecution, variables: { executionArn } });
       logger.info('GraphQL response received:', result);
       console.log('GraphQL response received:', result);
 
@@ -191,10 +219,7 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
   // Disable auto-refresh when execution completes
   useEffect(() => {
     const execution = data?.getStepFunctionExecution;
-    if (
-      execution &&
-      (execution.status === 'SUCCEEDED' || execution.status === 'FAILED' || execution.status === 'ABORTED')
-    ) {
+    if (execution && (execution.status === 'SUCCEEDED' || execution.status === 'FAILED' || execution.status === 'ABORTED')) {
       // If execution is complete, disable auto-refresh
       if (autoRefreshEnabled) {
         logger.info('Execution complete, disabling auto-refresh');
@@ -237,6 +262,9 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
       return <FaEye size={iconProps.size} className={iconProps.className} />;
     }
     if (stepName.toLowerCase().includes('summarization')) {
+      return <FaChartBar size={iconProps.size} className={iconProps.className} />;
+    }
+    if (stepName.toLowerCase().includes('evaluation')) {
       return <FaChartBar size={iconProps.size} className={iconProps.className} />;
     }
     if (stepName.toLowerCase().includes('workflow')) {
@@ -344,9 +372,7 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
             <SpaceBetween direction="horizontal" size="l">
               <Box>
                 <Box variant="awsui-key-label">Status</Box>
-                <Box className={`execution-status execution-status-${execution.status.toLowerCase()}`}>
-                  {execution.status}
-                </Box>
+                <Box className={`execution-status execution-status-${execution.status.toLowerCase()}`}>{execution.status}</Box>
               </Box>
               <Box>
                 <Box variant="awsui-key-label">Duration</Box>
@@ -385,57 +411,60 @@ const StepFunctionFlowViewer = ({ executionArn, visible, onDismiss }) => {
             onStepClick={setSelectedStep}
             selectedStep={selectedStep}
             getStepIcon={getStepIcon}
+            mergedConfig={mergedConfig}
           />
         </Container>
 
         {/* Step Details */}
         {selectedStep && (
           <Container header={<Header variant="h3">Step Details</Header>}>
-            <StepDetails step={selectedStep} formatDuration={formatDuration} getStepIcon={getStepIcon} />
+            <StepDetails step={selectedStep} formatDuration={formatDuration} getStepIcon={getStepIcon} mergedConfig={mergedConfig} />
           </Container>
         )}
 
         {/* Steps Timeline */}
         <Container header={<Header variant="h3">Steps Timeline</Header>}>
           <div className="steps-timeline">
-            {(processedSteps.length > 0 ? processedSteps : execution.steps)?.map((step, index) => (
-              <div
-                key={`timeline-${step.name}-${step.type}-${step.status}-${step.startDate || index}`}
-                className={`timeline-step ${step.status.toLowerCase()} ${
-                  selectedStep?.name === step.name ? 'selected' : ''
-                } ${step.isMapIteration ? 'map-iteration-step' : ''}`}
-                onClick={() => setSelectedStep(step)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setSelectedStep(step);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="timeline-step-icon">{getStepIcon(step.name, step.type, step.status)}</div>
-                <div className="timeline-step-content">
-                  <div className="timeline-step-name">
-                    {step.name}
-                    {step.isMapIteration && <Badge color="green">Map Iteration</Badge>}
-                    {step.type === 'Map' && step.mapIterations && (
-                      <Badge color="blue">{step.mapIterations} iterations</Badge>
+            {(processedSteps.length > 0 ? processedSteps : execution.steps)?.map((step, index) => {
+              const stepDisabled = isStepDisabled(step.name, mergedConfig);
+              return (
+                <div
+                  key={`timeline-${step.name}-${step.type}-${step.status}-${step.startDate || index}`}
+                  className={`timeline-step ${step.status.toLowerCase()} ${selectedStep?.name === step.name ? 'selected' : ''} ${
+                    step.isMapIteration ? 'map-iteration-step' : ''
+                  } ${stepDisabled ? 'step-disabled' : ''}`}
+                  onClick={() => setSelectedStep(step)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setSelectedStep(step);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  title={stepDisabled ? 'This step was disabled in configuration and performed no processing' : ''}
+                >
+                  <div className="timeline-step-icon">{getStepIcon(step.name, step.type, step.status)}</div>
+                  <div className="timeline-step-content">
+                    <div className="timeline-step-name">
+                      {step.name}
+                      {stepDisabled && <Badge color="grey">NOT ENABLED</Badge>}
+                      {step.isMapIteration && <Badge color="green">Map Iteration</Badge>}
+                      {step.type === 'Map' && step.mapIterations && <Badge color="blue">{step.mapIterations} iterations</Badge>}
+                    </div>
+                    <div className="timeline-step-meta">
+                      <span className={`timeline-step-status status-${step.status.toLowerCase()}`}>{step.status}</span>
+                      <span className="timeline-step-duration">{formatDuration(step.startDate, step.stopDate)}</span>
+                    </div>
+                    {step.error && (
+                      <div className="timeline-step-error">
+                        <FaExclamationTriangle size={14} style={{ marginRight: '4px', color: '#d13212' }} />
+                        <strong>Error:</strong> {step.error.length > 100 ? `${step.error.substring(0, 100)}...` : step.error}
+                      </div>
                     )}
                   </div>
-                  <div className="timeline-step-meta">
-                    <span className={`timeline-step-status status-${step.status.toLowerCase()}`}>{step.status}</span>
-                    <span className="timeline-step-duration">{formatDuration(step.startDate, step.stopDate)}</span>
-                  </div>
-                  {step.error && (
-                    <div className="timeline-step-error">
-                      <FaExclamationTriangle size={14} style={{ marginRight: '4px', color: '#d13212' }} />
-                      <strong>Error:</strong>{' '}
-                      {step.error.length > 100 ? `${step.error.substring(0, 100)}...` : step.error}
-                    </div>
-                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Container>
       </SpaceBetween>
@@ -447,6 +476,21 @@ StepFunctionFlowViewer.propTypes = {
   executionArn: PropTypes.string.isRequired,
   visible: PropTypes.bool.isRequired,
   onDismiss: PropTypes.func.isRequired,
+  mergedConfig: PropTypes.shape({
+    summarization: PropTypes.shape({
+      enabled: PropTypes.bool,
+    }),
+    assessment: PropTypes.shape({
+      enabled: PropTypes.bool,
+    }),
+    evaluation: PropTypes.shape({
+      enabled: PropTypes.bool,
+    }),
+  }),
+};
+
+StepFunctionFlowViewer.defaultProps = {
+  mergedConfig: null,
 };
 
 export default StepFunctionFlowViewer;

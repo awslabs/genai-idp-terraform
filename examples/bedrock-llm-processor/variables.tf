@@ -82,6 +82,13 @@ variable "api" {
       model_id           = optional(string, "us.amazon.nova-pro-v1:0")
       embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
     }), { enabled = false })
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = optional(bool, false)
+    enable_test_studio          = optional(bool, false)
+    enable_fcc_dataset          = optional(bool, false)
+    enable_error_analyzer       = optional(bool, false)
+    enable_mcp                  = optional(bool, false)
   })
 
   default = {
@@ -94,8 +101,8 @@ variable "api" {
   }
 
   validation {
-    condition     = !var.api.chat_with_document.enabled || var.api.knowledge_base.enabled
-    error_message = "When api.chat_with_document.enabled is true, api.knowledge_base.enabled must also be true."
+    condition     = !var.api.chat_with_document.enabled || !var.api.knowledge_base.enabled || var.api.knowledge_base.knowledge_base_arn != null
+    error_message = "When api.knowledge_base.enabled is true, knowledge_base_arn must be provided."
   }
 
   validation {

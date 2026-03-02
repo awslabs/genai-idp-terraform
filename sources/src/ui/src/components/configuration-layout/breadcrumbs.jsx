@@ -3,7 +3,7 @@
 
 // src/components/configuration-layout/breadcrumbs.jsx
 import React from 'react';
-import { BreadcrumbGroup } from '@awsui/components-react';
+import { BreadcrumbGroup } from '@cloudscape-design/components';
 import { DOCUMENTS_PATH, CONFIGURATION_PATH, DEFAULT_PATH } from '../../routes/constants';
 
 export const configurationBreadcrumbItems = [

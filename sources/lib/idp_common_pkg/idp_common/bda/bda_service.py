@@ -29,7 +29,12 @@ class BdaService:
             region = os.environ.get("AWS_REGION", "us-east-1")
             identity = session.client("sts").get_caller_identity()
             account_id = identity.get("Account")
-            self._dataAutomationProfileArn = f"arn:aws:bedrock:{region}:{account_id}:data-automation-profile/us.data-automation-v1"
+
+            # Extract region prefix (us, eu, ap, ca, sa, etc.) for profile ARN
+            region_prefix = region.split("-")[0]
+            profile_id = f"{region_prefix}.data-automation-v1"
+
+            self._dataAutomationProfileArn = f"arn:aws:bedrock:{region}:{account_id}:data-automation-profile/{profile_id}"
 
         self._bda_client = boto3.client("bedrock-data-automation-runtime")
 

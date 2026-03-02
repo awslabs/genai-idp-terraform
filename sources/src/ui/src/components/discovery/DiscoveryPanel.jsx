@@ -19,13 +19,16 @@ import {
   Box,
   TextContent,
   ColumnLayout,
-} from '@awsui/components-react';
-import { API, graphqlOperation } from 'aws-amplify';
+} from '@cloudscape-design/components';
+import { generateClient } from 'aws-amplify/api';
+
 import uploadDiscoveryDocument from '../../graphql/queries/uploadDiscoveryDocument';
 import listDiscoveryJobs from '../../graphql/queries/listDiscoveryJobs';
 import onDiscoveryJobStatusChange from '../../graphql/subscriptions/onDiscoveryJobStatusChange';
 import useSettingsContext from '../../contexts/settings';
 import { getJsonValidationError } from '../common/utilities';
+
+const client = generateClient();
 
 const DiscoveryPanel = () => {
   const { settings } = useSettingsContext();
@@ -50,7 +53,7 @@ const DiscoveryPanel = () => {
   const loadDiscoveryJobs = async () => {
     setIsLoadingJobs(true);
     try {
-      const response = await API.graphql(graphqlOperation(listDiscoveryJobs));
+      const response = await client.graphql({ query: listDiscoveryJobs });
       // Access the DiscoveryJobs array from the response
       console.log('loadDiscoveryJobs done');
       console.log(response);
@@ -145,22 +148,24 @@ const DiscoveryPanel = () => {
       if (job.status === 'PENDING' || job.status === 'IN_PROGRESS') {
         console.log(`Setting up subscription for discovery job: ${job.jobId}`);
 
-        const subscription = API.graphql(graphqlOperation(onDiscoveryJobStatusChange, { jobId: job.jobId })).subscribe({
-          next: (data) => {
-            console.log('Discovery job status changed:', data);
-            const updatedJob = data?.data?.onDiscoveryJobStatusChange;
-            if (updatedJob) {
-              // Directly update the specific job instead of refreshing entire list
-              updateDiscoveryJob(updatedJob);
-              return;
-            }
-            console.warn('Received subscription update but no job data, falling back to refresh');
-            loadDiscoveryJobs();
-          },
-          error: (subscriptionError) => {
-            console.error('Discovery job subscription error:', subscriptionError);
-          },
-        });
+        const subscription = client
+          .graphql({ query: onDiscoveryJobStatusChange, variables: { jobId: job.jobId } })
+          .subscribe({
+            next: (data) => {
+              console.log('Discovery job status changed:', data);
+              const updatedJob = data?.data?.onDiscoveryJobStatusChange;
+              if (updatedJob) {
+                // Directly update the specific job instead of refreshing entire list
+                updateDiscoveryJob(updatedJob);
+                return;
+              }
+              console.warn('Received subscription update but no job data, falling back to refresh');
+              loadDiscoveryJobs();
+            },
+            error: (subscriptionError) => {
+              console.error('Discovery job subscription error:', subscriptionError);
+            },
+          });
 
         subscriptions.set(job.jobId, subscription);
       }
@@ -330,15 +335,16 @@ const DiscoveryPanel = () => {
         groundTruthFileName = groundTruthFile.name;
       }
 
-      const documentResponse = await API.graphql(
-        graphqlOperation(uploadDiscoveryDocument, {
+      const documentResponse = await client.graphql({
+        query: uploadDiscoveryDocument,
+        variables: {
           fileName: documentFile.name,
           contentType: documentFile.type,
           prefix: prefix || '',
           bucket: settings.DiscoveryBucket,
           groundTruthFileName: groundTruthFileName || '',
-        }),
-      );
+        },
+      });
 
       const {
         presignedUrl: docPresignedUrl,
