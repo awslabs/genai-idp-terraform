@@ -168,7 +168,7 @@
                     "Next": "HITLReview"
                 }
             ],
-            "Default": "SummarizationStep"
+            "Default": "${IsSummarizationEnabled == "true" ? "SummarizationStep" : "WorkflowComplete"}"
         },
         "HITLReview": {
             "Type": "Task",
@@ -223,9 +223,9 @@
                     "BackoffRate": 2
                 }
             ],
-            "Next": "SummarizationStep"
+            "Next": "${IsSummarizationEnabled == "true" ? "SummarizationStep" : "WorkflowComplete"}"
         },
-        "SummarizationStep": {
+%{ if IsSummarizationEnabled == "true" }        "SummarizationStep": {
             "Type": "Task",
             "Resource": "${SummarizationLambdaArn}",
             "Parameters": {
@@ -254,8 +254,9 @@
             ],
             "Next": "WorkflowComplete"
         },
-        "WorkflowComplete": {
+%{ endif }        "WorkflowComplete": {
             "Type": "Pass",
+            "OutputPath": "$.Result.document",
             "End": true
         }
     }
