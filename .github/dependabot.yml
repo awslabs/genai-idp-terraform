@@ -3,20 +3,14 @@
 
 version: 2
 updates:
-  # Terraform dependencies
+  # Terraform dependencies (excludes /sources - managed upstream)
   - package-ecosystem: "terraform"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    ignore:
-      # Exclude sources directory (upstream CF/CDK reference code)
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
-    # Only scan Terraform files, exclude sources/
     directories:
       - "/"
       - "/examples/**"
       - "/modules/**"
+    schedule:
+      interval: "weekly"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -24,8 +18,17 @@ updates:
     schedule:
       interval: "weekly"
 
-  # Python dependencies (docs only)
+  # Python dependencies (excludes /sources - managed upstream)
   - package-ecosystem: "pip"
-    directory: "/docs"
+    directories:
+      - "/docs"
+      - "/examples/**"
+    schedule:
+      interval: "weekly"
+
+  # npm/yarn dependencies (excludes /sources - managed upstream)
+  - package-ecosystem: "npm"
+    directories:
+      - "/examples/**"
     schedule:
       interval: "weekly"
