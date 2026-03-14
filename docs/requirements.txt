@@ -1,5 +1,5 @@
 mkdocs~=1.6.1
-mkdocs-drawio~=1.11.2
+mkdocs-drawio~=1.15.0
 pygments>=2.12
 mkdocs-awesome-pages-plugin~=2.9.2
 mkdocs-material~=9.5.34
