@@ -94,9 +94,8 @@ resource "aws_lambda_function" "queue_sender" {
   filename         = data.archive_file.queue_sender_code.output_path
   source_code_hash = data.archive_file.queue_sender_code.output_base64sha256
 
-  # Include both the function-specific layer and idp_common layer
-  # queue_sender uses idp_common[appsync] based on requirements.txt
-  layers = [var.idp_common_layer_arn]
+  # queue_sender uses docs_service extras (AppSync integration) — use base layer (v0.4.11+)
+  layers = [local.effective_base_layer_arn]
 
   handler     = "index.handler"
   runtime     = "python3.12"
@@ -179,9 +178,8 @@ resource "aws_lambda_function" "workflow_tracker" {
   role        = aws_iam_role.workflow_tracker_role.arn
   description = "Lambda function that tracks workflow execution status"
 
-  # Include both the function-specific layer and idp_common layer
-  # workflow_tracker uses idp_common[appsync] based on requirements.txt
-  layers = [var.idp_common_layer_arn]
+  # workflow_tracker uses docs_service extras (AppSync integration) — use base layer (v0.4.11+)
+  layers = [local.effective_base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -377,7 +375,8 @@ resource "aws_lambda_function" "post_processing_decompressor" {
   filename         = data.archive_file.post_processing_decompressor_code.output_path
   source_code_hash = data.archive_file.post_processing_decompressor_code.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  # post_processing_decompressor uses docs_service extras — use base layer (v0.4.11+)
+  layers = [local.effective_base_layer_arn]
 
   handler     = "index.handler"
   runtime     = "python3.12"
@@ -385,8 +384,6 @@ resource "aws_lambda_function" "post_processing_decompressor" {
   memory_size = 512
   role        = aws_iam_role.post_processing_decompressor_role.arn
   description = "Decompresses documents from Step Functions and invokes custom post-processor Lambda"
-
-  kms_key_arn = var.encryption_key_arn
 
   environment {
     variables = {

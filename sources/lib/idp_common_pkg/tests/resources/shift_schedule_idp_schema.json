@@ -1,0 +1,103 @@
+ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$defs": {
+        "Shift": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "data_type": "string",
+              "description": "Shift type",
+              "x-aws-idp-confidence-threshold": "0.8",
+              "type": "string",
+              "enum": [
+                "Morning",
+                "Afternoon",
+                "Night",
+                "Leave",
+                "empty"
+              ],
+              "x-aws-idp-evaluation-method": "EXACT"
+            },
+            "hours": {
+              "data_type": "string",
+              "description": "Shift hours, ex. 07:00-15:00. Only required for Morning, Afternoon, and Night.",
+              "x-aws-idp-confidence-threshold": "0.8",
+              "type": "string",
+              "x-aws-idp-evaluation-method": "EXACT"
+            }
+          }
+        },
+        "Employee": {
+          "type": "object",
+          "properties": {
+            "employeeName": {
+              "data_type": "string",
+              "description": "Employee name",
+              "x-aws-idp-confidence-threshold": "0.8",
+              "type": "string",
+              "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+              "x-aws-idp-evaluation-threshold": "0.7"
+            },
+            "shifts": {
+              "type": "array",
+              "description": "Weekly shifts",
+              "items": {
+                "$ref": "#/$defs/Shift"
+              }
+            },
+            "employeeId": {
+              "data_type": "string",
+              "description": "Employee ID",
+              "x-aws-idp-confidence-threshold": "0.8",
+              "type": "string",
+              "x-aws-idp-evaluation-method": "EXACT"
+            },
+            "department": {
+              "data_type": "string",
+              "description": "Department",
+              "x-aws-idp-confidence-threshold": "0.8",
+              "type": "string",
+              "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+              "x-aws-idp-evaluation-threshold": "0.7"
+            }
+          }
+        }
+      },
+      "description": "Employee shift schedule with daily assignments",
+      "type": "object",
+      "x-aws-idp-document-type": "SHIFT_SCHEDULE",
+      "properties": {
+        "title": {
+          "data_type": "string",
+          "description": "Schedule title",
+          "x-aws-idp-confidence-threshold": "0.8",
+          "type": "string",
+          "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+          "x-aws-idp-evaluation-threshold": "0.7"
+        },
+        "employees": {
+          "type": "array",
+          "description": "Employee schedules",
+          "items": {
+            "$ref": "#/$defs/Employee"
+          }
+        },
+        "facility": {
+          "data_type": "string",
+          "description": "Facility name",
+          "x-aws-idp-confidence-threshold": "0.8",
+          "type": "string",
+          "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+          "x-aws-idp-evaluation-threshold": "0.7"
+        },
+        "weekStartDate": {
+          "data_type": "string",
+          "description": "Week start date",
+          "x-aws-idp-confidence-threshold": "0.8",
+          "type": "string",
+          "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+          "x-aws-idp-evaluation-threshold": "0.7"
+        }
+      },
+      "$id": "SHIFT_SCHEDULE"
+    }

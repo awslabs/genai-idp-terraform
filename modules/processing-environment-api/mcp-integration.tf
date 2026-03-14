@@ -124,7 +124,7 @@ resource "aws_lambda_function" "agentcore_analytics_processor" {
   runtime          = "python3.12"
   timeout          = 300
   memory_size      = 512
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   environment {
     variables = {
@@ -277,7 +277,7 @@ resource "aws_lambda_function" "agentcore_gateway_manager" {
   runtime          = "python3.12"
   timeout          = 300
   memory_size      = 256
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   environment {
     variables = {

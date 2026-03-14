@@ -44,7 +44,9 @@ resource "aws_iam_role_policy" "state_machine" {
           aws_lambda_function.assessment.arn,
           var.enable_hitl ? aws_lambda_function.hitl_wait[0].arn : "",
           var.enable_hitl ? aws_lambda_function.hitl_status_update[0].arn : "",
-          var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : ""
+          var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : "",
+          var.enable_rule_validation ? aws_lambda_function.rule_validation_function[0].arn : "",
+          var.enable_rule_validation ? aws_lambda_function.rule_validation_orchestration_function[0].arn : ""
         ])
       },
       {
@@ -68,6 +70,40 @@ resource "aws_iam_role_policy" "state_machine" {
           "xray:PutTelemetryRecords"
         ]
         Resource = "*"
+      }
+    ]
+  })
+}
+
+# Hook inference Lambda permissions (conditional on any hook being configured)
+# Grants Step Functions InvokeFunction on the specific hook function ARNs.
+# Actual hook routing is stored in DynamoDB config (model_lambda_hook_arn field).
+locals {
+  hook_function_names = compact([
+    var.lambda_hook_ocr,
+    var.lambda_hook_classification,
+    var.lambda_hook_extraction,
+    var.lambda_hook_assessment,
+    var.lambda_hook_summarization,
+  ])
+  hook_function_arns = [
+    for name in local.hook_function_names :
+    "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${name}"
+  ]
+}
+
+resource "aws_iam_role_policy" "state_machine_hook_inference" {
+  count = length(local.hook_function_names) > 0 ? 1 : 0
+  name  = "${local.name_prefix}-state-machine-hook-inference-policy"
+  role  = aws_iam_role.state_machine.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = local.hook_function_arns
       }
     ]
   })

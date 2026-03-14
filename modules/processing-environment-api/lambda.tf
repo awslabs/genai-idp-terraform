@@ -58,6 +58,7 @@ resource "aws_lambda_function" "upload_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.upload_resolver_role.arn
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to return signed upload URL via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -105,6 +106,7 @@ resource "aws_lambda_function" "delete_document_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.delete_document_resolver_role.arn
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to delete documents via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -152,7 +154,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.reprocess_document_resolver_role.arn
-  layers      = compact([var.idp_common_layer_arn])
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to reprocess documents via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -209,6 +211,7 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.get_file_contents_resolver_role.arn
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to retrieve file contents via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -235,9 +238,11 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 }
 
 # Configuration Resolver Lambda
+# Sourced from CDK nested appsync tree (DEC-007/DEC-008) — handles all config
+# versioning, pricing, and config library operations via fieldName dispatch.
 data "archive_file" "configuration_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/configuration_resolver"
+  source_dir  = "${path.module}/../../genai-idp/sources/nested/appsync/src/lambda/configuration_resolver"
   output_path = "${local.module_build_dir}/configuration_resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -254,14 +259,16 @@ resource "aws_lambda_function" "configuration_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.configuration_resolver_role.arn
-  layers      = compact([var.idp_common_layer_arn])
-  description = "Lambda function to manage configuration through GraphQL API"
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
+  description = "Lambda function to manage configuration, versioning, and pricing through GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
 
   environment {
     variables = {
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
+      CONFIGURATION_TABLE_NAME = local.configuration_table_name != null ? local.configuration_table_name : ""
+      CONFIGURATION_BUCKET     = local.configuration_table_name != null ? "${local.api_name}-config" : ""
+      LOG_LEVEL                = var.log_level
     }
   }
 
@@ -304,6 +311,7 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.get_stepfunction_execution_resolver_role.arn
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to get Step Function execution status via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -360,6 +368,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
   timeout     = 60
   memory_size = 512
   role        = aws_iam_role.query_knowledge_base_resolver_role["enabled"].arn
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to query Bedrock Knowledge Base via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -415,7 +424,7 @@ resource "aws_lambda_function" "copy_to_baseline_resolver" {
   timeout     = 30
   memory_size = 512
   role        = aws_iam_role.copy_to_baseline_resolver_role["enabled"].arn
-  layers      = compact([var.idp_common_layer_arn])
+  layers      = compact([var.base_layer_arn, var.idp_common_layer_arn])
   description = "Lambda function to copy documents to baseline via GraphQL API"
 
   kms_key_arn = var.encryption_key_arn
@@ -546,79 +555,6 @@ resource "aws_appsync_datasource" "copy_to_baseline_resolver" {
 }
 
 # =============================================================================
-# APPSYNC RESOLVERS
+# APPSYNC DATASOURCES (Lambda-backed)
+# Note: aws_appsync_resolver resources are in resolvers.tf
 # =============================================================================
-
-# Upload Document Resolver
-resource "aws_appsync_resolver" "upload_document" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "uploadDocument"
-  data_source = aws_appsync_datasource.upload_resolver.name
-}
-
-# Delete Document Resolver
-resource "aws_appsync_resolver" "delete_document" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "deleteDocument"
-  data_source = aws_appsync_datasource.delete_document_resolver.name
-}
-
-# Reprocess Document Resolver
-resource "aws_appsync_resolver" "reprocess_document" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "reprocessDocument"
-  data_source = aws_appsync_datasource.reprocess_document_resolver.name
-}
-
-# Get File Contents Resolver
-resource "aws_appsync_resolver" "get_file_contents" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getFileContents"
-  data_source = aws_appsync_datasource.get_file_contents_resolver.name
-}
-
-# Get Configuration Resolver
-resource "aws_appsync_resolver" "get_configuration" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getConfiguration"
-  data_source = aws_appsync_datasource.configuration.name
-}
-
-# Update Configuration Resolver
-resource "aws_appsync_resolver" "update_configuration" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "updateConfiguration"
-  data_source = aws_appsync_datasource.configuration.name
-}
-
-# Get Step Function Execution Resolver
-resource "aws_appsync_resolver" "get_stepfunction_execution" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getStepFunctionExecution"
-  data_source = aws_appsync_datasource.get_stepfunction_execution_resolver.name
-}
-
-# Query Knowledge Base Resolver
-resource "aws_appsync_resolver" "query_knowledge_base" {
-  for_each    = var.knowledge_base.enabled ? toset(["enabled"]) : toset([])
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "queryKnowledgeBase"
-  data_source = aws_appsync_datasource.query_knowledge_base_resolver["enabled"].name
-}
-
-# Copy to Baseline Resolver
-resource "aws_appsync_resolver" "copy_to_baseline" {
-  for_each    = var.evaluation_enabled ? { "enabled" = true } : {}
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "copyToBaseline"
-  data_source = aws_appsync_datasource.copy_to_baseline_resolver["enabled"].name
-}

@@ -20,6 +20,11 @@ locals {
   output_bucket_name  = element(split(":", var.output_bucket_arn), 5)
   working_bucket_name = element(split(":", var.working_bucket_arn), 5)
 
+  # Resolved layer ARNs — fall back to idp_common_layer_arn when specific layers not provided
+  # (supports standalone module use without root-level layer instances)
+  effective_base_layer_arn      = var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn
+  effective_reporting_layer_arn = var.reporting_layer_arn != null ? var.reporting_layer_arn : var.idp_common_layer_arn
+
   # Lambda function names (to avoid circular dependencies in IAM policies)
   queue_sender_function_name         = "idp-queue-sender-${random_string.suffix.result}"
   workflow_tracker_function_name     = "idp-workflow-tracker-${random_string.suffix.result}"

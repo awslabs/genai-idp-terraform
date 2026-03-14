@@ -98,20 +98,18 @@ locals {
   # Apply model overrides if provided, similar to CDK transforms
   config_with_overrides = merge(
     local.base_config,
-    # Only override classification model if provided
-    var.classification_model_id != null ? {
+    # Override classification model: per-step var → model_id default
+    {
       classification = merge(
         local.base_config.classification,
-        {
-          model = var.classification_model_id
-        }
+        { model = coalesce(var.classification_model_id, var.model_id) }
       )
-    } : {},
+    },
     # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
     {
       extraction = merge(
         local.base_config.extraction,
-        var.extraction_model_id != null ? { model = var.extraction_model_id } : {},
+        { model = coalesce(var.extraction_model_id, var.model_id) },
         var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
         var.enable_agentic_extraction ? {
           agentic = merge(
@@ -125,16 +123,14 @@ locals {
         } : {}
       )
     },
-    # Only override summarization model if provided
-    var.summarization_model_id != null ? {
+    # Override summarization model: per-step var → model_id default
+    {
       summarization = merge(
         local.base_config.summarization,
-        {
-          model = var.summarization_model_id
-        }
+        { model = coalesce(var.summarization_model_id, var.model_id) }
       )
-    } : {},
-    # Only override evaluation model if provided
+    },
+    # Only override evaluation model if provided (evaluation uses a different config path)
     var.evaluation_model_id != null ? {
       evaluation = merge(
         local.base_config.evaluation,
@@ -169,9 +165,9 @@ locals {
 # Local values for state machine definition
 locals {
   # Determine which optional features are active
-  hitl_enabled       = var.enable_hitl
-  summ_enabled       = var.is_summarization_enabled
-  eval_enabled       = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null
+  hitl_enabled = var.enable_hitl
+  summ_enabled = var.is_summarization_enabled
+  eval_enabled = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null
 
   # Retry policy shared across most task states
   standard_retry = [
@@ -209,7 +205,7 @@ locals {
       Type     = "Task"
       Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
       Parameters = {
-        FunctionName    = aws_lambda_function.hitl_wait[0].arn
+        FunctionName = aws_lambda_function.hitl_wait[0].arn
         "Payload" = {
           "taskToken.$" = "$.Task.Token"
           "Payload.$"   = "$"
@@ -367,7 +363,7 @@ locals {
             BooleanEquals = true
             Next          = "HITLReview"
           }
-        ] : [
+          ] : [
           {
             Variable      = "$.Result.hitl_triggered"
             BooleanEquals = false

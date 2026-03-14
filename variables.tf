@@ -192,8 +192,8 @@ variable "bedrock_llm_processor" {
       enabled  = optional(bool, true)
       model_id = optional(string, null)
     }), { enabled = true, model_id = null })
-    enable_hitl       = optional(bool, false)
-    config            = any
+    enable_hitl = optional(bool, false)
+    config      = any
   })
   default = null
 
@@ -290,13 +290,9 @@ variable "reporting" {
 # Human Review Configuration
 #
 variable "human_review" {
-  description = "Configuration for human review functionality in document processing"
+  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api."
   type = object({
     enabled                   = optional(bool, false)
-    user_group_name           = optional(string)
-    user_pool_id              = optional(string)
-    private_workforce_arn     = optional(string)
-    workteam_name             = optional(string)
     enable_pattern2_hitl      = optional(bool, false)
     hitl_confidence_threshold = optional(number, 80)
   })
@@ -304,16 +300,6 @@ variable "human_review" {
     enabled                   = false
     enable_pattern2_hitl      = false
     hitl_confidence_threshold = 80
-  }
-
-  validation {
-    condition = var.human_review.enabled == false || (
-      var.human_review.user_group_name != null &&
-      var.human_review.user_pool_id != null &&
-      var.human_review.private_workforce_arn != null &&
-      var.human_review.workteam_name != null
-    )
-    error_message = "When human_review.enabled is true, user_group_name, user_pool_id, private_workforce_arn, and workteam_name are required."
   }
 
   validation {
@@ -394,6 +380,12 @@ variable "api" {
     enable_fcc_dataset          = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
+
+    # v0.4.16 feature flags
+    enable_hitl                     = optional(bool, true)
+    enable_capacity_planning        = optional(bool, false)
+    enable_omni_ai_dataset          = optional(bool, false)
+    enable_docplit_poly_seq_dataset = optional(bool, false)
   })
 
   default = {

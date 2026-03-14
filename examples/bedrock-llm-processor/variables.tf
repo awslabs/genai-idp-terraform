@@ -89,6 +89,12 @@ variable "api" {
     enable_fcc_dataset          = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
+
+    # v0.4.16 feature flags
+    enable_hitl                     = optional(bool, true)
+    enable_capacity_planning        = optional(bool, false)
+    enable_omni_ai_dataset          = optional(bool, false)
+    enable_docplit_poly_seq_dataset = optional(bool, false)
   })
 
   default = {
@@ -225,6 +231,45 @@ variable "enable_hitl" {
   description = "Enable Human-in-the-Loop (HITL) functionality for document review"
   type        = bool
   default     = false
+}
+
+# v0.4.16: Rule Validation
+variable "enable_rule_validation" {
+  description = "Enable rule validation for compliance checking (v0.4.16+)"
+  type        = bool
+  default     = false
+}
+
+# v0.4.16: Lambda Hook Inference — custom Lambda ARNs injected into the Step Functions workflow.
+# Each ARN must start with the 'GENAIIDP-' prefix (enforced by the bedrock-llm-processor module).
+variable "lambda_hook_ocr" {
+  description = "ARN of custom Lambda hook for OCR stage (must start with 'GENAIIDP-')"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_hook_classification" {
+  description = "ARN of custom Lambda hook for classification stage (must start with 'GENAIIDP-')"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_hook_extraction" {
+  description = "ARN of custom Lambda hook for extraction stage (must start with 'GENAIIDP-')"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_hook_assessment" {
+  description = "ARN of custom Lambda hook for assessment stage (must start with 'GENAIIDP-')"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_hook_summarization" {
+  description = "ARN of custom Lambda hook for summarization stage (must start with 'GENAIIDP-')"
+  type        = string
+  default     = ""
 }
 
 # Configuration File Path

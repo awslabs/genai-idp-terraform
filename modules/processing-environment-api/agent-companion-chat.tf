@@ -228,8 +228,8 @@ resource "aws_iam_role_policy" "agent_chat_processor" {
         Resource = "*"
       },
       {
-        Effect = "Allow"
-        Action = ["appsync:GraphQL"]
+        Effect   = "Allow"
+        Action   = ["appsync:GraphQL"]
         Resource = "${aws_appsync_graphql_api.api.arn}/*"
       },
       {
@@ -407,27 +407,27 @@ resource "aws_lambda_function" "agent_chat_processor" {
 
   environment {
     variables = {
-      LOG_LEVEL                    = var.log_level
-      STRANDS_LOG_LEVEL            = var.log_level
-      CHAT_SESSIONS_TABLE          = aws_dynamodb_table.agent_chat_sessions[0].name
-      CHAT_MESSAGES_TABLE          = aws_dynamodb_table.agent_chat_messages[0].name
-      ID_HELPER_CHAT_MEMORY_TABLE  = aws_dynamodb_table.agent_chat_memory[0].name
-      MEMORY_METHOD                = "dynamodb"
-      STREAMING_ENABLED            = "true"
-      BEDROCK_REGION               = data.aws_region.current.id
-      CONFIGURATION_TABLE_NAME     = local.configuration_table_name != null ? local.configuration_table_name : ""
-      TRACKING_TABLE_NAME          = local.tracking_table_name != null ? local.tracking_table_name : ""
-      LOOKUP_FUNCTION_NAME         = var.lookup_function_name != null ? var.lookup_function_name : ""
-      INPUT_BUCKET                 = local.input_bucket_name
-      OUTPUT_BUCKET                = local.output_bucket_name
-      APPSYNC_API_URL              = aws_appsync_graphql_api.api.uris["GRAPHQL"]
-      MAX_CONVERSATION_TURNS       = "20"
-      MAX_MESSAGE_SIZE_KB          = "8.5"
-      DATA_RETENTION_DAYS          = tostring(var.data_retention_in_days)
-      AWS_STACK_NAME               = local.api_name
-      CLOUDWATCH_LOG_GROUP_PREFIX  = "/aws/lambda/${local.api_name}"
-      ATHENA_DATABASE              = var.agent_analytics.reporting_database_name != null ? var.agent_analytics.reporting_database_name : ""
-      ATHENA_OUTPUT_LOCATION       = var.agent_analytics.reporting_bucket_arn != null ? "s3://${element(split(":", var.agent_analytics.reporting_bucket_arn), length(split(":", var.agent_analytics.reporting_bucket_arn)) - 1)}/athena-results/" : ""
+      LOG_LEVEL                   = var.log_level
+      STRANDS_LOG_LEVEL           = var.log_level
+      CHAT_SESSIONS_TABLE         = aws_dynamodb_table.agent_chat_sessions[0].name
+      CHAT_MESSAGES_TABLE         = aws_dynamodb_table.agent_chat_messages[0].name
+      ID_HELPER_CHAT_MEMORY_TABLE = aws_dynamodb_table.agent_chat_memory[0].name
+      MEMORY_METHOD               = "dynamodb"
+      STREAMING_ENABLED           = "true"
+      BEDROCK_REGION              = data.aws_region.current.id
+      CONFIGURATION_TABLE_NAME    = local.configuration_table_name != null ? local.configuration_table_name : ""
+      TRACKING_TABLE_NAME         = local.tracking_table_name != null ? local.tracking_table_name : ""
+      LOOKUP_FUNCTION_NAME        = var.lookup_function_name != null ? var.lookup_function_name : ""
+      INPUT_BUCKET                = local.input_bucket_name
+      OUTPUT_BUCKET               = local.output_bucket_name
+      APPSYNC_API_URL             = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+      MAX_CONVERSATION_TURNS      = "20"
+      MAX_MESSAGE_SIZE_KB         = "8.5"
+      DATA_RETENTION_DAYS         = tostring(var.data_retention_in_days)
+      AWS_STACK_NAME              = local.api_name
+      CLOUDWATCH_LOG_GROUP_PREFIX = "/aws/lambda/${local.api_name}"
+      ATHENA_DATABASE             = var.agent_analytics.reporting_database_name != null ? var.agent_analytics.reporting_database_name : ""
+      ATHENA_OUTPUT_LOCATION      = var.agent_analytics.reporting_bucket_arn != null ? "s3://${element(split(":", var.agent_analytics.reporting_bucket_arn), length(split(":", var.agent_analytics.reporting_bucket_arn)) - 1)}/athena-results/" : ""
     }
   }
 
@@ -545,16 +545,16 @@ resource "aws_lambda_function" "agent_chat_resolver" {
   runtime          = "python3.12"
   timeout          = 30
 
-  layers = compact([var.idp_common_layer_arn])
+  layers = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   environment {
     variables = {
-      LOG_LEVEL                    = var.log_level
+      LOG_LEVEL                     = var.log_level
       AGENT_CHAT_PROCESSOR_FUNCTION = aws_lambda_function.agent_chat_processor[0].function_name
-      AGENT_CHAT_PROCESSOR_ARN     = aws_lambda_function.agent_chat_processor[0].arn
-      CHAT_MESSAGES_TABLE          = aws_dynamodb_table.agent_chat_messages[0].name
-      CHAT_SESSIONS_TABLE          = aws_dynamodb_table.agent_chat_sessions[0].name
-      DATA_RETENTION_DAYS          = tostring(var.data_retention_in_days)
+      AGENT_CHAT_PROCESSOR_ARN      = aws_lambda_function.agent_chat_processor[0].arn
+      CHAT_MESSAGES_TABLE           = aws_dynamodb_table.agent_chat_messages[0].name
+      CHAT_SESSIONS_TABLE           = aws_dynamodb_table.agent_chat_sessions[0].name
+      DATA_RETENTION_DAYS           = tostring(var.data_retention_in_days)
     }
   }
 
@@ -663,7 +663,7 @@ resource "aws_lambda_function" "create_chat_session_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment {
     variables = {
       LOG_LEVEL           = var.log_level
@@ -707,7 +707,7 @@ resource "aws_lambda_function" "list_agent_chat_sessions_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment {
     variables = {
       LOG_LEVEL           = var.log_level
@@ -751,11 +751,11 @@ resource "aws_lambda_function" "get_agent_chat_messages_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment {
     variables = {
-      LOG_LEVEL            = var.log_level
-      CHAT_MESSAGES_TABLE  = aws_dynamodb_table.agent_chat_messages[0].name
+      LOG_LEVEL           = var.log_level
+      CHAT_MESSAGES_TABLE = aws_dynamodb_table.agent_chat_messages[0].name
     }
   }
   tracing_config { mode = var.lambda_tracing_mode }
@@ -795,7 +795,7 @@ resource "aws_lambda_function" "delete_agent_chat_session_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment {
     variables = {
       LOG_LEVEL           = var.log_level

@@ -1,0 +1,45 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "idp-cli"
+version = "0.4.16"
+description = "Command-line interface for IDP Accelerator batch document processing"
+authors = [{name = "AWS"}]
+license = {text = "MIT-0"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "idp-sdk",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-mock>=3.11.0",
+    "moto>=4.2.0",
+]
+
+[project.scripts]
+idp-cli = "idp_cli.cli:main"
+
+[tool.setuptools]
+packages = ["idp_cli"]
+
+[tool.setuptools.package-dir]
+idp_cli = "idp_cli"

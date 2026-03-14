@@ -335,6 +335,12 @@ variable "idp_common_layer_arn" {
   default     = null
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the base Lambda layer containing shared Python dependencies (from processing-environment module)"
+  type        = string
+  default     = null
+}
+
 variable "enable_encryption" {
   description = "Enable encryption for resources"
   type        = bool
@@ -353,6 +359,12 @@ variable "lambda_layers_bucket_arn" {
 
 variable "enable_agent_companion_chat" {
   description = "Enable Agent Companion Chat feature (multi-agent AI chat sessions)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_hitl" {
+  description = "Enable built-in HITL review via complete_section_review Lambda (v0.4.9+). Replaces SageMaker A2I."
   type        = bool
   default     = true
 }
@@ -377,6 +389,30 @@ variable "enable_error_analyzer" {
 
 variable "enable_mcp" {
   description = "Enable MCP Integration feature (Bedrock AgentCore Gateway with OAuth 2.0). Not supported in GovCloud regions."
+  type        = bool
+  default     = false
+}
+
+variable "bda_project_arn" {
+  description = "ARN of the BDA Data Automation Project (used by sync_bda_idp resolver). Leave empty if not using BDA processor."
+  type        = string
+  default     = ""
+}
+
+variable "enable_capacity_planning" {
+  description = "Enable Capacity Planning feature (v0.4.13+). Deploys calculate_capacity and calculate_capacity_resolver Lambdas."
+  type        = bool
+  default     = false
+}
+
+variable "enable_omni_ai_dataset" {
+  description = "Enable OmniAI OCR Benchmark dataset deployer (v0.4.15+). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
+variable "enable_docplit_poly_seq_dataset" {
+  description = "Enable DocSplit RVL-CDIP-NMP Packet dataset deployer (v0.4.15+). Requires enable_test_studio = true."
   type        = bool
   default     = false
 }

@@ -1,5 +1,7 @@
 # SageMaker UDOP Processor Example with Automated Model Training
 
+> **⚠️ DEPRECATION NOTICE**: The SageMaker UDOP processor (Pattern 3) is deprecated as of v0.4.16 and will be removed in v0.5.0. For new deployments, use the BDA processor (Pattern 1) or Bedrock LLM processor (Pattern 2). See the [migration guide](../../docs/migration-guide.md) for details.
+
 This example demonstrates how to deploy a complete document processing solution using the SageMaker UDOP processor from the GenAI IDP Accelerator with automated model training and an integrated Web UI.
 
 ## Architecture Overview

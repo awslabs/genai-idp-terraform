@@ -130,31 +130,44 @@ variable "api" {
   description = "API configuration for processing environment features"
   type = object({
     enabled = optional(bool, false)
-    
+
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
       model_id = optional(string, "us.anthropic.claude-3-haiku-20240307-v1:0")
     }), { enabled = false })
-    
+
     discovery = optional(object({
       enabled = optional(bool, false)
     }), { enabled = false })
-    
+
     chat_with_document = optional(object({
       enabled                  = optional(bool, false)
       guardrail_id_and_version = optional(string, null)
     }), { enabled = false })
-    
+
     process_changes = optional(object({
       enabled = optional(bool, false)
     }), { enabled = false })
-    
+
     knowledge_base = optional(object({
       enabled            = optional(bool, false)
       knowledge_base_arn = optional(string, null)
       model_id           = optional(string, "us.amazon.nova-pro-v1:0")
       embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
     }), { enabled = false })
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = optional(bool, false)
+    enable_test_studio          = optional(bool, false)
+    enable_fcc_dataset          = optional(bool, false)
+    enable_error_analyzer       = optional(bool, false)
+    enable_mcp                  = optional(bool, false)
+
+    # v0.4.16 feature flags
+    enable_hitl                     = optional(bool, true)
+    enable_capacity_planning        = optional(bool, false)
+    enable_omni_ai_dataset          = optional(bool, false)
+    enable_docplit_poly_seq_dataset = optional(bool, false)
   })
   default = { enabled = false }
 }
