@@ -98,6 +98,22 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "output_bucket" {
   }
 }
 
+resource "aws_s3_bucket" "working_bucket" {
+  bucket = "${var.prefix}-working-bucket-${random_string.suffix.result}"
+  tags   = var.tags
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "working_bucket" {
+  bucket = aws_s3_bucket.working_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.encryption_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
 # Create evaluation baseline bucket (conditional)
 resource "aws_s3_bucket" "evaluation_baseline_bucket" {
   count         = var.enable_evaluation ? 1 : 0
@@ -172,11 +188,19 @@ module "reporting_environment" {
   count  = var.enable_reporting ? 1 : 0
   source = "../../modules/reporting"
 
-  # Pass the reporting bucket ARN
-  reporting_bucket_arn = aws_s3_bucket.reporting_bucket[0].arn
-
-  # Pass the reporting database name
-  reporting_database_name = aws_glue_catalog_database.reporting_database[0].name
+  name_prefix              = "${var.prefix}-${random_string.suffix.result}"
+  reporting_bucket_arn     = aws_s3_bucket.reporting_bucket[0].arn
+  reporting_database_name  = aws_glue_catalog_database.reporting_database[0].name
+  output_bucket_arn        = aws_s3_bucket.output_bucket.arn
+  output_bucket_name       = aws_s3_bucket.output_bucket.bucket
+  metric_namespace         = "${var.prefix}-metrics"
+  idp_common_layer_arn     = module.idp_common_layer.layer_arn
+  configuration_table_arn  = module.processing_environment.configuration_table_arn
+  configuration_table_name = module.processing_environment.configuration_table_name
+  encryption_key_arn       = aws_kms_key.encryption_key.arn
+  log_level                = var.log_level
+  log_retention_days       = var.log_retention_days
+  tags                     = var.tags
 }
 
 # Create the IDP Common Layer
@@ -184,7 +208,7 @@ module "idp_common_layer" {
   source = "../../modules/idp-common-layer"
 
   # Use a unique layer prefix per stack to avoid conflicts with parallel deployments
-  name_prefix = "${var.prefix}-processing-env-${random_string.suffix.result}"
+  layer_prefix = "${var.prefix}-processing-env-${random_string.suffix.result}"
 
   # Configure the layer with the extras needed by processing environment functions
   # Based on requirements.txt analysis: queue_sender and workflow_tracker use appsync
@@ -202,8 +226,9 @@ module "processing_environment" {
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
   # Required parameters
-  input_bucket_arn  = aws_s3_bucket.input_bucket.arn
-  output_bucket_arn = aws_s3_bucket.output_bucket.arn
+  input_bucket_arn   = aws_s3_bucket.input_bucket.arn
+  output_bucket_arn  = aws_s3_bucket.output_bucket.arn
+  working_bucket_arn = aws_s3_bucket.working_bucket.arn
 
   metric_namespace = "${var.prefix}-metrics"
 

@@ -265,7 +265,7 @@ resource "aws_lambda_function" "test_runner" {
   runtime          = "python3.12"
   timeout          = 300
   memory_size      = 512
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -307,7 +307,7 @@ resource "aws_lambda_function" "test_results_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -349,7 +349,7 @@ resource "aws_lambda_function" "test_set_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -392,7 +392,7 @@ resource "aws_lambda_function" "test_set_zip_extractor" {
   runtime          = "python3.12"
   timeout          = 300
   memory_size      = 1024
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -434,7 +434,7 @@ resource "aws_lambda_function" "test_file_copier" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 300
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -476,7 +476,7 @@ resource "aws_lambda_function" "test_set_file_copier" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 300
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -518,7 +518,7 @@ resource "aws_lambda_function" "delete_tests" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 60
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -560,7 +560,7 @@ resource "aws_lambda_function" "fcc_dataset_deployer" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 300
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment { variables = local.test_studio_env }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
@@ -590,8 +590,8 @@ resource "aws_iam_policy" "appsync_invoke_test_studio_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
+      Effect = "Allow"
+      Action = "lambda:InvokeFunction"
       Resource = [
         aws_lambda_function.test_runner[0].arn,
         aws_lambda_function.test_set_resolver[0].arn,

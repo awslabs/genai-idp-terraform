@@ -102,8 +102,84 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the shared base Lambda layer (idp_common with docs_service extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
+variable "enable_rule_validation" {
+  description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
+# LAMBDA HOOK INFERENCE VARIABLES (v0.4.15+)
+# =============================================================================
+# These variables pre-grant Step Functions InvokeFunction permissions for custom
+# Lambda hooks. The actual hook ARNs are stored in the DynamoDB configuration
+# table (model_lambda_hook_arn field) and referenced when model_id = "LambdaHook".
+# Function names must start with "GENAIIDP-" per the naming convention.
+
+variable "lambda_hook_ocr" {
+  description = "ARN or name of custom Lambda for OCR step hook inference. Must start with 'GENAIIDP-'. (v0.4.15+)"
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.lambda_hook_ocr == "" || startswith(var.lambda_hook_ocr, "GENAIIDP-")
+    error_message = "lambda_hook_ocr must be empty or start with 'GENAIIDP-'."
+  }
+}
+
+variable "lambda_hook_classification" {
+  description = "ARN or name of custom Lambda for Classification step hook inference. Must start with 'GENAIIDP-'. (v0.4.15+)"
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.lambda_hook_classification == "" || startswith(var.lambda_hook_classification, "GENAIIDP-")
+    error_message = "lambda_hook_classification must be empty or start with 'GENAIIDP-'."
+  }
+}
+
+variable "lambda_hook_extraction" {
+  description = "ARN or name of custom Lambda for Extraction step hook inference. Must start with 'GENAIIDP-'. (v0.4.15+)"
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.lambda_hook_extraction == "" || startswith(var.lambda_hook_extraction, "GENAIIDP-")
+    error_message = "lambda_hook_extraction must be empty or start with 'GENAIIDP-'."
+  }
+}
+
+variable "lambda_hook_assessment" {
+  description = "ARN or name of custom Lambda for Assessment step hook inference. Must start with 'GENAIIDP-'. (v0.4.15+)"
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.lambda_hook_assessment == "" || startswith(var.lambda_hook_assessment, "GENAIIDP-")
+    error_message = "lambda_hook_assessment must be empty or start with 'GENAIIDP-'."
+  }
+}
+
+variable "lambda_hook_summarization" {
+  description = "ARN or name of custom Lambda for Summarization step hook inference. Must start with 'GENAIIDP-'. (v0.4.15+)"
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.lambda_hook_summarization == "" || startswith(var.lambda_hook_summarization, "GENAIIDP-")
+    error_message = "lambda_hook_summarization must be empty or start with 'GENAIIDP-'."
+  }
+}
+
+variable "model_id" {
+  description = "Default Bedrock model ID for all processing steps. Supports global./ us. prefixes and :flex/:priority/:standard suffixes. (v0.4.12+)"
+  type        = string
+  default     = "us.amazon.nova-2-lite-v1:0"
+}
+
 variable "classification_model_id" {
-  description = "Optional model ID for document classification. If not provided, the model from config.yaml will be used."
+  description = "Optional model ID for document classification. Overrides model_id for this step. If not provided, model_id is used."
   type        = string
   default     = null
 }
@@ -135,7 +211,7 @@ variable "classification_guardrail" {
 }
 
 variable "extraction_model_id" {
-  description = "Optional model ID for information extraction. If not provided, the model from config.yaml will be used."
+  description = "Optional model ID for information extraction. Overrides model_id for this step. If not provided, model_id is used."
   type        = string
   default     = null
 }
@@ -168,7 +244,7 @@ variable "evaluation_baseline_bucket_arn" {
 }
 
 variable "evaluation_model_id" {
-  description = "Optional model ID for evaluating extraction results. If not provided, the model from config.yaml will be used."
+  description = "Optional model ID for evaluating extraction results. Overrides model_id for this step. If not provided, model_id is used."
   type        = string
   default     = null
 }
@@ -180,7 +256,7 @@ variable "is_summarization_enabled" {
 }
 
 variable "summarization_model_id" {
-  description = "Optional model ID for document summarization. If not provided, the model from config.yaml will be used."
+  description = "Optional model ID for document summarization. Overrides model_id for this step. If not provided, model_id is used."
   type        = string
   default     = null
 }

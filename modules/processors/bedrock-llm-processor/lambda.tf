@@ -15,7 +15,7 @@ resource "aws_lambda_function" "ocr" {
   filename         = data.archive_file.ocr_lambda.output_path
   source_code_hash = data.archive_file.ocr_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -59,7 +59,7 @@ resource "aws_lambda_function" "classification" {
   filename         = data.archive_file.classification_lambda.output_path
   source_code_hash = data.archive_file.classification_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -96,7 +96,7 @@ resource "aws_lambda_function" "extraction" {
   filename         = data.archive_file.extraction_lambda.output_path
   source_code_hash = data.archive_file.extraction_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -132,7 +132,7 @@ resource "aws_lambda_function" "process_results" {
   filename         = data.archive_file.process_results_lambda.output_path
   source_code_hash = data.archive_file.process_results_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -170,7 +170,7 @@ resource "aws_lambda_function" "summarization" {
   filename         = data.archive_file.summarization_lambda.output_path
   source_code_hash = data.archive_file.summarization_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -249,7 +249,7 @@ resource "aws_lambda_function" "assessment" {
   filename         = data.archive_file.assessment_lambda.output_path
   source_code_hash = data.archive_file.assessment_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -294,7 +294,7 @@ resource "aws_lambda_function" "hitl_wait" {
   filename         = data.archive_file.hitl_wait_lambda.output_path
   source_code_hash = data.archive_file.hitl_wait_lambda.output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -484,7 +484,7 @@ resource "aws_lambda_function" "evaluation_function" {
   filename         = data.archive_file.evaluation_lambda[0].output_path
   source_code_hash = data.archive_file.evaluation_lambda[0].output_base64sha256
 
-  layers = [var.idp_common_layer_arn]
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 

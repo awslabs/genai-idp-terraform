@@ -391,7 +391,7 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config            = local.config
+    config = local.config
   }
 
   # Use external user identity instead of creating new one

@@ -456,6 +456,11 @@ module "genai_idp_accelerator" {
     enable_fcc_dataset          = var.api.enable_fcc_dataset
     enable_error_analyzer       = var.api.enable_error_analyzer
     enable_mcp                  = var.api.enable_mcp
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
     knowledge_base = var.api.knowledge_base.enabled ? {
       enabled            = true
       knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null

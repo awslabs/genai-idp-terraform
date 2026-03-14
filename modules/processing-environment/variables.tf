@@ -72,6 +72,24 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the shared base Lambda layer (idp_common with docs_service extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
+variable "reporting_layer_arn" {
+  description = "ARN of the shared reporting Lambda layer (idp_common with reporting extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
+variable "agents_layer_arn" {
+  description = "ARN of the shared agents Lambda layer (idp_common with agents extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
 variable "data_tracking_retention_days" {
   description = "The retention period for document tracking data in days"
   type        = number

@@ -179,3 +179,20 @@ output "post_processing_decompressor_function_name" {
   description = "Name of the post-processing decompressor Lambda function"
   value       = aws_lambda_function.post_processing_decompressor.function_name
 }
+
+# Shared layer ARN outputs (v0.4.11+)
+# Consumed by processor modules and processing-environment-api
+output "base_layer_arn" {
+  description = "ARN of the shared base Lambda layer (idp_common with docs_service extras)"
+  value       = local.effective_base_layer_arn
+}
+
+output "reporting_layer_arn" {
+  description = "ARN of the shared reporting Lambda layer (idp_common with reporting extras)"
+  value       = local.effective_reporting_layer_arn
+}
+
+output "agents_layer_arn" {
+  description = "ARN of the shared agents Lambda layer (idp_common with agents extras)"
+  value       = var.agents_layer_arn != null ? var.agents_layer_arn : var.idp_common_layer_arn
+}

@@ -1,0 +1,5 @@
+# Constraints to prevent problematic packages during SAM Lambda builds
+# ruamel-yaml-clib is a C extension that requires compilation
+# It's only a performance optimization and not functionally required
+ruamel-yaml-clib<0.1.0
+ruamel-yaml-clibz<0.1.0

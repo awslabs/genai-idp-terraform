@@ -171,6 +171,12 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the shared base Lambda layer (v0.4.11+). Accepted for API consistency but not attached — all SageMaker UDOP functions use package_type=Image and do not support Lambda layers."
+  type        = string
+  default     = null
+}
+
 
 
 variable "assessment_model_id" {

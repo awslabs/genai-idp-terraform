@@ -518,29 +518,55 @@ locals {
   # New api variable takes precedence when both are provided
   api_config = var.api.enabled || var.discovery != null || var.chat_with_document != null || var.process_changes != null ? {
     enabled = var.api.enabled || var.discovery != null || var.chat_with_document != null || var.process_changes != null
-    
+
     agent_analytics = var.api.agent_analytics
-    
+
     discovery = var.api.enabled ? var.api.discovery : (
       var.discovery != null ? var.discovery : { enabled = false }
     )
-    
+
     chat_with_document = var.api.enabled ? var.api.chat_with_document : (
       var.chat_with_document != null ? var.chat_with_document : { enabled = false }
     )
-    
+
     process_changes = var.api.enabled ? var.api.process_changes : (
       var.process_changes != null ? var.process_changes : { enabled = false }
     )
-    
+
     knowledge_base = var.api.knowledge_base
-  } : {
-    enabled = false
-    agent_analytics = { enabled = false }
-    discovery = { enabled = false }
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = var.api.enable_agent_companion_chat
+    enable_test_studio          = var.api.enable_test_studio
+    enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_error_analyzer       = var.api.enable_error_analyzer
+    enable_mcp                  = var.api.enable_mcp
+
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
+    } : {
+    enabled            = false
+    agent_analytics    = { enabled = false }
+    discovery          = { enabled = false }
     chat_with_document = { enabled = false }
-    process_changes = { enabled = false }
-    knowledge_base = { enabled = false }
+    process_changes    = { enabled = false }
+    knowledge_base     = { enabled = false }
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = false
+    enable_test_studio          = false
+    enable_fcc_dataset          = false
+    enable_error_analyzer       = false
+    enable_mcp                  = false
+
+    # v0.4.16 feature flags
+    enable_hitl                     = true
+    enable_capacity_planning        = false
+    enable_omni_ai_dataset          = false
+    enable_docplit_poly_seq_dataset = false
   }
 }
 
@@ -560,7 +586,7 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config            = local.config
+    config = local.config
   }
 
   # Resource ARNs

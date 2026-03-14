@@ -1,0 +1,55 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TestDocument",
+    "x-aws-idp-document-type": "TestDocument",
+    "type": "object",
+    "description": "Test schema with special characters in property names",
+    "properties": {
+        "Normal_Property": {
+            "type": "string",
+            "description": "A normal property"
+        },
+        "Property&WithAmpersand": {
+            "type": "string",
+            "description": "Property with ampersand"
+        },
+        "Property/WithSlash": {
+            "type": "string",
+            "description": "Property with slash"
+        },
+        "Property@WithAt": {
+            "type": "string",
+            "description": "Property with at symbol"
+        },
+        "Property With Spaces": {
+            "type": "string",
+            "description": "Property with spaces"
+        },
+        "NestedObject": {
+            "type": "object",
+            "properties": {
+                "Nested&Property": {
+                    "type": "string",
+                    "description": "Nested property with ampersand"
+                },
+                "Nested/Property": {
+                    "type": "string",
+                    "description": "Nested property with slash"
+                }
+            }
+        },
+        "ArrayProperty": {
+            "type": "array",
+            "description": "Array with special chars in items",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Item&Field": {
+                        "type": "string",
+                        "description": "Item field with ampersand"
+                    }
+                }
+            }
+        }
+    }
+}

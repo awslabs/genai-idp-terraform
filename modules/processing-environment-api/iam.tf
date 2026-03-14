@@ -312,6 +312,24 @@ resource "aws_iam_role_policy_attachment" "configuration_resolver_vpc_attachment
   policy_arn = aws_iam_policy.configuration_resolver_vpc_policy[0].arn
 }
 
+# S3 config bucket read — needed by configuration_resolver for versioning/pricing (v0.4.12+)
+resource "aws_iam_role_policy" "configuration_resolver_s3" {
+  name = "ConfigurationResolverS3Policy-${random_string.suffix.result}"
+  role = aws_iam_role.configuration_resolver_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
+      Resource = [
+        local.output_bucket_arn,
+        "${local.output_bucket_arn}/*",
+      ]
+    }]
+  })
+}
+
 # IAM resources from lambda_copy_to_baseline_resolver.tf
 resource "aws_iam_role" "copy_to_baseline_resolver_role" {
   for_each = var.evaluation_enabled ? { "enabled" = true } : {}

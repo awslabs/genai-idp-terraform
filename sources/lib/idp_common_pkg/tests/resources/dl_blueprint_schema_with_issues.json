@@ -1,0 +1,145 @@
+{
+    "class": "US-drivers-licenses",
+    "description": "This document is for US driving license from any US state",
+    "definitions": {
+        "Address": {
+            "properties": {
+                "STREET_ADDRESS": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The street address"
+                },
+                "CITY": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The city name"
+                },
+                "ZIP_CODE": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The zip code"
+                },
+                "STATE": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The two letter code of the state"
+                }
+            }
+        },
+        "NameDetails": {
+            "properties": {
+                "FIRST_NAME": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The first name"
+                },
+                "MIDDLE_NAME": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The middle name or initial"
+                },
+                "LAST_NAME": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The last name of the driver"
+                },
+                "SUFFIX": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The suffix, such as PhD, MSc. etc"
+                }
+            }
+        },
+        "PersonalDetails": {
+            "properties": {
+                "SEX": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "One of [\"M\", \"F\"]"
+                },
+                "HEIGHT": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The height in ft and inches"
+                },
+                "WEIGHT": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "The weight in pounds"
+                },
+                "HAIR_COLOR": {
+                    "type": "string",
+                    "inferenceType": "inferred",
+                    "instruction": "Hair colour, unabbreviated"
+                },
+                "EYE_COLOR": {
+                    "type": "string",
+                    "inferenceType": "explicit",
+                    "instruction": "Eye colour, unabbreviated"
+                }
+            }
+        }
+    },
+    "properties": {
+        "NAME_DETAILS": {
+            "$ref": "#/definitions/NameDetails"
+        },
+        "ADDRESS_DETAILS": {
+            "$ref": "#/definitions/Address"
+        },
+        "COUNTY": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "The county (if available, else empty string)"
+        },
+        "ID_NUMBER": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "The unique identification number of the driving license"
+        },
+        "EXPIRATION_DATE": {
+            "type": "string",
+            "inferenceType": "inferred",
+            "instruction": "The date of expiry in YYYY-MM-DD format"
+        },
+        "DATE_OF_BIRTH": {
+            "type": "string",
+            "inferenceType": "inferred",
+            "instruction": "The date of birth of the driver in YYYY-MM-DD format"
+        },
+        "STATE_NAME": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "The state name "
+        },
+        "DATE_OF_ISSUE": {
+            "type": "string",
+            "inferenceType": "inferred",
+            "instruction": "The date of issue in YYYY-MM-DD format"
+        },
+        "CLASS": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "The single letter class code, one of \"A\", \"B\" or \"C\""
+        },
+        "RESTRICTIONS": {
+            "type": "array",
+            "inferenceType": "explicit",
+            "instruction": "The restrictions listed, e.g prescriptive lens or special letter codes",
+            "items": {
+                "type": "string"
+            }
+        },
+        "ENDORSEMENTS": {
+            "type": "array",
+            "inferenceType": "explicit",
+            "instruction": "The endorsement codes if any",
+            "items": {
+                "type": "string"
+            }
+        },
+        "PERSONAL_DETAILS": {
+            "$ref": "#/definitions/PersonalDetails"
+        }
+    }
+}

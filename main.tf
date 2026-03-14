@@ -130,6 +130,40 @@ module "idp_common_layer" {
   lambda_tracing_mode      = var.lambda_tracing_mode
 }
 
+# Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
+# post_processing_decompressor, and evaluation functions (v0.4.11+)
+module "idp_base_layer" {
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-base-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["docs_service"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
+# Reporting layer: reporting extras — used by save_reporting_data function (v0.4.11+)
+module "idp_reporting_layer" {
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-reporting-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["reporting"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
+# Agents layer: agents extras — used by agent companion chat and agent analytics functions (v0.4.11+)
+module "idp_agents_layer" {
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-agents-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["agents"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
 #
 # User Identity (Cognito) - Only create if needed and not provided externally
 #
@@ -150,12 +184,7 @@ module "human_review" {
   source = "./modules/human-review"
 
   name_prefix       = "${local.name_prefix}-human-review"
-  user_pool_id      = var.human_review.user_pool_id
   output_bucket_arn = var.output_bucket_arn
-
-  # Use externally created workforce and workteam
-  private_workforce_arn = var.human_review.private_workforce_arn
-  workteam_name         = var.human_review.workteam_name
 
   # Configuration
   log_level          = var.log_level
@@ -171,9 +200,6 @@ module "human_review" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
-
-  # Stack name for A2I resources
-  stack_name = local.name_prefix
 
   # Pattern-2 HITL configuration
   enable_pattern2_hitl      = var.human_review.enable_pattern2_hitl
@@ -211,6 +237,11 @@ module "processing_environment" {
 
   # Lambda layer
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+
+  # Shared layers (v0.4.11+)
+  base_layer_arn      = module.idp_base_layer.layer_arn
+  reporting_layer_arn = module.idp_reporting_layer.layer_arn
+  agents_layer_arn    = module.idp_agents_layer.layer_arn
 
   # Optional: Evaluation configuration
   evaluation_config = var.evaluation.enabled ? {
@@ -337,10 +368,18 @@ module "processing_environment_api" {
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
   enable_mcp                  = try(var.api.enable_mcp, false)
 
+  # v0.4.16 feature flags
+  enable_hitl                     = try(var.api.enable_hitl, true)
+  enable_capacity_planning        = try(var.api.enable_capacity_planning, false)
+  enable_omni_ai_dataset          = try(var.api.enable_omni_ai_dataset, false)
+  enable_docplit_poly_seq_dataset = try(var.api.enable_docplit_poly_seq_dataset, false)
+  bda_project_arn                 = length(module.bda_processor) > 0 ? module.bda_processor[0].data_automation_project_arn : ""
+
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
 
-  # IDP Common Layer ARN for sub-modules
+  # Lambda layers
+  base_layer_arn           = module.processing_environment.base_layer_arn
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
@@ -507,8 +546,8 @@ module "sagemaker_udop_processor" {
   classification_max_workers = var.sagemaker_udop_processor.classification_max_workers
 
   # Optional: Model configurations
-  extraction_model_id    = null # Will use default from module
-  summarization_model_id = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
+  extraction_model_id             = null # Will use default from module
+  summarization_model_id          = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 

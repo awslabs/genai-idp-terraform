@@ -80,8 +80,8 @@ resource "aws_lambda_function" "evaluation" {
   role        = aws_iam_role.evaluation_role[0].arn
   description = "Lambda function that evaluates extraction results against baseline documents"
 
-  # Use the idp_common layer for evaluation functionality
-  layers = [var.idp_common_layer_arn]
+  # evaluation uses docs_service extras — use base layer (v0.4.11+)
+  layers = [local.effective_base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 

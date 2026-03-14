@@ -497,7 +497,7 @@ locals {
     "manual" = null
     "15min"  = "cron(0/15 * * * ? *)"
     "hourly" = "cron(0 * * * ? *)"
-    "daily"  = "cron(0 0 * * ? *)"  # Changed from 1 AM to midnight to match CloudFormation
+    "daily"  = "cron(0 0 * * ? *)" # Changed from 1 AM to midnight to match CloudFormation
   }
   crawler_schedule_expression = local.crawler_schedule_map[var.crawler_schedule]
 }
