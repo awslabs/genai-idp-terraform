@@ -134,5 +134,6 @@ v0.5.0. A `check` block in the module emits a deprecation warning on every `terr
 and `terraform apply`.
 
 To migrate from Pattern 3:
+
 - **Pattern 1 (BDA)**: Use `modules/processors/bda-processor/` for standard document types
 - **Pattern 2 (Bedrock LLM)**: Use `modules/processors/bedrock-llm-processor/` for custom extraction

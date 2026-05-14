@@ -108,22 +108,15 @@
 | [aws_lambda_function.process_results](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.summarization](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_permission.allow_eventbridge_to_invoke_bda_completion](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_permission) | resource |
+| [aws_s3_object.pattern1_sources](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [aws_sfn_state_machine.document_processing](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) | resource |
 | [aws_sqs_queue.bda_completion_dlq](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue) | resource |
 | [aws_sqs_queue.invoke_bda_dlq](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue) | resource |
 | [aws_sqs_queue.process_results_dlq](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue) | resource |
 | [aws_sqs_queue.summarization_dlq](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue) | resource |
-| [null_resource.create_module_build_dir](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.trigger_bda_build](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [random_id.build_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
-| [archive_file.bda_completion_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.hitl_process_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.hitl_status_update_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.hitl_wait_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.invoke_bda_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.process_results_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.summarization_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.pattern1_sources](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_arn.data_automation_project](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/arn) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
@@ -136,6 +129,7 @@
 | <a name="input_api_arn"></a> [api\_arn](#input\_api\_arn) | ARN of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_graphql_url"></a> [api\_graphql\_url](#input\_api\_graphql\_url) | GraphQL URL of the API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_id"></a> [api\_id](#input\_api\_id) | ID of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
+| <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (idp\_common with docs\_service extras, v0.4.11+). Not attached to BDA functions as they use container images which do not support Lambda layers. | `string` | `null` | no |
 | <a name="input_bda_metadata_table_arn"></a> [bda\_metadata\_table\_arn](#input\_bda\_metadata\_table\_arn) | ARN of the DynamoDB table that stores BDA processing metadata (optional, required for HITL functionality) | `string` | `null` | no |
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the DynamoDB table that manages concurrency limits for document processing | `string` | n/a | yes |
 | <a name="input_config"></a> [config](#input\_config) | Configuration values from config\_library YAML files | `any` | n/a | yes |
@@ -174,6 +168,7 @@
 |------|-------------|
 | <a name="output_configuration"></a> [configuration](#output\_configuration) | Configuration for the BDA processor |
 | <a name="output_data_automation_project"></a> [data\_automation\_project](#output\_data\_automation\_project) | Information about the Bedrock Data Automation Project |
+| <a name="output_data_automation_project_arn"></a> [data\_automation\_project\_arn](#output\_data\_automation\_project\_arn) | ARN of the BDA Data Automation Project (consumed by processing-environment-api for BDA sync resolver) |
 | <a name="output_evaluation_function_arn"></a> [evaluation\_function\_arn](#output\_evaluation\_function\_arn) | ARN of the evaluation Lambda function (used by the Step Functions state machine) |
 | <a name="output_evaluation_model"></a> [evaluation\_model](#output\_evaluation\_model) | The invokable model used for evaluating extraction results |
 | <a name="output_lambda_functions"></a> [lambda\_functions](#output\_lambda\_functions) | Lambda functions used by the BDA processor |

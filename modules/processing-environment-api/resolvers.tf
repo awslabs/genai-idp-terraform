@@ -13,7 +13,7 @@ resource "aws_appsync_resolver" "create_document" {
 
   request_template = <<EOF
 #set( $PK = "doc#$${ctx.args.input.ObjectKey}" )
-  
+
 #set( $shardsInDay = 6 )
 #set( $shardDivider = 24 / $shardsInDay )
 #set( $Integer = 0 )
@@ -25,7 +25,7 @@ resource "aws_appsync_resolver" "create_document" {
 #set( $shardPad = $date.format("%02d", $hourShard) )
 #set( $listPk = "list#$${date}#s#$${shardPad}" )
 #set( $listSk = "ts#$${now}#id#$${ctx.args.input.ObjectKey}" )
-  
+
 {
   "version" : "2018-05-29",
   "operation" : "TransactWriteItems",
@@ -329,16 +329,6 @@ resource "aws_appsync_resolver" "get_file_contents" {
 # CONFIGURATION RESOLVERS (Lambda-backed via configuration_resolver)
 # All routed through a single Lambda that dispatches on fieldName
 # =============================================================================
-
-resource "aws_appsync_resolver" "get_configuration" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getConfiguration"
-  data_source = aws_appsync_datasource.configuration.name
-
-  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
-  response_template = "$util.toJson($context.result)"
-}
 
 resource "aws_appsync_resolver" "update_configuration" {
   api_id      = aws_appsync_graphql_api.api.id

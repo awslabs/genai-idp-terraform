@@ -440,6 +440,7 @@ For issues and questions:
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 5.0 |
+| <a name="requirement_opensearch"></a> [opensearch](#requirement\_opensearch) | 2.2.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.9 |
 
@@ -447,8 +448,11 @@ For issues and questions:
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.34.0 |
+| <a name="provider_opensearch"></a> [opensearch](#provider\_opensearch) | 2.2.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.8.1 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.13.1 |
 
 ## Modules
 
@@ -460,6 +464,8 @@ For issues and questions:
 
 | Name | Type |
 |------|------|
+| [aws_bedrockagent_data_source.knowledge_base_data_source](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagent_data_source) | resource |
+| [aws_bedrockagent_knowledge_base.knowledge_base](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagent_knowledge_base) | resource |
 | [aws_cognito_identity_pool.identity_pool](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_identity_pool) | resource |
 | [aws_cognito_identity_pool_roles_attachment.identity_pool_roles](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_identity_pool_roles_attachment) | resource |
 | [aws_cognito_user.admin_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user) | resource |
@@ -469,9 +475,21 @@ For issues and questions:
 | [aws_cognito_user_pool_client.user_pool_client](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cognito_user_pool_client) | resource |
 | [aws_glue_catalog_database.reporting_database](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/glue_catalog_database) | resource |
 | [aws_iam_role.authenticated_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.knowledge_base_ingestion_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.knowledge_base_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.unauthenticated_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy.knowledge_base_bedrock_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.knowledge_base_ingestion_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.knowledge_base_opensearch_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.knowledge_base_s3_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_kms_alias.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_key.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
+| [aws_lambda_function.knowledge_base_ingestion](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
+| [aws_lambda_permission.allow_s3_invoke](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_permission) | resource |
+| [aws_opensearchserverless_access_policy.knowledge_base_data_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearchserverless_access_policy) | resource |
+| [aws_opensearchserverless_collection.knowledge_base_collection](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearchserverless_collection) | resource |
+| [aws_opensearchserverless_security_policy.knowledge_base_encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearchserverless_security_policy) | resource |
+| [aws_opensearchserverless_security_policy.knowledge_base_network](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearchserverless_security_policy) | resource |
 | [aws_s3_bucket.evaluation_baseline_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket.input_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
@@ -479,7 +497,12 @@ For issues and questions:
 | [aws_s3_bucket.reporting_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket.working_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket_notification.input_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) | resource |
+| [aws_s3_bucket_notification.output_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) | resource |
+| [opensearch_index.knowledge_base_index](https://registry.terraform.io/providers/opensearch-project/opensearch/2.2.0/docs/resources/index) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
+| [time_sleep.iam_consistency_delay](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
+| [time_sleep.wait_before_index_creation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
+| [archive_file.knowledge_base_ingestion_zip](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
@@ -489,18 +512,29 @@ For issues and questions:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Optional email address for the admin user. If provided, an admin user will be created in the Cognito User Pool. | `string` | `null` | no |
+| <a name="input_agent_analytics"></a> [agent\_analytics](#input\_agent\_analytics) | DEPRECATED: Use api.agent\_analytics instead. Configuration for agent analytics functionality | <pre>object({<br/>    enabled  = optional(bool, false)<br/>    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")<br/>  })</pre> | `null` | no |
+| <a name="input_api"></a> [api](#input\_api) | Configuration for GraphQL API and all API-related features | <pre>object({<br/>    # Core API configuration<br/>    enabled = optional(bool, true)<br/><br/>    # Agent Analytics (GraphQL resolvers for agent functionality)<br/>    agent_analytics = optional(object({<br/>      enabled  = optional(bool, false)<br/>      model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")<br/>    }), { enabled = false })<br/><br/>    # Discovery (Document discovery and classification workflow)<br/>    discovery = optional(object({<br/>      enabled = optional(bool, false)<br/>    }), { enabled = false })<br/><br/>    # Chat with Document (Document Q&A using Bedrock and Knowledge Base)<br/>    chat_with_document = optional(object({<br/>      enabled                  = optional(bool, false)<br/>      guardrail_id_and_version = optional(string, null)<br/>    }), { enabled = false })<br/><br/>    # Process Changes (Document editing and reprocessing)<br/>    process_changes = optional(object({<br/>      enabled = optional(bool, false)<br/>    }), { enabled = false })<br/><br/>    # Knowledge Base (external dependency for chat feature)<br/>    knowledge_base = optional(object({<br/>      enabled            = optional(bool, false)<br/>      knowledge_base_arn = optional(string)<br/>      model_id           = optional(string, "us.amazon.nova-pro-v1:0")<br/>      embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")<br/>    }), { enabled = false })<br/><br/>    # v0.4.8 feature flags<br/>    enable_agent_companion_chat = optional(bool, false)<br/>    enable_test_studio          = optional(bool, false)<br/>    enable_fcc_dataset          = optional(bool, false)<br/>    enable_error_analyzer       = optional(bool, false)<br/>    enable_mcp                  = optional(bool, false)<br/><br/>    # v0.4.16 feature flags<br/>    enable_hitl                     = optional(bool, true)<br/>    enable_capacity_planning        = optional(bool, false)<br/>    enable_omni_ai_dataset          = optional(bool, false)<br/>    enable_docplit_poly_seq_dataset = optional(bool, false)<br/>  })</pre> | <pre>{<br/>  "agent_analytics": {<br/>    "enabled": false<br/>  },<br/>  "chat_with_document": {<br/>    "enabled": false<br/>  },<br/>  "discovery": {<br/>    "enabled": false<br/>  },<br/>  "enabled": true,<br/>  "knowledge_base": {<br/>    "enabled": false<br/>  },<br/>  "process_changes": {<br/>    "enabled": false<br/>  }<br/>}</pre> | no |
+| <a name="input_chat_with_document"></a> [chat\_with\_document](#input\_chat\_with\_document) | DEPRECATED: Use api.chat\_with\_document instead. Configuration for chat with document functionality | <pre>object({<br/>    enabled                  = optional(bool, false)<br/>    guardrail_id_and_version = optional(string, null)<br/>  })</pre> | `null` | no |
 | <a name="input_classification_model_id"></a> [classification\_model\_id](#input\_classification\_model\_id) | Model ID for document classification (Bedrock LLM processor only) | `string` | `"us.anthropic.claude-3-5-sonnet-20241022-v2:0"` | no |
 | <a name="input_config_file_path"></a> [config\_file\_path](#input\_config\_file\_path) | Path to the configuration YAML file for document processing | `string` | `"../../sources/config_library/pattern-2/lending-package-sample/config.yaml"` | no |
 | <a name="input_data_tracking_retention_days"></a> [data\_tracking\_retention\_days](#input\_data\_tracking\_retention\_days) | The retention period for document tracking data in days | `number` | `365` | no |
-| <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | Enable GraphQL API for programmatic access and notifications | `bool` | `true` | no |
-| <a name="input_enable_assessment"></a> [enable\_assessment](#input\_enable\_assessment) | Enable assessment functionality | `bool` | `false` | no |
+| <a name="input_discovery"></a> [discovery](#input\_discovery) | DEPRECATED: Use api.discovery instead. Configuration for document discovery functionality | <pre>object({<br/>    enabled = optional(bool, false)<br/>  })</pre> | `null` | no |
+| <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | DEPRECATED: Use api.enabled instead. Enable GraphQL API for programmatic access and notifications | `bool` | `null` | no |
 | <a name="input_enable_evaluation"></a> [enable\_evaluation](#input\_enable\_evaluation) | Enable evaluation functionality (simplified flag) | `bool` | `false` | no |
+| <a name="input_enable_hitl"></a> [enable\_hitl](#input\_enable\_hitl) | Enable Human-in-the-Loop (HITL) functionality for document review | `bool` | `false` | no |
 | <a name="input_enable_reporting"></a> [enable\_reporting](#input\_enable\_reporting) | Enable reporting functionality (simplified flag) | `bool` | `false` | no |
+| <a name="input_enable_rule_validation"></a> [enable\_rule\_validation](#input\_enable\_rule\_validation) | Enable rule validation for compliance checking (v0.4.16+) | `bool` | `false` | no |
 | <a name="input_evaluation_model_id"></a> [evaluation\_model\_id](#input\_evaluation\_model\_id) | Model ID for evaluation processing | `string` | `"anthropic.claude-3-sonnet-20240229-v1:0"` | no |
 | <a name="input_extraction_model_id"></a> [extraction\_model\_id](#input\_extraction\_model\_id) | Model ID for information extraction (Bedrock LLM processor only) | `string` | `"us.anthropic.claude-3-5-sonnet-20241022-v2:0"` | no |
+| <a name="input_lambda_hook_assessment"></a> [lambda\_hook\_assessment](#input\_lambda\_hook\_assessment) | ARN of custom Lambda hook for assessment stage (must start with 'GENAIIDP-') | `string` | `""` | no |
+| <a name="input_lambda_hook_classification"></a> [lambda\_hook\_classification](#input\_lambda\_hook\_classification) | ARN of custom Lambda hook for classification stage (must start with 'GENAIIDP-') | `string` | `""` | no |
+| <a name="input_lambda_hook_extraction"></a> [lambda\_hook\_extraction](#input\_lambda\_hook\_extraction) | ARN of custom Lambda hook for extraction stage (must start with 'GENAIIDP-') | `string` | `""` | no |
+| <a name="input_lambda_hook_ocr"></a> [lambda\_hook\_ocr](#input\_lambda\_hook\_ocr) | ARN of custom Lambda hook for OCR stage (must start with 'GENAIIDP-') | `string` | `""` | no |
+| <a name="input_lambda_hook_summarization"></a> [lambda\_hook\_summarization](#input\_lambda\_hook\_summarization) | ARN of custom Lambda hook for summarization stage (must start with 'GENAIIDP-') | `string` | `""` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | The log level for the document processing components | `string` | `"INFO"` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The retention period for CloudWatch logs generated by the document processing components in days | `number` | `7` | no |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix to add to resource names | `string` | `"idp"` | no |
+| <a name="input_process_changes"></a> [process\_changes](#input\_process\_changes) | DEPRECATED: Use api.process\_changes instead. Configuration for document editing and reprocessing functionality | <pre>object({<br/>    enabled = optional(bool, false)<br/>  })</pre> | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | AWS region to deploy resources | `string` | `"us-east-1"` | no |
 | <a name="input_summarization_enabled"></a> [summarization\_enabled](#input\_summarization\_enabled) | Enable document summarization for Bedrock LLM processor | `bool` | `true` | no |
 | <a name="input_summarization_model_id"></a> [summarization\_model\_id](#input\_summarization\_model\_id) | Model ID for document summarization | `string` | `"us.anthropic.claude-3-5-sonnet-20241022-v2:0"` | no |

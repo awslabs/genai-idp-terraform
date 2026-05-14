@@ -1,9 +1,4 @@
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-
-> [!WARNING]
-> **DEPRECATED**: The SageMaker UDOP Processor (Pattern 3) is deprecated as of v0.4.16 and will be **removed in v0.5.0**.
-> Please migrate to **Pattern 1 (BDA)** or **Pattern 2 (Bedrock LLM)**. See `docs/migration-guide.md` for migration steps.
-
 ## Requirements
 
 | Name | Version |
@@ -98,17 +93,13 @@
 | [aws_lambda_function.ocr_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.process_results_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.summarization_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
+| [aws_s3_object.pattern3_sources](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [aws_sfn_state_machine.document_processing](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) | resource |
 | [null_resource.create_module_build_dir](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.trigger_udop_build](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.build_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
-| [archive_file.assessment_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.classification_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.extraction_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.ocr_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.process_results_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.summarization_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.pattern3_sources](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
@@ -121,6 +112,7 @@
 | <a name="input_api_graphql_url"></a> [api\_graphql\_url](#input\_api\_graphql\_url) | GraphQL URL of the API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_id"></a> [api\_id](#input\_api\_id) | ID of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_assessment_model_id"></a> [assessment\_model\_id](#input\_assessment\_model\_id) | The Bedrock model ID to use for assessment (when assessment is enabled) | `string` | `"anthropic.claude-3-haiku-20240307-v1:0"` | no |
+| <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (v0.4.11+). Accepted for API consistency but not attached — all SageMaker UDOP functions use package\_type=Image and do not support Lambda layers. | `string` | `null` | no |
 | <a name="input_classification_endpoint_arn"></a> [classification\_endpoint\_arn](#input\_classification\_endpoint\_arn) | ARN of the SageMaker endpoint for document classification | `string` | n/a | yes |
 | <a name="input_classification_guardrail"></a> [classification\_guardrail](#input\_classification\_guardrail) | Optional guardrail configuration for classification function | <pre>object({<br/>    guardrail_id  = string<br/>    guardrail_arn = string<br/>  })</pre> | `null` | no |
 | <a name="input_classification_max_workers"></a> [classification\_max\_workers](#input\_classification\_max\_workers) | Maximum number of concurrent workers for classification processing | `number` | `20` | no |

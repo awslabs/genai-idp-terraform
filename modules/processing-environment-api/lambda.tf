@@ -242,7 +242,7 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 # versioning, pricing, and config library operations via fieldName dispatch.
 data "archive_file" "configuration_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../genai-idp/sources/nested/appsync/src/lambda/configuration_resolver"
+  source_dir  = "${path.module}/../../sources/src/lambda/configuration_resolver"
   output_path = "${local.module_build_dir}/configuration_resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]

@@ -73,7 +73,7 @@ resource "aws_cloudwatch_log_group" "abort_workflow" {
 
 data "archive_file" "abort_workflow" {
   type        = "zip"
-  source_dir  = "${path.module}/../../genai-idp/sources/nested/appsync/src/lambda/abort_workflow_resolver"
+  source_dir  = "${path.module}/../../sources/src/lambda/abort_workflow_resolver"
   output_path = "${path.module}/../../.terraform/archives/abort_workflow.zip"
 }
 

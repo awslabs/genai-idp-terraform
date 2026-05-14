@@ -114,7 +114,9 @@
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_agents_layer_arn"></a> [agents\_layer\_arn](#input\_agents\_layer\_arn) | ARN of the shared agents Lambda layer (idp\_common with agents extras, v0.4.11+) | `string` | `null` | no |
 | <a name="input_api"></a> [api](#input\_api) | Optional GraphQL API that is used to track processing status and results of documents | <pre>object({<br/>    api_id           = string<br/>    api_name         = optional(string)<br/>    api_arn          = string<br/>    graphql_url      = string<br/>    realtime_url     = optional(string)<br/>    api_key          = optional(string)<br/>    lambda_functions = optional(any)<br/>  })</pre> | `null` | no |
+| <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (idp\_common with docs\_service extras, v0.4.11+) | `string` | `null` | no |
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the table that manages concurrency limits for document processing | `string` | `null` | no |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the optional DynamoDB table for storing configuration settings | `string` | `null` | no |
 | <a name="input_custom_post_processor_arn"></a> [custom\_post\_processor\_arn](#input\_custom\_post\_processor\_arn) | ARN of a custom Lambda function to invoke after document processing completes. Used by the post\_processing\_decompressor. | `string` | `null` | no |
@@ -132,6 +134,7 @@
 | <a name="input_metric_namespace"></a> [metric\_namespace](#input\_metric\_namespace) | The namespace for CloudWatch metrics emitted by the document processing system | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket where processed documents and extraction results will be stored | `string` | n/a | yes |
 | <a name="input_reporting_bucket_arn"></a> [reporting\_bucket\_arn](#input\_reporting\_bucket\_arn) | ARN of the S3 bucket for reporting data (required when enable\_reporting is true) | `string` | `null` | no |
+| <a name="input_reporting_layer_arn"></a> [reporting\_layer\_arn](#input\_reporting\_layer\_arn) | ARN of the shared reporting Lambda layer (idp\_common with reporting extras, v0.4.11+) | `string` | `null` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | List of security group IDs for Lambda functions | `list(string)` | `[]` | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | List of subnet IDs for Lambda functions to run in | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | A map of tags to add to all resources | `map(string)` | `{}` | no |
@@ -142,9 +145,11 @@
 
 | Name | Description |
 |------|-------------|
+| <a name="output_agents_layer_arn"></a> [agents\_layer\_arn](#output\_agents\_layer\_arn) | ARN of the shared agents Lambda layer (idp\_common with agents extras) |
 | <a name="output_api_arn"></a> [api\_arn](#output\_api\_arn) | ARN of the GraphQL API that provides interfaces for querying document status and metadata (if provided) |
 | <a name="output_api_graphql_url"></a> [api\_graphql\_url](#output\_api\_graphql\_url) | GraphQL URL of the API that provides interfaces for querying document status and metadata (if provided) |
 | <a name="output_api_id"></a> [api\_id](#output\_api\_id) | ID of the GraphQL API that provides interfaces for querying document status and metadata (if provided) |
+| <a name="output_base_layer_arn"></a> [base\_layer\_arn](#output\_base\_layer\_arn) | ARN of the shared base Lambda layer (idp\_common with docs\_service extras) |
 | <a name="output_concurrency_table_arn"></a> [concurrency\_table\_arn](#output\_concurrency\_table\_arn) | ARN of the DynamoDB table that manages concurrency limits for document processing |
 | <a name="output_concurrency_table_name"></a> [concurrency\_table\_name](#output\_concurrency\_table\_name) | Name of the DynamoDB table that manages concurrency limits for document processing |
 | <a name="output_configuration_table_arn"></a> [configuration\_table\_arn](#output\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings |
@@ -166,6 +171,7 @@
 | <a name="output_post_processing_decompressor_function_name"></a> [post\_processing\_decompressor\_function\_name](#output\_post\_processing\_decompressor\_function\_name) | Name of the post-processing decompressor Lambda function |
 | <a name="output_queue_sender_function_arn"></a> [queue\_sender\_function\_arn](#output\_queue\_sender\_function\_arn) | ARN of the Lambda function that sends documents to the processing queue |
 | <a name="output_queue_sender_function_name"></a> [queue\_sender\_function\_name](#output\_queue\_sender\_function\_name) | Name of the Lambda function that sends documents to the processing queue |
+| <a name="output_reporting_layer_arn"></a> [reporting\_layer\_arn](#output\_reporting\_layer\_arn) | ARN of the shared reporting Lambda layer (idp\_common with reporting extras) |
 | <a name="output_save_reporting_data_function_arn"></a> [save\_reporting\_data\_function\_arn](#output\_save\_reporting\_data\_function\_arn) | ARN of the Lambda function that saves reporting data to the reporting bucket (when reporting is enabled) |
 | <a name="output_save_reporting_data_function_name"></a> [save\_reporting\_data\_function\_name](#output\_save\_reporting\_data\_function\_name) | Name of the Lambda function that saves reporting data to the reporting bucket (when reporting is enabled) |
 | <a name="output_tracking_table_arn"></a> [tracking\_table\_arn](#output\_tracking\_table\_arn) | ARN of the DynamoDB table that tracks document processing status and metadata |

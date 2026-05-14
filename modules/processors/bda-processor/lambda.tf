@@ -75,7 +75,7 @@ resource "aws_lambda_function" "invoke_bda" {
   image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:bda-invoke-function"
   architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 4096
+  memory_size   = 3008
 
   kms_key_arn = var.encryption_key_arn
 
@@ -123,7 +123,9 @@ resource "aws_lambda_function" "bda_completion" {
   image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:bda-completion-function"
   architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 4096
+  # Upstream uses 4096 MB; capped at 3008 MB (default account quota).
+  # Request a Lambda memory quota increase to 10240 MB via AWS Service Quotas to restore.
+  memory_size = 3008
 
   kms_key_arn = var.encryption_key_arn
 
@@ -170,7 +172,9 @@ resource "aws_lambda_function" "process_results" {
   image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:processresults-function"
   architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 4096
+  # Upstream uses 4096 MB; capped at 3008 MB (default account quota).
+  # Request a Lambda memory quota increase to 10240 MB via AWS Service Quotas to restore.
+  memory_size = 3008
 
   kms_key_arn = var.encryption_key_arn
 
@@ -222,7 +226,9 @@ resource "aws_lambda_function" "summarization" {
   image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:summarization-function"
   architectures = ["arm64"]
   timeout       = 900
-  memory_size   = 4096
+  # Upstream uses 4096 MB; capped at 3008 MB (default account quota).
+  # Request a Lambda memory quota increase to 10240 MB via AWS Service Quotas to restore.
+  memory_size = 3008
 
   kms_key_arn = var.encryption_key_arn
 

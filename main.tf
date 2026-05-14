@@ -4,7 +4,7 @@
 /**
  * # GenAI IDP Accelerator - Complete Deployment Module
  *
- * This module provides a one-stop solution for deploying an end-to-end GenAI Intelligent Document Processing (IDP) 
+ * This module provides a one-stop solution for deploying an end-to-end GenAI Intelligent Document Processing (IDP)
  * pipeline. It connects to your existing AWS resources (S3 buckets, KMS keys) and creates the processing infrastructure
  * including user identity management, processing environment, API, web UI, and the selected document processor.
  *
@@ -57,7 +57,7 @@ check "single_processor_required" {
   }
 }
 
-# Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.) 
+# Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.)
 # have been removed to eliminate "known after apply" warnings. These validations
 # are still enforced by Terraform's resource dependencies and will fail at apply
 # time if the required resources don't exist.
@@ -716,7 +716,7 @@ module "processor_attachment" {
   # Processor configuration - dynamically determined based on active processor
   processor = local.processor_config
 
-  # Processing environment resources  
+  # Processing environment resources
   document_queue_arn             = module.processing_environment.document_queue_arn
   queue_sender_function_arn      = module.processing_environment.queue_sender_function_arn
   queue_sender_function_name     = module.processing_environment.queue_sender_function_name
@@ -729,7 +729,7 @@ module "processor_attachment" {
   working_bucket_arn = var.working_bucket_arn
   s3_prefix          = null # No prefix filtering
 
-  # Configuration  
+  # Configuration
   tracking_table_arn      = module.processing_environment.tracking_table_arn
   configuration_table_arn = module.processing_environment.configuration_table_arn
   concurrency_table_arn   = module.processing_environment.concurrency_table_arn

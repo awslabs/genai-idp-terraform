@@ -5,7 +5,7 @@
  * # SageMaker UDOP Processor Example with Web UI
  *
  * This example demonstrates how to use the SageMaker UDOP processor from the GenAI IDP Accelerator
- * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key, 
+ * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key,
  * and uses the top-level module to deploy the complete solution with the SageMaker UDOP processor.
  */
 

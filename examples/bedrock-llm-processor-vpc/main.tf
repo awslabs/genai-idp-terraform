@@ -5,8 +5,8 @@
  * # Bedrock LLM Processor Example with Web UI and VPC
  *
  * This example demonstrates how to use the Bedrock LLM processor from the GenAI IDP Accelerator
- * with the integrated Web UI deployed in a VPC. It creates all the necessary resources including 
- * VPC, S3 buckets, KMS key, and uses the top-level module to deploy the complete solution with 
+ * with the integrated Web UI deployed in a VPC. It creates all the necessary resources including
+ * VPC, S3 buckets, KMS key, and uses the top-level module to deploy the complete solution with
  * the Bedrock LLM processor running in private subnets.
  */
 
@@ -619,7 +619,7 @@ module "genai_idp_accelerator" {
   # Chat with Document configuration (backward compatibility)
   chat_with_document = local.api_config.chat_with_document
 
-  # Process Changes configuration (backward compatibility)  
+  # Process Changes configuration (backward compatibility)
   process_changes = local.api_config.process_changes
 
   # Feature flags

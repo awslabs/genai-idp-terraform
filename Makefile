@@ -35,9 +35,11 @@ setup-pre-commit: ## Setup pre-commit hooks
 	@echo "✅ Pre-commit hooks installed"
 
 # Terraform formatting
-fmt: ## Format all Terraform files
+fmt: ## Format all Terraform files (excludes sources/ - upstream files synced 1:1)
 	@echo "Formatting Terraform files..."
-	@terraform fmt -recursive .
+	@terraform fmt -recursive modules/
+	@terraform fmt -recursive examples/
+	@terraform fmt *.tf
 	@echo "✅ Terraform files formatted"
 
 # Terraform validation

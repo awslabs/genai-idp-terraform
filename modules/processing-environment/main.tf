@@ -5,7 +5,7 @@
  * # Processing Environment Module
  *
  * This module creates the core infrastructure for the Intelligent Document Processing solution.
- * It orchestrates the end-to-end document processing workflow, from document ingestion to 
+ * It orchestrates the end-to-end document processing workflow, from document ingestion to
  * structured data extraction and result tracking.
  */
 

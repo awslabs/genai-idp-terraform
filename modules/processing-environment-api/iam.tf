@@ -1280,6 +1280,3 @@ resource "aws_iam_role_policy_attachment" "upload_resolver_vpc_attachment" {
   role       = aws_iam_role.upload_resolver_role.name
   policy_arn = aws_iam_policy.upload_resolver_vpc_policy[0].arn
 }
-
-
-

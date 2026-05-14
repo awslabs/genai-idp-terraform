@@ -83,7 +83,7 @@ resource "aws_cloudwatch_log_group" "sync_bda_idp" {
 
 data "archive_file" "sync_bda_idp" {
   type        = "zip"
-  source_dir  = "${path.module}/../../genai-idp/sources/nested/appsync/src/lambda/sync_bda_idp_resolver"
+  source_dir  = "${path.module}/../../sources/src/lambda/sync_bda_idp_resolver"
   output_path = "${path.module}/../../.terraform/archives/sync_bda_idp.zip"
 }
 
