@@ -1,3 +1,59 @@
+type CapacityResult @aws_cognito_user_pools {
+  success: Boolean!
+  errorMessage: String
+  data: String
+  metrics: [CapacityMetric]
+  quotaRequirements: [QuotaRequirement]
+  latencyDistribution: LatencyDistribution
+  calculationDetails: CalculationDetails
+  recommendations: [String]
+}
+
+type LatencyDistribution @aws_cognito_user_pools {
+  p50: String
+  p75: String
+  p90: String
+  p95: String
+  p99: String
+  procP50: String
+  procP75: String
+  procP90: String
+  procP95: String
+  procP99: String
+  queueP50: String
+  queueP75: String
+  queueP90: String
+  queueP95: String
+  queueP99: String
+  baseLatency: String
+  queueLatency: String
+  totalLatency: String
+  maxAllowed: String
+  exceedsLimit: Boolean
+}
+
+type CapacityMetric @aws_cognito_user_pools {
+  label: String!
+  value: String!
+}
+
+type QuotaRequirement @aws_cognito_user_pools {
+  service: String!
+  category: String!
+  currentQuota: String!
+  requiredQuota: String!
+  statusText: String!
+  modelId: String
+}
+
+type CalculationDetails @aws_cognito_user_pools {
+  quotasUsed: QuotasUsed
+}
+
+type QuotasUsed @aws_cognito_user_pools {
+  bedrock_models: AWSJSON
+}
+
 interface DynamoDbBase {
   PK: ID!
   SK: ID!
@@ -22,9 +78,21 @@ type Document implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
   EvaluationReportUri: String
   EvaluationStatus: String
   SummaryReportUri: String
+  RuleValidationResultUri: String
   ExpiresAfter: AWSTimestamp
   HITLStatus: String
   HITLReviewURL: String
+  HITLTriggered: Boolean
+  HITLCompleted: Boolean
+  HITLSectionsPending: [String]
+  HITLSectionsCompleted: [String]
+  HITLSectionsSkipped: [String]
+  HITLReviewOwner: String
+  HITLReviewOwnerEmail: String
+  HITLReviewedBy: String
+  HITLReviewedByEmail: String
+  HITLReviewHistory: AWSJSON
+  ConfigVersion: String
   TraceId: String
 }
 
@@ -63,6 +131,21 @@ type DocumentListItem implements DynamoDbBase @aws_cognito_user_pools @aws_iam {
   ExpiresAfter: AWSTimestamp
   HITLStatus: String
   HITLReviewURL: String
+  HITLTriggered: Boolean
+  HITLCompleted: Boolean
+}
+
+# User Management Types
+type User @aws_cognito_user_pools {
+  userId: ID!
+  email: String!
+  persona: String!
+  status: String
+  createdAt: AWSDateTime
+}
+
+type UserList @aws_cognito_user_pools {
+  users: [User]
 }
 
 type ValidationError @aws_cognito_user_pools @aws_iam {
@@ -85,7 +168,43 @@ type ConfigurationResponse @aws_cognito_user_pools @aws_iam {
   error: ConfigurationError
 }
 
+type ConfigurationVersion @aws_cognito_user_pools @aws_iam {
+  versionName: String!
+  isActive: Boolean
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+  description: String
+}
+
+type ConfigurationVersionsResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  versions: [ConfigurationVersion]
+  error: ConfigurationError
+}
+
 type UpdateConfigurationResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  message: String
+  versionName: String
+  error: ConfigurationError
+}
+
+type SyncBdaIdpResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  message: String
+  processedClasses: [String]
+  direction: String
+  error: ConfigurationError
+}
+
+type PricingResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  pricing: AWSJSON
+  defaultPricing: AWSJSON
+  error: ConfigurationError
+}
+
+type UpdatePricingResponse @aws_cognito_user_pools @aws_iam {
   success: Boolean!
   message: String
   error: ConfigurationError
@@ -124,6 +243,7 @@ type DiscoveryJobListItem @aws_cognito_user_pools @aws_iam {
   createdAt: String
   updatedAt: String
   errorMessage: String
+  version: String
 }
 
 input CreateDocumentInput {
@@ -132,6 +252,7 @@ input CreateDocumentInput {
   InitialEventTime: AWSDateTime
   QueuedTime: AWSDateTime
   ExpiresAfter: AWSTimestamp
+  ConfigVersion: String
   TraceId: String
 }
 
@@ -167,9 +288,36 @@ input UpdateDocumentInput {
   EvaluationReportUri: String
   EvaluationStatus: String
   SummaryReportUri: String
+  RuleValidationResultUri: String
   HITLStatus: String
   HITLReviewURL: String
+  HITLTriggered: Boolean
+  HITLCompleted: Boolean
+  HITLSectionsPending: [String]
+  HITLSectionsCompleted: [String]
+  HITLSectionsSkipped: [String]
+  HITLReviewOwner: String
+  HITLReviewOwnerEmail: String
+  HITLReviewedBy: String
+  HITLReviewedByEmail: String
+  HITLReviewHistory: AWSJSON
+  ConfigVersion: String
   TraceId: String
+}
+
+# Lightweight status-only update input for minimal DynamoDB WCU usage
+input UpdateDocumentStatusInput {
+  ObjectKey: ID!
+  ObjectStatus: String!
+  WorkflowExecutionArn: String
+  WorkflowStatus: String
+}
+
+# Section-level update input for atomic section updates within Map operations
+input UpdateDocumentSectionInput {
+  ObjectKey: ID!
+  SectionIndex: Int!
+  Section: SectionInput!
 }
 
 input SectionInput {
@@ -205,12 +353,28 @@ type ProcessChangesResponse @aws_cognito_user_pools {
   processingJobId: String
 }
 
+type AbortWorkflowResponse @aws_cognito_user_pools @aws_iam {
+  success: Boolean!
+  message: String
+  abortedCount: Int
+  failedCount: Int
+  errors: [String]
+}
+
 input ModifiedSectionInput {
   sectionId: String!
   classification: String!
   pageIds: [Int!]!
   isNew: Boolean
   isDeleted: Boolean
+}
+
+input ModifiedPageInput {
+  pageId: Int!
+  textModified: Boolean!
+  classReset: Boolean!
+  newTextUri: String
+  newConfidenceUri: String
 }
 
 type FileContentsResponse @aws_cognito_user_pools @aws_iam {
@@ -296,11 +460,13 @@ type TestRun @aws_cognito_user_pools @aws_iam {
   weightedOverallScores: AWSJSON
   averageConfidence: Float
   accuracyBreakdown: AWSJSON
+  splitClassificationMetrics: AWSJSON
   totalCost: Float
   costBreakdown: AWSJSON
   createdAt: AWSDateTime
   completedAt: AWSDateTime
   context: String
+  configVersion: String
   config: AWSJSON
 }
 
@@ -322,6 +488,7 @@ type TestSetValidationResponse @aws_cognito_user_pools @aws_iam {
 type TestSet @aws_cognito_user_pools @aws_iam {
   id: String!
   name: String!
+  description: String
   filePattern: String
   fileCount: Int
   status: String
@@ -332,6 +499,7 @@ type TestSet @aws_cognito_user_pools @aws_iam {
 input TestSetUploadInput {
   fileName: String!
   fileSize: Int!
+  description: String
 }
 
 input FileUploadInfo {
@@ -356,6 +524,8 @@ type PresignedUploadUrl @aws_cognito_user_pools @aws_iam {
 input TestRunInput {
   testSetId: String!
   context: String
+  numberOfFiles: Int
+  configVersion: String
 }
 
 type AgentChatMessage @aws_cognito_user_pools @aws_iam {
@@ -399,14 +569,28 @@ type MessageContent {
 type Mutation {
   createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
   updateDocument(input: UpdateDocumentInput!): Document @aws_iam
+  # Lightweight status-only update for minimal DynamoDB WCU usage during processing
+  updateDocumentStatus(input: UpdateDocumentStatusInput!): Document @aws_iam
+  # Atomic section-level update for parallel Map operations (extraction/assessment)
+  updateDocumentSection(input: UpdateDocumentSectionInput!): Document @aws_iam
   deleteDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
-  updateConfiguration(customConfig: AWSJSON!): UpdateConfigurationResponse
+  updateConfiguration(versionName: String!, customConfig: AWSJSON!, description: String): UpdateConfigurationResponse
+    @aws_cognito_user_pools
+  setActiveVersion(versionName: String!): UpdateConfigurationResponse
+    @aws_cognito_user_pools
+  deleteConfigVersion(versionName: String!): UpdateConfigurationResponse
+    @aws_cognito_user_pools
+  syncBdaIdp(direction: String, versionName: String): SyncBdaIdpResponse @aws_cognito_user_pools
+  updatePricing(pricingConfig: AWSJSON!): UpdatePricingResponse
+    @aws_cognito_user_pools
+  restoreDefaultPricing: UpdatePricingResponse
     @aws_cognito_user_pools
   uploadDocument(
     fileName: String!
     contentType: String
     prefix: String
     bucket: String
+    version: String
   ): PresignedUrlResponse! @aws_cognito_user_pools
   uploadDiscoveryDocument(
     fileName: String!
@@ -414,13 +598,16 @@ type Mutation {
     prefix: String
     bucket: String
     groundTruthFileName: String
+    version: String
   ): DisPresignedUrlResponse! @aws_cognito_user_pools
   copyToBaseline(objectKey: String!): CopyToBaselineResponse!
     @aws_cognito_user_pools
-  reprocessDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
+  reprocessDocument(objectKeys: [String!]!, version: String): Boolean! @aws_cognito_user_pools
+  abortWorkflow(objectKeys: [String!]!): AbortWorkflowResponse! @aws_cognito_user_pools
   processChanges(
     objectKey: String!
     modifiedSections: [ModifiedSectionInput!]!
+    modifiedPages: [ModifiedPageInput!]
   ): ProcessChangesResponse! @aws_cognito_user_pools
   updateAgentJobStatus(
     jobId: ID!
@@ -451,9 +638,22 @@ type Mutation {
     @aws_iam
   startTestRun(input: TestRunInput!): TestRun @aws_cognito_user_pools
   deleteTests(testRunIds: [String!]!): Boolean! @aws_cognito_user_pools
-  addTestSet(name: String!, filePattern: String!, bucketType: String!, fileCount: Int!): TestSet @aws_cognito_user_pools
+  addTestSet(name: String!, description: String, filePattern: String!, bucketType: String!, fileCount: Int!): TestSet @aws_cognito_user_pools
   addTestSetFromUpload(input: TestSetUploadInput!): TestSetUploadResponse @aws_cognito_user_pools
   deleteTestSets(testSetIds: [String!]!): Boolean! @aws_cognito_user_pools
+  # User Management
+  createUser(email: String!, persona: String!): User @aws_cognito_user_pools
+  deleteUser(userId: ID!): Boolean @aws_cognito_user_pools
+  # HITL Section Review
+  completeSectionReview(objectKey: String!, sectionId: String!, editedData: AWSJSON): Document @aws_cognito_user_pools
+  skipAllSectionsReview(objectKey: String!): Document @aws_cognito_user_pools
+  claimReview(objectKey: String!): Document @aws_cognito_user_pools
+  releaseReview(objectKey: String!): Document @aws_cognito_user_pools
+}
+
+type DocumentPage @aws_cognito_user_pools @aws_iam {
+  Documents: [Document]
+  nextToken: String
 }
 
 type Query @aws_cognito_user_pools @aws_iam {
@@ -464,8 +664,17 @@ type Query @aws_cognito_user_pools @aws_iam {
   ): DocumentList
   listDocumentsDateHour(date: AWSDate, hour: Int): DocumentList
   listDocumentsDateShard(date: AWSDate, shard: Int): DocumentList
+  listDocumentsByDateRange(
+    startDateTime: AWSDateTime!
+    endDateTime: AWSDateTime!
+    limit: Int
+    nextToken: String
+  ): DocumentPage
   getFileContents(s3Uri: String!): FileContentsResponse
-  getConfiguration: ConfigurationResponse
+  getConfigVersions: ConfigurationVersionsResponse
+  getConfigVersion(versionName: String!): ConfigurationResponse
+  getPricing: PricingResponse
+  calculateCapacity(input: String!): CapacityResult @aws_cognito_user_pools
   listDiscoveryJobs: DiscoveryJobList
   queryKnowledgeBase(input: String!, sessionId: String): String
   chatWithDocument(
@@ -491,7 +700,7 @@ type Query @aws_cognito_user_pools @aws_iam {
     @aws_cognito_user_pools
     @aws_iam
   getTestRun(testRunId: String!): TestRun @aws_cognito_user_pools
-  getTestRuns(timePeriodHours: Int): [TestRun] @aws_cognito_user_pools
+  getTestRuns(timePeriodHours: Int, startDateTime: AWSDateTime, endDateTime: AWSDateTime): [TestRun] @aws_cognito_user_pools
   getTestRunStatus(testRunId: String!): TestRunStatus @aws_cognito_user_pools
   compareTestRuns(testRunIds: [String!]!): TestRunComparison @aws_cognito_user_pools
   getTestSets: [TestSet] @aws_cognito_user_pools
@@ -503,12 +712,16 @@ type Query @aws_cognito_user_pools @aws_iam {
     configName: String!
     fileName: String!
   ): ConfigurationLibraryFileResponse @aws_cognito_user_pools
+  # User Management
+  listUsers: UserList @aws_cognito_user_pools
+  # HITL Pending Reviews
+  listPendingReviewDocuments: DocumentList @aws_cognito_user_pools
 }
 
 type Subscription @aws_cognito_user_pools @aws_iam {
   onCreateDocument: CreateDocumentOutput
     @aws_subscribe(mutations: ["createDocument"])
-  onUpdateDocument: Document @aws_subscribe(mutations: ["updateDocument"])
+  onUpdateDocument: Document @aws_subscribe(mutations: ["updateDocument", "updateDocumentStatus", "updateDocumentSection", "completeSectionReview", "skipAllSectionsReview", "claimReview", "releaseReview"])
   onAgentJobComplete(jobId: ID!): Boolean
     @aws_subscribe(mutations: ["updateAgentJobStatus"])
   onDiscoveryJobStatusChange(jobId: ID!): DiscoveryJob
