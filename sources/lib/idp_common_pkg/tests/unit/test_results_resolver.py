@@ -19,7 +19,7 @@ with patch("boto3.resource") as mock_resource, patch("boto3.client") as mock_cli
         "results_index",
         os.path.join(
             os.path.dirname(__file__),
-            "../../../../src/lambda/test_results_resolver/index.py",
+            "../../../../nested/appsync/src/lambda/test_results_resolver/index.py",
         ),
     )
     if spec is None or spec.loader is None:
@@ -69,107 +69,33 @@ def test_get_test_results_structure():
     assert result["accuracyBreakdown"]["f1_score"] == 0.925
 
 
-@pytest.mark.unit
-@patch.dict(os.environ, {"REPORTING_BUCKET": "test-bucket"})
-@patch("boto3.client")
-@patch("pyarrow.parquet.read_table")
-@patch("pyarrow.fs.S3FileSystem")
-@patch("pyarrow.compute.equal")
-def test_get_document_costs_from_parquet_success(
-    mock_pc_equal, mock_s3fs, mock_read_table, mock_boto3
-):
-    """Test successful Parquet cost retrieval"""
+# NOTE: These tests are commented out as they test the old Parquet-based cost retrieval
+# which has been replaced with Athena-based queries in the test_results_resolver Lambda
 
-    # Mock S3 list_objects_v2 response
-    mock_s3_client = Mock()
-    mock_boto3.return_value = mock_s3_client
-    mock_s3_client.list_objects_v2.return_value = {
-        "Contents": [
-            {
-                "Key": "metering/date=2025-10-08/test-doc_20251008_123456_001_results.parquet"
-            }
-        ]
-    }
+# @pytest.mark.unit
+# @patch.dict(os.environ, {"REPORTING_BUCKET": "test-bucket"})
+# @patch("boto3.client")
+# @patch("pyarrow.parquet.read_table")
+# @patch("pyarrow.fs.S3FileSystem")
+# @patch("pyarrow.compute.equal")
+# def test_get_document_costs_from_parquet_success(
+#     mock_pc_equal, mock_s3fs, mock_read_table, mock_boto3
+# ):
+#     """Test successful Parquet cost retrieval"""
+#     pass
 
-    # Mock PyArrow table
-    mock_table = Mock()
-    mock_read_table.return_value = mock_table
-    mock_table.column_names = [
-        "document_id",
-        "context",
-        "service_api",
-        "unit",
-        "value",
-        "unit_cost",
-        "estimated_cost",
-    ]
+# @pytest.mark.unit
+# @patch.dict(os.environ, {"REPORTING_BUCKET": "test-bucket"})
+# @patch("boto3.client")
+# def test_get_document_costs_no_files_found(mock_boto3):
+#     """Test when no Parquet files are found"""
+#     pass
 
-    # Make the table subscriptable for document_id access
-    mock_table.__getitem__ = Mock(return_value=Mock())
-
-    mock_table.filter.return_value = mock_table
-    mock_table.num_rows = 2
-    mock_table.to_pydict.return_value = {
-        "context": ["test", "test"],
-        "service_api": ["bedrock", "textract"],
-        "unit": ["tokens", "pages"],
-        "value": [1000, 5],
-        "unit_cost": [0.0015, 0.45],
-        "estimated_cost": [1.50, 2.25],
-    }
-
-    # Mock S3FileSystem
-    mock_s3fs_instance = Mock()
-    mock_s3fs.return_value = mock_s3fs_instance
-
-    # Mock pyarrow compute equal function
-    mock_pc_equal.return_value = Mock()
-
-    result = index._get_document_costs_from_reporting_db("test-doc", "2025-10-08")
-
-    expected = {
-        "test": {
-            "bedrock_tokens": {
-                "unit": "tokens",
-                "value": 1000,
-                "unit_cost": 0.0015,
-                "estimated_cost": 1.50,
-            },
-            "textract_pages": {
-                "unit": "pages",
-                "value": 5,
-                "unit_cost": 0.45,
-                "estimated_cost": 2.25,
-            },
-        }
-    }
-    assert result == expected
-    mock_s3_client.list_objects_v2.assert_called_once()
-
-
-@pytest.mark.unit
-@patch.dict(os.environ, {"REPORTING_BUCKET": "test-bucket"})
-@patch("boto3.client")
-def test_get_document_costs_no_files_found(mock_boto3):
-    """Test when no Parquet files are found"""
-
-    mock_s3_client = Mock()
-    mock_boto3.return_value = mock_s3_client
-    mock_s3_client.list_objects_v2.return_value = {}  # No Contents key
-
-    result = index._get_document_costs_from_reporting_db("test-doc", "2025-10-08")
-
-    assert result == {}
-
-
-@pytest.mark.unit
-@patch.dict(os.environ, {"REPORTING_BUCKET": ""})
-def test_get_document_costs_no_bucket():
-    """Test when REPORTING_BUCKET is not set"""
-
-    result = index._get_document_costs_from_reporting_db("test-doc", "2025-10-08")
-
-    assert result == {}
+# @pytest.mark.unit
+# @patch.dict(os.environ, {"REPORTING_BUCKET": ""})
+# def test_get_document_costs_no_bucket():
+#     """Test when REPORTING_BUCKET is not set"""
+#     pass
 
 
 @pytest.mark.unit

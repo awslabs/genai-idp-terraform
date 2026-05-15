@@ -1,3 +1,9 @@
+# Include YAML files for system defaults
+recursive-include idp_common/config/system_defaults *.yaml
+include idp_common/config/system_defaults/*.yaml
+include idp_common/config/system_defaults/*.md
+
+# Exclude build artifacts
 global-exclude build/*
 global-exclude build/lib/*
 global-exclude */build/*

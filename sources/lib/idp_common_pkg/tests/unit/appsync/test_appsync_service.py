@@ -271,6 +271,39 @@ class TestDocumentAppSyncService:
             == "s3://bucket/test-document.pdf/evaluation/report.md"
         )
 
+    def test_document_to_update_input_with_config_version(self):
+        """Test conversion of Document to UpdateDocumentInput with config version."""
+        # Create a document with config version
+        doc = Document(
+            id="test-doc",
+            input_key="test-document.pdf",
+            status=Status.COMPLETED,
+            config_version="v1.2.3",
+        )
+
+        # Create service and convert document
+        service = DocumentAppSyncService(appsync_client=MagicMock())
+        input_data = service._document_to_update_input(doc)
+
+        # Verify config version conversion
+        assert input_data["ConfigVersion"] == "v1.2.3"
+
+    def test_document_to_update_input_without_config_version(self):
+        """Test conversion of Document to UpdateDocumentInput without config version."""
+        # Create a document without config version
+        doc = Document(
+            id="test-doc",
+            input_key="test-document.pdf",
+            status=Status.COMPLETED,
+        )
+
+        # Create service and convert document
+        service = DocumentAppSyncService(appsync_client=MagicMock())
+        input_data = service._document_to_update_input(doc)
+
+        # Verify config version is not included when None
+        assert "ConfigVersion" not in input_data
+
     def test_appsync_to_document_basic(self):
         """Test conversion from AppSync data to Document with basic fields."""
         # Create AppSync data
@@ -428,6 +461,37 @@ class TestDocumentAppSyncService:
         assert doc.metering["bedrock"]["tokens"] == 5000
         assert doc.metering["bedrock"]["cost"] == 0.025
 
+    def test_appsync_to_document_with_config_version(self):
+        """Test conversion from AppSync data to Document with config version."""
+        # Create AppSync data with config version
+        appsync_data = {
+            "ObjectKey": "test-document.pdf",
+            "ObjectStatus": "COMPLETED",
+            "ConfigVersion": "v1.2.3",
+        }
+
+        # Create service and convert data
+        service = DocumentAppSyncService(appsync_client=MagicMock())
+        doc = service._appsync_to_document(appsync_data)
+
+        # Verify config version conversion
+        assert doc.config_version == "v1.2.3"
+
+    def test_appsync_to_document_without_config_version(self):
+        """Test conversion from AppSync data to Document without config version."""
+        # Create AppSync data without config version
+        appsync_data = {
+            "ObjectKey": "test-document.pdf",
+            "ObjectStatus": "COMPLETED",
+        }
+
+        # Create service and convert data
+        service = DocumentAppSyncService(appsync_client=MagicMock())
+        doc = service._appsync_to_document(appsync_data)
+
+        # Verify config version is None when not provided
+        assert doc.config_version is None
+
     @patch(
         "idp_common.appsync.service.DocumentAppSyncService._document_to_create_input"
     )
@@ -540,3 +604,278 @@ class TestDocumentAppSyncService:
             expected_timestamp = int(expected_expiration.timestamp())
 
             assert ttl == expected_timestamp
+
+    def test_update_document_status_running(self):
+        """Test lightweight status update with RUNNING status."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentStatus": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "EXTRACTING",
+                "WorkflowStatus": "RUNNING",
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Test
+        result = service.update_document_status(
+            document_id="test-document.pdf",
+            status=Status.EXTRACTING,
+        )
+
+        # Verify
+        mock_client.execute_mutation.assert_called_once()
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert input_data["ObjectKey"] == "test-document.pdf"
+        assert input_data["ObjectStatus"] == "EXTRACTING"
+        assert input_data["WorkflowStatus"] == "RUNNING"
+        assert "WorkflowExecutionArn" not in input_data
+        assert result["ObjectStatus"] == "EXTRACTING"
+
+    def test_update_document_status_completed(self):
+        """Test lightweight status update with COMPLETED status."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentStatus": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "COMPLETED",
+                "WorkflowStatus": "SUCCEEDED",
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Test
+        service.update_document_status(
+            document_id="test-document.pdf",
+            status=Status.COMPLETED,
+        )
+
+        # Verify
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert input_data["ObjectStatus"] == "COMPLETED"
+        assert input_data["WorkflowStatus"] == "SUCCEEDED"
+
+    def test_update_document_status_failed(self):
+        """Test lightweight status update with FAILED status."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentStatus": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "FAILED",
+                "WorkflowStatus": "FAILED",
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Test
+        service.update_document_status(
+            document_id="test-document.pdf",
+            status=Status.FAILED,
+        )
+
+        # Verify
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert input_data["ObjectStatus"] == "FAILED"
+        assert input_data["WorkflowStatus"] == "FAILED"
+
+    def test_update_document_status_with_workflow_arn(self):
+        """Test lightweight status update with workflow execution ARN."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentStatus": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "EXTRACTING",
+                "WorkflowStatus": "RUNNING",
+                "WorkflowExecutionArn": "arn:aws:states:us-west-2:123456789012:execution:workflow:test-execution",
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Test
+        result = service.update_document_status(
+            document_id="test-document.pdf",
+            status=Status.EXTRACTING,
+            workflow_execution_arn="arn:aws:states:us-west-2:123456789012:execution:workflow:test-execution",
+        )
+
+        # Verify
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert (
+            input_data["WorkflowExecutionArn"]
+            == "arn:aws:states:us-west-2:123456789012:execution:workflow:test-execution"
+        )
+        assert (
+            result["WorkflowExecutionArn"]
+            == "arn:aws:states:us-west-2:123456789012:execution:workflow:test-execution"
+        )
+
+    def test_update_document_section_basic(self):
+        """Test atomic section-level update with basic section data."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentSection": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "EXTRACTING",
+                "Sections": [
+                    {
+                        "Id": "section-1",
+                        "PageIds": [1, 2],
+                        "Class": "Invoice",
+                        "OutputJSONUri": "s3://bucket/sections/section-1/result.json",
+                    }
+                ],
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Create test section
+        section = Section(
+            section_id="section-1",
+            classification="Invoice",
+            page_ids=["1", "2"],
+            extraction_result_uri="s3://bucket/sections/section-1/result.json",
+        )
+
+        # Test
+        service.update_document_section(
+            document_id="test-document.pdf",
+            section_index=0,
+            section=section,
+        )
+
+        # Verify
+        mock_client.execute_mutation.assert_called_once()
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert input_data["ObjectKey"] == "test-document.pdf"
+        assert input_data["SectionIndex"] == 0
+        assert input_data["Section"]["Id"] == "section-1"
+        assert input_data["Section"]["Class"] == "Invoice"
+        assert input_data["Section"]["PageIds"] == [1, 2]
+        assert (
+            input_data["Section"]["OutputJSONUri"]
+            == "s3://bucket/sections/section-1/result.json"
+        )
+
+    def test_update_document_section_with_confidence_alerts(self):
+        """Test atomic section-level update with confidence threshold alerts."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentSection": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "ASSESSING",
+                "Sections": [
+                    {
+                        "Id": "section-2",
+                        "PageIds": [3],
+                        "Class": "W2",
+                        "OutputJSONUri": "s3://bucket/sections/section-2/result.json",
+                        "ConfidenceThresholdAlerts": [
+                            {
+                                "attributeName": "employer_name",
+                                "confidence": 0.75,
+                                "confidenceThreshold": 0.85,
+                            }
+                        ],
+                    }
+                ],
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Create test section with alerts
+        section = Section(
+            section_id="section-2",
+            classification="W2",
+            page_ids=["3"],
+            extraction_result_uri="s3://bucket/sections/section-2/result.json",
+            confidence_threshold_alerts=[
+                {
+                    "attribute_name": "employer_name",
+                    "confidence": 0.75,
+                    "confidence_threshold": 0.85,
+                }
+            ],
+        )
+
+        # Test
+        service.update_document_section(
+            document_id="test-document.pdf",
+            section_index=1,
+            section=section,
+        )
+
+        # Verify
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert input_data["SectionIndex"] == 1
+        assert "ConfidenceThresholdAlerts" in input_data["Section"]
+        alerts = input_data["Section"]["ConfidenceThresholdAlerts"]
+        assert len(alerts) == 1
+        assert alerts[0]["attributeName"] == "employer_name"
+        assert alerts[0]["confidence"] == 0.75
+        assert alerts[0]["confidenceThreshold"] == 0.85
+
+    def test_update_document_section_empty_extraction_uri(self):
+        """Test section update with no extraction result URI."""
+        # Setup
+        mock_client = MagicMock()
+        mock_client.execute_mutation.return_value = {
+            "updateDocumentSection": {
+                "ObjectKey": "test-document.pdf",
+                "ObjectStatus": "CLASSIFYING",
+                "Sections": [
+                    {
+                        "Id": "section-1",
+                        "PageIds": [1],
+                        "Class": "Unknown",
+                        "OutputJSONUri": "",
+                    }
+                ],
+            }
+        }
+
+        service = DocumentAppSyncService(appsync_client=mock_client)
+
+        # Create test section without extraction result
+        section = Section(
+            section_id="section-1",
+            classification="Unknown",
+            page_ids=["1"],
+            extraction_result_uri=None,
+        )
+
+        # Test
+        service.update_document_section(
+            document_id="test-document.pdf",
+            section_index=0,
+            section=section,
+        )
+
+        # Verify
+        call_args = mock_client.execute_mutation.call_args
+        input_data = call_args[0][1]["input"]
+
+        assert input_data["Section"]["OutputJSONUri"] == ""

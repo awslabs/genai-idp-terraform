@@ -14,6 +14,7 @@ The IDP Common library provides these main modules:
 - **[Classification](classification/README.md)**: Document classification services
 - **[Extraction](extraction/README.md)**: Field extraction services
 - **[Evaluation](evaluation/README.md)**: Result evaluation tools
+- **[Rule Validation](rule_validation/README.md)**: Business rule validation and compliance checking
 - **[OCR](ocr/README.md)**: Text extraction using AWS Textract
 - **[Summarization](summarization/README.md)**: Document summarization services
 - **[BDA](bda/README.md)**: Bedrock Data Automation integration
@@ -60,6 +61,7 @@ class Document:
     metering: Dict[str, Any] = field(default_factory=dict)
     evaluation_report_uri: Optional[str] = None
     evaluation_result: Any = None  # Holds the DocumentEvaluationResult object
+    rule_validation_result: Optional[RuleValidationResult] = None  # Holds rule validation results
     errors: List[str] = field(default_factory=list)
 ```
 
@@ -298,7 +300,7 @@ expected_document = Document.from_s3(
 The document model integrates with all IDP services:
 
 ```python
-from idp_common import ocr, classification, extraction, evaluation, appsync
+from idp_common import ocr, classification, extraction, evaluation, rule_validation, appsync
 
 # OCR Processing
 ocr_service = ocr.OcrService()
@@ -311,6 +313,14 @@ document = classification_service.classify_document(document)
 # Field Extraction
 extraction_service = extraction.ExtractionService(config=config)
 document = extraction_service.process_document_section(document, section_id="1")
+
+# Rule Validation
+rule_validation_service = rule_validation.RuleValidationService(config=config)
+document = rule_validation_service.validate_document(document)
+
+# Rule Validation Orchestration
+orchestrator = rule_validation.RuleValidationOrchestratorService(config=config)
+document = orchestrator.consolidate_and_save(document, config=config, multiple_sections=True)
 
 # Document Evaluation
 evaluation_service = evaluation.EvaluationService(config=config)

@@ -24,7 +24,7 @@ class ThrottlingException(Exception):
 # Throttling detection constants
 THROTTLING_KEYWORDS = [
     "throttlingexception",
-    "provisionedthroughputexceededexception",
+    "provisionedthroughputexceededexception", 
     "servicequotaexceededexception",
     "toomanyrequestsexception",
     "requestlimitexceeded",
@@ -36,7 +36,7 @@ THROTTLING_KEYWORDS = [
 THROTTLING_EXCEPTIONS = [
     "ThrottlingException",
     "ProvisionedThroughputExceededException",
-    "ServiceQuotaExceededException",
+    "ServiceQuotaExceededException", 
     "TooManyRequestsException",
     "RequestLimitExceeded"
 ]
@@ -50,22 +50,22 @@ logging.getLogger('idp_common.bedrock.client').setLevel(os.environ.get("BEDROCK_
 def is_throttling_exception(exception):
     """
     Check if an exception is related to throttling.
-
+    
     Args:
         exception: The exception to check
-
+        
     Returns:
         bool: True if the exception is throttling-related, False otherwise
     """
     from botocore.exceptions import ClientError
-
+    
     if isinstance(exception, ClientError):
         error_code = exception.response.get('Error', {}).get('Code', '')
         return error_code in THROTTLING_EXCEPTIONS
-
+    
     exception_name = type(exception).__name__
     exception_message = str(exception).lower()
-
+    
     return (
         exception_name in THROTTLING_EXCEPTIONS or
         any(keyword in exception_message for keyword in THROTTLING_KEYWORDS)
@@ -74,21 +74,21 @@ def is_throttling_exception(exception):
 def check_document_for_throttling_errors(document):
     """
     Check if a document has throttling errors in its errors field.
-
+    
     Args:
         document: The document object to check
-
+        
     Returns:
         tuple: (has_throttling_errors: bool, first_throttling_error: str or None)
     """
     if document.status != Status.FAILED or not document.errors:
         return False, None
-
+    
     for error_msg in document.errors:
         error_lower = str(error_msg).lower()
         if any(keyword in error_lower for keyword in THROTTLING_KEYWORDS):
             return True, error_msg
-
+    
     return False, None
 
 @xray_recorder.capture('assessment_function')
@@ -101,25 +101,33 @@ def handler(event, context):
     start_time = time.time()  # Capture start time for Lambda metering
     logger.info(f"Starting assessment processing for event: {json.dumps(event, default=str)}")
 
-    # Load configuration
-    config = get_config(as_model=True)
-    # Use default=str to handle Decimal and other non-serializable types
-    logger.info(f"Config: {json.dumps(config.model_dump(), default=str)}")
-
     # Extract input from event - handle both compressed and uncompressed
     document_data = event.get('document', {})
     section_id = event.get('section_id')
-
+    
     # Validate inputs
     if not document_data:
         raise ValueError("No document provided in event")
-
+        
     if not section_id:
         raise ValueError("No section_id provided in event")
-
+        
     # Convert document data to Document object - handle compression
     working_bucket = os.environ.get('WORKING_BUCKET')
     document = Document.load_document(document_data, working_bucket, logger)
+    
+    # Load configuration - use document's version if specified, otherwise use active version
+    config_version = getattr(document, 'config_version', None)
+    config = get_config(as_model=True, version=config_version)
+    
+    if config_version:
+        logger.info(f"Using configuration version {config_version} for document {document.id}")
+    else:
+        logger.info(f"Using active configuration for document {document.id}")
+    
+    # Use default=str to handle Decimal and other non-serializable types
+    logger.info(f"Config: {json.dumps(config.model_dump(), default=str)}")
+    
     logger.info(f"Processing assessment for document {document.id}, section {section_id}")
 
     # X-Ray annotations
@@ -132,9 +140,14 @@ def handler(event, context):
         if s.section_id == section_id:
             section = s
             break
-
+    
     if not section:
         raise ValueError(f"Section {section_id} not found in document")
+
+    # Capture section index BEFORE any potential modifications to document.sections
+    # This is needed for atomic section updates to DynamoDB
+    section_index = next(i for i, s in enumerate(document.sections) if s.section_id == section_id)
+    logger.info(f"Section {section_id} is at index {section_index} in the Sections array")
 
     # Check if granular assessment is enabled (moved earlier for Lambda metering context)
     assessment_context = "GranularAssessment" if config.assessment.granular.enabled else "Assessment"
@@ -145,11 +158,11 @@ def handler(event, context):
         try:
             logger.info(f"Checking extraction results for existing assessment: {section.extraction_result_uri}")
             extraction_data = s3.get_json_content(section.extraction_result_uri)
-
+            
             # If explainability_info exists, assessment was already done
             if extraction_data.get('explainability_info'):
                 logger.info(f"Skipping assessment for section {section_id} - extraction results already contain explainability_info")
-
+                
                 # Create section-specific document (same as normal processing) to match output format
                 section_document = Document(
                     id=document.id,
@@ -170,28 +183,28 @@ def handler(event, context):
                     errors=document.errors,
                     metering={}  # Empty metering for skipped processing
                 )
-
+                
                 # Add only the pages needed for this section
                 for page_id in section.page_ids:
                     if page_id in document.pages:
                         section_document.pages[page_id] = document.pages[page_id]
-
+                
                 # Add only the section being processed (preserve existing data)
                 section_document.sections = [section]
-
+                
                 # Add Lambda metering for assessment skip execution with dynamic context
                 try:
                     lambda_metering = calculate_lambda_metering(assessment_context, context, start_time)
                     section_document.metering = merge_metering_data(section_document.metering, lambda_metering)
                 except Exception as e:
                     logger.warning(f"Failed to add Lambda metering for assessment skip: {str(e)}")
-
+                
                 # Return consistent format for Map state collation
                 response = {
-                    "section_id": section_id,
+                    "section_id": section_id, 
                     "document": section_document.serialize_document(working_bucket, f"assessment_skip_{section_id}", logger)
                 }
-
+                
                 logger.info(f"Assessment skipped - Response: {json.dumps(response, default=str)}")
                 return response
             else:
@@ -203,22 +216,26 @@ def handler(event, context):
     # Normal assessment processing
     document.status = Status.ASSESSING
 
-    # Update document status to ASSESSING for UI only
-    # Create new 'shell' document since our input document has only 1 section.
-    docStatus = Document(
-        id=document.id,
-        input_key=document.input_key,
-        status=Status.ASSESSING,
-    )
+    # Update document status to ASSESSING using lightweight status-only update
+    # This reduces DynamoDB WCU consumption by ~94% (~500 bytes vs ~100KB)
+    # Previously we created a 'shell' document, but now we use update_document_status
     document_service = create_document_service()
-    logger.info(f"Updating document status to {docStatus.status}")
-    document_service.update_document(docStatus)
+    logger.info(f"Updating document status to ASSESSING (lightweight update) for document {document.input_key}")
+    try:
+        status_result = document_service.update_document_status(
+            document_id=document.input_key,
+            status=Status.ASSESSING,
+            workflow_execution_arn=document.workflow_execution_arn,
+        )
+        logger.info(f"Status update result: {json.dumps(status_result, default=str)[:500]}")
+    except Exception as e:
+        logger.error(f"Failed to update document status: {str(e)}", exc_info=True)
 
     # Initialize assessment service with cache table for enhanced retry handling
     cache_table = os.environ.get('TRACKING_TABLE')
-
+    
     # Check if granular assessment is enabled
-
+    
     if config.assessment.granular.enabled:
         # Use enhanced granular assessment service with caching and retry support
         from idp_common.assessment.granular_service import GranularAssessmentService
@@ -232,12 +249,12 @@ def handler(event, context):
     # Process the document section for assessment
     t0 = time.time()
     logger.info(f"Starting assessment for section {section_id}")
-
+    
     try:
         updated_document = assessment_service.process_document_section(document, section_id)
         t1 = time.time()
         logger.info(f"Total assessment time: {t1-t0:.2f} seconds")
-
+        
         # Check for failed assessment tasks that might require retry (granular assessment)
         if hasattr(updated_document, 'metadata') and updated_document.metadata:
             failed_tasks = updated_document.metadata.get('failed_assessment_tasks', {})
@@ -246,35 +263,33 @@ def handler(event, context):
                     task_id: task_info for task_id, task_info in failed_tasks.items()
                     if task_info.get('is_throttling', False)
                 }
-
+                
                 logger.warning(
                     f"Assessment completed with {len(failed_tasks)} failed tasks, "
                     f"{len(throttling_tasks)} due to throttling"
                 )
-
+                
                 if throttling_tasks:
                     logger.info(
                         f"Throttling detected in {len(throttling_tasks)} tasks. "
                         f"Successful tasks have been cached for retry."
                     )
-
+        
         # Check for throttling errors in document status and errors field
         has_throttling, throttling_error = check_document_for_throttling_errors(updated_document)
         if has_throttling:
             logger.error(f"Throttling error detected in document errors: {throttling_error}")
             logger.error("Raising ThrottlingException to trigger Step Functions retry")
             raise ThrottlingException(f"Throttling detected in document processing: {throttling_error}")
-
+        
     except Exception as e:
         t1 = time.time()
         logger.error(f"Assessment failed after {t1-t0:.2f} seconds: {str(e)}")
-
+        
         # Check if this is a throttling exception that should trigger retry
         if is_throttling_exception(e):
             logger.error(f"Throttling exception detected: {type(e).__name__}. This will trigger state machine retry.")
-            # Update document status before re-raising
-            document_service.update_document(docStatus)
-            # Re-raise to trigger state machine retry
+            # Re-raise to trigger state machine retry (status already updated to ASSESSING)
             raise
         else:
             logger.error(f"Non-throttling exception: {type(e).__name__}. Marking document as failed.")
@@ -316,11 +331,27 @@ def handler(event, context):
     except Exception as e:
         logger.warning(f"Failed to add Lambda metering for assessment: {str(e)}")
 
+    # Update the section in DynamoDB for immediate UI visibility
+    # This allows the UI to show assessment results (confidence alerts) as they complete
+    try:
+        # Use section_index captured at start (before any potential modifications)
+        updated_section = next(s for s in updated_document.sections if s.section_id == section_id)
+        original_input_key = document.input_key
+        logger.info(f"Persisting assessment results for section {section_id} (index {section_index}) to DynamoDB for document {original_input_key}")
+        result = document_service.update_document_section(
+            document_id=original_input_key,
+            section_index=section_index,
+            section=updated_section,
+        )
+        logger.info(f"Section update result: {json.dumps(result, default=str)[:500]}")
+    except Exception as e:
+        logger.error(f"Failed to update section in DynamoDB: {str(e)}", exc_info=True)
+
     # Prepare output with automatic compression if needed
     result = {
         'document': updated_document.serialize_document(working_bucket, f"assessment_{section_id}", logger),
         'section_id': section_id
     }
-
+    
     logger.info("Assessment processing completed")
     return result

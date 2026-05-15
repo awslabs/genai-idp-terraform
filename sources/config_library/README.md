@@ -15,6 +15,57 @@ The Configuration Library:
 - Enables teams to share and reuse successful configurations
 - Showcases advanced features like few-shot example prompting for improved accuracy
 
+## System Defaults and Configuration Inheritance
+
+Configurations in this library **inherit from system defaults**, meaning you only need to specify what differs from the defaults. This makes configurations:
+
+- **Simpler** - Only specify `notes`, `classes`, and any intentional overrides
+- **Maintainable** - Changes to system defaults automatically apply to all configs
+- **Focused** - Easy to see what makes each configuration unique
+
+### Minimal Configuration Example
+
+```yaml
+# All settings inherit from system defaults
+notes: "My document processing configuration"
+
+classes:
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: Invoice
+    type: object
+    x-aws-idp-document-type: Invoice
+    description: "A billing document"
+    properties:
+      invoice_number:
+        type: string
+        description: "Unique invoice identifier"
+```
+
+### Override Example
+
+To override a specific setting:
+
+```yaml
+notes: "Configuration with custom classification method"
+
+# Override just the classification method - everything else uses defaults
+classification:
+  classificationMethod: textbasedHolisticClassification
+
+classes:
+  # ... your document classes
+```
+
+### System Default Files
+
+System defaults are located in:
+```
+lib/idp_common_pkg/idp_common/config/system_defaults/
+├── pattern-1.yaml    # BDA pattern defaults
+├── pattern-2.yaml    # Bedrock LLM pattern defaults
+└── pattern-3.yaml    # UDOP pattern defaults
+```
+
 ## Patterns
 
 The GenAI IDP Accelerator supports three distinct architectural patterns, each with its own configuration requirements:
@@ -23,12 +74,11 @@ The GenAI IDP Accelerator supports three distinct architectural patterns, each w
 - **Pattern 2**: Uses Amazon Bedrock with Nova or Claude models for both page classification/grouping and information extraction
 - **Pattern 3**: Uses UDOP (Unified Document Processing) for page classification and grouping, followed by Claude for information extraction
 
-Each configuration in this library is designed for a specific pattern. The library contains configurations for Pattern 2, including examples demonstrating few-shot prompting capabilities.
+Each configuration in this library is designed for a specific pattern.
 
 ## Few-Shot Example Support
 
-The accelerator supports few-shot example prompting to improve processing accuracy by providing concrete examples of documents and their expected outputs. This is demonstrated in the `pattern-2/few_shot_example/` configuration.
-
+The accelerator supports few-shot example prompting to improve processing accuracy by providing concrete examples of documents and their expected outputs. This is demonstrated in the `pattern-2/rvl-cdip-with-few-shot-examples/` configuration.
 
 ## Validation Levels
 
@@ -47,28 +97,32 @@ Each configuration's README.md should include its validation level and supportin
 config_library/
 ├── README.md                      # This file
 ├── TEMPLATE_README.md             # Template for new configuration READMEs
-├── pattern-1/                     # Pattern 1 configurations
-│   └── <use_case_name>/           # Use case specific folder
-│       ├── config.json            # Use case specific config
-│       ├── samples/               # Sample documents for testing
-│       └── README.md              # Documentation with validation level
-├── pattern-2/                     # Pattern 2 configurations
-│   ├── default/                   # Default configuration
-│   │   ├── config.json            # Default config file
-│   │   └── README.md              # Documentation for default config
-│   ├── few_shot_example/          # Few-shot prompting example
-│   │   ├── config.yaml            # Config with few-shot examples
-│   │   ├── example-images/        # Example document images
-│   │   └── README.md              # Documentation for few-shot feature
-│   └── medical_records_summarization/  # Use case specific folder
-│       ├── config.json            # Use case specific config
-│       └── README.md              # Documentation with validation level
-└── pattern-3/                     # Pattern 3 configurations
-    └── <use_case_name>/           # Use case specific folder
-        ├── config.json            # Use case specific config
-        ├── samples/               # Sample documents for testing
-        └── README.md              # Documentation with validation level
+├── pattern-1/                     # Pattern 1 (BDA) configurations
+│   ├── README.md
+│   ├── lending-package-sample/
+│   ├── lending-package-sample-govcloud/
+│   ├── ocr-benchmark/
+│   ├── realkie-fcc-verified/
+│   └── rvl-cdip/
+├── pattern-2/                     # Pattern 2 (Bedrock LLM) configurations
+│   ├── README.md
+│   ├── bank-statement-sample/
+│   ├── criteria-validation/
+│   ├── lending-package-sample/
+│   ├── lending-package-sample-govcloud/
+│   ├── ocr-benchmark/
+│   ├── realkie-fcc-verified/
+│   ├── rvl-cdip/
+│   └── rvl-cdip-with-few-shot-examples/
+└── pattern-3/                     # Pattern 3 (UDOP) configurations
+    ├── README.md
+    └── rvl-cdip/
 ```
+
+Each configuration directory contains:
+- `config.yaml` - The configuration file
+- `README.md` - Documentation with validation level
+- `samples/` - (Optional) Sample documents for testing
 
 ## Creating a New Configuration
 
@@ -81,17 +135,21 @@ To add a new configuration to the library:
    mkdir -p config_library/pattern-X/your_use_case_name
    ```
 
-3. **Copy and modify** the default configuration for that pattern:
-   ```
-   cp config_library/pattern-2/default/config.json config_library/pattern-X/your_use_case_name/config.json
+3. **Create a minimal configuration** - Start with just `notes` and `classes`:
+   ```yaml
+   notes: "Description of your use case"
+   
+   classes:
+     - $schema: https://json-schema.org/draft/2020-12/schema
+       $id: YourDocType
+       type: object
+       x-aws-idp-document-type: YourDocType
+       description: "Document description"
+       properties:
+         # ... your fields
    ```
 
-4. **Modify the configuration** to suit your use case:
-   - Update document classes and attributes
-   - Adjust prompts for classification, extraction, or summarization
-   - Tune model parameters (temperature, top_k, etc.)
-   - Select appropriate models
-   - Add few-shot examples if needed (see few_shot_example configuration for reference)
+4. **Add overrides only if needed** - Most configurations don't need to override defaults
 
 5. **Create a README.md** in your use case directory using the TEMPLATE_README.md as a guide. Include:
    - Description of the use case
@@ -110,7 +168,7 @@ To add a new configuration to the library:
 To add few-shot examples to your configuration:
 
 1. **Create example images**: Collect clear, representative document images for each class
-2. **Define examples**: Add `examples` array to each class with:
+2. **Define examples**: Add `x-aws-idp-examples` to each class with:
    - `classPrompt`: Text describing the document class
    - `attributesPrompt`: Expected attribute extraction in JSON format  
    - `imagePath`: Path to the example document image
@@ -121,8 +179,8 @@ To add few-shot examples to your configuration:
 ## Naming Conventions
 
 - Use lowercase for directory names
-- Use underscores to separate words in directory names
-- Choose descriptive names that reflect the use case (e.g., `invoice_processing`, `medical_records_summarization`, `few_shot_example`)
+- Use hyphens to separate words in directory names
+- Choose descriptive names that reflect the use case (e.g., `lending-package-sample`, `bank-statement-sample`)
 - Keep names concise but informative
 
 ## Best Practices
@@ -132,6 +190,7 @@ To add few-shot examples to your configuration:
 - Define classes with clear, specific descriptions
 - Include all relevant attributes for each class
 - Provide detailed descriptions for each attribute to guide extraction
+- Use JSON Schema extensions like `x-aws-idp-evaluation-method` for evaluation
 
 ### Few-Shot Examples
 
@@ -141,11 +200,11 @@ To add few-shot examples to your configuration:
 - **Image Quality**: Use high-resolution, clear images for examples
 - **Balanced Coverage**: Provide examples for your most important document classes
 
-### Prompts
+### Prompts (Overrides Only)
 
+- Only override prompts when the default behavior doesn't meet your needs
 - Keep prompts clear and focused
 - Include specific instructions for handling edge cases
-- Balance prompt length with model context limitations
 - Use consistent formatting and structure
 - Include `{FEW_SHOT_EXAMPLES}` placeholder where appropriate
 
@@ -157,7 +216,7 @@ To add few-shot examples to your configuration:
 
 ### Configuration Management
 
-- Document all significant changes
+- Document all significant overrides in your README
 - Include version information when applicable
 - Note any dependencies or requirements
 
@@ -170,15 +229,6 @@ When contributing a new configuration:
 3. Test your configuration with representative documents
 4. Document performance metrics and findings
 5. Include sample documents for demonstration and testing
-6. If using few-shot examples, include test notebooks demonstrating the capability
-
-## Testing Few-Shot Configurations
-
-Use the provided test notebooks to validate few-shot functionality:
-
-- `notebooks/test_few_shot_classification.ipynb`: Test classification with examples
-- `notebooks/test_few_shot_extraction.ipynb`: Test extraction with examples
-
-These notebooks demonstrate how to test and validate few-shot example configurations.
+6. If using few-shot examples, demonstrate the capability works correctly
 
 By following these guidelines, we can build a valuable library of configurations that benefit the entire GenAI IDP Accelerator community.

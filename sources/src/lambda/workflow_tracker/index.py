@@ -6,8 +6,8 @@ import json
 import os
 from datetime import datetime, timezone
 import logging
-from idp_common.models import Document, Status, Page, Section
-from idp_common.docs_service import create_document_service
+from idp_common.models import Document, Status, Page, Section  # type: ignore[import-untyped]
+from idp_common.docs_service import create_document_service  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError
 from typing import Dict, Any, Optional
 
@@ -20,46 +20,62 @@ METRIC_NAMESPACE = os.environ['METRIC_NAMESPACE']
 REPORTING_BUCKET = os.environ.get('REPORTING_BUCKET')
 SAVE_REPORTING_FUNCTION_NAME = os.environ.get('SAVE_REPORTING_FUNCTION_NAME')
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mypy_boto3_dynamodb.service_resource import Table
+else:
+    Table = object
+
 dynamodb = boto3.resource('dynamodb')
 cloudwatch = boto3.client('cloudwatch')
 s3 = boto3.client('s3')
 lambda_client = boto3.client('lambda')
 document_service = create_document_service()
-concurrency_table = dynamodb.Table(os.environ['CONCURRENCY_TABLE'])
+concurrency_table: Table = dynamodb.Table(os.environ['CONCURRENCY_TABLE'])
 COUNTER_ID = 'workflow_counter'
 
 
 def update_document_completion(object_key: str, workflow_status: str, output_data: Dict[str, Any]) -> Document:
     """
     Update document completion status via document service
-
+    
     Args:
         object_key: The document object key (ID)
-        workflow_status: The final workflow status (SUCCEEDED or FAILED)
+        workflow_status: The final workflow status (SUCCEEDED, FAILED, ABORTED, TIMED_OUT)
         output_data: The output data from the workflow execution
-
+        
     Returns:
         The updated Document object
     """
+    # Map workflow status to document status
+    # ABORTED workflows should keep ABORTED status (set by abort_workflow_resolver)
+    if workflow_status == 'SUCCEEDED':
+        doc_status = Status.COMPLETED
+    elif workflow_status == 'ABORTED':
+        doc_status = Status.ABORTED
+    else:
+        doc_status = Status.FAILED
+    
     # Create a document with basic properties (fallback for failed workflows)
     document = Document(
         id=object_key,
         input_key=object_key,
-        status=Status.COMPLETED if workflow_status == 'SUCCEEDED' else Status.FAILED,
+        status=doc_status,
         completion_time=datetime.now(timezone.utc).isoformat()
     )
-
+    
     # Get sections, pages, and metering data if workflow succeeded
     if workflow_status == 'SUCCEEDED' and output_data:
         try:
             # Get working bucket for decompression
             working_bucket = os.environ.get('WORKING_BUCKET')
-
+            
             # Handle multiple possible output structures from different Step Functions patterns
             # After evaluation refactoring, output is at root level 'document' for Pattern 2/3
             # Pattern 1 may still use 'Result.document' wrapper
             logger.info(f"Output data keys: {list(output_data.keys())}")
-
+            
             if 'document' in output_data:
                 # Pattern 2/3 structure after evaluation refactoring: at root level
                 document_data = output_data['document']
@@ -72,52 +88,57 @@ def update_document_completion(object_key: str, workflow_status: str, output_dat
                 # Fallback: entire output is the document
                 document_data = output_data
                 logger.info("Using entire output_data as document (fallback)")
-
+            
             # Log compression status for debugging
             if isinstance(document_data, dict):
                 is_compressed = document_data.get('compressed', False)
                 logger.info(f"Document data is compressed: {is_compressed}")
                 if is_compressed:
                     logger.info(f"Compressed document S3 URI: {document_data.get('s3_uri', 'N/A')}")
-
+            
             # Load document with proper decompression handling
             processed_doc = Document.load_document(document_data, working_bucket, logger)
-
+            
             # Log what we got from decompression/loading
             logger.info(f"Loaded document has {processed_doc.num_pages} pages, "
                        f"{len(processed_doc.sections)} sections, "
                        f"{len(processed_doc.metering)} metering entries")
-
+            
             # Use the processed document directly and update status
             # This is safer than copying fields and ensures we don't miss any data
             processed_doc.status = Status.COMPLETED if workflow_status == 'SUCCEEDED' else Status.FAILED
             processed_doc.completion_time = datetime.now(timezone.utc).isoformat()
             document = processed_doc
-
+                
         except Exception as e:
             logger.error(f"Could not extract document data: {e}", exc_info=True)
             # Keep the fallback document with minimal data
-
+    
     # Update document in document service
     logger.info(f"Updating document via document service with {len(document.metering)} metering entries "
                 f"and {len(document.sections)} sections")
     updated_doc = document_service.update_document(document)
-
+    
     # Save reporting data to reporting bucket if available
     if REPORTING_BUCKET and SAVE_REPORTING_FUNCTION_NAME:
         # Determine what data to save based on what's available in the document
         data_to_save = []
-
+        
         if document.metering:
             data_to_save.append('metering')
-
+            
         if document.sections:
             # Check if any sections have extraction results
             sections_with_results = [s for s in document.sections if s.extraction_result_uri]
             if sections_with_results:
                 data_to_save.append('sections')
                 logger.info(f"Found {len(sections_with_results)} sections with extraction results")
-
+        
+        # Check if rule validation results are available
+        if hasattr(document, 'rule_validation_result') and document.rule_validation_result:
+            data_to_save.append('rule_validation_results')
+            logger.info("Found rule validation results")
+        
         if data_to_save:
             try:
                 logger.info(f"Saving reporting data ({', '.join(data_to_save)}) to {REPORTING_BUCKET} by calling Lambda {SAVE_REPORTING_FUNCTION_NAME}")
@@ -130,7 +151,7 @@ def update_document_completion(object_key: str, workflow_status: str, output_dat
                         'data_to_save': data_to_save
                     })
                 )
-
+                
                 # Check the response
                 response_payload = json.loads(lambda_response['Payload'].read().decode('utf-8'))
                 if response_payload.get('statusCode') != 200:
@@ -142,17 +163,17 @@ def update_document_completion(object_key: str, workflow_status: str, output_dat
                 # Continue execution - don't fail the entire function if reporting fails
         else:
             logger.info("No reporting data available to save (no metering data or sections with extraction results)")
-
+    
     return updated_doc
 
 
 def put_latency_metrics(document: Document) -> None:
     """
     Publish latency metrics to CloudWatch
-
+    
     Args:
         document: Document object containing timestamps
-
+        
     Raises:
         ValueError: If required timestamps are missing
         ClientError: If CloudWatch operation fails
@@ -171,16 +192,16 @@ def put_latency_metrics(document: Document) -> None:
         initial_time = datetime.fromisoformat(document.start_time)
         queued_time = datetime.fromisoformat(document.queued_time)
         workflow_start_time = datetime.fromisoformat(document.start_time)
-
+        
         queue_latency = (workflow_start_time - queued_time).total_seconds() * 1000
         workflow_latency = (now - workflow_start_time).total_seconds() * 1000
         total_latency = (now - initial_time).total_seconds() * 1000
-
+        
         logger.info(
             f"Publishing latency metrics - queue: {queue_latency}ms, "
             f"workflow: {workflow_latency}ms, total: {total_latency}ms"
         )
-
+        
         cloudwatch.put_metric_data(
             Namespace=f'{METRIC_NAMESPACE}',
             MetricData=[
@@ -214,10 +235,10 @@ def put_latency_metrics(document: Document) -> None:
 def decrement_counter() -> Optional[int]:
     """
     Decrement the concurrency counter
-
+    
     Returns:
         The new counter value or None if operation failed
-
+        
     Note: This function handles its own errors
     """
     try:
@@ -246,10 +267,10 @@ def handler(event, context):
         # Extract data from event
         input_data = json.loads(event['detail']['input'])
         output_data = None
-
+        
         if event['detail'].get('output'):
             output_data = json.loads(event['detail']['output'])
-
+        
         # Get object key from document
         try:
             if "document" in input_data:
@@ -260,12 +281,12 @@ def handler(event, context):
             logger.error(f"Error extracting object_key from input: {e}")
             logger.error(f"Input data structure: {input_data}")
             raise
-
+            
         workflow_status = event['detail']['status']
-
+        
         # Update document completion status
         updated_doc = update_document_completion(object_key, workflow_status, output_data)
-
+        
         # Publish metrics for successful executions
         if workflow_status == 'SUCCEEDED':
             try:
@@ -279,10 +300,10 @@ def handler(event, context):
                 f"Workflow did not succeed (status: {workflow_status}), "
                 "skipping latency metrics"
             )
-
+        
         # Always decrement counter
         counter_value = decrement_counter()
-
+        
         return {
             'statusCode': 200,
             'body': {
@@ -292,7 +313,7 @@ def handler(event, context):
                 'counter_value': counter_value
             }
         }
-
+        
     except Exception as e:
         logger.error(f"Unexpected error in handler: {str(e)}", exc_info=True)
         # Always try to decrement counter in case of any error

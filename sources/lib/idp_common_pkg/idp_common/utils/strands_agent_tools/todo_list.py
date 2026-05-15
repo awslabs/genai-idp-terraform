@@ -5,6 +5,7 @@ from strands import Agent, tool
 
 logger = Logger(service="agentic_idp", level=os.getenv("LOG_LEVEL", "INFO"))
 
+
 @tool
 def update_todo(task_index: int, completed: bool, agent: Agent) -> str:
     """Mark a todo item as completed or not completed.
@@ -38,8 +39,6 @@ def update_todo(task_index: int, completed: bool, agent: Agent) -> str:
     return f"Task {task_index} marked as {status}: {todo_list[index]['task']}"
 
 
-
-
 @tool
 def view_todo_list(agent: Agent) -> str:
     """View your current todo list with completion status."""
@@ -58,7 +57,6 @@ def view_todo_list(agent: Agent) -> str:
     )
 
     return result
-
 
 
 @tool

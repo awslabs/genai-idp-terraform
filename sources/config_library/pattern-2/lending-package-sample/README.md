@@ -76,7 +76,7 @@ Enhanced confidence assessment ensures high accuracy for financial data extracti
 
 ### Summarization Settings
 
-- **Model**: us.amazon.nova-premier-v1:0
+- **Model**: us.amazon.nova-2-lite-v1:0
 - **Temperature**: 0 (deterministic outputs)
 - **Top-k**: 5
 

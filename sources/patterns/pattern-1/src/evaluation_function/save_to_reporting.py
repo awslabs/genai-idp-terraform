@@ -20,7 +20,7 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
     1. Document level metrics
     2. Section level metrics
     3. Attribute level metrics
-
+    
     Args:
         document: Document with evaluation results
         reporting_bucket: S3 bucket for reporting data
@@ -30,16 +30,16 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
         if not document.evaluation_result:
             logger.warning(f"No evaluation results to save for document {document.id}")
             return
-
+            
         # Extract evaluation data
         eval_result = document.evaluation_result
         now = datetime.datetime.now()
         year, month, day = now.strftime("%Y"), now.strftime("%m"), now.strftime("%d")
         s3_client = boto3.client('s3')
-
+        
         # Escape document ID by replacing slashes with underscores
         escaped_doc_id = re.sub(r'[/\\]', '_', document.id)
-
+        
         # 1. Document level metrics
         document_record = {
             'document_id': document.id,
@@ -53,7 +53,7 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
             'false_discovery_rate': eval_result.overall_metrics.get('false_discovery_rate', 0.0),
             'execution_time': eval_result.execution_time,
         }
-
+        
         # Save document metrics in JSON Lines format
         doc_key = f"evaluation_metrics/document_metrics/year={year}/month={month}/day={day}/document={escaped_doc_id}/results.jsonl"
         s3_client.put_object(
@@ -63,19 +63,19 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
             ContentType='application/x-ndjson'
         )
         logger.info(f"Saved document metrics to s3://{reporting_bucket}/{doc_key}")
-
+        
         # 2. Section level metrics
         section_records = []
         # 3. Attribute level records
         attribute_records = []
-
+        
         # Log section results count
         logger.info(f"Processing {len(eval_result.section_results)} section results")
-
+        
         for section_result in eval_result.section_results:
             section_id = section_result.section_id
             section_type = getattr(section_result, 'document_class', '')
-
+            
             # Section record
             section_record = {
                 'document_id': document.id,
@@ -90,19 +90,19 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
                 'evaluation_date': now.isoformat(),
             }
             section_records.append(section_record)
-
+            
             # Log section metrics
             logger.debug(f"Added section record for section_id={section_id}, section_type={section_type}")
-
+            
             # Check if section has attributes
             has_attributes = hasattr(section_result, 'attributes')
             logger.debug(f"Section {section_id} has attributes: {has_attributes}")
-
+            
             # Attribute records
             if has_attributes:
                 attr_count = len(section_result.attributes)
                 logger.debug(f"Section {section_id} has {attr_count} attributes")
-
+                
                 for attr in section_result.attributes:
                     attribute_record = {
                         'document_id': document.id,
@@ -121,10 +121,10 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
                     }
                     attribute_records.append(attribute_record)
                     logger.debug(f"Added attribute record for attribute_name={getattr(attr, 'name', '')}")
-
+        
         # Log counts
         logger.info(f"Collected {len(section_records)} section records and {len(attribute_records)} attribute records")
-
+        
         # Save section metrics in JSON Lines format
         if section_records:
             section_key = f"evaluation_metrics/section_metrics/year={year}/month={month}/day={day}/document={escaped_doc_id}/results.jsonl"
@@ -138,7 +138,7 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
             logger.info(f"Saved {len(section_records)} section metrics to s3://{reporting_bucket}/{section_key}")
         else:
             logger.warning("No section records to save")
-
+        
         # Save attribute metrics in JSON Lines format
         if attribute_records:
             attr_key = f"evaluation_metrics/attribute_metrics/year={year}/month={month}/day={day}/document={escaped_doc_id}/results.jsonl"
@@ -152,9 +152,9 @@ def save_evaluation_to_reporting_bucket(document, reporting_bucket: str) -> None
             logger.info(f"Saved {len(attribute_records)} attribute metrics to s3://{reporting_bucket}/{attr_key}")
         else:
             logger.warning("No attribute records to save")
-
+        
         logger.info(f"Completed saving evaluation results to s3://{reporting_bucket}")
-
+        
     except Exception as e:
         logger.error(f"Error saving evaluation results to reporting bucket: {str(e)}")
         # Log the full stack trace for better debugging

@@ -44,7 +44,6 @@ User receives streaming response
 ### 1. Lambda Functions
 
 #### AgentChatResolver
-
 - **Purpose**: Entry point for user messages
 - **Location**: `src/lambda/agent_chat_resolver/`
 - **Responsibilities**:
@@ -54,7 +53,6 @@ User receives streaming response
   - Returns immediate acknowledgment
 
 #### AgentChatProcessor
-
 - **Purpose**: Processes messages and generates responses
 - **Location**: `src/lambda/agent_chat_processor/`
 - **Responsibilities**:
@@ -66,11 +64,9 @@ User receives streaming response
 ### 2. Core Modules
 
 #### Agent Factory (`factory/agent_factory.py`)
-
 Central factory for creating and managing agents.
 
 **Key Method**:
-
 ```python
 create_conversational_orchestrator(
     agent_ids: List[str],
@@ -81,17 +77,14 @@ create_conversational_orchestrator(
 ```
 
 Creates an orchestrator with:
-
 - Memory hooks for conversation history
 - Conversation manager for context optimization
 - All specified agents as tools
 
 #### Memory Provider (`utils/memory_provider.py`)
-
 Manages conversation history persistence in DynamoDB.
 
 **Features**:
-
 - Stores messages in JSON arrays within DynamoDB items
 - Automatically loads recent conversation history
 - Groups messages into turns for efficient context
@@ -99,7 +92,6 @@ Manages conversation history persistence in DynamoDB.
 - Creates new items when approaching 400KB DynamoDB limit
 
 **Usage**:
-
 ```python
 from idp_common.agents.utils.memory_provider import DynamoDBMemoryHookProvider
 
@@ -115,18 +107,15 @@ agent.hooks.add_hook(memory_provider)
 ```
 
 #### Conversation Manager (`utils/conversation_manager.py`)
-
 Optimizes conversation context to stay within token limits.
 
 **Features**:
-
 - Drops verbose tool results to reduce context size
 - Applies sliding window to keep recent turns
 - Preserves important context
 - Configurable tool dropping and window size
 
 **Usage**:
-
 ```python
 from idp_common.agents.utils.conversation_manager import DropAndSlideConversationManager
 
@@ -144,21 +133,17 @@ agent.conversation_manager = conversation_manager
 ### 3. Data Storage
 
 #### ChatMessagesTable (DynamoDB)
-
 Stores all chat messages for display and retrieval.
 
 **Schema**:
-
 - **PK**: `session_id` (e.g., "user-session-123")
 - **SK**: `timestamp` (ISO-8601 format)
 - **Attributes**: role, content, isProcessing, ExpiresAfter
 
 #### IdHelperChatMemoryTable (DynamoDB)
-
 Stores conversation history for agent memory.
 
 **Schema**:
-
 - **PK**: `conversation#{session_id}`
 - **SK**: `timestamp` (ISO-8601 format)
 - **Attributes**: conversation_history (JSON), message_count, last_updated
@@ -166,7 +151,6 @@ Stores conversation history for agent memory.
 ### 4. GraphQL API
 
 #### Mutation: sendAgentChatMessage
-
 Send a message to the conversational agent system.
 
 ```graphql
@@ -186,7 +170,6 @@ mutation SendMessage {
 ```
 
 #### Subscription: onAgentChatMessageUpdate
-
 Subscribe to real-time message updates.
 
 ```graphql
@@ -201,7 +184,6 @@ subscription WatchMessages {
 ```
 
 #### Query: getAgentChatMessages
-
 Retrieve conversation history.
 
 ```graphql
@@ -272,7 +254,6 @@ python tests/test_agent_chat_backend.py --stack-name IDP --region us-east-2
 ```
 
 This tests:
-
 - Message storage in DynamoDB
 - Processor invocation
 - Assistant response generation
@@ -284,13 +265,11 @@ This tests:
 ### Environment Variables
 
 #### AgentChatResolver
-
 - `CHAT_MESSAGES_TABLE`: DynamoDB table for messages
 - `AGENT_CHAT_PROCESSOR_FUNCTION`: Processor function name
 - `DATA_RETENTION_DAYS`: TTL for messages (default: 30)
 
 #### AgentChatProcessor
-
 - `CHAT_MESSAGES_TABLE`: DynamoDB table for messages
 - `ID_HELPER_CHAT_MEMORY_TABLE`: DynamoDB table for memory
 - `BEDROCK_REGION`: AWS region for Bedrock/DynamoDB
@@ -316,7 +295,6 @@ The system is deployed via CloudFormation with these key resources:
 ### 1. User Sends Message
 
 User sends a message via GraphQL mutation:
-
 ```graphql
 sendAgentChatMessage(prompt: "Hello", sessionId: "session-123")
 ```
@@ -324,7 +302,6 @@ sendAgentChatMessage(prompt: "Hello", sessionId: "session-123")
 ### 2. Resolver Stores Message
 
 `AgentChatResolver` Lambda:
-
 - Validates the message
 - Stores in `ChatMessagesTable` with PK=sessionId, SK=timestamp
 - Invokes `AgentChatProcessor` asynchronously
@@ -333,7 +310,6 @@ sendAgentChatMessage(prompt: "Hello", sessionId: "session-123")
 ### 3. Processor Creates Orchestrator
 
 `AgentChatProcessor` Lambda:
-
 - Gets ALL registered agents automatically
 - Creates conversational orchestrator with:
   - Memory provider (loads last 20 turns)
@@ -343,7 +319,6 @@ sendAgentChatMessage(prompt: "Hello", sessionId: "session-123")
 ### 4. Orchestrator Processes Message
 
 The orchestrator:
-
 - Analyzes the user's query
 - Selects the most appropriate agent
 - Routes the query to that agent
@@ -352,7 +327,6 @@ The orchestrator:
 ### 5. Response Streams Back
 
 As the response is generated:
-
 - Chunks are published via AppSync mutation
 - Frontend receives real-time updates via subscription
 - Thinking tags are removed for clean display
@@ -361,7 +335,6 @@ As the response is generated:
 ### 6. Memory Persists
 
 After the response:
-
 - Full conversation stored in `IdHelperChatMemoryTable`
 - Available for next turn in the conversation
 - Grouped into turns for efficient loading
@@ -419,13 +392,11 @@ pytest test_conversational_orchestrator.py -v
 ### No Assistant Response
 
 **Check CloudWatch Logs**:
-
 ```bash
 aws logs tail /aws/lambda/{ProcessorFunctionName} --follow --region us-east-2
 ```
 
 Look for:
-
 - Import errors
 - Bedrock permission issues
 - Memory table access errors
@@ -434,7 +405,6 @@ Look for:
 ### Memory Not Persisting
 
 **Verify table access**:
-
 - Check IAM permissions for `IdHelperChatMemoryTable`
 - Verify `BEDROCK_REGION` environment variable
 - Check CloudWatch logs for DynamoDB errors
@@ -442,7 +412,6 @@ Look for:
 ### Streaming Not Working
 
 **Check AppSync**:
-
 - Verify `APPSYNC_API_URL` is set correctly
 - Check IAM permissions for `appsync:GraphQL`
 - Verify subscription is active in frontend
@@ -450,7 +419,6 @@ Look for:
 ### Context Not Maintained
 
 **Check memory loading**:
-
 - Verify `MAX_CONVERSATION_TURNS` is set
 - Check memory table has conversation history
 - Look for "Loaded X conversation turns" in logs
@@ -489,7 +457,6 @@ Look for:
 ### Alarms
 
 Consider setting up alarms for:
-
 - Lambda errors > 5%
 - Lambda duration > 500 seconds
 - DynamoDB throttling
@@ -515,7 +482,6 @@ Consider setting up alarms for:
 ## Support
 
 For issues or questions:
-
 1. Check CloudWatch logs
 2. Review this documentation
 3. Run backend test script

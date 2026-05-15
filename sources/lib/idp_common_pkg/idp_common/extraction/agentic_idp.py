@@ -369,7 +369,8 @@ def write_buffer_date(data: dict[str, Any], agent: Agent) -> str:
 def view_buffer_data(agent: Agent) -> str:
     """View the intermediate buffer data with this tool, this data is not a validated extraction, but intermediate state for you to work with.
 
-    WARNING: This returns the ENTIRE buffer which can be very large. For large extractions, prefer using view_buffer_data_section or view_buffer_data_stats."""
+    WARNING: This returns the ENTIRE buffer which can be very large. For large extractions, prefer using view_buffer_data_section or view_buffer_data_stats.
+    """
 
     return agent.state.get("intermediate_extraction")
 
@@ -432,7 +433,8 @@ def view_buffer_data_section(path: str, agent: Agent) -> Any:
 def get_extraction_schema_reminder(agent: Agent) -> str:
     """Use this tool during long extractions to review the expected data schema and field requirements. Helps ensure you stay aligned with the required structure.
 
-    RECOMMENDED: Call this tool every 100-200 rows in large extractions to verify you're maintaining the correct structure."""
+    RECOMMENDED: Call this tool every 100-200 rows in large extractions to verify you're maintaining the correct structure.
+    """
 
     schema = agent.state.get("extraction_schema_json")
     if not schema:
@@ -445,7 +447,8 @@ def get_extraction_schema_reminder(agent: Agent) -> str:
 def view_buffer_data_stats(agent: Agent) -> dict[str, Any]:
     """View overview statistics of intermediate buffer data. Token-efficient alternative to viewing full data. Use this for progress checks during large extractions.
 
-    TIP: For large extractions (500+ items), consider calling get_extraction_schema_reminder every 100-200 items to stay aligned with requirements."""
+    TIP: For large extractions (500+ items), consider calling get_extraction_schema_reminder every 100-200 items to stay aligned with requirements.
+    """
 
     data = agent.state.get("intermediate_extraction")
 
@@ -511,7 +514,7 @@ EXTRACTION APPROACH:
 
 IMPORTANT:
 YOU MUST perform a batched extraction if there are more than 50 fields to extract.
-batched extraction is when you create a viable format with extraction tool and then you expand it with jsonpatches.
+batched extraction is when you create a viable format with extraction tool and then you expand it with jsonpatches. 
 You can pass up to 100 records in a single patch operation.
 When using batched extraction plan it out and make a todo list with target size based on the document and other key tasks.
 
@@ -1089,9 +1092,9 @@ async def structured_output_async(
         state={
             "current_extraction": None,
             "images": {},
-            "existing_data": existing_data.model_dump(mode="json")
-            if existing_data
-            else None,
+            "existing_data": (
+                existing_data.model_dump(mode="json") if existing_data else None
+            ),
             "extraction_schema_json": schema_json,  # Store for schema reminder tool
         },
         conversation_manager=SummarizingConversationManager(
@@ -1171,9 +1174,9 @@ async def structured_output_async(
             state={
                 "current_extraction": result.model_dump(mode="json"),
                 "images": {},
-                "existing_data": existing_data.model_dump(mode="json")
-                if existing_data
-                else None,
+                "existing_data": (
+                    existing_data.model_dump(mode="json") if existing_data else None
+                ),
                 "extraction_schema_json": schema_json,  # Store for schema reminder tool
             },
             conversation_manager=SummarizingConversationManager(

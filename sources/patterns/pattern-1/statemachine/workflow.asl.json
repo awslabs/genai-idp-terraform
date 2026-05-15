@@ -1,7 +1,42 @@
 {
-    "Comment": "Data Automation Async Workflow with Step Functions-managed HITL Integration",
-    "StartAt": "InvokeDataAutomation",
+    "Comment": "Data Automation Async Workflow with Built-in Review Integration",
+    "StartAt": "CheckExistingData",
     "States": {
+        "CheckExistingData": {
+            "Type": "Choice",
+            "Comment": "Check if document already has pages/sections data (reprocessing scenario)",
+            "Choices": [
+                {
+                    "And": [
+                        {
+                            "Variable": "$.document.num_pages",
+                            "NumericGreaterThan": 0
+                        },
+                        {
+                            "Variable": "$.document.sections[0]",
+                            "IsString": true
+                        }
+                    ],
+                    "Comment": "Document has existing data with string section IDs - skip BDA invocation",
+                    "Next": "ProcessResultsSkip"
+                },
+                {
+                    "And": [
+                        {
+                            "Variable": "$.document.num_pages",
+                            "NumericGreaterThan": 0
+                        },
+                        {
+                            "Variable": "$.document.sections[0].section_id",
+                            "IsPresent": true
+                        }
+                    ],
+                    "Comment": "Document has existing data with section objects - skip BDA invocation",
+                    "Next": "ProcessResultsSkip"
+                }
+            ],
+            "Default": "InvokeDataAutomation"
+        },
         "InvokeDataAutomation": {
             "Type": "Task",
             "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
@@ -72,78 +107,51 @@
             ],
             "Next": "CheckHITLRequired"
         },
+        "ProcessResultsSkip": {
+            "Type": "Task",
+            "Comment": "Process existing document data without BDA invocation (reprocessing scenario)",
+            "Resource": "${ProcessResultsLambdaArn}",
+            "Parameters": {
+                "execution_arn.$": "$$.Execution.Id",
+                "output_bucket": "${OutputBucket}",
+                "skip_bda": true,
+                "document.$": "$.document"
+            },
+            "ResultPath": "$.Result",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException",
+                        "ServiceQuotaExceededException",
+                        "ThrottlingException",
+                        "ProvisionedThroughputExceededException",
+                        "RequestLimitExceeded",
+                        "ServiceUnavailableException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "CheckHITLRequired"
+        },
         "CheckHITLRequired": {
             "Type": "Choice",
             "Choices": [
                 {
                     "Variable": "$.Result.hitl_triggered",
-                    "StringEquals": "true",
-                    "Next": "HITLReview"
+                    "BooleanEquals": true,
+                    "Next": "MarkHITLPending"
                 }
             ],
             "Default": "SummarizationStep"
         },
-        "HITLReview": {
-            "Type": "Task",
-            "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
-            "Parameters": {
-                "FunctionName": "${HITLWaitFunctionArn}",
-                "Payload": {
-                    "taskToken.$": "$$.Task.Token",
-                    "Payload.$": "$"
-                }
-            },
-            "ResultPath": "$.HITLWaitResult",
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "Lambda.ServiceException",
-                        "Lambda.SdkClientException",
-                        "Lambda.TooManyRequestsException",
-                        "ServiceQuotaExceededException",
-                        "ThrottlingException",
-                        "ProvisionedThroughputExceededException",
-                        "RequestLimitExceeded",
-                        "ServiceUnavailableException"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 10,
-                    "BackoffRate": 2
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": ["HITLFailedException"],
-                    "Next": "HITLFailState"
-                }
-            ],
-            "Next": "HITLStatusUpdate"
-        },
-        "HITLStatusUpdate": {
-            "Type": "Task",
-            "Resource": "${HITLStatusUpdateFunctionArn}",
-            "Parameters": {
-                "document.$": "$.Result.document",
-                "HITLWaitResult.$": "$.HITLWaitResult"
-            },
-            "ResultPath": "$.HITLStatusResult",
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "Lambda.ServiceException",
-                        "Lambda.SdkClientException",
-                        "Lambda.TooManyRequestsException",
-                        "ServiceQuotaExceededException",
-                        "ThrottlingException",
-                        "ProvisionedThroughputExceededException",
-                        "RequestLimitExceeded",
-                        "ServiceUnavailableException"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 10,
-                    "BackoffRate": 2
-                }
-            ],
+        "MarkHITLPending": {
+            "Type": "Pass",
+            "Comment": "Document marked for async HITL review, workflow continues without waiting",
             "Next": "SummarizationStep"
         },
         "SummarizationStep": {
@@ -211,11 +219,6 @@
             "Type": "Fail",
             "Cause": "Data Automation Job Failed",
             "Error": "JobFailedException"
-        },
-        "HITLFailState": {
-            "Type": "Fail",
-            "Cause": "Human In The Loop Review Failed",
-            "Error": "HITLFailedException"
         }
     }
 }

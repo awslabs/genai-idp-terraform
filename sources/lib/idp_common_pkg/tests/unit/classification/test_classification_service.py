@@ -68,13 +68,13 @@ class TestClassificationService:
                 "task_prompt": dedent("""
                     Classify the following document text into one of the available classes:
                     {CLASS_NAMES_AND_DESCRIPTIONS}
-
+                    
                     Document text:
                     {DOCUMENT_TEXT}
-
+                    
                     Document image:
                     {DOCUMENT_IMAGE}
-
+                    
                     Respond with a JSON object with a single field "class" containing the document type.
                 """),
                 "classificationMethod": "multimodalPageLevelClassification",
@@ -103,13 +103,13 @@ class TestClassificationService:
                 "task_prompt": dedent("""
                     Classify the following document text into one of the available classes:
                     {CLASS_NAMES_AND_DESCRIPTIONS}
-
+                    
                     Document text:
                     {DOCUMENT_TEXT}
-
+                    
                     Document image:
                     {DOCUMENT_IMAGE}
-
+                    
                     Respond with a JSON object with a single field "class" containing the document type.
                 """),
                 "classificationMethod": "multimodalPageLevelClassification",
@@ -865,7 +865,7 @@ class TestClassificationService:
         assert [p.page_id for p in sections[1].pages] == ["3"]
 
     def test_section_splitting_disabled(self, mock_config):
-        """Test sectionSplitting=disabled creates single section with all pages."""
+        """Test sectionSplitting=disabled creates single section with all pages using majority voting."""
         # Update config with disabled splitting
         mock_config["classification"]["sectionSplitting"] = "disabled"
 
@@ -881,6 +881,7 @@ class TestClassificationService:
             doc.pages["3"] = Page(page_id="3")
 
             # Create mock page results with different classifications
+            # invoice appears twice, receipt once -> invoice should win by voting
             page_results = [
                 PageClassification(
                     page_id="1",
@@ -899,15 +900,202 @@ class TestClassificationService:
             # Apply strategy
             result = service._apply_section_splitting_strategy(doc, page_results)
 
-            # Verify: Single section with all pages, using first page's class
+            # Verify: Single section with all pages, using majority-voted class (invoice wins 2-1)
             assert len(result.sections) == 1
-            assert result.sections[0].classification == "invoice"  # First page's class
+            assert result.sections[0].classification == "invoice"  # Majority wins
             assert result.sections[0].page_ids == ["1", "2", "3"]
 
             # Verify all pages assigned the same class
             assert result.pages["1"].classification == "invoice"
             assert result.pages["2"].classification == "invoice"
             assert result.pages["3"].classification == "invoice"
+
+    def test_section_splitting_disabled_excludes_blank_pages_from_voting(
+        self, mock_config
+    ):
+        """Test sectionSplitting=disabled excludes blank/unclassifiable pages from voting.
+
+        This addresses GitHub Issue #167 where blank pages could incorrectly determine
+        the document classification.
+        """
+        mock_config["classification"]["sectionSplitting"] = "disabled"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document (6 pages like the issue)
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            for i in range(1, 7):
+                doc.pages[str(i)] = Page(page_id=str(i))
+
+            # Create mock page results matching Issue #167 scenario:
+            # 5 pages classified as DRILLING_PLAN_GEOLOGIC, 1 blank page
+            page_results = [
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(
+                        doc_type="DRILLING_PLAN_GEOLOGIC"
+                    ),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(
+                        doc_type="DRILLING_PLAN_GEOLOGIC"
+                    ),
+                ),
+                PageClassification(
+                    page_id="3",
+                    classification=DocumentClassification(
+                        doc_type="DRILLING_PLAN_GEOLOGIC"
+                    ),
+                ),
+                PageClassification(
+                    page_id="4",
+                    classification=DocumentClassification(
+                        doc_type="DRILLING_PLAN_GEOLOGIC"
+                    ),
+                ),
+                PageClassification(
+                    page_id="5",
+                    classification=DocumentClassification(
+                        doc_type="DRILLING_PLAN_GEOLOGIC"
+                    ),
+                ),
+                PageClassification(
+                    page_id="6",
+                    classification=DocumentClassification(
+                        doc_type="unclassifiable_blank_page"
+                    ),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: Blank page is excluded from voting, so DRILLING_PLAN_GEOLOGIC wins
+            assert len(result.sections) == 1
+            assert result.sections[0].classification == "DRILLING_PLAN_GEOLOGIC"
+            assert result.sections[0].page_ids == ["1", "2", "3", "4", "5", "6"]
+
+    def test_section_splitting_disabled_voting_tie_uses_first_page(self, mock_config):
+        """Test sectionSplitting=disabled uses first page's class as tie-breaker."""
+        mock_config["classification"]["sectionSplitting"] = "disabled"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            doc.pages["1"] = Page(page_id="1")
+            doc.pages["2"] = Page(page_id="2")
+
+            # Create mock page results with a tie: invoice and receipt each appear once
+            page_results = [
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(doc_type="invoice"),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(doc_type="receipt"),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: Tie-breaker uses first page (invoice)
+            assert len(result.sections) == 1
+            assert result.sections[0].classification == "invoice"
+
+    def test_section_splitting_disabled_all_pages_unclassifiable(self, mock_config):
+        """Test sectionSplitting=disabled handles all pages being unclassifiable."""
+        mock_config["classification"]["sectionSplitting"] = "disabled"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            doc.pages["1"] = Page(page_id="1")
+            doc.pages["2"] = Page(page_id="2")
+
+            # Create mock page results where all pages are unclassifiable
+            page_results = [
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(
+                        doc_type="unclassifiable_blank_page"
+                    ),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(doc_type="blank"),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: Falls back to first page's classification when all are unclassifiable
+            assert len(result.sections) == 1
+            assert result.sections[0].classification == "unclassifiable_blank_page"
+
+    def test_section_splitting_disabled_handles_completion_order_bug(self, mock_config):
+        """Test that voting fixes the completion-order bug from Issue #167.
+
+        The original bug: page_results came in completion order (not page order),
+        so blank pages that finish fast would end up at index 0 and be used as
+        the document classification.
+        """
+        mock_config["classification"]["sectionSplitting"] = "disabled"
+
+        with patch("boto3.Session"):
+            service = ClassificationService(
+                region="us-west-2", config=mock_config, backend="bedrock"
+            )
+
+            # Create test document
+            doc = Document(id="test-doc", status=Status.CLASSIFYING)
+            for i in range(1, 5):
+                doc.pages[str(i)] = Page(page_id=str(i))
+
+            # Simulate completion order bug: blank page completed first and is at index 0
+            # even though it's actually page 4
+            page_results = [
+                PageClassification(
+                    page_id="4",  # Blank page completed first
+                    classification=DocumentClassification(
+                        doc_type="unclassifiable_blank_page"
+                    ),
+                ),
+                PageClassification(
+                    page_id="1",
+                    classification=DocumentClassification(doc_type="invoice"),
+                ),
+                PageClassification(
+                    page_id="2",
+                    classification=DocumentClassification(doc_type="invoice"),
+                ),
+                PageClassification(
+                    page_id="3",
+                    classification=DocumentClassification(doc_type="invoice"),
+                ),
+            ]
+
+            # Apply strategy
+            result = service._apply_section_splitting_strategy(doc, page_results)
+
+            # Verify: Voting correctly selects invoice (3 votes) despite blank page
+            # being at index 0 in the unsorted results
+            assert len(result.sections) == 1
+            assert result.sections[0].classification == "invoice"
 
     def test_section_splitting_page(self, mock_config):
         """Test sectionSplitting=page creates one section per page."""

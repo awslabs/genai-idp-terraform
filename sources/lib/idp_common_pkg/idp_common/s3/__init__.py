@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Initialize clients
 _s3_client = None
 
+
 def get_s3_client():
     """
     Get or initialize the S3 client
@@ -22,8 +23,9 @@ def get_s3_client():
     """
     global _s3_client
     if _s3_client is None:
-        _s3_client = boto3.client('s3')
+        _s3_client = boto3.client("s3")
     return _s3_client
+
 
 def get_text_content(s3_uri: str) -> str:
     """
@@ -39,15 +41,17 @@ def get_text_content(s3_uri: str) -> str:
         bucket, key = parse_s3_uri(s3_uri)
         s3 = get_s3_client()
         response = s3.get_object(Bucket=bucket, Key=key)
-        content_str = response['Body'].read().decode('utf-8')
+        content_str = response["Body"].read().decode("utf-8")
 
         # Check if the content is JSON or plain text
-        if s3_uri.endswith('.json'):
+        if s3_uri.endswith(".json"):
             try:
                 content = json.loads(content_str)
-                return content.get('text', content_str)
+                return content.get("text", content_str)
             except json.JSONDecodeError:
-                logger.warning(f"File has .json extension but content is not valid JSON: {s3_uri}")
+                logger.warning(
+                    f"File has .json extension but content is not valid JSON: {s3_uri}"
+                )
                 return content_str
         else:
             # For non-JSON files (like .md), return the content directly
@@ -55,6 +59,7 @@ def get_text_content(s3_uri: str) -> str:
     except Exception as e:
         logger.error(f"Error reading text from {s3_uri}: {e}")
         raise
+
 
 def get_json_content(s3_uri: str) -> Dict[str, Any]:
     """
@@ -70,10 +75,11 @@ def get_json_content(s3_uri: str) -> Dict[str, Any]:
         bucket, key = parse_s3_uri(s3_uri)
         s3 = get_s3_client()
         response = s3.get_object(Bucket=bucket, Key=key)
-        return json.loads(response['Body'].read().decode('utf-8'))
+        return json.loads(response["Body"].read().decode("utf-8"))
     except Exception as e:
         logger.error(f"Error reading JSON from {s3_uri}: {e}")
         raise
+
 
 def get_binary_content(s3_uri: str) -> bytes:
     """
@@ -89,14 +95,18 @@ def get_binary_content(s3_uri: str) -> bytes:
         bucket, key = parse_s3_uri(s3_uri)
         s3 = get_s3_client()
         response = s3.get_object(Bucket=bucket, Key=key)
-        return response['Body'].read()
+        return response["Body"].read()
     except Exception as e:
         logger.error(f"Error reading binary content from {s3_uri}: {e}")
         raise
 
-def write_content(content: Union[str, bytes, Dict[str, Any], List[Any]],
-                 bucket: str, key: str,
-                 content_type: Optional[str] = None) -> None:
+
+def write_content(
+    content: Union[str, bytes, Dict[str, Any], List[Any]],
+    bucket: str,
+    key: str,
+    content_type: Optional[str] = None,
+) -> None:
     """
     Write content to S3
 
@@ -111,33 +121,29 @@ def write_content(content: Union[str, bytes, Dict[str, Any], List[Any]],
 
         # Handle different content types
         if isinstance(content, (dict, list)):
-            body = json.dumps(content).encode('utf-8')
+            body = json.dumps(content).encode("utf-8")
             if content_type is None:
-                content_type = 'application/json'
+                content_type = "application/json"
         elif isinstance(content, str):
             body = content
             if content_type is None:
-                content_type = 'text/plain'
+                content_type = "text/plain"
         else:
             body = content
             if content_type is None:
-                content_type = 'application/octet-stream'
+                content_type = "application/octet-stream"
 
         # Upload to S3
         extra_args = {}
         if content_type:
-            extra_args['ContentType'] = content_type
+            extra_args["ContentType"] = content_type
 
-        s3.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=body,
-            **extra_args
-        )
+        s3.put_object(Bucket=bucket, Key=key, Body=body, **extra_args)
         logger.info(f"Successfully wrote to s3://{bucket}/{key}")
     except Exception as e:
         logger.error(f"Error writing to s3://{bucket}/{key}: {e}")
         raise
+
 
 def list_images_from_path(image_path: str) -> List[str]:
     """
@@ -150,12 +156,22 @@ def list_images_from_path(image_path: str) -> List[str]:
     Returns:
         List of image file paths/URIs sorted by filename
     """
-    image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'}
+    image_extensions = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".tiff",
+        ".tif",
+        ".webp",
+    }
 
-    if image_path.startswith('s3://'):
+    if image_path.startswith("s3://"):
         return _list_s3_images(image_path, image_extensions)
     else:
         return _list_local_images(image_path, image_extensions)
+
 
 def _list_s3_images(s3_prefix: str, image_extensions: set) -> List[str]:
     """
@@ -172,17 +188,17 @@ def _list_s3_images(s3_prefix: str, image_extensions: set) -> List[str]:
         bucket, prefix = parse_s3_uri(s3_prefix)
 
         # Ensure prefix ends with / if it's meant to be a directory
-        if not prefix.endswith('/') and prefix:
-            prefix += '/'
+        if not prefix.endswith("/") and prefix:
+            prefix += "/"
 
         s3 = get_s3_client()
-        paginator = s3.get_paginator('list_objects_v2')
+        paginator = s3.get_paginator("list_objects_v2")
 
         image_files = []
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            if 'Contents' in page:
-                for obj in page['Contents']:
-                    key = obj['Key']
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    key = obj["Key"]
                     # Skip the prefix itself if it's a "directory" key
                     if key == prefix:
                         continue
@@ -200,6 +216,7 @@ def _list_s3_images(s3_prefix: str, image_extensions: set) -> List[str]:
     except Exception as e:
         logger.error(f"Error listing images from S3 prefix {s3_prefix}: {e}")
         raise
+
 
 def _list_local_images(directory_path: str, image_extensions: set) -> List[str]:
     """
@@ -236,12 +253,15 @@ def _list_local_images(directory_path: str, image_extensions: set) -> List[str]:
 
         # Sort by filename
         image_files.sort(key=os.path.basename)
-        logger.info(f"Found {len(image_files)} image files in local directory: {directory_path}")
+        logger.info(
+            f"Found {len(image_files)} image files in local directory: {directory_path}"
+        )
         return image_files
 
     except Exception as e:
         logger.error(f"Error listing images from local directory {directory_path}: {e}")
         raise
+
 
 def find_matching_files(bucket: str, pattern: str) -> List[str]:
     """
@@ -258,24 +278,28 @@ def find_matching_files(bucket: str, pattern: str) -> List[str]:
 
     try:
         s3 = get_s3_client()
-        paginator = s3.get_paginator('list_objects_v2')
+        paginator = s3.get_paginator("list_objects_v2")
 
         # Convert pattern: * matches anything except /, ? matches single char except /
-        regex_pattern = pattern.replace('*', '[^/]*').replace('?', '[^/]')
-        regex = re.compile(f'^{regex_pattern}$')
+        regex_pattern = pattern.replace("*", "[^/]*").replace("?", "[^/]")
+        regex = re.compile(f"^{regex_pattern}$")
 
         matching_files = []
 
         for page in paginator.paginate(Bucket=bucket):
-            if 'Contents' in page:
-                for obj in page['Contents']:
-                    key = obj['Key']
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    key = obj["Key"]
                     if regex.match(key):
                         matching_files.append(key)
 
-        logger.info(f"Found {len(matching_files)} files matching pattern '{pattern}' in bucket '{bucket}'")
+        logger.info(
+            f"Found {len(matching_files)} files matching pattern '{pattern}' in bucket '{bucket}'"
+        )
         return sorted(matching_files)
 
     except Exception as e:
-        logger.error(f"Error finding matching files in bucket {bucket} with pattern {pattern}: {e}")
+        logger.error(
+            f"Error finding matching files in bucket {bucket} with pattern {pattern}: {e}"
+        )
         raise

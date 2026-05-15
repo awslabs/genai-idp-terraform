@@ -9,7 +9,7 @@ from typing import List
 import boto3
 from botocore.config import Config as BotoCoreConfig
 from botocore.exceptions import ClientError
-from crhelper import CfnResource
+from crhelper import CfnResource  # type: ignore[import-untyped]
 
 
 LOGGER = logging.getLogger(__name__)
@@ -62,18 +62,18 @@ def create_or_update(event, _):
 
 def _verify_ecr_images_available(ecr_uri: str, image_version: str, expected_images: List[str] = None) -> bool:
     """Verify all required Lambda images exist in ECR and are pullable.
-
+    
     Args:
         ecr_uri: ECR repository URI (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/repo-name)
         image_version: Image version tag (e.g., "latest" or "0.3.19")
         expected_images: List of base image names (without version suffix). If not provided, defaults to Pattern-2 images.
-
+    
     Returns:
         True if all images are available and scannable, False otherwise
     """
     try:
         repository_name = ecr_uri.split("/")[-1]
-
+        
         # If expected_images not provided, fall back to Pattern-2 images for backward compatibility
         if expected_images is None:
             expected_images = [
@@ -88,17 +88,17 @@ def _verify_ecr_images_available(ecr_uri: str, image_version: str, expected_imag
                 "hitl-status-update-function",
                 "hitl-process-function",
             ]
-
+        
         # Append version to each base image name
         required_images = [f"{img}-{image_version}" for img in expected_images]
-
+        
         LOGGER.info(
             "verifying %d images in repository %s with version %s",
             len(required_images),
             repository_name,
             image_version,
         )
-
+        
         # Check each image
         for image_tag in required_images:
             try:
@@ -106,30 +106,30 @@ def _verify_ecr_images_available(ecr_uri: str, image_version: str, expected_imag
                     repositoryName=repository_name,
                     imageIds=[{"imageTag": image_tag}]
                 )
-
+                
                 images = response.get("imageDetails", [])
                 if not images:
                     LOGGER.warning("image %s not found in ECR", image_tag)
                     return False
-
+                
                 # Check if image scan is complete (repository has ScanOnPush enabled)
                 image = images[0]
                 scan_status = image.get("imageScanStatus", {}).get("status")
-
+                
                 if scan_status == "IN_PROGRESS":
                     LOGGER.info("image %s scan still in progress", image_tag)
                     return False
-
+                
                 LOGGER.info("image %s verified (scan status: %s)", image_tag, scan_status)
-
+                    
             except ClientError as error:
                 error_code = error.response["Error"]["Code"]
-
+                
                 # Retriable condition - image just doesn't exist yet, keep polling
                 if error_code == "ImageNotFoundException":
                     LOGGER.warning("image %s not found: %s", image_tag, error)
                     return False  # Continue polling
-
+                
                 # Fatal errors - permissions, validation, repository not found, etc.
                 # Fail immediately instead of polling forever
                 LOGGER.error(
@@ -139,10 +139,10 @@ def _verify_ecr_images_available(ecr_uri: str, image_version: str, expected_imag
                     error
                 )
                 raise  # Fail custom resource immediately
-
+        
         LOGGER.info("all %d required images are available in ECR", len(required_images))
         return True
-
+        
     except Exception as exception:  # pylint: disable=broad-except
         # Any non-ClientError exception is unexpected and fatal
         LOGGER.error("unexpected fatal error verifying ECR images: %s", exception)
@@ -174,24 +174,24 @@ def poll_create_or_update(event, _):
                 # Verify ECR images are available before returning success
                 # This prevents Lambda functions from being created before images are pullable
                 env_vars = build.get("environment", {}).get("environmentVariables", [])
-
+                
                 # Extract ECR URI, image version, and expected images from build/resource properties
                 ecr_uri = next((v["value"] for v in env_vars if v["name"] == "ECR_URI"), None)
                 image_version = next((v["value"] for v in env_vars if v["name"] == "IMAGE_VERSION"), None)
-
+                
                 # Get expected images from resource properties (optional)
                 resource_properties = event.get("ResourceProperties", {})
                 expected_images = resource_properties.get("ExpectedImages")
-
+                
                 if ecr_uri and image_version:
                     LOGGER.info("verifying ECR images are available and pullable...")
                     if _verify_ecr_images_available(ecr_uri, image_version, expected_images):
                         LOGGER.info("ECR image verification complete - returning True")
                         return True
-
+                    
                     LOGGER.info("ECR images not yet available - returning None to poll again")
                     return None
-
+                
                 # Fallback: if we can't extract variables, proceed without verification
                 LOGGER.warning(
                     "could not extract ECR_URI or IMAGE_VERSION from build environment, "

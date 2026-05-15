@@ -2,22 +2,41 @@
 # SPDX-License-Identifier: MIT-0
 
 from idp_common.config.configuration_manager import ConfigurationManager
-from idp_common.config.models import SchemaConfig, IDPConfig
+from idp_common.config.models import SchemaConfig, IDPConfig, PricingConfig
 from idp_common.config.constants import (
     CONFIG_TYPE_SCHEMA,
-    CONFIG_TYPE_DEFAULT,
-    CONFIG_TYPE_CUSTOM,
+    CONFIG_TYPE_DEFAULT_PRICING,
+    CONFIG_TYPE_CUSTOM_PRICING,
+    CONFIG_TYPE_CONFIG,
+    DEFAULT_VERSION,
 )
 from pydantic import ValidationError
 import os
 import json
 import logging
+import re
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 logging.getLogger("idp_common.bedrock.client").setLevel(
     os.environ.get("BEDROCK_LOG_LEVEL", "INFO")
 )
+
+
+def validate_version_name(name):
+    """Validate version name: alphanumeric, hyphens, underscores only, max 50 chars"""
+    if not name or not isinstance(name, str):
+        return False
+    return re.match(r'^[a-zA-Z0-9-_]+$', name) and len(name) <= 50
+
+
+def validate_description(description):
+    """Validate description: max 200 chars only"""
+    if description is None or description == "":
+        return True  # Optional field
+    if not isinstance(description, str):
+        return False
+    return len(description) <= 200
 
 
 def handler(event, context):
@@ -53,18 +72,64 @@ def handler(event, context):
     manager = ConfigurationManager()
 
     try:
-        if operation == "getConfiguration":
-            return handle_get_configuration(manager)
+        if operation == "getConfigVersions":
+            return handle_get_config_versions(manager)
+        elif operation == "getConfigVersion":
+            return handle_get_configuration(manager, event["arguments"].get("versionName"))
         elif operation == "updateConfiguration":
             args = event["arguments"]
+            version = args.get("versionName")
             custom_config = args.get("customConfig")
-            success = manager.handle_update_custom_configuration(custom_config)
+            description = args.get("description")
+            if not version:
+                return {
+                    "success": False,
+                    "error": {
+                        "type": "ValidationError",
+                        "message": "versionId is required",
+                    },
+                }
+            # Validate version name if provided
+            if not validate_version_name(version):
+                return {
+                    "success": False,
+                    "error": {
+                        "type": "ValidationError",
+                        "message": "Version name can only contain letters, numbers, hyphens, and underscores (max 50 characters)",
+                    },
+                }
+            # Validate description if provided
+            if description and not validate_description(description):
+                return {
+                    "success": False,
+                    "error": {
+                        "type": "ValidationError",
+                        "message": "Description cannot exceed 200 characters",
+                    },
+                }
+            success = manager.handle_update_custom_configuration(custom_config, version, description)
             return {
                 "success": success,
                 "message": "Configuration updated successfully"
                 if success
                 else "Configuration update failed",
             }
+        elif operation == "setActiveVersion":
+            args = event["arguments"]
+            version = args.get("versionName")
+            return handle_set_active_version(manager, version)
+        elif operation == "deleteConfigVersion":
+            args = event["arguments"]
+            version = args.get("versionName")
+            return handle_delete_config_version(manager, version)
+        elif operation == "getPricing":
+            return handle_get_pricing(manager)
+        elif operation == "updatePricing":
+            args = event["arguments"]
+            pricing_config = args.get("pricingConfig")
+            return handle_update_pricing(manager, pricing_config)
+        elif operation == "restoreDefaultPricing":
+            return handle_restore_default_pricing(manager)
         elif operation == "listConfigurationLibrary":
             return handle_list_config_library(event["arguments"])
         elif operation == "getConfigurationLibraryFile":
@@ -107,23 +172,40 @@ def handler(event, context):
                 },
             },
         }
+    except Exception as e:
+        # Catch all other exceptions to prevent lambda failures
+        logger.error(f"Unexpected error in {operation}: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error": {
+                "type": "UnexpectedError",
+                "message": f"An unexpected error occurred: {str(e)}",
+            },
+        }
 
 
-def handle_get_configuration(manager):
+def handle_get_configuration(manager, version: str):
     """
     Handle the getConfiguration GraphQL query
-    Returns Schema, Default, and Custom configuration items with auto-migration support
-
-    Data Flow:
-    1. If Custom is empty on first read, copy Default → Custom
-    2. Frontend only uses Custom for display and diffing
-    3. Default is only used for "Reset to Default" operation
-
-    New ConfigurationManager API returns IDPConfig directly - convert to dict for GraphQL
+    Returns Schema and version configuration items.
+    
+    DESIGN PATTERN (CRITICAL):
+    - Default: Full stack baseline (Pydantic validated)
+    - Version: SPARSE DELTAS ONLY (raw from DynamoDB, NO Pydantic defaults!)
+    - Frontend merges Default + Version for display
+    - Runtime uses get_merged_configuration() for processing
+    
+    This design allows:
+    - Stack upgrades to safely update Default without losing user customizations
+    - Empty Version = all defaults (clean reset)
+    - User customizations survive stack updates
+    
+    ANTI-PATTERNS TO AVOID:
+    - DO NOT auto-copy default → version when version is empty
+    - DO NOT use Pydantic validation on version (fills in defaults)
     """
     try:
-        # Get all configurations - migration happens automatically in get_configuration
-        # API returns SchemaConfig for Schema, IDPConfig for Default/Custom
+        # Get Schema configuration (Pydantic validated - this is correct for Schema)
         schema_config = manager.get_configuration(CONFIG_TYPE_SCHEMA)
         if schema_config:
             # Remove config_type discriminator before sending to frontend
@@ -133,7 +215,8 @@ def handle_get_configuration(manager):
         else:
             schema_dict = {}
 
-        default_config = manager.get_configuration(CONFIG_TYPE_DEFAULT)
+        # Get Default configuration (Pydantic validated - full stack baseline)
+        default_config = manager.get_configuration(CONFIG_TYPE_CONFIG, DEFAULT_VERSION)
         if default_config and isinstance(default_config, IDPConfig):
             default_dict = default_config.model_dump(
                 mode="python", exclude={"config_type"}
@@ -141,38 +224,29 @@ def handle_get_configuration(manager):
         else:
             default_dict = {}
 
-        custom_config = manager.get_configuration(CONFIG_TYPE_CUSTOM)
-
-        # IMPORTANT: If Custom is empty on first read, copy Default → Custom
-        # This ensures frontend always has a complete config to diff against
-        if not custom_config or (
-            isinstance(custom_config, IDPConfig)
-            and not custom_config.model_dump(exclude_unset=True)
-        ):
-            logger.info("Custom config is empty, copying Default → Custom")
-            if default_config and isinstance(default_config, IDPConfig):
-                manager.save_configuration(CONFIG_TYPE_CUSTOM, default_config)
-                custom_config = default_config
-                logger.info("Copied Default to Custom on first read")
-            else:
-                logger.warning("Default config is also empty, using empty Custom")
-
-        if custom_config and isinstance(custom_config, IDPConfig):
-            custom_dict = custom_config.model_dump(
-                mode="python", exclude={"config_type"}
-            )
-        else:
-            custom_dict = {}
+        if not version:
+            raise ValueError("version is missing")
+        
+        
+        # Get Version configuration as RAW dict (NO Pydantic defaults!)
+        # This is critical for the sparse delta pattern to work correctly
+        version_dict = manager.get_raw_configuration(CONFIG_TYPE_CONFIG, version)
+        
+        # If version dict doesn't exist or is empty, return empty dict
+        # DO NOT auto-copy Default → Custom (this breaks the delta pattern)
+        if not version_dict:
+            logger.info("Custom config is empty or not found - returning empty dict (expected behavior)")
+            version_dict = {}
 
         # Return all configurations as dicts (GraphQL requires JSON-serializable)
         result = {
             "success": True,
             "Schema": schema_dict,
             "Default": default_dict,
-            "Custom": custom_dict,
+            "Custom": {} if version == "default" else version_dict,
         }
 
-        logger.info(f"Returning configuration")
+        logger.info("Returning configuration (default=full, Version=deltas only)")
         return result
 
     except Exception as e:
@@ -351,4 +425,303 @@ def handle_get_config_library_file(args):
             "content": "",
             "contentType": "",
             "error": f"Unexpected error: {str(e)}",
+        }
+
+
+def handle_get_pricing(manager):
+    """
+    Handle the getPricing GraphQL query
+    Returns both merged pricing and default pricing for UI diff/restore features
+
+    This mirrors the Default/Custom pattern for IDP configuration:
+    - DefaultPricing: Full baseline from deployment (stored at deployment time)
+    - CustomPricing: User overrides only (deltas)
+    - Returns:
+      - pricing: Merged result (default + custom overrides)
+      - defaultPricing: Original defaults for diff highlighting and restore
+
+    Returns: { success: bool, pricing: {...}, defaultPricing: {...}, error: {...} }
+    """
+    try:
+        # Get merged pricing (DefaultPricing + CustomPricing deltas)
+        pricing_config = manager.get_merged_pricing()
+
+        # Also get default pricing for UI diff/restore features
+        default_pricing_config = manager.get_configuration(CONFIG_TYPE_DEFAULT_PRICING)
+
+        empty_pricing = {
+            "textract": {},
+            "bedrock": {},
+            "bda": {},
+            "sagemaker": {},
+        }
+
+        if pricing_config and isinstance(pricing_config, PricingConfig):
+            # Convert to dict, excluding config_type discriminator
+            pricing_dict = pricing_config.model_dump(
+                mode="python", exclude={"config_type"}
+            )
+            logger.info("Returning merged pricing configuration from DynamoDB")
+        else:
+            # No DefaultPricing in DynamoDB - this shouldn't happen after deployment
+            logger.warning("No DefaultPricing found in DynamoDB")
+            pricing_dict = empty_pricing
+
+        if default_pricing_config and isinstance(default_pricing_config, PricingConfig):
+            default_pricing_dict = default_pricing_config.model_dump(
+                mode="python", exclude={"config_type"}
+            )
+            logger.info("Returning default pricing for UI diff/restore")
+        else:
+            logger.warning("No DefaultPricing found for diff/restore")
+            default_pricing_dict = empty_pricing
+
+        return {
+            "success": True,
+            "pricing": pricing_dict,
+            "defaultPricing": default_pricing_dict,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in getPricing: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "type": "Error",
+                "message": f"Failed to get pricing: {str(e)}",
+            },
+        }
+
+
+def handle_update_pricing(manager, pricing_config_json):
+    """
+    Handle the updatePricing GraphQL mutation
+    Saves custom pricing overrides (deltas) to DynamoDB
+
+    This saves to CustomPricing, which stores only user overrides.
+    The overrides are merged with DefaultPricing when reading.
+
+    Args:
+        manager: ConfigurationManager instance
+        pricing_config_json: JSON string or dict with pricing deltas
+
+    Returns: { success: bool, message: str, error: {...} }
+    """
+    try:
+        # Parse JSON if it's a string
+        if isinstance(pricing_config_json, str):
+            pricing_data = json.loads(pricing_config_json)
+        else:
+            pricing_data = pricing_config_json
+
+        # Validate and create PricingConfig
+        pricing_config = PricingConfig(**pricing_data)
+
+        # Save to CustomPricing (deltas only)
+        success = manager.save_custom_pricing(pricing_config)
+
+        if success:
+            logger.info("Custom pricing configuration updated successfully")
+            return {
+                "success": True,
+                "message": "Pricing configuration updated successfully",
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to save pricing configuration",
+                "error": {
+                    "type": "SaveError",
+                    "message": "Failed to save pricing configuration to database",
+                },
+            }
+
+    except ValidationError as e:
+        logger.error(f"Pricing validation error: {e}")
+        validation_errors = []
+        for error in e.errors():
+            field_path = " -> ".join(str(loc) for loc in error["loc"])
+            validation_errors.append(
+                {"field": field_path, "message": error["msg"], "type": error["type"]}
+            )
+        return {
+            "success": False,
+            "error": {
+                "type": "ValidationError",
+                "message": "Pricing validation failed",
+                "validationErrors": validation_errors,
+            },
+        }
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in pricing: {e}")
+        return {
+            "success": False,
+            "error": {
+                "type": "JSONDecodeError",
+                "message": f"Invalid JSON format: {str(e)}",
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error in updatePricing: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "type": "Error",
+                "message": f"Failed to update pricing: {str(e)}",
+            },
+        }
+
+
+def handle_restore_default_pricing(manager):
+    """
+    Handle the restoreDefaultPricing GraphQL mutation
+    Restores pricing to the default values by deleting CustomPricing
+
+    This simply deletes the CustomPricing record from DynamoDB.
+    After deletion, get_merged_pricing() returns DefaultPricing only.
+
+    Returns: { success: bool, message: str, error: {...} }
+    """
+    try:
+        # Delete CustomPricing - this effectively resets to defaults
+        success = manager.delete_custom_pricing()
+
+        if success:
+            logger.info("Pricing restored to default by deleting CustomPricing")
+            return {
+                "success": True,
+                "message": "Pricing restored to default values",
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to restore default pricing",
+                "error": {
+                    "type": "DeleteError",
+                    "message": "Failed to delete custom pricing from database",
+                },
+            }
+
+    except Exception as e:
+        logger.error(f"Error in restoreDefaultPricing: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "type": "Error",
+                "message": f"Failed to restore default pricing: {str(e)}",
+            },
+        }
+
+
+def handle_get_config_versions(manager):
+    """
+    Handle the getConfigVersions GraphQL query
+    Returns list of all available configuration versions
+    """
+    try:
+        versions = manager.list_config_versions()
+        
+        return {
+            "success": True,
+            "versions": versions
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in getConfigVersions: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "type": "Error",
+                "message": f"Failed to get configuration versions: {str(e)}",
+            },
+        }
+
+
+def handle_set_active_version(manager, version):
+    """
+    Handle the setActiveVersion GraphQL mutation
+    Sets a specific version as active and deactivates others
+    """
+    try:
+        if not version:
+            return {
+                "success": False,
+                "error": {
+                    "type": "ValidationError",
+                    "message": "versionId is required",
+                },
+            }
+        
+        # Check if the version exists
+        config = manager.get_configuration("Config", version)
+        if not config:
+            return {
+                "success": False,
+                "error": {
+                    "type": "NotFoundError",
+                    "message": f"Configuration version '{version}' not found",
+                },
+            }
+        
+        # Set the version as active
+        manager.activate_version(version)
+        
+        return {
+            "success": True,
+            "message": f"Configuration version {version} set as active",
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in setActiveVersion: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "type": "Error",
+                "message": f"Failed to set active version: {str(e)}",
+            },
+        }
+    
+
+def handle_delete_config_version(manager, version):
+    """
+    Handle the deleteConfigVersion GraphQL mutation
+    Deletes a specific configuration version
+    """
+    try:
+        if not version:
+            return {
+                "success": False,
+                "error": {
+                    "type": "ValidationError",
+                    "message": "versionId is required",
+                },
+            }
+        
+        # Prevent deletion of system default version
+        if version == "default":
+            return {
+                "success": False,
+                "error": {
+                    "type": "ValidationError",
+                    "message": "Cannot delete system default version",
+                },
+            }
+        # Delete the version
+        manager.delete_configuration("Config", version)
+        
+        return {
+            "success": True,
+            "message": f"Configuration version {version} deleted successfully",
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in deleteConfigVersion: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "type": "Error",
+                "message": f"Failed to delete configuration version: {str(e)}",
+            },
         }

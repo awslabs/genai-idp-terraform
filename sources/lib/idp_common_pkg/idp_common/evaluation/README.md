@@ -89,7 +89,7 @@ config = {
                     "evaluation_method": "FUZZY",
                     "evaluation_threshold": 0.8
                 },
-
+                
                 # Group Attributes - nested object structures
                 {
                     "name": "Account Holder Address",
@@ -126,7 +126,7 @@ config = {
                         }
                     ]
                 },
-
+                
                 # List Attributes - arrays of items with consistent structure
                 {
                     "name": "Transactions",
@@ -208,7 +208,7 @@ The service offers two approaches for semantic evaluation:
   - Provides similarity scores without explanations
   - Great for high-volume comparisons where speed is important
   - Configurable threshold for matching sensitivity
-
+  
 - **LLM Method**: Uses Bedrock Claude or other LLM models
   - Provides detailed reasoning for why values match or don't match
   - Better at handling implicit/explicit information differences
@@ -263,7 +263,6 @@ The evaluation module produces richly formatted Markdown reports with:
    - Indications for attributes that were discovered in the data but not in the configuration
 
 Examples of method display in reports:
-
 - `EXACT` - Simple exact matching
 - `FUZZY (threshold: 0.8)` - Fuzzy matching with threshold
 - `HUNGARIAN (comparator: EXACT)` - Hungarian algorithm with exact matching
@@ -287,7 +286,7 @@ actual_results = {
 
 expected_results = {
     "invoice_number": "INV-12345",          # In configuration
-    "amount_due": "$1,250.00",              # In configuration
+    "amount_due": "$1,250.00",              # In configuration 
     "issue_date": "01/15/2023",             # Not in configuration
     "reference_number": "REF-98765"         # Not in configuration, missing in actual
 }
@@ -301,7 +300,6 @@ expected_results = {
 ```
 
 This capability is particularly useful for:
-
 - Exploratory evaluation when the complete schema is not yet defined
 - Handling variations in extraction outputs that may contain additional information
 - Identifying potential new attributes to add to the configuration
@@ -318,7 +316,6 @@ The evaluation service automatically integrates with the assessment feature to d
 ### Enhanced Report Format
 
 #### JSON Output with Confidence
-
 ```json
 {
   "attributes": [
@@ -336,7 +333,6 @@ The evaluation service automatically integrates with the assessment feature to d
 ```
 
 #### Markdown Table with Confidence
-
 ```
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :---------------: | ----- | ------ | ------ |
@@ -355,7 +351,6 @@ Confidence scores provide additional insights for evaluation analysis:
 ### Backward Compatibility
 
 The confidence integration is fully backward compatible:
-
 - Reports without assessment data show "N/A" for confidence columns
 - Evaluation logic remains unchanged when confidence data is absent
 - Existing evaluation workflows continue to work without modification
@@ -367,7 +362,6 @@ The evaluation service fully supports nested document structures including group
 ### Attribute Types and Processing
 
 #### Simple Attributes
-
 Basic single-value extractions that are evaluated directly:
 
 ```python
@@ -382,8 +376,7 @@ Basic single-value extractions that are evaluated directly:
 # Evaluation: Direct comparison using EXACT method
 ```
 
-#### Group Attributes
-
+#### Group Attributes  
 Nested object structures where each sub-attribute is evaluated individually:
 
 ```python
@@ -399,7 +392,7 @@ Nested object structures where each sub-attribute is evaluated individually:
         },
         {
             "name": "City",
-            "evaluation_method": "FUZZY",
+            "evaluation_method": "FUZZY", 
             "evaluation_threshold": 0.9
         }
     ]
@@ -411,7 +404,6 @@ Nested object structures where each sub-attribute is evaluated individually:
 ```
 
 #### List Attributes
-
 Arrays of items where each item's attributes are evaluated individually:
 
 ```python
@@ -447,7 +439,6 @@ Arrays of items where each item's attributes are evaluated individually:
 The evaluation service automatically flattens nested extraction results for comparison:
 
 #### Input Data (Nested)
-
 ```json
 {
   "Account Number": "1234567890",
@@ -464,7 +455,7 @@ The evaluation service automatically flattens nested extraction results for comp
       "Amount": "-4.50"
     },
     {
-      "Date": "01/16/2024",
+      "Date": "01/16/2024", 
       "Description": "ATM Withdrawal",
       "Amount": "-20.00"
     }
@@ -473,19 +464,18 @@ The evaluation service automatically flattens nested extraction results for comp
 ```
 
 #### Flattened Data (For Evaluation)
-
 ```json
 {
   "Account Number": "1234567890",
   "Account Holder Address.Street Number": "123",
-  "Account Holder Address.Street Name": "Main St",
+  "Account Holder Address.Street Name": "Main St", 
   "Account Holder Address.City": "Seattle",
   "Account Holder Address.State": "WA",
   "Transactions[0].Date": "01/15/2024",
   "Transactions[0].Description": "Coffee Shop",
   "Transactions[0].Amount": "-4.50",
   "Transactions[1].Date": "01/16/2024",
-  "Transactions[1].Description": "ATM Withdrawal",
+  "Transactions[1].Description": "ATM Withdrawal", 
   "Transactions[1].Amount": "-20.00"
 }
 ```
@@ -495,14 +485,13 @@ The evaluation service automatically flattens nested extraction results for comp
 The evaluation service provides detailed results for all flattened attributes:
 
 #### Sample Evaluation Output
-
 ```json
 {
   "attributes": [
     {
       "name": "Account Number",
       "expected": "1234567890",
-      "actual": "1234567890",
+      "actual": "1234567890", 
       "matched": true,
       "score": 1.0,
       "confidence": 0.95,
@@ -528,7 +517,7 @@ The evaluation service provides detailed results for all flattened attributes:
       "evaluation_method": "NUMERIC_EXACT"
     },
     {
-      "name": "Transactions[1].Description",
+      "name": "Transactions[1].Description", 
       "expected": "ATM Withdrawal",
       "actual": "ATM Cash",
       "matched": true,
@@ -542,7 +531,6 @@ The evaluation service provides detailed results for all flattened attributes:
 ```
 
 #### Markdown Report for Nested Structures
-
 ```markdown
 | Status | Attribute | Expected | Actual | Confidence | Score | Method | Reason |
 | :----: | --------- | -------- | ------ | :--------: | ----- | ------ | ------ |
@@ -577,7 +565,6 @@ The nested structure support enables comprehensive evaluation of complex documen
 ## Document Split Classification Metrics
 
 The evaluation service provides specialized metrics for evaluating document splitting and classification accuracy. This feature is particularly useful for assessing how well the system:
-
 - Classifies individual pages
 - Groups pages into document sections
 - Maintains correct page order within sections
@@ -623,7 +610,6 @@ split_with_order = metrics["split_accuracy_with_order"]
 Evaluates classification accuracy for **individual pages** by comparing the `document_class` assigned to each page index.
 
 **Calculation:**
-
 - For each page index in ground truth or predicted data
 - Check if the predicted document_class matches the ground truth document_class
 - Calculate: `correct_pages / total_pages`
@@ -631,7 +617,6 @@ Evaluates classification accuracy for **individual pages** by comparing the `doc
 **Use Case:** Determine if the classification model correctly identifies document types at the page level.
 
 **Example:**
-
 ```python
 page_level = {
     "accuracy": 0.95,
@@ -659,7 +644,6 @@ page_level = {
 Evaluates whether the system correctly groups pages into sections with the right document class, **regardless of page order**.
 
 **Calculation:**
-
 - For each ground truth section
 - Find a predicted section with:
   - Same set of page indices (as a set, order doesn't matter)
@@ -669,7 +653,6 @@ Evaluates whether the system correctly groups pages into sections with the right
 **Use Case:** Assess if the system correctly identifies which pages belong together, even if the order is different.
 
 **Example:**
-
 ```python
 split_no_order = {
     "accuracy": 0.90,
@@ -693,7 +676,6 @@ split_no_order = {
 Evaluates whether the system correctly groups pages into sections with the right document class, **including exact page order**.
 
 **Calculation:**
-
 - For each ground truth section
 - Find a predicted section with:
   - Exact same page indices list (same order)
@@ -703,7 +685,6 @@ Evaluates whether the system correctly groups pages into sections with the right
 **Use Case:** Assess if the system maintains the correct page sequence within document sections.
 
 **Example:**
-
 ```python
 split_with_order = {
     "accuracy": 0.85,
@@ -737,7 +718,6 @@ split_with_order = {
 The `generate_markdown_report()` method creates comprehensive visual reports with:
 
 #### Summary Dashboard
-
 ```markdown
 ## 🎯 Split Classification Summary
 
@@ -747,7 +727,6 @@ The `generate_markdown_report()` method creates comprehensive visual reports wit
 ```
 
 #### Metrics Table
-
 ```markdown
 | Metric | Accuracy | Rating | Correct/Total |
 | ------ | :------: | :----: | :-----------: |
@@ -757,7 +736,6 @@ The `generate_markdown_report()` method creates comprehensive visual reports wit
 ```
 
 #### Combined Section Analysis
-
 ```markdown
 | Section Match | Page Order Match | Section ID | Expected Class | Expected Pages | Pred Class | Pred Pages | Matched Section |
 | :-----------: | :--------------: | ---------- | -------------- | -------------- | ---------- | ---------- | --------------- |
@@ -768,7 +746,6 @@ The `generate_markdown_report()` method creates comprehensive visual reports wit
 ```
 
 **Column Definitions:**
-
 - **Section Match**: ✅ if pages match as a set with same class (order independent)
 - **Page Order Match**: ✅ if Section Match is true AND page order matches exactly
 - **Matched Section**: ID of the predicted section that corresponds to ground truth
@@ -777,7 +754,6 @@ The `generate_markdown_report()` method creates comprehensive visual reports wit
 #### Color-Coded Ratings
 
 The reports use visual indicators for quick assessment:
-
 - 🟢 **Excellent** (≥ 90% accuracy)
 - 🟡 **Good** (70-89% accuracy)
 - 🟠 **Fair** (50-69% accuracy)
@@ -827,7 +803,6 @@ if result_document.evaluation_result:
 ### Error Handling
 
 The calculator gracefully handles missing or malformed data:
-
 - Missing `extraction_result_uri`: Section skipped with warning
 - Invalid page indices: Empty list with warning
 - Missing document_class: Recorded as "Unknown"

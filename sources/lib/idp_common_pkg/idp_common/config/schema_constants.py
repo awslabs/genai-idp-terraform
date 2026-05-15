@@ -49,6 +49,7 @@ X_AWS_IDP_LIST_ITEM_DESCRIPTION = "x-aws-idp-list-item-description"
 # Original attribute name (preserved from legacy format)
 X_AWS_IDP_ORIGINAL_NAME = "x-aws-idp-original-name"
 
+
 # ============================================================================
 # AWS IDP Evaluation Extensions
 # ============================================================================

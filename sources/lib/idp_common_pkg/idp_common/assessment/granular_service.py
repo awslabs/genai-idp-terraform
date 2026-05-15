@@ -22,6 +22,7 @@ from typing import Any, Dict, Generator, List, Optional, Tuple
 from idp_common import bedrock, image, metrics, s3, utils
 from idp_common.config.models import IDPConfig
 from idp_common.config.schema_constants import (
+    REF_FIELD,
     SCHEMA_DESCRIPTION,
     SCHEMA_ITEMS,
     SCHEMA_PROPERTIES,
@@ -595,11 +596,78 @@ class GranularAssessmentService:
 
         return content
 
+    def _resolve_ref(
+        self, ref_value: str, root_schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Resolve a JSON Schema $ref reference to its target schema.
+
+        Args:
+            ref_value: The $ref value (e.g., "#/$defs/PatientInformationDef")
+            root_schema: The root schema containing $defs
+
+        Returns:
+            The resolved schema, or empty dict if resolution fails
+        """
+        if not ref_value or not ref_value.startswith("#/"):
+            logger.warning(f"Cannot resolve non-local $ref: {ref_value}")
+            return {}
+
+        # Parse the JSON pointer path
+        parts = ref_value[2:].split("/")  # Remove "#/" and split
+        current = root_schema
+
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                logger.warning(f"Failed to resolve $ref path '{ref_value}' at '{part}'")
+                return {}
+
+        return current if isinstance(current, dict) else {}
+
+    def _get_effective_schema(
+        self, prop_schema: Dict[str, Any], root_schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Get the effective schema for a property, resolving $ref if present.
+
+        This merges the $ref target with any sibling properties (like description)
+        that may be defined alongside the $ref.
+
+        Args:
+            prop_schema: The property schema that may contain $ref
+            root_schema: The root schema containing $defs
+
+        Returns:
+            The effective schema with $ref resolved and merged
+        """
+        if REF_FIELD not in prop_schema:
+            return prop_schema
+
+        # Resolve the $ref
+        ref_value = prop_schema[REF_FIELD]
+        resolved = self._resolve_ref(ref_value, root_schema)
+
+        if not resolved:
+            logger.warning(f"Could not resolve $ref: {ref_value}")
+            return prop_schema
+
+        # Merge: start with resolved schema, then overlay any sibling properties
+        # (like description) from the original prop_schema
+        effective = resolved.copy()
+        for key, value in prop_schema.items():
+            if key != REF_FIELD:
+                effective[key] = value
+
+        return effective
+
     def _create_assessment_tasks(
         self,
         extraction_results: Dict[str, Any],
         properties: Dict[str, Any],
         default_confidence_threshold: float,
+        root_schema: Optional[Dict[str, Any]] = None,
     ) -> List[AssessmentTask]:
         """
         Create assessment tasks based on JSON Schema property types and extraction results.
@@ -608,12 +676,19 @@ class GranularAssessmentService:
             extraction_results: The extraction results to assess
             properties: JSON Schema properties dict
             default_confidence_threshold: Default confidence threshold
+            root_schema: Optional root schema for $ref resolution (defaults to class schema)
 
         Returns:
             List of assessment tasks
         """
         tasks = []
         task_counter = 0
+
+        # Use provided root_schema or try to get it from the class schema
+        if root_schema is None:
+            # Try to find the root schema from the properties' parent
+            # This handles the case when called internally without root_schema
+            root_schema = {}
 
         # Group properties by type for efficient processing
         simple_props = []
@@ -624,15 +699,17 @@ class GranularAssessmentService:
             if prop_name not in extraction_results:
                 continue  # Skip properties not in extraction results
 
-            prop_type = prop_schema.get(SCHEMA_TYPE)
+            # Resolve $ref to get effective schema
+            effective_schema = self._get_effective_schema(prop_schema, root_schema)
+            prop_type = effective_schema.get(SCHEMA_TYPE)
 
             if prop_type == TYPE_OBJECT:
-                group_props.append((prop_name, prop_schema))
+                group_props.append((prop_name, effective_schema))
             elif prop_type == TYPE_ARRAY:
-                list_props.append((prop_name, prop_schema))
+                list_props.append((prop_name, effective_schema))
             else:
                 # Simple types: string, number, boolean, etc.
-                simple_props.append((prop_name, prop_schema))
+                simple_props.append((prop_name, effective_schema))
 
         # Create tasks for simple properties (batch them)
         for i in range(0, len(simple_props), self.simple_batch_size):
@@ -775,7 +852,7 @@ class GranularAssessmentService:
                 f"Processing assessment task {task.task_id} with {len(task.attributes)} attributes"
             )
 
-            # Invoke Bedrock
+            # Invoke Bedrock (or LambdaHook)
             response_with_metering = bedrock.invoke_model(
                 model_id=model_id,
                 system_prompt=system_prompt,
@@ -785,6 +862,7 @@ class GranularAssessmentService:
                 top_p=top_p,
                 max_tokens=max_tokens,
                 context="GranularAssessment",
+                model_lambda_hook_arn=self.config.assessment.model_lambda_hook_arn,
             )
 
             # Extract text from response
@@ -1606,9 +1684,12 @@ class GranularAssessmentService:
                 page_images,
             )
 
-            # Create assessment tasks
+            # Create assessment tasks - pass class_schema for $ref resolution
             tasks = self._create_assessment_tasks(
-                extraction_results, properties, default_confidence_threshold
+                extraction_results,
+                properties,
+                default_confidence_threshold,
+                root_schema=class_schema,
             )
 
             if not tasks:

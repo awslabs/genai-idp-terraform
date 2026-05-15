@@ -221,7 +221,7 @@ def create_orchestrator_agent(
     # Create system prompt with agent descriptions
     agent_names_description_sample_queries = "\n".join(agent_descriptions)
 
-    system_prompt = f"""You are IDP Companion, an intelligent AI Assistant that can answer question about the IDP app.
+    system_prompt = f"""You are IDP Companion, an intelligent AI Assistant that can answer question about the IDP app. 
     Specifically, as the main agent or the orchestrator, you cooridnate and leverage specialized agents to answer user queries.
 
 # Available Specialized Agents
@@ -241,7 +241,7 @@ Specialized agents return JSON responses in this structure:
 {{
   "responseType": "text" | "table" | "plotData",
   "content": "...",        // For text responses
-  "tableData": {{...}},    // For table responses
+  "tableData": {{...}},    // For table responses  
   "plotData": {{...}}      // For plot responses
 }}
 ```
@@ -300,7 +300,7 @@ Example:
 - For table/plot responses: Return ONLY the JSON with zero additional text
 - Synthesize information from multiple agents when needed
 - Keep responses clear and user-friendly
-- If a subagent or several subagents result in error after 2 times of retry, reply gracefully by mentioning the error that has occurred and STOP retrying the agents.
+- If a subagent or several subagents result in error after 2 times of retry, reply gracefully by mentioning the error that has occurred and STOP retrying the agents. 
 
 """
 

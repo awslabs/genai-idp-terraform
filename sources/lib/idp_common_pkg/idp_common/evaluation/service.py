@@ -14,7 +14,7 @@ import os
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
 
 if TYPE_CHECKING:
     from stickler import StructuredModel
@@ -60,13 +60,13 @@ def _normalize_comparator_name(comparator: str) -> str:
 
 def _convert_numpy_types(obj: Any) -> Any:
     """
-    Recursively convert numpy types to Python native types for JSON serialization.
+    Recursively convert numpy types and Pydantic models to Python native types for JSON serialization.
 
     Args:
-        obj: Object that may contain numpy types
+        obj: Object that may contain numpy types or Pydantic models
 
     Returns:
-        Object with numpy types converted to Python native types
+        Object with numpy types and Pydantic models converted to Python native types
     """
     import numpy as np
 
@@ -82,6 +82,12 @@ def _convert_numpy_types(obj: Any) -> Any:
         return {key: _convert_numpy_types(value) for key, value in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_convert_numpy_types(item) for item in obj]
+    elif hasattr(obj, "model_dump"):
+        # Handle Pydantic v2 models (including DynamicModel from Stickler)
+        return _convert_numpy_types(obj.model_dump())
+    elif hasattr(obj, "dict"):
+        # Handle Pydantic v1 models
+        return _convert_numpy_types(obj.dict())
     else:
         return obj
 
@@ -245,6 +251,14 @@ class EvaluationService:
         schema[X_AWS_IDP_DOCUMENT_TYPE] = document_class
         schema[X_AWS_IDP_EVALUATION_MATCH_THRESHOLD] = 0.8
 
+        # Normalize integer types to number to handle decimal values in extraction
+        # This prevents type mismatch errors when baseline has int but prediction has float
+        self._normalize_integer_to_number(schema)
+
+        # Normalize null types to string - genson produces "type": "null" for fields
+        # with null values in baseline data, which Stickler doesn't support
+        self._normalize_null_types(schema)
+
         # Add evaluation method extensions recursively
         self._add_evaluation_extensions_recursive(schema)
 
@@ -258,6 +272,78 @@ class EvaluationService:
         )
 
         return schema
+
+    def _normalize_null_types(self, schema: Dict[str, Any]) -> None:
+        """
+        Recursively convert 'null' types to 'string' in auto-generated schemas.
+
+        The genson library produces "type": "null" for fields where the baseline
+        data has a null/None value. Stickler's JsonSchemaFieldConverter only supports
+        ['string', 'number', 'integer', 'boolean'] and crashes on 'null'.
+
+        By converting to 'string', we allow the field to pass through and be
+        compared as an empty/missing value during evaluation.
+
+        For union types like ["string", "null"] or ["number", "null"], we keep
+        only the non-null type.
+
+        Args:
+            schema: Schema object to modify in-place
+        """
+        schema_type = schema.get("type")
+
+        if schema_type == "null":
+            schema["type"] = "string"
+        elif isinstance(schema_type, list):
+            # Handle union types from genson (e.g., ["string", "null"], ["number", "null"])
+            non_null = [t for t in schema_type if t != "null"]
+            if non_null:
+                # Use the first non-null type (e.g., "string" or "number")
+                schema["type"] = non_null[0] if len(non_null) == 1 else non_null
+            else:
+                # All types are null (shouldn't happen, but be safe)
+                schema["type"] = "string"
+
+        # Recursively process nested structures
+        if "properties" in schema:
+            for prop_schema in schema["properties"].values():
+                self._normalize_null_types(prop_schema)
+
+        if "items" in schema:
+            items = schema["items"]
+            if isinstance(items, dict):
+                self._normalize_null_types(items)
+
+    def _normalize_integer_to_number(self, schema: Dict[str, Any]) -> None:
+        """
+        Recursively convert 'integer' types to 'number' in auto-generated schemas.
+
+        This prevents Pydantic validation errors when the baseline data has an
+        integer value but the prediction has a float (e.g., baseline edited to 9999
+        but prediction is 2111.2). By using 'number' type instead of 'integer',
+        we allow both int and float values to pass validation.
+
+        Args:
+            schema: Schema object to modify in-place
+        """
+        schema_type = schema.get("type")
+
+        # Convert integer to number
+        if schema_type == "integer":
+            schema["type"] = "number"
+        elif isinstance(schema_type, list):
+            # Handle union types from genson (e.g., ["string", "integer"])
+            schema["type"] = ["number" if t == "integer" else t for t in schema_type]
+
+        # Recursively process nested structures
+        if "properties" in schema:
+            for prop_schema in schema["properties"].values():
+                self._normalize_integer_to_number(prop_schema)
+
+        if "items" in schema:
+            items = schema["items"]
+            if isinstance(items, dict):
+                self._normalize_integer_to_number(items)
 
     def _add_evaluation_extensions_recursive(self, schema: Dict[str, Any]) -> None:
         """
@@ -678,9 +764,9 @@ class EvaluationService:
                 conf_threshold = confidence_value.get("confidence_threshold")
                 return {
                     "confidence": float(confidence_value["confidence"]),
-                    "confidence_threshold": float(conf_threshold)
-                    if conf_threshold is not None
-                    else None,
+                    "confidence_threshold": (
+                        float(conf_threshold) if conf_threshold is not None else None
+                    ),
                 }
 
             return None
@@ -775,16 +861,16 @@ class EvaluationService:
         attribute_results = []
 
         # Convert Pydantic model instances to dicts upfront using Pydantic's serialization
-        # This handles nested models and lists automatically
+        # Use mode='python' to ensure nested Pydantic models are fully serialized
         if hasattr(expected_instance, "model_dump"):
-            expected_dict = expected_instance.model_dump()
+            expected_dict = expected_instance.model_dump(mode="python")
         elif hasattr(expected_instance, "dict"):
             expected_dict = expected_instance.dict()
         else:
             expected_dict = dict(expected_instance)
 
         if hasattr(actual_instance, "model_dump"):
-            actual_dict = actual_instance.model_dump()
+            actual_dict = actual_instance.model_dump(mode="python")
         elif hasattr(actual_instance, "dict"):
             actual_dict = actual_instance.dict()
         else:
@@ -792,6 +878,24 @@ class EvaluationService:
 
         # Get field scores from Stickler result
         field_scores = stickler_result.get("field_scores", {})
+
+        # Get field_comparisons from Stickler result (sticker-eval v0.1.4+)
+        field_comparisons = stickler_result.get("field_comparisons", [])
+
+        # Group field comparisons by top-level field name for attachment to attributes
+        # field_comparisons is a flat list, we need to group by the root field
+        field_comparison_map: Dict[str, List[Dict[str, Any]]] = {}
+        for fc in field_comparisons:
+            # Extract the root field name from expected_key (e.g., "LineItems" from "LineItems[0].Description")
+            expected_key = fc.get("expected_key", "")
+            root_field = (
+                expected_key.split("[")[0].split(".")[0] if expected_key else ""
+            )
+
+            if root_field:
+                if root_field not in field_comparison_map:
+                    field_comparison_map[root_field] = []
+                field_comparison_map[root_field].append(fc)
 
         # Get Stickler configuration for this document class
         stickler_config = self.stickler_models.get(section.classification.lower(), {})
@@ -970,7 +1074,10 @@ class EvaluationService:
                     # Safe default for any other types
                     evaluation_method_value = "Exact"
 
-            # Create AttributeEvaluationResult
+            # Get detailed field comparisons for this attribute (sticker-eval v0.1.4+)
+            detailed_comparisons = field_comparison_map.get(field_name, None)
+
+            # Create AttributeEvaluationResult with field comparison details
             attribute_result = AttributeEvaluationResult(
                 name=field_name,
                 expected=expected_value,
@@ -981,13 +1088,16 @@ class EvaluationService:
                 evaluation_method=evaluation_method_value,
                 evaluation_threshold=field_threshold,
                 comparator_type=field_config.get("comparator"),
-                confidence=confidence_info.get("confidence")
-                if confidence_info
-                else None,
-                confidence_threshold=confidence_info.get("confidence_threshold")
-                if confidence_info
-                else None,
+                confidence=(
+                    confidence_info.get("confidence") if confidence_info else None
+                ),
+                confidence_threshold=(
+                    confidence_info.get("confidence_threshold")
+                    if confidence_info
+                    else None
+                ),
                 weight=field_config.get("weight"),  # Stickler field weight
+                field_comparison_details=detailed_comparisons,  # Nested field-by-field comparisons
             )
 
             attribute_results.append(attribute_result)
@@ -1040,6 +1150,9 @@ class EvaluationService:
         This prevents validation errors when baseline data has different types
         than the schema expects (e.g., float values when schema expects strings).
 
+        Also handles required fields that have None/null values by providing
+        appropriate defaults to prevent Pydantic validation errors.
+
         Args:
             data: Dictionary of extraction data
             model_class: Pydantic model class with field type annotations
@@ -1055,6 +1168,7 @@ class EvaluationService:
 
             coerced_data = {}
 
+            # First pass: process existing data
             for key, value in data.items():
                 if key not in model_fields:
                     # Field not in schema, keep as-is
@@ -1081,6 +1195,42 @@ class EvaluationService:
                     value, field_annotation, key
                 )
 
+            # Second pass: add defaults for missing required fields
+            # This handles cases where LLM returned null for required fields
+            # and _remove_none_values() removed them
+            for field_name, field_info in model_fields.items():
+                if field_name in coerced_data:
+                    continue  # Already have a value
+
+                # Check if field is required (no default and not Optional)
+                is_required = field_info.is_required()
+
+                if is_required:
+                    # Get the field's annotation to determine appropriate default
+                    field_annotation = field_info.annotation
+
+                    # Handle Optional types
+                    origin = getattr(field_annotation, "__origin__", None)
+                    if origin is Union:
+                        args = getattr(field_annotation, "__args__", ())
+                        # If None is in the Union, field accepts None
+                        if type(None) in args:
+                            continue  # Optional field, skip
+                        field_annotation = next(
+                            (arg for arg in args if arg is not type(None)),
+                            field_annotation,
+                        )
+
+                    # Provide type-appropriate default for required field
+                    default_value = self._get_default_for_type(
+                        field_annotation, field_name
+                    )
+                    if default_value is not None:
+                        logger.debug(
+                            f"Required field '{field_name}' missing from data, providing default: {default_value!r}"
+                        )
+                        coerced_data[field_name] = default_value
+
             return coerced_data
 
         except Exception as e:
@@ -1088,6 +1238,48 @@ class EvaluationService:
                 f"Error during type coercion: {str(e)}. Returning original data."
             )
             return data
+
+    def _get_default_for_type(self, field_annotation: Any, field_name: str = "") -> Any:
+        """
+        Get an appropriate default value for a required field based on its type.
+
+        This is used when a required field has a null/None value and we need
+        to provide a default to allow Pydantic validation to succeed.
+
+        Args:
+            field_annotation: The type annotation for the field
+            field_name: Name of the field (for logging)
+
+        Returns:
+            Appropriate default value for the type, or None if no default is suitable
+        """
+        origin = getattr(field_annotation, "__origin__", None)
+
+        # Handle list/array types
+        if origin is list:
+            return []
+
+        # Handle dict types
+        if origin is dict:
+            return {}
+
+        # Handle basic types
+        if field_annotation is str:
+            return ""
+        elif field_annotation is int:
+            return 0
+        elif field_annotation is float:
+            return 0.0
+        elif field_annotation is bool:
+            return False
+
+        # For complex types (e.g., nested Pydantic models), return None
+        # This will still cause validation to fail, but that's appropriate
+        # for complex required fields
+        logger.debug(
+            f"No default available for required field '{field_name}' with type {field_annotation}"
+        )
+        return None
 
     def _coerce_value_to_type(
         self, value: Any, expected_type: Any, field_name: str = ""
@@ -1123,14 +1315,32 @@ class EvaluationService:
                 or expected_type is float
             ):
                 if isinstance(value, str):
-                    # Try to convert string to number
+                    # Empty strings for numeric fields should be treated as missing (None)
+                    # This prevents Pydantic validation errors like:
+                    # "Input should be a valid number, unable to parse string as a number"
+                    if not value.strip():
+                        return None
+                    # Try to convert non-empty string to number
                     try:
-                        return float(value) if expected_type is float else int(value)
+                        return (
+                            float(value)
+                            if expected_type is float
+                            else int(float(value))
+                        )
                     except ValueError:
                         logger.warning(
                             f"Could not convert '{value}' to {expected_type} for field {field_name}"
                         )
-                        return value
+                        # Return None instead of original string to prevent Pydantic crash
+                        # The field will be treated as missing/empty during comparison
+                        return None
+                elif isinstance(value, float) and expected_type is int:
+                    # Coerce float to int when schema expects int
+                    # This handles cases where baseline has int but prediction has float
+                    return int(value)
+                elif isinstance(value, int) and expected_type is float:
+                    # Coerce int to float when schema expects float
+                    return float(value)
                 return value
 
             # Handle boolean
@@ -1210,22 +1420,90 @@ class EvaluationService:
             cleaned_expected = self._remove_none_values(expected_results)
             cleaned_actual = self._remove_none_values(actual_results)
 
+            # Check for unparsed LLM output (raw_output indicates extraction parsing failed)
+            # This typically happens when LLM output is truncated due to max_tokens limit
+            if (
+                isinstance(cleaned_actual, dict)
+                and "raw_output" in cleaned_actual
+                and len(cleaned_actual) == 1
+            ):
+                raw_output_preview = str(cleaned_actual.get("raw_output", ""))[:500]
+                logger.error(
+                    f"Section {section.section_id}: Extraction produced unparsed raw_output. "
+                    f"This indicates the LLM output could not be parsed as valid JSON. "
+                    f"Raw output preview: {raw_output_preview}..."
+                )
+
+                failure_reason = (
+                    f"Extraction parsing failed for section {section.section_id}. "
+                    f"The LLM output could not be parsed as valid JSON. "
+                    f"This typically indicates truncated output (model hit max_tokens limit). "
+                    f"Consider increasing max_tokens in extraction config. "
+                    f"Raw output preview: {raw_output_preview[:200]}..."
+                )
+
+                # Count expected fields as false negatives since none were extracted
+                num_expected_fields = len(cleaned_expected) if cleaned_expected else 1
+
+                return SectionEvaluationResult(
+                    section_id=section.section_id,
+                    document_class=class_name,
+                    attributes=[
+                        AttributeEvaluationResult(
+                            name="__EXTRACTION_PARSING_FAILED__",
+                            expected=f"Expected {num_expected_fields} fields",
+                            actual="raw_output (unparsed LLM response)",
+                            matched=False,
+                            score=0.0,
+                            reason=failure_reason,
+                            evaluation_method="N/A",
+                        )
+                    ],
+                    metrics={
+                        "precision": 0.0,
+                        "recall": 0.0,
+                        "f1_score": 0.0,
+                        "accuracy": 0.0,
+                        "false_alarm_rate": 0.0,
+                        "false_discovery_rate": 0.0,
+                        "weighted_overall_score": 0.0,
+                        "evaluation_failed": True,
+                        "failure_type": "extraction_parsing_failed",
+                    },
+                )
+
             # Coerce data types to match schema expectations
             # This prevents Pydantic validation errors from type mismatches
             coerced_expected = self._coerce_data_to_schema(cleaned_expected, ModelClass)
             coerced_actual = self._coerce_data_to_schema(cleaned_actual, ModelClass)
+
+            # Remove None values introduced by coercion (e.g., empty strings converted to None
+            # for numeric fields). Without this second pass, Pydantic would reject None for
+            # required numeric fields in nested objects like LineItems[].LineItemRate.
+            coerced_expected = self._remove_none_values(coerced_expected)
+            coerced_actual = self._remove_none_values(coerced_actual)
 
             # Create model instances from coerced data
             # Stickler handles validation and structure
             expected_instance = ModelClass(**coerced_expected)
             actual_instance = ModelClass(**coerced_actual)
 
-            # Compare using Stickler
-            stickler_result = expected_instance.compare_with(actual_instance)
+            # Compare using Stickler with field_comparisons enabled (sticker-eval v0.1.4+)
+            stickler_result = expected_instance.compare_with(
+                actual_instance,
+                document_field_comparisons=True,  # Enable detailed field-by-field comparison
+            )
 
             logger.debug(
                 f"Stickler comparison complete. Overall score: {stickler_result.get('overall_score', 'N/A'):.3f}"
             )
+
+            # Log field_comparisons count if available
+            field_comparisons = stickler_result.get("field_comparisons", [])
+            if field_comparisons:
+                logger.debug(
+                    f"Field comparisons enabled: {len(field_comparisons)} detailed comparisons available"
+                )
 
             # Transform Stickler result to IDP format
             section_result = self._transform_stickler_result(
@@ -1239,16 +1517,37 @@ class EvaluationService:
             return section_result
 
         except ValueError as ve:
-            # Schema configuration missing - this is a configuration issue
+            # Schema configuration error - determine specific cause for better messaging
+            error_message = str(ve)
             logger.error(
-                f"Configuration error for section {section.section_id}: {str(ve)}",
+                f"Configuration error for section {section.section_id}: {error_message}",
                 exc_info=True,
             )
-            failure_reason = (
-                f"No schema configuration found for document class: {class_name}. "
-                f"Cannot evaluate without configuration or baseline data. "
-                f"Please add configuration for this document class or provide baseline data."
-            )
+
+            # Check for specific known error patterns
+            if "field_definitions must contain at least one field" in error_message:
+                # This happens when a nested object has empty properties: {}
+                # Extract the field name from the error message if possible
+                import re
+
+                field_match = re.search(r"Error in field '([^']+)'", error_message)
+                field_name = field_match.group(1) if field_match else "unknown"
+
+                failure_reason = (
+                    f"Schema error for document class '{class_name}': "
+                    f"Nested object '{field_name}' has no properties defined. "
+                    f"Stickler requires at least one field in nested objects. "
+                    f"Either add properties to '{field_name}' in your schema or remove it entirely."
+                )
+            elif "No schema configuration found" in error_message:
+                failure_reason = (
+                    f"No schema configuration found for document class: {class_name}. "
+                    f"Cannot evaluate without configuration or baseline data. "
+                    f"Please add configuration for this document class or provide baseline data."
+                )
+            else:
+                # Generic schema/configuration error
+                failure_reason = f"Schema configuration error for document class '{class_name}': {error_message}"
 
             return SectionEvaluationResult(
                 section_id=section.section_id,
@@ -1562,7 +1861,17 @@ class EvaluationService:
                         )
 
             # Sort section results by section_id for consistent output
-            section_results.sort(key=lambda x: x.section_id)
+            # Use natural sorting to handle numeric section IDs correctly (1, 2, 10 vs 1, 10, 2)
+            def natural_sort_key(x):
+                """Extract numeric parts for natural sorting."""
+                import re
+
+                # Split section_id into text and numeric parts
+                parts = re.split(r"(\d+)", x.section_id)
+                # Convert numeric parts to integers for proper numerical sorting
+                return [int(p) if p.isdigit() else p.lower() for p in parts]
+
+            section_results.sort(key=natural_sort_key)
 
             # Calculate overall metrics
             overall_metrics = calculate_metrics(

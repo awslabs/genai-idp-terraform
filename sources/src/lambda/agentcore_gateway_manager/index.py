@@ -56,20 +56,20 @@ def handler(event, context):
 def create_or_update_gateway(props, gateway_name):
     """Create or update AgentCore Gateway using existing Cognito resources"""
     region = props['Region']
-
+    
     # Initialize gateway client
     client = GatewayClient(region_name=region)
-
+    
     # Check if gateway already exists
     try:
         control_client = boto3.client("bedrock-agentcore-control", region_name=region)
         resp = control_client.list_gateways(maxResults=10)
         existing_gateways = [g for g in resp.get("items", []) if g.get("name") == gateway_name]
-
+        
         if existing_gateways:
             existing_gateway = existing_gateways[0]
             gateway_id = existing_gateway.get('gatewayId')
-
+            
             if gateway_id:
                 try:
                     gateway_details = control_client.get_gateway(gatewayIdentifier=gateway_id)
@@ -84,7 +84,7 @@ def create_or_update_gateway(props, gateway_name):
 
     except Exception as e:
         logger.warning(f"Error checking for existing gateway: {e}")
-
+    
     # Gateway doesn't exist, create it
     logger.info(f"Gateway {gateway_name} does not exist, creating new one")
     return create_gateway(props, gateway_name, client)
@@ -122,30 +122,113 @@ def create_gateway(props, gateway_name, client):
     logger.info("Waiting for IAM propagation...")
     time.sleep(30)
 
-    # Add analytics Lambda target
-    logger.info("Adding analytics Lambda target...")
+    # Add IDP tools Lambda target with all tools
+    logger.info("Adding IDP tools Lambda target...")
     client.create_mcp_gateway_target(
         gateway=gateway,
-        name="AnalyticsLambdaTarget",
+        name="IDPTools",
         target_type="lambda",
         target_payload={
             "lambdaArn": lambda_arn,
             "toolSchema": {
                 "inlinePayload": [
                     {
-                        "description": "Provides information from GenAI Intelligent Document Processing System and answer user questions",
+                        "name": "search",
+                        "description": "Search and query processed documents using natural language. Returns analytics, metrics, and document information from the IDP system.",
                         "inputSchema": {
+                            "type": "object",
                             "properties": {
                                 "query": {
-                                    "type": "string"
+                                    "type": "string",
+                                    "description": "Natural language query about processed documents, metrics, or system status"
                                 }
                             },
-                            "required": [
-                                "query"
-                            ],
-                            "type": "object"
-                        },
-                        "name": "search_genaiidp"
+                            "required": ["query"]
+                        }
+                    },
+                    {
+                        "name": "process",
+                        "description": "Process documents through the IDP pipeline. Accepts S3 locations or base64-encoded content. Intelligently handles missing information by requesting specific details.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "S3 URI for batch processing (e.g., 's3://bucket/documents/'). Optional if content is provided."
+                                },
+                                "content": {
+                                    "type": "string",
+                                    "description": "Base64-encoded document content for single document processing. Optional if location is provided."
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Document filename with extension (e.g., 'invoice.pdf', 'contract.docx'). Required if content is provided; optional for S3 locations."
+                                },
+                                "prefix": {
+                                    "type": "string",
+                                    "description": "Optional batch ID prefix (default: 'mcp-batch')"
+                                }
+                            },
+                            "required": []
+                        }
+                    },
+                    {
+                        "name": "reprocess",
+                        "description": "Reprocess documents from a specific pipeline step. Supports classification or extraction reprocessing. Returns batch ID for status tracking.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "step": {
+                                    "type": "string",
+                                    "description": "Pipeline step to reprocess from (classification or extraction)"
+                                },
+                                "document_ids": {
+                                    "type": "string",
+                                    "description": "Comma-separated list of document IDs to reprocess (alternative to batch_id)"
+                                },
+                                "batch_id": {
+                                    "type": "string",
+                                    "description": "Batch ID to get document IDs from (alternative to document_ids)"
+                                },
+                                "region": {
+                                    "type": "string",
+                                    "description": "AWS region (optional)"
+                                }
+                            },
+                            "required": ["step"]
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "description": "Get processing status for a batch of documents. Returns progress, timing, and error information.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "batch_id": {
+                                    "type": "string",
+                                    "description": "Batch identifier (e.g., 'mcp-batch-20250124-143000')"
+                                },
+                                "options": {
+                                    "type": "object",
+                                    "description": "Optional status parameters",
+                                    "properties": {
+                                        "detailed": {
+                                            "type": "boolean",
+                                            "description": "Include per-document details (default: false)"
+                                        },
+                                        "include_errors": {
+                                            "type": "boolean",
+                                            "description": "Include error details (default: true)"
+                                        }
+                                    }
+                                },
+                                "region": {
+                                    "type": "string",
+                                    "description": "AWS region (optional)"
+                                }
+                            },
+                            "required": ["batch_id"]
+                        }
                     }
                 ]
             },
@@ -218,3 +301,4 @@ def delete_gateway(props, gateway_name):
 
     except Exception as e:
         logger.error(f"Gateway deletion failed: {e}")
+

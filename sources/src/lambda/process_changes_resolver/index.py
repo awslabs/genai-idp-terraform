@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: MIT-0
 
 import json
-import os
-import boto3
 import logging
+import os
 from datetime import datetime, timezone
 
-# Import IDP Common modules
-from idp_common.models import Document, Section, Status
+import boto3
 from idp_common.docs_service import create_document_service
+
+# Import IDP Common modules
+from idp_common.models import Section, Status
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
@@ -32,6 +33,7 @@ def handler(event, context):
         
         object_key = args.get('objectKey')
         modified_sections = args.get('modifiedSections', [])
+        modified_pages = args.get('modifiedPages', [])
         
         if not object_key:
             logger.error("objectKey is required but not provided")
@@ -41,16 +43,16 @@ def handler(event, context):
                 'processingJobId': None
             }
         
-        if not modified_sections:
-            logger.error("modifiedSections is required but not provided")
-            return {
-                'success': False,
-                'message': 'modifiedSections is required',
-                'processingJobId': None
-            }
+        # Allow empty arrays for evaluation-only reprocessing
+        # When both are empty, the document will be resubmitted and the existing
+        # Lambda skip logic will bypass OCR/Classification/Extraction/Assessment
+        # and proceed directly to Summarization and Evaluation steps
+        if not modified_sections and not modified_pages:
+            logger.info("No section or page modifications - reprocessing for evaluation/summarization only")
 
         logger.info(f"Processing changes for document: {object_key}")
         logger.info(f"Modified sections: {json.dumps(modified_sections)}")
+        logger.info(f"Modified pages: {json.dumps(modified_pages)}")
 
         # Use DynamoDB service to get the document (only service that supports get_document)
         try:
@@ -69,6 +71,43 @@ def handler(event, context):
             
             logger.info(f"Found document: {document.id}")
             
+            # Mark HITL review as completed when processing changes
+            # This handles the case where user edits data and clicks "Process Changes"
+            hitl_status_lower = (document.hitl_status or '').lower().replace(' ', '')
+            completed_statuses = ['completed', 'reviewcompleted', 'skipped', 'reviewskipped']
+            if document.hitl_status and hitl_status_lower not in completed_statuses:
+                identity = event.get('identity', {})
+                username = identity.get('username', 'system')
+                user_email = identity.get('claims', {}).get('email', '')
+                
+                # Mark all pending sections as completed
+                pending_sections = document.hitl_sections_pending or []
+                completed_sections = list(document.hitl_sections_completed or [])
+                completed_sections.extend(pending_sections)
+                
+                document.hitl_status = 'Review Completed'
+                document.hitl_sections_pending = []
+                document.hitl_sections_completed = completed_sections
+                
+                # Update review fields in DynamoDB (not in document model)
+                # HITLReviewedBy tracks who completed the review via Process Changes
+                tracking_table = os.environ.get('TRACKING_TABLE')
+                if tracking_table:
+                    dynamodb_resource = boto3.resource('dynamodb')
+                    table = dynamodb_resource.Table(tracking_table)
+                    table.update_item(
+                        Key={"PK": f"doc#{object_key}", "SK": "none"},
+                        UpdateExpression="SET HITLStatus = :status, HITLReviewedBy = :reviewedBy, HITLReviewedByEmail = :reviewedByEmail, HITLCompleted = :completed",
+                        ExpressionAttributeValues={
+                            ":status": "Review Completed",
+                            ":reviewedBy": username,
+                            ":reviewedByEmail": user_email,
+                            ":completed": True,
+                        },
+                    )
+                
+                logger.info(f"Marked HITL review as completed by {username} via Process Changes")
+            
         except Exception as e:
             logger.error(f"Error retrieving document {object_key}: {str(e)}")
             raise ValueError(f"Document {object_key} not found or error retrieving: {str(e)}")
@@ -76,7 +115,11 @@ def handler(event, context):
         # Track modified section IDs for selective processing
         modified_section_ids = []
         
-        # Process each modification
+        # Process page-level modifications first (if any)
+        if modified_pages:
+            process_page_changes(document, modified_pages, modified_section_ids)
+        
+        # Process each section modification
         for modified_section in modified_sections:
             section_id = modified_section['sectionId']
             classification = modified_section['classification']
@@ -192,7 +235,7 @@ def handler(event, context):
         if working_bucket:
             # Use document compression (always compress with 0KB threshold)
             sqs_message_content = document.serialize_document(working_bucket, "process_changes", logger)
-            logger.info(f"Document compressed for SQS (always compress)")
+            logger.info("Document compressed for SQS (always compress)")
         else:
             # Fallback to direct document dict if no working bucket
             sqs_message_content = document.to_dict()
@@ -221,7 +264,7 @@ def handler(event, context):
             appsync_service = create_document_service(mode='appsync')
             document.status = Status.QUEUED  # Ensure status is QUEUED for UI
             updated_document = appsync_service.update_document(document)
-            logger.info(f"Updated document status to QUEUED in AppSync for immediate UI feedback")
+            logger.info("Updated document status to QUEUED in AppSync for immediate UI feedback")
         except Exception as e:
             logger.warning(f"Failed to update document status in AppSync: {str(e)}")
             # Don't fail the entire operation if AppSync update fails
@@ -249,6 +292,77 @@ def handler(event, context):
         
         logger.error(f"Returning error response: {json.dumps(error_response)}")
         return error_response
+
+def process_page_changes(document, modified_pages, modified_section_ids):
+    """
+    Process page-level modifications
+    
+    Args:
+        document: Document object to modify
+        modified_pages: List of modified page dictionaries
+        modified_section_ids: List to track which sections need reprocessing
+    """
+    for modified_page in modified_pages:
+        page_id = modified_page['pageId']
+        page_id_str = str(page_id)
+        text_modified = modified_page.get('textModified', False)
+        class_reset = modified_page.get('classReset', False)
+        new_text_uri = modified_page.get('newTextUri')
+        new_confidence_uri = modified_page.get('newConfidenceUri')
+        
+        logger.info(f"Processing page {page_id}: textModified={text_modified}, classReset={class_reset}")
+        
+        # Check if page exists in document
+        if page_id_str not in document.pages:
+            logger.warning(f"Page {page_id} not found in document, skipping")
+            continue
+            
+        page = document.pages[page_id_str]
+        
+        # Handle class reset - removes sections containing this page
+        if class_reset:
+            logger.info(f"Resetting classification for page {page_id}")
+            page.classification = None  # Reset to unclassified
+            
+            # Find and remove all sections containing this page
+            sections_to_remove = []
+            for section in document.sections:
+                if page_id_str in section.page_ids:
+                    sections_to_remove.append(section)
+                    logger.info(f"Marking section {section.section_id} for removal (contains page {page_id})")
+            
+            # Clear extraction data and remove sections
+            for section in sections_to_remove:
+                if section.extraction_result_uri:
+                    clear_extraction_data(section.extraction_result_uri)
+                document.sections = [s for s in document.sections if s.section_id != section.section_id]
+                logger.info(f"Removed section {section.section_id} due to page {page_id} class reset")
+        
+        # Handle text modification - clears extraction results but keeps sections
+        elif text_modified:
+            logger.info(f"Text modified for page {page_id}")
+            
+            # Update page URIs if provided
+            if new_text_uri:
+                page.text_uri = new_text_uri
+                logger.info(f"Updated text URI for page {page_id}: {new_text_uri}")
+            
+            if new_confidence_uri:
+                page.text_confidence_uri = new_confidence_uri
+                logger.info(f"Updated confidence URI for page {page_id}: {new_confidence_uri}")
+            
+            # Find sections containing this page and clear their extraction results
+            for section in document.sections:
+                if page_id_str in section.page_ids:
+                    if section.extraction_result_uri:
+                        clear_extraction_data(section.extraction_result_uri)
+                        section.extraction_result_uri = None
+                        section.attributes = None
+                        logger.info(f"Cleared extraction results for section {section.section_id} (page {page_id} text modified)")
+                    
+                    # Track section for reprocessing
+                    if section.section_id not in modified_section_ids:
+                        modified_section_ids.append(section.section_id)
 
 def clear_extraction_data(s3_uri):
     """Clear extraction data from S3"""

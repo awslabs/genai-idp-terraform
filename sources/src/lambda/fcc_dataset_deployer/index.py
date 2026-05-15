@@ -42,41 +42,64 @@ def handler(event, context):
     Main Lambda handler for deploying the FCC dataset.
     """
     logger.info(f"Event: {json.dumps(event)}")
-
+    
     try:
         request_type = event['RequestType']
-
+        
         if request_type == 'Delete':
             # On stack deletion, we leave the data in place
             logger.info("Delete request - keeping dataset in place")
             cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
             return
-
+        
         # Extract properties
         properties = event['ResourceProperties']
         dataset_version = properties.get('DatasetVersion', '1.0')
         dataset_description = properties.get('DatasetDescription', '')
-
+        
         logger.info(f"Processing dataset version: {dataset_version}")
-
+        
         # Check if dataset already exists with this version
         if check_existing_version(dataset_version):
-            logger.info(f"Dataset version {dataset_version} already deployed, skipping")
+            logger.info(f"Dataset version {dataset_version} already deployed, updating description only")
+            update_description_only(dataset_description)
             cfnresponse.send(event, context, cfnresponse.SUCCESS, {
-                'Message': f'Dataset version {dataset_version} already exists'
+                'Message': f'Dataset version {dataset_version} already exists, description updated'
             })
             return
-
+        
         # Download and deploy the dataset
         result = deploy_dataset(dataset_version, dataset_description)
-
+        
         logger.info(f"Dataset deployment completed: {result}")
         cfnresponse.send(event, context, cfnresponse.SUCCESS, result)
-
+        
     except Exception as e:
         logger.error(f"Error deploying dataset: {str(e)}", exc_info=True)
-        cfnresponse.send(event, context, cfnresponse.FAILED, {},
+        cfnresponse.send(event, context, cfnresponse.FAILED, {}, 
                         reason=f"Error deploying dataset: {str(e)}")
+
+
+def update_description_only(description: str):
+    """
+    Update only the description field in the existing DynamoDB record.
+    """
+    try:
+        table = dynamodb.Table(TRACKING_TABLE)  # type: ignore[attr-defined]
+        table.update_item(
+            Key={
+                'PK': f'testset#{TEST_SET_ID}',
+                'SK': 'metadata'
+            },
+            UpdateExpression='SET description = :desc',
+            ExpressionAttributeValues={
+                ':desc': description
+            }
+        )
+        logger.info(f"Updated description for test set {TEST_SET_ID}")
+    except Exception as e:
+        logger.error(f"Failed to update description: {e}")
+        raise
 
 
 def check_existing_version(version: str) -> bool:
@@ -91,11 +114,11 @@ def check_existing_version(version: str) -> bool:
                 'SK': 'metadata'
             }
         )
-
+        
         if 'Item' in response:
             existing_version = response['Item'].get('datasetVersion', '')
             logger.info(f"Found existing dataset version: {existing_version}")
-
+            
             # Check if version matches and files exist
             if existing_version == version:
                 # Verify at least some files exist in S3
@@ -110,9 +133,9 @@ def check_existing_version(version: str) -> bool:
                         return True
                 except Exception as e:
                     logger.warning(f"Error checking S3 files: {e}")
-
+        
         return False
-
+        
     except Exception as e:
         logger.warning(f"Error checking existing version: {e}")
         return False
@@ -121,83 +144,23 @@ def check_existing_version(version: str) -> bool:
 def get_page_count(data_dict: dict, idx: int) -> int:
     """
     Get the number of pages for a document by counting image files.
-
-    The RealKIE-FCC-Verified dataset contains an 'image_files' column
+    
+    The RealKIE-FCC-Verified dataset contains an 'image_files' column 
     with a list of image filenames, one per page.
-
+    
     Args:
         data_dict: Parquet data dictionary
         idx: Document index
-
+        
     Returns:
         Number of pages (image file count)
     """
     image_files = data_dict['image_files'][idx]
     if image_files and isinstance(image_files, list):
         return len(image_files)
-
+    
     logger.warning(f"Could not determine page count for document index {idx}")
     return 0
-
-
-def transform_line_item_days(days_string: str) -> list:
-    """
-    Transform LineItemDays from string format to array format.
-
-    The HuggingFace dataset stores days as a string like "M T W T F . ."
-    where letters represent days the ad ran and dots represent days it didn't.
-
-    Args:
-        days_string: Space-separated string with day abbreviations and dots
-                    (e.g., "M T W T F . .", ". . . T . . .")
-
-    Returns:
-        List of day abbreviations (e.g., ["M", "T", "W", "T", "F"])
-
-    Examples:
-        "M T W T F . ." -> ["M", "T", "W", "T", "F"]
-        ". . . T . . ." -> ["T"]
-        ". . . . . S ." -> ["S"]
-    """
-    if not days_string or not isinstance(days_string, str):
-        return []
-
-    # Split by whitespace and filter out dots
-    tokens = days_string.split()
-    return [token for token in tokens if token != '.']
-
-
-def transform_json_response(json_response: dict) -> dict:
-    """
-    Transform the json_response from HuggingFace format to match IDP schema.
-
-    Specifically handles:
-    - LineItemDays: string -> array transformation
-
-    Args:
-        json_response: Original json_response from HuggingFace
-
-    Returns:
-        Transformed json_response matching IDP schema expectations
-    """
-    if not json_response or not isinstance(json_response, dict):
-        return json_response
-
-    # Deep copy to avoid modifying original
-    import copy
-    transformed = copy.deepcopy(json_response)
-
-    # Transform LineItems if present
-    if 'LineItems' in transformed and isinstance(transformed['LineItems'], list):
-        for item in transformed['LineItems']:
-            if isinstance(item, dict) and 'LineItemDays' in item:
-                # Transform string to array
-                days_string = item['LineItemDays']
-                if isinstance(days_string, str):
-                    item['LineItemDays'] = transform_line_item_days(days_string)
-                    logger.debug(f"Transformed LineItemDays: '{days_string}' -> {item['LineItemDays']}")
-
-    return transformed
 
 
 def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
@@ -210,9 +173,9 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
         cache_dir = '/tmp/huggingface/hub'
         os.makedirs(cache_dir, exist_ok=True)
         logger.info(f"Using cache directory: {cache_dir}")
-
+        
         logger.info(f"Downloading dataset from HuggingFace: amazon-agi/RealKIE-FCC-Verified")
-
+        
         # Download the parquet file with metadata using hf_hub_download
         parquet_path = hf_hub_download(
             repo_id="amazon-agi/RealKIE-FCC-Verified",
@@ -220,20 +183,20 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
             repo_type="dataset",
             cache_dir=cache_dir
         )
-
+        
         logger.info(f"Downloaded parquet metadata file")
-
+        
         # Read parquet file with pyarrow
         table = pq.read_table(parquet_path)
         data_dict = table.to_pydict()
-
+        
         num_documents = len(data_dict['id'])
         logger.info(f"Loaded {num_documents} documents from parquet")
-
+        
         # TEMPORARY: Log parquet schema for debugging
         logger.info(f"Parquet schema: {table.schema}")
         logger.info(f"Available columns: {list(data_dict.keys())}")
-
+        
         # Sample first document to see structure (if exists)
         if num_documents > 0:
             sample_keys = list(data_dict.keys())
@@ -245,41 +208,38 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
                     logger.info(f"  {key}: {type(value).__name__} with {len(value) if hasattr(value, '__len__') else 'N/A'} items")
                 else:
                     logger.info(f"  {key}: {type(value).__name__}")
-
+        
         # Process and upload each document
         file_count = 0
         skipped_count = 0
         total_pages = 0
         page_count_distribution = {}
-
+        
         for idx in range(num_documents):
             try:
                 document_id = data_dict['id'][idx]
                 json_response = data_dict['json_response'][idx]
-
+                
                 if not json_response:
                     logger.warning(f"Skipping {document_id}: no json_response")
                     skipped_count += 1
                     continue
-
+                
                 # Get page count from images
                 page_count = get_page_count(data_dict, idx)
-
+                
                 # Validate page count
                 if page_count == 0:
                     logger.warning(f"Skipping {document_id}: no pages found (page_count=0)")
                     skipped_count += 1
                     continue
-
-                # Transform json_response to match IDP schema
-                transformed_json = transform_json_response(json_response)
-
+                
                 # Track statistics
                 total_pages += page_count
                 page_count_distribution[page_count] = page_count_distribution.get(page_count, 0) + 1
-
+                
                 logger.info(f"Processing {document_id} ({page_count} pages)")
-
+                
                 # Download PDF file from HuggingFace repository using hf_hub_download
                 try:
                     pdf_path = hf_hub_download(
@@ -288,13 +248,13 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
                         repo_type="dataset",
                         cache_dir=cache_dir
                     )
-
+                    
                     # Read the downloaded PDF
                     with open(pdf_path, 'rb') as f:
                         pdf_bytes = f.read()
-
+                    
                     logger.info(f"Downloaded PDF for {document_id} ({len(pdf_bytes):,} bytes)")
-
+                    
                     # Upload PDF to input folder
                     pdf_key = f'{DATASET_PREFIX}input/{document_id}'
                     s3_client.put_object(
@@ -303,15 +263,15 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
                         Body=pdf_bytes,
                         ContentType='application/pdf'
                     )
-
+                    
                 except Exception as e:
                     logger.error(f"Error downloading/uploading PDF for {document_id}: {e}")
                     skipped_count += 1
                     continue
-
+                
                 # Generate zero-indexed page_indices array
                 page_indices = list(range(page_count))
-
+                
                 # Create enhanced baseline with document split classification fields
                 result_json = {
                     "document_class": {
@@ -320,9 +280,9 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
                     "split_document": {
                         "page_indices": page_indices
                     },
-                    "inference_result": transformed_json
+                    "inference_result": json_response
                 }
-
+                
                 # Upload ground truth baseline
                 result_key = f'{DATASET_PREFIX}baseline/{document_id}/sections/1/result.json'
                 s3_client.put_object(
@@ -331,26 +291,26 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
                     Body=json.dumps(result_json, indent=2),
                     ContentType='application/json'
                 )
-
+                
                 file_count += 1
-
+                
                 if file_count % 10 == 0:
                     logger.info(f"Processed {file_count}/{num_documents} documents...")
-
+                    
             except Exception as e:
                 logger.error(f"Error processing document {idx} ({document_id}): {e}")
                 skipped_count += 1
                 continue
-
+        
         # Log comprehensive statistics
         logger.info(f"Successfully deployed {file_count} documents (skipped {skipped_count})")
         logger.info(f"Total pages across all documents: {total_pages}")
         logger.info(f"Average pages per document: {total_pages / file_count if file_count > 0 else 0:.2f}")
         logger.info(f"Page count distribution: {dict(sorted(page_count_distribution.items()))}")
-
+        
         # Create test set record in DynamoDB
         create_testset_record(version, description, file_count)
-
+        
         return {
             'DatasetVersion': version,
             'FileCount': file_count,
@@ -359,7 +319,7 @@ def deploy_dataset(version: str, description: str) -> Dict[str, Any]:
             'PageCountDistribution': page_count_distribution,
             'Message': f'Successfully deployed {file_count} documents with enhanced baseline files (doc split fields included)'
         }
-
+        
     except Exception as e:
         logger.error(f"Error deploying dataset: {e}", exc_info=True)
         raise
@@ -371,19 +331,21 @@ def create_testset_record(version: str, description: str, file_count: int):
     """
     table = dynamodb.Table(TRACKING_TABLE)  # type: ignore[attr-defined]
     timestamp = datetime.utcnow().isoformat() + 'Z'
-
+    
     item = {
         'PK': f'testset#{TEST_SET_ID}',
         'SK': 'metadata',
         'id': TEST_SET_ID,
         'name': DATASET_NAME,
+        'description': description,
         'filePattern': '',
         'fileCount': file_count,
         'status': 'COMPLETED',
         'createdAt': timestamp,
         'datasetVersion': version,
-        'source': 'huggingface:amazon-agi/RealKIE-FCC-Verified'
+        'source': 'huggingface:amazon-agi/RealKIE-FCC-Verified',
+        'description': description or 'RealKIE-FCC-Verified dataset from HuggingFace'
     }
-
+    
     table.put_item(Item=item)
     logger.info(f"Created test set record in DynamoDB: {TEST_SET_ID}")

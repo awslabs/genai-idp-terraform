@@ -1,1 +1,2 @@
-./lib/idp_common_pkg[reporting]  # Repoprting module with dependencies
+# idp_common provided by Lambda Layer 2 (reporting)
+# Layer 2 includes: core + docs_service + reporting (pyarrow)

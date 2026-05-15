@@ -162,6 +162,94 @@
                     "BackoffRate": 2
                 }
             ],
+            "Next": "CheckRuleValidationEnabled"
+        },
+        "CheckRuleValidationEnabled": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.Result.rule_validation_enabled",
+                    "BooleanEquals": true,
+                    "Next": "ProcessRuleValidationSections"
+                }
+            ],
+            "Default": "SetEmptyRuleValidationResult"
+        },
+        "SetEmptyRuleValidationResult": {
+            "Type": "Pass",
+            "Parameters": {
+                "document.$": "$.Result.document"
+            },
+            "ResultPath": "$.RuleValidationOrchestrationResult",
+            "Next": "CheckHITLRequired"
+        },
+        "ProcessRuleValidationSections": {
+            "Type": "Map",
+            "ItemsPath": "$.Result.document.sections",
+            "ItemSelector": {
+                "execution_arn.$": "$$.Execution.Id",
+                "document.$": "$.Result.document",
+                "section_id.$": "$$.Map.Item.Value"
+            },
+            "MaxConcurrency": 10,
+            "Iterator": {
+                "StartAt": "RuleValidationStep",
+                "States": {
+                    "RuleValidationStep": {
+                        "Type": "Task",
+                        "Resource": "${RuleValidationLambdaArn}",
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "Sandbox.Timedout",
+                                    "Lambda.ServiceException",
+                                    "Lambda.AWSLambdaException",
+                                    "Lambda.SdkClientException",
+                                    "Lambda.TooManyRequestsException",
+                                    "ServiceQuotaExceededException",
+                                    "ThrottlingException",
+                                    "ProvisionedThroughputExceededException",
+                                    "RequestLimitExceeded",
+                                    "ServiceUnavailableException"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 10,
+                                "BackoffRate": 2
+                            }
+                        ],
+                        "Next": "RuleValidationSectionComplete"
+                    },
+                    "RuleValidationSectionComplete": {
+                        "Type": "Pass",
+                        "End": true
+                    }
+                }
+            },
+            "ResultPath": "$.RuleValidationResults",
+            "Next": "RuleValidationOrchestration"
+        },
+        "RuleValidationOrchestration": {
+            "Type": "Task",
+            "Resource": "${RuleValidationOrchestrationLambdaArn}",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException",
+                        "ServiceQuotaExceededException",
+                        "ThrottlingException",
+                        "ProvisionedThroughputExceededException",
+                        "RequestLimitExceeded",
+                        "ServiceUnavailableException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                }
+            ],
+            "ResultPath": "$.RuleValidationOrchestrationResult",
             "Next": "CheckHITLRequired"
         },
         "CheckHITLRequired": {
@@ -170,66 +258,14 @@
                 {
                     "Variable": "$.Result.hitl_triggered",
                     "BooleanEquals": true,
-                    "Next": "HITLReview"
+                    "Next": "MarkHITLPending"
                 }
             ],
             "Default": "SummarizationStep"
         },
-        "HITLReview": {
-            "Type": "Task",
-            "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
-            "Parameters": {
-                "FunctionName": "${HITLWaitFunctionArn}",
-                "Payload": {
-                    "taskToken.$": "$$.Task.Token",
-                    "Payload.$": "$"
-                }
-            },
-            "ResultPath": "$.HITLWaitResult",
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "Lambda.ServiceException",
-                        "Lambda.SdkClientException",
-                        "Lambda.TooManyRequestsException",
-                        "ServiceQuotaExceededException",
-                        "ThrottlingException",
-                        "ProvisionedThroughputExceededException",
-                        "RequestLimitExceeded",
-                        "ServiceUnavailableException"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 10,
-                    "BackoffRate": 2
-                }
-            ],
-            "Next": "HITLStatusUpdate"
-        },
-        "HITLStatusUpdate": {
-            "Type": "Task",
-            "Resource": "${HITLStatusUpdateFunctionArn}",
-            "Parameters": {
-                "Result.$": "$.Result",
-                "HITLWaitResult.$": "$.HITLWaitResult"
-            },
-            "ResultPath": "$.HITLStatusResult",
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "Lambda.ServiceException",
-                        "Lambda.SdkClientException",
-                        "Lambda.TooManyRequestsException",
-                        "ServiceQuotaExceededException",
-                        "ThrottlingException",
-                        "ProvisionedThroughputExceededException",
-                        "RequestLimitExceeded",
-                        "ServiceUnavailableException"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 10,
-                    "BackoffRate": 2
-                }
-            ],
+        "MarkHITLPending": {
+            "Type": "Pass",
+            "Comment": "Document marked for async HITL review, workflow continues without waiting",
             "Next": "SummarizationStep"
         },
         "SummarizationStep": {
@@ -237,7 +273,7 @@
             "Resource": "${SummarizationLambdaArn}",
             "Parameters": {
                 "execution_arn.$": "$$.Execution.Id",
-                "document.$": "$.Result.document"
+                "document.$": "States.ArrayGetItem(States.Array($.RuleValidationOrchestrationResult.document, $.Result.document), 0)"
             },
             "ResultPath": "$.Result",
             "OutputPath": "$.Result.document",

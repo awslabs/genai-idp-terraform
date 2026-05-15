@@ -13,6 +13,7 @@ from idp_common.utils import (
     extract_json_from_text,
     extract_structured_data_from_text,
     extract_yaml_from_text,
+    repair_truncated_json,
 )
 
 # Import yaml with fallback for testing
@@ -686,6 +687,232 @@ document:
         assert len(doc["extraction"]["line_items"]) == 2
         assert doc["extraction"]["line_items"][0]["pricing"]["total"] == 50.00
         assert doc["extraction"]["summary"]["total"] == 102.60
+
+
+@pytest.mark.unit
+class TestRepairTruncatedJson:
+    """Tests for the repair_truncated_json function."""
+
+    def test_valid_json_no_repair_needed(self):
+        """Test that valid JSON passes through without repair."""
+        text = '{"Agency": "ACME Corp", "Advertiser": "Client XYZ", "LineItems": [{"item": 1}]}'
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert result["Agency"] == "ACME Corp"
+        assert result["Advertiser"] == "Client XYZ"
+        assert info["was_truncated"] is False
+        assert info["fields_recovered"] == 3
+
+    def test_truncated_json_in_code_block(self):
+        """Test repair of truncated JSON inside markdown code block."""
+        # Simulates real-world LLM output that got cut off
+        text = """```json
+{
+  "Agency": "RICHARDSON OREGON SEC OF STAT",
+  "Advertiser": "RICHARDSON OREGON SEC OF STATE (29214)",
+  "LineItems": [
+    {
+      "LineItemEndDate": "10/02/2016",
+      "LineItemStartDate": "09/26/2016",
+      "LineItemDescription": "W",
+      "LineItemDays": "X X X X X X X",
+      "LineItemRate": 10.0
+    },
+    {
+      "LineItemEndDate": "10/09/2016",
+      "LineItemStartDate": "10/03/2016",
+      "LineItemDescription": "W",
+      "LineItemDays": "X X X X X"""
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert "Agency" in result
+        assert result["Agency"] == "RICHARDSON OREGON SEC OF STAT"
+        assert "Advertiser" in result
+
+    def test_truncated_json_mid_string(self):
+        """Test repair of JSON truncated in the middle of a string value."""
+        text = '{"name": "John Doe", "address": "123 Main St, Apt'
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert "name" in result
+        assert result["name"] == "John Doe"
+
+    def test_truncated_json_mid_array(self):
+        """Test repair of JSON truncated in the middle of an array."""
+        # A more recoverable truncated array with complete first elements
+        text = '{"items": [{"id": 1, "name": "Apple"}, {"id": 2, "name": "Banana"}], "incomplete": "val'
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert "items" in result
+        # Should recover the complete array items
+        assert len(result["items"]) == 2
+
+    def test_truncated_json_nested_object(self):
+        """Test repair of JSON truncated within a nested object."""
+        text = '{"document": {"type": "invoice", "vendor": {"name": "ACME", "addr'
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert "document" in result
+
+    def test_truncated_json_after_complete_field(self):
+        """Test repair of JSON truncated right after a complete field."""
+        text = '{"field1": "value1", "field2": 123, "field3":'
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert result["field1"] == "value1"
+        assert result["field2"] == 123
+
+    def test_truncated_json_numeric_values(self):
+        """Test repair of JSON with various numeric types."""
+        text = '{"integer": 42, "float": 3.14159, "negative": -100, "scientific": 1.5e'
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert result["integer"] == 42
+        assert result["float"] == 3.14159
+        assert result["negative"] == -100
+
+    def test_truncated_json_boolean_null(self):
+        """Test repair of JSON with boolean and null values."""
+        text = '{"active": true, "deleted": false, "notes": null, "incomplete":'
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert result["active"] is True
+        assert result["deleted"] is False
+        assert result["notes"] is None
+
+    def test_empty_text(self):
+        """Test handling of empty text."""
+        result, info = repair_truncated_json("")
+
+        assert result is None
+        assert info["error"] == "Empty text provided"
+
+    def test_no_json_found(self):
+        """Test handling of text with no JSON."""
+        text = "This is just plain text with no JSON structure at all."
+
+        result, info = repair_truncated_json(text)
+
+        assert result is None
+        assert "No JSON object found" in info["error"]
+
+    def test_repair_info_fields(self):
+        """Test that repair_info contains all expected fields."""
+        text = '{"test": "value"'
+
+        result, info = repair_truncated_json(text)
+
+        # Check all expected keys are present
+        assert "was_truncated" in info
+        assert "repair_succeeded" in info
+        assert "repair_method" in info
+        assert "fields_recovered" in info
+        assert "error" in info
+
+    def test_real_world_truncated_extraction(self):
+        """Test repair of real-world truncated extraction output.
+
+        This test uses a sample from actual truncated LLM output that caused
+        evaluation failures in production.
+        """
+        # Simulating the actual truncated output structure from the bug report
+        text = """```json
+{
+  "Agency": "RICHARDSON OREGON SEC OF STAT",
+  "Advertiser": "RICHARDSON OREGON SEC OF STATE (29214)",
+  "LineItems": [
+    {
+      "LineItemEndDate": "10/02/2016",
+      "LineItemStartDate": "09/26/2016",
+      "LineItemDescription": "W",
+      "LineItemDays": "X X X X X X X",
+      "LineItemRate": 10.0
+    },
+    {
+      "LineItemEndDate": "10/09/2016",
+      "LineItemStartDate": "10/03/2016",
+      "LineItemDescription": "W",
+      "LineItemDays": "X X X X X X X",
+      "LineItemRate": 10.0
+    },
+    {
+      "LineItemEndDate": "09/30/2016",
+      "LineItemStartDate": "09/26/2016",
+      "LineItemDescription": "W",
+      "LineItemDays": "X X X X X",
+      "LineItemRate": 38.0
+    }
+  ],
+  "GrossTotal": 44674.0,
+  "PaymentTerms": null,
+  "AgencyCommission": 6701.1,
+  "NetAmountDue": 37973.0,
+  "IncompleteField": "This value is trun"""
+
+        result, info = repair_truncated_json(text)
+
+        assert result is not None
+        assert info["was_truncated"] is True
+        assert info["repair_succeeded"] is True
+        assert info["fields_recovered"] >= 3  # At minimum Agency, Advertiser, LineItems
+
+        # Verify key fields were recovered
+        assert result["Agency"] == "RICHARDSON OREGON SEC OF STAT"
+        assert result["Advertiser"] == "RICHARDSON OREGON SEC OF STATE (29214)"
+        assert "LineItems" in result
+        assert isinstance(result["LineItems"], list)
+        assert len(result["LineItems"]) >= 1
+
+    def test_severely_truncated_json(self):
+        """Test handling of very severely truncated JSON."""
+        text = '{"field1": "'
+
+        result, info = repair_truncated_json(text)
+
+        # Should either succeed with partial data or fail gracefully
+        if result is None:
+            assert "error" in info
+        else:
+            assert info["repair_succeeded"] is True
+
+    def test_truncated_with_escaped_characters(self):
+        """Test repair of JSON with escaped characters."""
+        text = r'{"message": "He said \"Hello\", and then'
+
+        result, info = repair_truncated_json(text)
+
+        # Should handle escaped quotes correctly
+        if result is not None:
+            assert info["repair_succeeded"] is True
 
 
 @pytest.mark.unit

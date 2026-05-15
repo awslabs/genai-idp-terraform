@@ -12,6 +12,8 @@ from typing import Any, Dict
 import boto3
 from strands import tool
 
+from ..analytics_logger import analytics_logger
+
 logger = logging.getLogger(__name__)
 
 # Maximum number of rows that can be returned directly when return_full_query_results=True
@@ -45,12 +47,14 @@ def run_athena_query(
             original_query (the original query the user entered, for posterity)
             full_results (optional, only if return_full_query_results=True): CSV string of query results
     """
+    start_time = time.time()
     try:
         # Create Athena client
         athena_client = boto3.client("athena", region_name=config.get("aws_region"))
 
         # Start query execution
-        logger.info(f"Executing Athena query: {query}")
+        analytics_logger.log_query(query)
+        logger.info(f"return_full_query_results: [{return_full_query_results}]")
         response = athena_client.start_query_execution(
             QueryString=query,
             QueryExecutionContext={"Database": config["athena_database"]},
@@ -112,7 +116,7 @@ def run_athena_query(
                     f"Query returned {total_rows} rows, which exceeds the limit of {MAX_ROWS_TO_RETURN_DIRECTLY} "
                     f"for return_full_query_results=True"
                 )
-                return {
+                result = {
                     "success": False,
                     "error": (
                         f"More than {MAX_ROWS_TO_RETURN_DIRECTLY} rows were retrieved when the tool was called with "
@@ -123,6 +127,9 @@ def run_athena_query(
                     "query": query,
                     "rows_returned": total_rows,
                 }
+                analytics_logger.log_content("run_athena_query", result)
+                logger.info(f"return_full_query_results: [{return_full_query_results}]")
+                return result
 
             result_dict = {
                 "success": True,
@@ -168,6 +175,8 @@ def run_athena_query(
                         f"Error reading results from S3: {str(e)}"
                     )
 
+            analytics_logger.log_content("run_athena_query", result_dict)
+            logger.info(f"return_full_query_results: [{return_full_query_results}]")
             return result_dict
 
         elif state == "RUNNING":
@@ -175,13 +184,16 @@ def run_athena_query(
             logger.warning(
                 f"Query still running after {max_polling_attempts} polling attempts. Query execution ID: {query_execution_id}"
             )
-            return {
+            result = {
                 "success": False,
                 "error": f"Query timed out after {max_polling_attempts} polling attempts. The query is still running in Athena and may complete later.",
                 "query": query,
                 "query_execution_id": query_execution_id,
                 "state": "RUNNING",
             }
+            analytics_logger.log_content("run_athena_query", result)
+            logger.info(f"return_full_query_results: [{return_full_query_results}]")
+            return result
         else:
             # Query failed
             error_message = response["QueryExecution"]["Status"].get(
@@ -190,14 +202,22 @@ def run_athena_query(
             error_details = response["QueryExecution"]["Status"].get("AthenaError", {})
             logger.error(f"Query failed with state {state}. Reason: {error_message}")
 
-            return {
+            result = {
                 "success": False,
                 "error": error_message,
                 "state": state,
                 "athena_error_details": error_details,
                 "query": query,
             }
+            analytics_logger.log_content("run_athena_query", result)
+            logger.info(f"return_full_query_results: [{return_full_query_results}]")
+            return result
 
     except Exception as e:
         logger.exception("Error executing Athena query")
-        return {"success": False, "error": str(e), "query": query}
+        result = {"success": False, "error": str(e), "query": query}
+        analytics_logger.log_content("run_athena_query", result)
+        logger.info(f"return_full_query_results: [{return_full_query_results}]")
+        return result
+    finally:
+        analytics_logger.log_event("run_athena_query", time.time() - start_time)

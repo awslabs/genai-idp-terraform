@@ -17,7 +17,7 @@ from model_versions import get_model_revision
 
 class UDOPModel(pl.LightningModule):
     def __init__(
-        self, model_id, lr=5e-5, weight_decay=1e-5, b1=0.9, b2=0.999,
+        self, model_id, lr=5e-5, weight_decay=1e-5, b1=0.9, b2=0.999, 
         lr_warmup_steps=20, max_steps=5000, dropout_rate=0.2,
         print_every_n_steps=100
     ):
@@ -103,7 +103,7 @@ class UDOPModel(pl.LightningModule):
     def on_validation_epoch_end(self):
         # need to make sure we have elements in the list before we evaluate
         d = {t: {
-            'predictions': [o['model_output'] for o in self.validation_step_outputs if o['task'] == t],
+            'predictions': [o['model_output'] for o in self.validation_step_outputs if o['task'] == t], 
             'targets': [o['targets'] for o in self.validation_step_outputs if o['task'] == t]
         } for t in self.tasks.keys()}
         for k, v in d.items():

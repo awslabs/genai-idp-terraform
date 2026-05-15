@@ -16,12 +16,8 @@ phases:
       - echo "Image tag will be $IMAGE_VERSION"
       - export FUNCTION_bda_invoke="patterns/pattern-1/src/bda_invoke_function"
       - export FUNCTION_bda_completion="patterns/pattern-1/src/bda_completion_function"
-      - export FUNCTION_bda_discovery="patterns/pattern-1/src/bda_discovery_function"
       - export FUNCTION_processresults="patterns/pattern-1/src/processresults_function"
       - export FUNCTION_summarization="patterns/pattern-1/src/summarization_function"
-      - export FUNCTION_hitl_wait="patterns/pattern-1/src/hitl-wait-function"
-      - export FUNCTION_hitl_status_update="patterns/pattern-1/src/hitl-status-update-function"
-      - export FUNCTION_hitl_process="patterns/pattern-1/src/hitl-process-function"
       - export FUNCTION_evaluation="patterns/pattern-1/src/evaluation_function"
       - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_bda_invoke -t $ECR_URI:bda-invoke-function-$IMAGE_VERSION -t $ECR_URI:bda-invoke-function --platform linux/arm64 --load .
       - docker push $ECR_URI:bda-invoke-function-$IMAGE_VERSION
@@ -29,24 +25,12 @@ phases:
       - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_bda_completion -t $ECR_URI:bda-completion-function-$IMAGE_VERSION -t $ECR_URI:bda-completion-function --platform linux/arm64 --load .
       - docker push $ECR_URI:bda-completion-function-$IMAGE_VERSION
       - docker push $ECR_URI:bda-completion-function
-      - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_bda_discovery -t $ECR_URI:bda-discovery-function-$IMAGE_VERSION -t $ECR_URI:bda-discovery-function --platform linux/arm64 --load .
-      - docker push $ECR_URI:bda-discovery-function-$IMAGE_VERSION
-      - docker push $ECR_URI:bda-discovery-function
       - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_processresults -t $ECR_URI:processresults-function-$IMAGE_VERSION -t $ECR_URI:processresults-function --platform linux/arm64 --load .
       - docker push $ECR_URI:processresults-function-$IMAGE_VERSION
       - docker push $ECR_URI:processresults-function
       - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_summarization -t $ECR_URI:summarization-function-$IMAGE_VERSION -t $ECR_URI:summarization-function --platform linux/arm64 --load .
       - docker push $ECR_URI:summarization-function-$IMAGE_VERSION
       - docker push $ECR_URI:summarization-function
-      - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_hitl_wait -t $ECR_URI:hitl-wait-function-$IMAGE_VERSION -t $ECR_URI:hitl-wait-function --platform linux/arm64 --load .
-      - docker push $ECR_URI:hitl-wait-function-$IMAGE_VERSION
-      - docker push $ECR_URI:hitl-wait-function
-      - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_hitl_status_update -t $ECR_URI:hitl-status-update-function-$IMAGE_VERSION -t $ECR_URI:hitl-status-update-function --platform linux/arm64 --load .
-      - docker push $ECR_URI:hitl-status-update-function-$IMAGE_VERSION
-      - docker push $ECR_URI:hitl-status-update-function
-      - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_hitl_process -t $ECR_URI:hitl-process-function-$IMAGE_VERSION -t $ECR_URI:hitl-process-function --platform linux/arm64 --load .
-      - docker push $ECR_URI:hitl-process-function-$IMAGE_VERSION
-      - docker push $ECR_URI:hitl-process-function
       - docker buildx build -f Dockerfile.optimized --build-arg FUNCTION_PATH=$FUNCTION_evaluation -t $ECR_URI:evaluation-function-$IMAGE_VERSION -t $ECR_URI:evaluation-function --platform linux/arm64 --load .
       - docker push $ECR_URI:evaluation-function-$IMAGE_VERSION
       - docker push $ECR_URI:evaluation-function
@@ -62,7 +46,7 @@ phases:
       - |
         # Optional: Quick check if any scans have already completed
         # This is informational only and does not block the build
-        IMAGES=("bda-invoke-function" "bda-completion-function" "bda-discovery-function" "processresults-function" "summarization-function" "hitl-wait-function" "hitl-status-update-function" "hitl-process-function" "evaluation-function")
+        IMAGES=("bda-invoke-function" "bda-completion-function" "processresults-function" "summarization-function" "hitl-wait-function" "hitl-status-update-function" "hitl-process-function" "evaluation-function")
         echo "Checking scan status (non-blocking)..."
         for IMAGE in "${IMAGES[@]}"; do
           SCAN_STATUS=$(aws ecr describe-image-scan-findings --repository-name $(basename $ECR_URI) --image-id imageTag=$IMAGE-$IMAGE_VERSION --region $AWS_REGION --query 'imageScanStatus.status' --output text 2>/dev/null || echo "IN_PROGRESS")

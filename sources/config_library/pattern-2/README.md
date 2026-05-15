@@ -17,6 +17,31 @@ Key components of Pattern 2:
 - **Field extraction** using Claude via Amazon Bedrock
 - **Assessment functionality** for confidence evaluation of extraction results
 
+## Configuration Structure
+
+Pattern 2 configurations leverage **system defaults** for standard settings. A minimal config only needs:
+
+```yaml
+notes: "Description of the configuration"
+
+classes:
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: DocumentType
+    type: object
+    x-aws-idp-document-type: DocumentType
+    description: "Document description"
+    properties:
+      field_name:
+        type: string
+        description: "Field description"
+```
+
+**Override only what differs from defaults.** For example, to change the classification method:
+```yaml
+classification:
+  classificationMethod: textbasedHolisticClassification
+```
+
 ## OCR Backend Selection for Pattern 2
 
 Pattern 2 supports multiple OCR backends, each with different implications for the assessment feature:
@@ -41,48 +66,26 @@ Pattern 2 supports multiple OCR backends, each with different implications for t
 
 > ⚠️ **Assessment Recommendation**: Use Textract backend (default) when assessment functionality is required. Bedrock and None backends eliminate assessment capability due to lack of confidence data.
 
-## Text Confidence Data and Assessment Integration
-
-Pattern 2's assessment feature relies on text confidence data generated during the OCR phase to evaluate extraction quality and provide confidence scores for each extracted attribute.
-
-### How Text Confidence Data Enables Assessment
-
-1. **OCR Phase**: Textract generates confidence scores for each text block during document processing
-2. **Condensed Format**: OCR service creates optimized `textConfidence.json` files with 80-90% token reduction
-3. **Assessment Phase**: LLM analyzes extraction results against OCR confidence data to provide accurate confidence evaluation
-4. **UI Integration**: Assessment results appear in the web interface with color-coded confidence indicators
-
-### Assessment Workflow Impact by OCR Backend
-
-**With Textract Backend:**
-```
-Document → Textract OCR → Rich Confidence Data → Assessment LLM → Confidence Scores
-```
-- Assessment LLM receives detailed confidence information for each text region
-- Can accurately evaluate extraction confidence based on OCR quality
-- Provides meaningful confidence scores and explanations
-
-**With Bedrock/None Backend:**
-```
-Document → LLM/No OCR → Empty Confidence Data → Assessment Disabled
-```
-- No confidence data available for assessment
-- Assessment feature cannot function without OCR confidence scores
-- Results in assessment being skipped or disabled
-
 ## Adding Configurations
 
 To add a new configuration for Pattern 2:
 
 1. Create a new directory with a descriptive name
-2. Include a config.json file with the appropriate settings
+2. Include a `config.yaml` file with the appropriate settings
 3. Add a README.md file using the template from `../TEMPLATE_README.md`
-4. Include sample documents in a samples/ directory
+4. Include sample documents in a `samples/` directory
 
 See the main [README.md](../README.md) for more detailed instructions on creating and contributing configurations.
 
 ## Available Configurations
 
-- [default](./default/): Default configuration for general document processing
-- [medical_records_summarization](./medical_records_summarization/): Specialized configuration for processing and summarizing medical records
-- [checkboxed_attributes_extraction](./checkboxed_attributes_extraction): Specialized configuration for processing documents that contain checkboxes where key information is extracted by selected boxes
+| Configuration | Description | Special Features |
+|---------------|-------------|------------------|
+| [bank-statement-sample](./bank-statement-sample/) | Bank statement processing with transaction extraction | Text-based holistic classification, granular assessment |
+| [criteria-validation](./criteria-validation/) | Healthcare/insurance prior authorization validation | Custom criteria validation rules and prompts |
+| [lending-package-sample](./lending-package-sample/) | Lending package processing (payslips, IDs, bank checks, W2s) | 6 document classes |
+| [lending-package-sample-govcloud](./lending-package-sample-govcloud/) | GovCloud-compatible lending package processing | |
+| [ocr-benchmark](./ocr-benchmark/) | OCR benchmarking configuration | |
+| [realkie-fcc-verified](./realkie-fcc-verified/) | Real estate FCC verification documents | |
+| [rvl-cdip](./rvl-cdip/) | RVL-CDIP document classification benchmark | 16 document classes |
+| [rvl-cdip-with-few-shot-examples](./rvl-cdip-with-few-shot-examples/) | RVL-CDIP with few-shot learning examples | Custom prompts with `{FEW_SHOT_EXAMPLES}` |

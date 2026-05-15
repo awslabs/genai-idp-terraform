@@ -53,6 +53,48 @@
   white-space: normal;
 }
 
+/* Two-column tables (e.g., Text + Confidence tables) */
+.markdown-viewer table th:nth-child(2):last-child,
+.markdown-viewer table td:nth-child(2):last-child {
+  /* Second column in 2-column tables - ensure "Confidence" doesn't wrap */
+  min-width: 140px;
+}
+
+/* Styles for markdown preview in PageTextEditorModal */
+.page-text-markdown-preview table {
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 14px;
+  width: 100% !important;
+}
+
+.page-text-markdown-preview table th,
+.page-text-markdown-preview table td {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  white-space: normal;
+}
+
+.page-text-markdown-preview table thead {
+  background-color: #f1f1f1;
+}
+
+.page-text-markdown-preview table th {
+  font-weight: bold;
+  text-align: left;
+}
+
+.page-text-markdown-preview table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+/* Ensure Confidence column doesn't wrap in 2-column tables */
+.page-text-markdown-preview table th:nth-child(2):last-child,
+.page-text-markdown-preview table td:nth-child(2):last-child {
+  min-width: 140px;
+  white-space: nowrap;
+}
+
 /* Alternate row colors */
 .markdown-viewer table tr:nth-child(even) {
   background-color: #f9f9f9;

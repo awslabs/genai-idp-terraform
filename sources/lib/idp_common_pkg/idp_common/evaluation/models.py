@@ -57,6 +57,9 @@ class AttributeEvaluationResult:
     weight: Optional[float] = (
         None  # Field importance weight from Stickler (business criticality)
     )
+    field_comparison_details: Optional[List[Dict[str, Any]]] = (
+        None  # Detailed field-by-field comparison from sticker-eval v0.1.4+
+    )
 
 
 @dataclass
@@ -123,6 +126,89 @@ class DocumentEvaluationResult:
     output_uri: Optional[str] = None
     doc_split_metrics: Optional[DocSplitMetrics] = None
 
+    def _format_nested_comparisons(
+        self, field_comparisons: List[Dict[str, Any]], indent_level: int = 0
+    ) -> str:
+        """
+        Format nested field comparison details as HTML.
+
+        Shows both expected and actual paths to reveal Hungarian matching pairs
+        where list indices may differ.
+
+        Args:
+            field_comparisons: List of field comparison dictionaries from Stickler
+            indent_level: Current indentation level for nested fields
+
+        Returns:
+            HTML string with formatted comparison details
+        """
+        if not field_comparisons:
+            return "<p><em>No detailed comparisons available</em></p>"
+
+        html_parts = []
+        html_parts.append(
+            '<table class="nested-comparison-table" style="width: 100%; border-collapse: collapse; font-size: 0.9em; margin: 10px 0;">'
+        )
+        html_parts.append(
+            "<thead><tr style='background: #f0f0f0;'>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: left;'>Expected Path</th>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: left;'>Expected Value</th>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: left;'>Actual Path</th>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: left;'>Actual Value</th>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: center;'>Match</th>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: center;'>Score</th>"
+            "<th style='padding: 8px; border: 1px solid #ddd; text-align: left;'>Reason</th>"
+            "</tr></thead><tbody>"
+        )
+
+        for fc in field_comparisons:
+            expected_key = fc.get("expected_key", "N/A")
+            actual_key = fc.get("actual_key", "N/A")
+            expected_val = str(fc.get("expected_value", ""))[:100]
+            actual_val = str(fc.get("actual_value", ""))[:100]
+            match = fc.get("match", False)
+            score = fc.get("score", 0.0)
+            reason = fc.get("reason", "")
+
+            # Escape HTML special characters
+            expected_val = (
+                expected_val.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+            actual_val = (
+                actual_val.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+            reason_escaped = (
+                str(reason)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                if reason
+                else ""
+            )
+
+            # Style based on match status
+            row_style = "background: #d4edda;" if match else "background: #f8d7da;"
+            match_symbol = "✅" if match else "❌"
+
+            html_parts.append(
+                f"<tr style='{row_style}'>"
+                f"<td style='padding: 8px; border: 1px solid #ddd;'><code>{expected_key}</code></td>"
+                f"<td style='padding: 8px; border: 1px solid #ddd;'>{expected_val}</td>"
+                f"<td style='padding: 8px; border: 1px solid #ddd;'><code>{actual_key}</code></td>"
+                f"<td style='padding: 8px; border: 1px solid #ddd;'>{actual_val}</td>"
+                f"<td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{match_symbol}</td>"
+                f"<td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{score:.3f}</td>"
+                f"<td style='padding: 8px; border: 1px solid #ddd; font-size: 0.85em;'>{reason_escaped}</td>"
+                "</tr>"
+            )
+
+        html_parts.append("</tbody></table>")
+        return "".join(html_parts)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
         result = {
@@ -150,6 +236,7 @@ class DocumentEvaluationResult:
                             "confidence": ar.confidence,
                             "confidence_threshold": ar.confidence_threshold,
                             "weight": ar.weight,
+                            "field_comparison_details": ar.field_comparison_details,
                         }
                         for ar in sr.attributes
                     ],
@@ -165,11 +252,15 @@ class DocumentEvaluationResult:
         return result
 
     def to_markdown(self) -> str:
-        """Convert evaluation results to markdown format."""
+        """Convert evaluation results to clean, portable markdown format."""
         sections = []
 
-        # Add main title at the very beginning
+        # Add main title
         sections.append("# Evaluation Report")
+        sections.append("")
+
+        # Add marker for React UI to detect evaluation reports with enhanced data
+        sections.append("<!-- eval-report-v2 -->")
         sections.append("")
 
         # Get overall stats for visual summary
@@ -546,44 +637,137 @@ class DocumentEvaluationResult:
             sections.append(metrics_table)
             sections.append("")
 
-            # Attribute results
+            # Attribute results with enhanced nested details
             sections.append("#### Attributes")
-            attr_table = "| Status | Attribute | Expected | Actual | Confidence | Confidence Threshold | Score | Weight | Method | Reason |\n"
-            attr_table += "| :----: | --------- | -------- | ------ | :---------------: | :---------------: | ----- | :----: | ------ | ------ |\n"
+
+            # Use HTML table for better control over row classes and expandable details
+            sections.append('<table style="width: 100%; border-collapse: collapse;">')
+            sections.append(
+                '<thead><tr style="background: #f0f0f0;">'
+                '<th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Status</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd;">Attribute</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd;">Expected</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd;">Actual</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Confidence</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Conf. Threshold</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Score</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Weight</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd;">Method</th>'
+                '<th style="padding: 8px; border: 1px solid #ddd;">Reason</th>'
+                "</tr></thead><tbody>"
+            )
+
             for ar in sr.attributes:
-                expected = str(ar.expected).replace("\n", " ")
-                actual = str(ar.actual).replace("\n", " ")
-                # Don't truncate the reason field for the report
-                reason = str(ar.reason).replace("\n", " ") if ar.reason else ""
+                # Determine row class for filtering
+                row_class = "matched-row" if ar.matched else "unmatched-row"
 
-                # Use evaluation_method directly - it's already formatted with threshold
-                method_display = ar.evaluation_method
+                # Status symbol
+                status_symbol = "✅" if ar.matched else "❌"
 
-                # Add color-coded status symbols (will render in markdown-compatible viewers)
-                if ar.matched:
-                    # Green checkmark for matched
-                    status_symbol = "✅"
-                else:
-                    # Red X for not matched
-                    status_symbol = "❌"
+                # Truncate long values for display in table
+                expected_display = str(ar.expected)[:100]
+                if len(str(ar.expected)) > 100:
+                    expected_display += "..."
+                actual_display = str(ar.actual)[:100]
+                if len(str(ar.actual)) > 100:
+                    actual_display += "..."
+
+                # Escape HTML in values
+                expected_display = (
+                    expected_display.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\n", " ")
+                )
+                actual_display = (
+                    actual_display.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\n", " ")
+                )
+                reason = (
+                    str(ar.reason)
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\n", " ")
+                    if ar.reason
+                    else ""
+                )
 
                 # Format confidence values
                 confidence_str = (
                     f"{ar.confidence:.2f}" if ar.confidence is not None else "N/A"
                 )
-
-                # Format confidence threshold values
                 threshold_str = (
                     f"{ar.confidence_threshold:.2f}"
                     if ar.confidence_threshold is not None
                     else "N/A"
                 )
 
-                # Format weight value (defaults to 1.0 if not specified)
+                # Format weight value
                 weight_str = f"{ar.weight:.2f}" if ar.weight is not None else "1.00"
 
-                attr_table += f"| {status_symbol} | {ar.name} | {expected} | {actual} | {confidence_str} | {threshold_str} | {ar.score:.2f} | {weight_str} | {method_display} | {reason} |\n"
-            sections.append(attr_table)
+                # Check if aggregate score (nested object or array)
+                has_nested_details = (
+                    ar.field_comparison_details and len(ar.field_comparison_details) > 1
+                )
+                if has_nested_details:
+                    score_display = f'<span class="aggregate-score">{ar.score:.2f}</span> <em>(aggregate)</em>'
+                else:
+                    score_display = f"{ar.score:.2f}"
+
+                # Create table row
+                sections.append(f'<tr class="{row_class}">')
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{status_symbol}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd;"><strong>{ar.name}</strong></td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd;">{expected_display}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd;">{actual_display}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{confidence_str}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{threshold_str}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{score_display}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{weight_str}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd;">{ar.evaluation_method}</td>'
+                )
+                sections.append(
+                    f'<td style="padding: 8px; border: 1px solid #ddd;">{reason}</td>'
+                )
+                sections.append("</tr>")
+
+                # Add expandable nested details if available
+                if has_nested_details:
+                    sections.append(f'<tr class="{row_class}">')
+                    sections.append(
+                        '<td colspan="10" style="padding: 0; border: 1px solid #ddd;">'
+                    )
+                    sections.append(
+                        f'<details><summary style="padding: 8px;"><strong>🔍 View {len(ar.field_comparison_details)} Nested Field Comparisons</strong></summary>'
+                    )
+                    sections.append('<div style="padding: 10px;">')
+                    sections.append(
+                        self._format_nested_comparisons(ar.field_comparison_details)
+                    )
+                    sections.append("</div></details>")
+                    sections.append("</td></tr>")
+
+            sections.append("</tbody></table>")
             sections.append("")
 
         # Add execution time

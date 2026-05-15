@@ -14,7 +14,13 @@ import logging
 from typing import Any, Dict, Optional
 
 from idp_common.appsync.client import AppSyncClient
-from idp_common.appsync.mutations import CREATE_DOCUMENT, UPDATE_DOCUMENT
+from idp_common.appsync.mutations import (
+    CREATE_DOCUMENT,
+    GET_DOCUMENT,
+    UPDATE_DOCUMENT,
+    UPDATE_DOCUMENT_SECTION,
+    UPDATE_DOCUMENT_STATUS,
+)
 from idp_common.models import Document, HitlMetadata, Page, Section, Status
 
 logger = logging.getLogger(__name__)
@@ -67,6 +73,10 @@ class DocumentAppSyncService:
         if document.trace_id:
             input_data["TraceId"] = document.trace_id
 
+        # Add config_version if available
+        if document.config_version:
+            input_data["ConfigVersion"] = document.config_version
+
         return input_data
 
     def _document_to_update_input(self, document: Document) -> Dict[str, Any]:
@@ -101,6 +111,8 @@ class DocumentAppSyncService:
             input_data["WorkflowStatus"] = "FAILED"
         elif document.status == Status.COMPLETED:
             input_data["WorkflowStatus"] = "SUCCEEDED"
+        elif document.status == Status.ABORTED:
+            input_data["WorkflowStatus"] = "ABORTED"
         else:
             input_data["WorkflowStatus"] = "RUNNING"
 
@@ -161,12 +173,16 @@ class DocumentAppSyncService:
 
                         alert_data = {
                             "attributeName": alert.get("attribute_name"),
-                            "confidence": float(confidence_value)
-                            if confidence_value is not None
-                            else None,
-                            "confidenceThreshold": float(confidence_threshold_value)
-                            if confidence_threshold_value is not None
-                            else None,
+                            "confidence": (
+                                float(confidence_value)
+                                if confidence_value is not None
+                                else None
+                            ),
+                            "confidenceThreshold": (
+                                float(confidence_threshold_value)
+                                if confidence_threshold_value is not None
+                                else None
+                            ),
                         }
                         alerts_data.append(alert_data)
                     section_data["ConfidenceThresholdAlerts"] = alerts_data
@@ -190,6 +206,15 @@ class DocumentAppSyncService:
         if document.summary_report_uri:
             input_data["SummaryReportUri"] = document.summary_report_uri
 
+        # Add rule validation result URI if available
+        if (
+            document.rule_validation_result
+            and document.rule_validation_result.output_uri
+        ):
+            input_data["RuleValidationResultUri"] = (
+                document.rule_validation_result.output_uri
+            )
+
         # Add HITL fields if available from hitl_metadata
         if document.hitl_metadata:
             # Get the most recent HITL metadata entry
@@ -199,15 +224,23 @@ class DocumentAppSyncService:
                 if latest_hitl.review_portal_url:
                     input_data["HITLReviewURL"] = latest_hitl.review_portal_url
 
-                # Determine HITL status - simple logic
-                if latest_hitl.hitl_completed:
-                    input_data["HITLStatus"] = "COMPLETED"
-                elif latest_hitl.hitl_triggered:
-                    input_data["HITLStatus"] = "IN_PROGRESS"
+        # Add Review Status fields from document model
+        if document.hitl_status:
+            input_data["HITLStatus"] = document.hitl_status
+        if getattr(document, "hitl_triggered", False):
+            input_data["HITLTriggered"] = document.hitl_triggered
+        if document.hitl_sections_pending:
+            input_data["HITLSectionsPending"] = document.hitl_sections_pending
+        if document.hitl_sections_completed:
+            input_data["HITLSectionsCompleted"] = document.hitl_sections_completed
 
         # Add trace_id if available
         if document.trace_id:
             input_data["TraceId"] = document.trace_id
+
+        # Add config_version if available
+        if document.config_version:
+            input_data["ConfigVersion"] = document.config_version
 
         return input_data
 
@@ -225,7 +258,7 @@ class DocumentAppSyncService:
         doc = Document(
             id=appsync_data.get("ObjectKey"),
             input_key=appsync_data.get("ObjectKey"),
-            num_pages=appsync_data.get("PageCount", 0),
+            num_pages=appsync_data.get("PageCount") or 0,
             queued_time=appsync_data.get("QueuedTime"),
             start_time=appsync_data.get("WorkflowStartTime"),
             completion_time=appsync_data.get("CompletionTime"),
@@ -233,7 +266,17 @@ class DocumentAppSyncService:
             evaluation_report_uri=appsync_data.get("EvaluationReportUri"),
             summary_report_uri=appsync_data.get("SummaryReportUri"),
             trace_id=appsync_data.get("TraceId"),
+            config_version=appsync_data.get("ConfigVersion"),
         )
+
+        # Handle rule validation result URI if present
+        rule_validation_uri = appsync_data.get("RuleValidationResultUri")
+        if rule_validation_uri:
+            from idp_common.models import RuleValidationResult
+
+            doc.rule_validation_result = RuleValidationResult(
+                request_id=doc.id or "", output_uri=rule_validation_uri
+            )
 
         # Handle HITL fields - create HITL metadata if HITL fields are present
         hitl_status = appsync_data.get("HITLStatus")
@@ -397,6 +440,160 @@ class DocumentAppSyncService:
 
         # Convert the response back to a Document object
         return self._appsync_to_document(result["updateDocument"])
+
+    def get_document(self, object_key: str) -> Optional[Document]:
+        """
+        Get a document from AppSync by its object key.
+
+        Args:
+            object_key: The object key of the document to retrieve
+
+        Returns:
+            Document object if found, None otherwise
+
+        Raises:
+            AppSyncError: If the GraphQL operation fails
+        """
+        try:
+            # Note: execute_mutation works for both mutations and queries
+            # GraphQL operations are sent the same way - only the query string differs
+            result = self.client.execute_mutation(
+                GET_DOCUMENT, {"objectKey": object_key}
+            )
+
+            document_data = result.get("getDocument")
+            if document_data:
+                return self._appsync_to_document(document_data)
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to get document {object_key}: {e}")
+            return None
+
+    def update_document_status(
+        self,
+        document_id: str,
+        status: Status,
+        workflow_execution_arn: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update only the status of a document (lightweight operation).
+
+        This method performs a minimal update that only touches the ObjectStatus field,
+        reducing DynamoDB WCU consumption from ~100KB to ~500 bytes. Use this during
+        parallel Map operations where multiple Lambda functions update status concurrently.
+
+        Args:
+            document_id: The ObjectKey of the document to update
+            status: The new Status to set
+            workflow_execution_arn: Optional workflow execution ARN
+
+        Returns:
+            Dictionary with the updated document fields
+
+        Raises:
+            AppSyncError: If the GraphQL operation fails
+        """
+        # Derive workflow status from document status
+        if status == Status.FAILED:
+            workflow_status = "FAILED"
+        elif status == Status.COMPLETED:
+            workflow_status = "SUCCEEDED"
+        elif status == Status.ABORTED:
+            workflow_status = "ABORTED"
+        else:
+            workflow_status = "RUNNING"
+
+        input_data = {
+            "ObjectKey": document_id,
+            "ObjectStatus": status.value,
+            "WorkflowStatus": workflow_status,
+        }
+
+        if workflow_execution_arn:
+            input_data["WorkflowExecutionArn"] = workflow_execution_arn
+
+        result = self.client.execute_mutation(
+            UPDATE_DOCUMENT_STATUS, {"input": input_data}
+        )
+
+        logger.info(f"Updated document status: {document_id} -> {status.value}")
+        return result["updateDocumentStatus"]
+
+    def update_document_section(
+        self,
+        document_id: str,
+        section_index: int,
+        section: Section,
+    ) -> Dict[str, Any]:
+        """
+        Update a single section in a document (atomic section-level update).
+
+        This method performs an atomic update of a single section using DynamoDB's
+        SET Sections[index] = :value expression. This reduces WCU consumption from
+        ~100KB to ~5KB per update and avoids read-modify-write race conditions
+        during parallel Map operations.
+
+        Args:
+            document_id: The ObjectKey of the document to update
+            section_index: The index position of the section in the Sections array
+            section: The Section object with updated data
+
+        Returns:
+            Dictionary with the updated document fields
+
+        Raises:
+            AppSyncError: If the GraphQL operation fails
+        """
+        # Convert page IDs to integers for AppSync
+        page_ids = []
+        for page_id in section.page_ids:
+            try:
+                page_ids.append(int(page_id))
+            except ValueError:
+                logger.warning(
+                    f"Skipping page ID {page_id} in section {section.section_id} - not an integer"
+                )
+
+        section_data = {
+            "Id": section.section_id,
+            "PageIds": page_ids,
+            "Class": section.classification,
+            "OutputJSONUri": section.extraction_result_uri or "",
+        }
+
+        # Convert confidence threshold alerts
+        if section.confidence_threshold_alerts:
+            alerts_data = []
+            for alert in section.confidence_threshold_alerts:
+                confidence_value = alert.get("confidence")
+                confidence_threshold_value = alert.get("confidence_threshold")
+
+                alert_data = {
+                    "attributeName": alert.get("attribute_name"),
+                    "confidence": float(confidence_value)
+                    if confidence_value is not None
+                    else None,
+                    "confidenceThreshold": float(confidence_threshold_value)
+                    if confidence_threshold_value is not None
+                    else None,
+                }
+                alerts_data.append(alert_data)
+            section_data["ConfidenceThresholdAlerts"] = alerts_data
+
+        input_data = {
+            "ObjectKey": document_id,
+            "SectionIndex": section_index,
+            "Section": section_data,
+        }
+
+        result = self.client.execute_mutation(
+            UPDATE_DOCUMENT_SECTION, {"input": input_data}
+        )
+
+        logger.info(
+            f"Updated section {section_index} ({section.section_id}) for document: {document_id}"
+        )
+        return result["updateDocumentSection"]
 
     def calculate_ttl(self, days: int = 30) -> int:
         """

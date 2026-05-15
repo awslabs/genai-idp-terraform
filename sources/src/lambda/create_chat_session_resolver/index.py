@@ -21,16 +21,16 @@ def handler(event, context):
     """Handler for creating new chat sessions"""
     try:
         logger.info(f"Creating chat session with event: {json.dumps(event)}")
-
+         
         # Generate session ID
         session_id = str(uuid.uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
-
+        
         logger.info(f"Successfully created chat session {session_id}")
-
+        
         # Calculate expiration time
         expiration_time = int((datetime.now(timezone.utc).timestamp() + (DATA_RETENTION_DAYS * 24 * 60 * 60)))
-
+        
         # Get user ID from event
         user_id = 'anonymous'
         if 'identity' in event:
@@ -38,7 +38,7 @@ def handler(event, context):
                 user_id = event['identity']['username']
             elif 'sub' in event['identity']:
                 user_id = event['identity']['sub']
-
+        
         # Create session record
         table = dynamodb.Table(CHAT_HISTORY_TABLE)
         table.put_item(
@@ -55,7 +55,7 @@ def handler(event, context):
                 'ExpiresAfter': expiration_time
             }
         )
-
+        
         # Return the session details
         return {
             'sessionId': session_id,
@@ -63,7 +63,7 @@ def handler(event, context):
             'lastMessageAt': timestamp,
             'messages': []
         }
-
+            
     except Exception as e:
         error_msg = f"Failed to create chat session: {str(e)}"
         logger.error(error_msg)

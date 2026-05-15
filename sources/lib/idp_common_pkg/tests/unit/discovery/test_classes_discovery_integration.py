@@ -13,7 +13,7 @@ import pytest
 
 # Import standard library modules first
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 # Import application modules
 from idp_common.discovery.classes_discovery import ClassesDiscovery
@@ -180,6 +180,7 @@ class TestClassesDiscoveryIntegration:
                 input_bucket="test-discovery-bucket",
                 input_prefix="forms/w4-sample.pdf",
                 region="us-west-2",
+                version="test-version",
             )
 
             # Store mocks for access in tests
@@ -212,6 +213,19 @@ class TestClassesDiscoveryIntegration:
 
         # Mock existing configuration (empty initially)
         service_with_mocks._mock_table.get_item.return_value = {}
+
+        # Mock scan for active config version
+        service_with_mocks._mock_table.scan.return_value = {
+            "Items": [
+                {
+                    "Configuration": "Config#v1",
+                    "IsActive": True,
+                    "CreatedAt": "2024-01-01T00:00:00Z",
+                    "UpdatedAt": "2024-01-01T00:00:00Z",
+                    "classes": [],
+                }
+            ]
+        }
 
         # Execute the discovery workflow
         result = service_with_mocks.discovery_classes_with_document(
@@ -252,8 +266,12 @@ class TestClassesDiscoveryIntegration:
         service_with_mocks._mock_table.put_item.assert_called_once()
         put_item_args = service_with_mocks._mock_table.put_item.call_args[1]
 
-        assert put_item_args["Item"]["Configuration"] == "Custom"
-        classes = put_item_args["Item"]["classes"]
+        assert put_item_args["Item"]["Configuration"] == "Config#test-version"
+        # Decompress the saved item to inspect config data (compressed storage format)
+        from idp_common.config.configuration_manager import ConfigurationManager
+
+        decompressed_item = ConfigurationManager._decompress_item(put_item_args["Item"])
+        classes = decompressed_item["classes"]
         assert len(classes) == 1
 
         # Verify JSON Schema format
@@ -299,21 +317,36 @@ class TestClassesDiscoveryIntegration:
         # Mock existing configuration
         service_with_mocks._mock_table.get_item.return_value = {}
 
+        # Mock scan for active config version
+        service_with_mocks._mock_table.scan.return_value = {
+            "Items": [
+                {
+                    "Configuration": "Config#v1",
+                    "IsActive": True,
+                    "CreatedAt": "2024-01-01T00:00:00Z",
+                    "UpdatedAt": "2024-01-01T00:00:00Z",
+                    "classes": [],
+                }
+            ]
+        }
+
         # Execute the discovery workflow with ground truth
         result = service_with_mocks.discovery_classes_with_document_and_ground_truth(
-            "test-discovery-bucket", "forms/w4-sample.pdf", "ground-truth/w4-gt.json"
+            "test-discovery-bucket",
+            "forms/w4-sample.pdf",
+            "ground-truth/w4-gt.json",
         )
 
         # Verify successful completion
         assert result["status"] == "SUCCESS"
 
-        # Verify S3 was accessed for both files
+        # Verify S3 was accessed for both files in correct order
         assert mock_get_bytes.call_count == 2
-        mock_get_bytes.assert_any_call(
-            bucket="test-discovery-bucket", key="ground-truth/w4-gt.json"
-        )
-        mock_get_bytes.assert_any_call(
-            bucket="test-discovery-bucket", key="forms/w4-sample.pdf"
+        mock_get_bytes.assert_has_calls(
+            [
+                call(bucket="test-discovery-bucket", key="ground-truth/w4-gt.json"),
+                call(bucket="test-discovery-bucket", key="forms/w4-sample.pdf"),
+            ]
         )
 
         # Verify Bedrock was called with ground truth context
@@ -348,8 +381,8 @@ class TestClassesDiscoveryIntegration:
         ]["content"][0]["text"]
         service_with_mocks._mock_bedrock_client.return_value = mock_w4_bedrock_response
 
-        # Mock existing configuration with different forms in JSON Schema format
-        existing_item = IDPConfig(
+        # Mock existing Default configuration with different forms in JSON Schema format
+        existing_default = IDPConfig(
             classes=[
                 {
                     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -373,9 +406,12 @@ class TestClassesDiscoveryIntegration:
         )
         # Create mocks for config_manager methods
         service_with_mocks.config_manager.get_configuration = MagicMock(
-            return_value=existing_item
+            return_value=existing_default
         )
-        service_with_mocks.config_manager.save_configuration = MagicMock()
+        service_with_mocks.config_manager.get_raw_configuration = MagicMock(
+            return_value={}  # No existing Custom
+        )
+        service_with_mocks.config_manager.save_raw_configuration = MagicMock()
 
         # Execute discovery
         result = service_with_mocks.discovery_classes_with_document(
@@ -385,13 +421,15 @@ class TestClassesDiscoveryIntegration:
         # Verify successful completion
         assert result["status"] == "SUCCESS"
 
-        # Verify configuration was saved
+        # Verify configuration was saved using save_raw_configuration
+        service_with_mocks.config_manager.save_raw_configuration.assert_called_once()
         save_config_args = (
-            service_with_mocks.config_manager.save_configuration.call_args[0]
+            service_with_mocks.config_manager.save_raw_configuration.call_args[0]
         )
-        updated_classes = save_config_args[1].classes
+        assert save_config_args[0] == "Config"  # First arg is config type
+        updated_classes = save_config_args[1]["classes"]  # Second arg is config dict
 
-        # Should have 2 classes: I-9 (unchanged) + W-4 (updated)
+        # Should have 2 classes: I-9 (from Default) + W-4 (updated)
         assert len(updated_classes) == 2
 
         # Find and verify the updated W-4 class (JSON Schema format)
@@ -460,6 +498,19 @@ class TestClassesDiscoveryIntegration:
                 "metering": {"tokens": 300},
             }
             service_with_mocks._mock_table.get_item.return_value = {}
+
+            # Mock scan for active config version
+            service_with_mocks._mock_table.scan.return_value = {
+                "Items": [
+                    {
+                        "Configuration": "Config#v1",
+                        "IsActive": True,
+                        "CreatedAt": "2024-01-01T00:00:00Z",
+                        "UpdatedAt": "2024-01-01T00:00:00Z",
+                        "classes": [],
+                    }
+                ]
+            }
 
             # Mock the image preparation
             mock_prepare_image.return_value = {

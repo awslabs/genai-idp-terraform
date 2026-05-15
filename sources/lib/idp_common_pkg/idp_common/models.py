@@ -27,9 +27,12 @@ class Status(Enum):
     POSTPROCESSING = "POSTPROCESSING"  # Document summarization
     HITL_IN_PROGRESS = "HITL_IN_PROGRESS"  # Human-in-the-loop review in progress
     SUMMARIZING = "SUMMARIZING"  # Document summarization
+    RULE_VALIDATION = "RULE_VALIDATION"  # Rule validation processing
+    RULE_VALIDATION_ORCHESTRATOR = "RULE_VALIDATION_ORCHESTRATOR"  # Rule validation orchestration and consolidation
     EVALUATING = "EVALUATING"  # Document evaluation
     COMPLETED = "COMPLETED"  # All processing completed
-    FAILED = "FAILED"  # Processing failed
+    FAILED = "FAILED"  # Processing failedy
+    ABORTED = "ABORTED"  # User cancelled workflow
 
 
 @dataclass
@@ -89,6 +92,70 @@ class Section:
 
 
 @dataclass
+class RuleValidationResult:
+    """Result of criteria validation for a document request."""
+
+    request_id: str
+    summary: Optional[Dict[str, Any]] = None
+    section_results: Optional[List[Dict[str, Any]]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    output_uri: Optional[str] = None
+    errors: Optional[List[str]] = None
+
+    @classmethod
+    def for_section(
+        cls,
+        document_id: str,
+        section_uri: str,
+        timing_metrics: Dict = None,
+        chunking_occurred: bool = False,
+        chunks_created: int = 0,
+    ):
+        """Create result for single section processing."""
+        section_data = {
+            "section_uri": section_uri,
+            "timing": timing_metrics or {},
+            "chunking_occurred": chunking_occurred,
+            "chunks_created": chunks_created,
+        }
+        return cls(
+            request_id=document_id,
+            section_results=[section_data],
+            metadata={
+                "sections_processed": 1,
+                "section_output_uri": section_uri,
+                "chunking_occurred": chunking_occurred,
+                "chunks_created": chunks_created,
+            },
+            output_uri=section_uri,
+        )
+
+    @classmethod
+    def for_consolidation(
+        cls,
+        document_id: str,
+        rule_type_uris: List[str],
+        summary_uri: str,
+        sections_processed: int = 0,
+        section_results: Optional[List[Dict[str, Any]]] = None,
+    ):
+        """Create result for consolidation processing."""
+        return cls(
+            request_id=document_id,
+            summary={
+                "rule_type_uris": rule_type_uris,
+                "consolidated_summary_uri": summary_uri,
+            },
+            section_results=section_results,  # Preserve section results from Map state
+            metadata={
+                "processing_type": "consolidation",
+                "sections_processed": sections_processed,
+            },
+            output_uri=summary_uri,
+        )
+
+
+@dataclass
 class HitlMetadata:
     """Represents HITL (Human-In-The-Loop) metadata for a document."""
 
@@ -100,7 +167,9 @@ class HitlMetadata:
     hitl_triggered: bool = False
     page_array: List[str] = field(default_factory=list)
     review_portal_url: Optional[str] = None  # Added field for review portal URL
-    hitl_completed: bool = False  # Added field to track completion status
+    hitl_completed: Optional[bool] = (
+        None  # None = unknown, True = completed, False = in progress
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert HITL metadata to dictionary representation."""
@@ -132,9 +201,7 @@ class HitlMetadata:
             review_portal_url=data.get(
                 "review_portal_url"
             ),  # Fix: Include review portal URL
-            hitl_completed=data.get(
-                "hitl_completed", False
-            ),  # Fix: Include completion status
+            hitl_completed=data.get("hitl_completed"),  # None if not set
             page_array=data.get("page_array", []),
         )
 
@@ -199,15 +266,21 @@ class Document:
     metering: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     trace_id: Optional[str] = None
+    config_version: Optional[str] = None  # Configuration version to use for processing
     evaluation_status: Optional[str] = None
     evaluation_report_uri: Optional[str] = None
     evaluation_results_uri: Optional[str] = None
+    rule_validation_result: Optional[RuleValidationResult] = None
     evaluation_result: Any = None  # Holds the DocumentEvaluationResult object
     summarization_result: Any = None  # Holds the DocumentSummarizationResult object
     errors: List[str] = field(default_factory=list)
 
     # HITL metadata
     hitl_metadata: List[HitlMetadata] = field(default_factory=list)
+    hitl_status: Optional[str] = None  # PendingReview, InProgress, Completed, Skipped
+    hitl_triggered: bool = False  # Whether HITL review was triggered for this document
+    hitl_sections_pending: List[str] = field(default_factory=list)
+    hitl_sections_completed: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert document to dictionary representation."""
@@ -231,6 +304,7 @@ class Document:
             "errors": self.errors,
             "metering": self.metering,
             "trace_id": self.trace_id,
+            "config_version": self.config_version,
             # We don't include evaluation_result or summarization_result in the dict since they're objects
         }
 
@@ -264,11 +338,32 @@ class Document:
                 section_dict["attributes"] = section.attributes
             result["sections"].append(section_dict)
 
+        # Add rule_validation_result if present (optional)
+        if self.rule_validation_result:
+            result["rule_validation_result"] = {
+                "request_id": self.rule_validation_result.request_id,
+                "summary": self.rule_validation_result.summary,
+                "section_results": self.rule_validation_result.section_results,
+                "metadata": self.rule_validation_result.metadata,
+                "output_uri": self.rule_validation_result.output_uri,
+                "errors": self.rule_validation_result.errors,
+            }
+
         # Add HITL metadata if it has any values
         if self.hitl_metadata:
             result["hitl_metadata"] = [
                 metadata.to_dict() for metadata in self.hitl_metadata
             ]
+
+        # Add Review Status fields
+        if self.hitl_status:
+            result["hitl_status"] = self.hitl_status
+        if self.hitl_triggered:
+            result["hitl_triggered"] = self.hitl_triggered
+        if self.hitl_sections_pending:
+            result["hitl_sections_pending"] = self.hitl_sections_pending
+        if self.hitl_sections_completed:
+            result["hitl_sections_completed"] = self.hitl_sections_completed
 
         return result
 
@@ -292,6 +387,7 @@ class Document:
             summary_report_uri=data.get("summary_report_uri"),
             metering=data.get("metering", {}),
             trace_id=data.get("trace_id"),
+            config_version=data.get("config_version"),
             errors=data.get("errors", []),
         )
 
@@ -340,14 +436,53 @@ class Document:
         for metadata_item in hitl_metadata_data:
             document.hitl_metadata.append(HitlMetadata.from_dict(metadata_item))
 
+        # Convert Review Status fields
+        document.hitl_status = data.get("hitl_status")
+        document.hitl_triggered = data.get("hitl_triggered", False)
+        document.hitl_sections_pending = data.get("hitl_sections_pending", [])
+        document.hitl_sections_completed = data.get("hitl_sections_completed", [])
+
+        # Convert rule_validation_result if present (optional)
+        if "rule_validation_result" in data:
+            rv_data = data["rule_validation_result"]
+            document.rule_validation_result = RuleValidationResult(
+                request_id=rv_data.get("request_id"),
+                summary=rv_data.get("summary"),
+                section_results=rv_data.get("section_results"),
+                metadata=rv_data.get("metadata"),
+                output_uri=rv_data.get("output_uri"),
+                errors=rv_data.get("errors"),
+            )
+
         return document
 
     @classmethod
     def from_s3_event(cls, event: Dict[str, Any], output_bucket: str) -> "Document":
         """Create a Document from an S3 event."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         input_bucket = event.get("detail", {}).get("bucket", {}).get("name", "")
         input_key = event.get("detail", {}).get("object", {}).get("key", "")
         initial_event_time = event.get("time", "")
+
+        # Read S3 metadata to get configuration version if available
+        config_version = None
+        try:
+            import boto3
+
+            s3_client = boto3.client("s3")
+            response = s3_client.head_object(Bucket=input_bucket, Key=input_key)
+            metadata = response.get("Metadata", {})
+            logger.info(f"S3 metadata for {input_key}: {metadata}")
+            config_version = metadata.get("config-version")
+            if config_version:
+                logger.info(f"Found config version in S3 metadata: {config_version}")
+            else:
+                logger.info(f"No config-version found in metadata for {input_key}")
+        except Exception as e:
+            logger.warning(f"Could not read S3 metadata for {input_key}: {e}")
 
         return cls(
             id=input_key,
@@ -356,6 +491,7 @@ class Document:
             output_bucket=output_bucket,
             initial_event_time=initial_event_time,
             status=Status.QUEUED,
+            config_version=config_version,  # Add config version to document
         )
 
     def to_json(self) -> str:

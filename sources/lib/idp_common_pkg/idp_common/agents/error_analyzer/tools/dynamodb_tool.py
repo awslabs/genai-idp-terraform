@@ -168,6 +168,7 @@ def fetch_recent_records(
             "total_documents": len(items),
             "completed_documents": status_stats["completed"],
             "failed_documents": status_stats["failed"],
+            "aborted_documents": status_stats["aborted"],
             "in_progress_documents": status_stats["in_progress"],
             "items": items,
             "query_date": date,
@@ -206,6 +207,7 @@ def _create_empty_response(date: str, hours_back: int) -> Dict[str, Any]:
         "total_documents": 0,
         "completed_documents": 0,
         "failed_documents": 0,
+        "aborted_documents": 0,
         "in_progress_documents": 0,
         "items": [],
         "query_date": date or datetime.now().strftime("%Y-%m-%d"),
@@ -254,9 +256,9 @@ def _query_documents_by_time(
 def _calculate_status_statistics(items: list) -> Dict[str, int]:
     """
     Calculate document status statistics from items.
-    Any status that is not COMPLETED or FAILED is considered in_progress.
+    Any status that is not COMPLETED, FAILED, or ABORTED is considered in_progress.
     """
-    stats = {"completed": 0, "failed": 0, "in_progress": 0}
+    stats = {"completed": 0, "failed": 0, "aborted": 0, "in_progress": 0}
 
     for item in items:
         status = _extract_document_status(item)
@@ -264,6 +266,8 @@ def _calculate_status_statistics(items: list) -> Dict[str, int]:
             stats["completed"] += 1
         elif status == "FAILED":
             stats["failed"] += 1
+        elif status == "ABORTED":
+            stats["aborted"] += 1
         else:
             stats["in_progress"] += 1
 

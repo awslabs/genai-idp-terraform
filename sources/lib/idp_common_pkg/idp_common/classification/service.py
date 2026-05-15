@@ -23,6 +23,7 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -49,6 +50,15 @@ from idp_common.utils import extract_json_from_text, extract_structured_data_fro
 from idp_common.utils.few_shot_example_builder import build_few_shot_examples_content
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PageContextData:
+    """Data class for page context information."""
+
+    page_id: str
+    text_content: Optional[str] = None
+    image_content: Optional[bytes] = None
 
 
 class ClassificationService:
@@ -233,11 +243,21 @@ class ClassificationService:
         Returns:
             Document with limited pages for classification
         """
-        # 0 or negative means ALL pages
-        if self.max_pages_for_classification <= 0:
+        # "ALL" means use all pages
+        if str(self.max_pages_for_classification).upper() == "ALL":
             return document
 
-        max_pages = self.max_pages_for_classification
+        try:
+            max_pages = int(self.max_pages_for_classification)
+        except (ValueError, TypeError):
+            logger.warning(
+                f"Invalid maxPagesForClassification value: {self.max_pages_for_classification}, using ALL pages"
+            )
+            return document
+
+        # 0 or negative means ALL pages (backward compatibility)
+        if max_pages <= 0:
+            return document
         try:
             if len(document.pages) <= max_pages:
                 return document
@@ -264,7 +284,7 @@ class ClassificationService:
             )
             return limited_document
 
-        except ValueError:
+        except (ValueError, TypeError):
             logger.warning(
                 f"Invalid maxPagesForClassification value: {self.max_pages_for_classification}, using ALL pages"
             )
@@ -341,14 +361,134 @@ class ClassificationService:
         )
         return original_document
 
+    def _preload_page_content(
+        self, document: Document, context_size: int
+    ) -> Dict[str, PageContextData]:
+        """
+        Pre-load text and image content for all pages when context is needed.
+
+        Args:
+            document: Document with pages to load
+            context_size: Number of context pages (determines if images should be loaded)
+
+        Returns:
+            Dictionary mapping page_id to PageContextData with loaded content
+        """
+        page_content_cache: Dict[str, PageContextData] = {}
+
+        # Type-safe access to image config
+        target_width = self.config.classification.image.target_width
+        target_height = self.config.classification.image.target_height
+
+        for page_id, page in document.pages.items():
+            text_content = None
+            image_content = None
+
+            # Load text content
+            if page.parsed_text_uri:
+                try:
+                    text_content = s3.get_text_content(page.parsed_text_uri)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load text content for page {page_id}: {e}"
+                    )
+
+            # Load image content
+            if page.image_uri:
+                try:
+                    image_content = image.prepare_image(
+                        page.image_uri, target_width, target_height
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load image content for page {page_id}: {e}"
+                    )
+
+            page_content_cache[page_id] = PageContextData(
+                page_id=page_id,
+                text_content=text_content,
+                image_content=image_content,
+            )
+
+        logger.info(
+            f"Pre-loaded content for {len(page_content_cache)} pages for context-aware classification"
+        )
+        return page_content_cache
+
+    def _get_context_for_page(
+        self,
+        page_id: str,
+        sorted_page_ids: List[str],
+        page_content_cache: Dict[str, PageContextData],
+        context_size: int,
+    ) -> Dict[str, Any]:
+        """
+        Get context data for a specific page.
+
+        Args:
+            page_id: The page being classified
+            sorted_page_ids: All page IDs in sorted order
+            page_content_cache: Pre-loaded page content
+            context_size: Number of pages before/after to include
+
+        Returns:
+            Dictionary with before_texts, after_texts, before_images, after_images
+        """
+        try:
+            current_idx = sorted_page_ids.index(page_id)
+        except ValueError:
+            return {
+                "before_texts": [],
+                "after_texts": [],
+                "before_images": [],
+                "after_images": [],
+            }
+
+        # Get indices for context pages
+        before_start = max(0, current_idx - context_size)
+        after_end = min(len(sorted_page_ids), current_idx + context_size + 1)
+
+        before_page_ids = sorted_page_ids[before_start:current_idx]
+        after_page_ids = sorted_page_ids[current_idx + 1 : after_end]
+
+        # Gather context content
+        before_texts = []
+        before_images = []
+        for pid in before_page_ids:
+            if pid in page_content_cache:
+                ctx = page_content_cache[pid]
+                if ctx.text_content:
+                    before_texts.append(ctx.text_content)
+                if ctx.image_content:
+                    before_images.append(ctx.image_content)
+
+        after_texts = []
+        after_images = []
+        for pid in after_page_ids:
+            if pid in page_content_cache:
+                ctx = page_content_cache[pid]
+                if ctx.text_content:
+                    after_texts.append(ctx.text_content)
+                if ctx.image_content:
+                    after_images.append(ctx.image_content)
+
+        return {
+            "before_texts": before_texts,
+            "after_texts": after_texts,
+            "before_images": before_images,
+            "after_images": after_images,
+        }
+
     def _classify_pages_multimodal(self, document: Document) -> Document:
         """
         Classify pages using multimodal page-level classification.
         """
         # Page-level classification with document boundary detection
         t0 = time.time()
+        context_size = self.config.classification.contextPagesCount
         logger.info(
             f"Classifying document with {len(document.pages)} pages using multimodal page-level classification with {self.backend} backend"
+            + (f" (contextPagesCount={context_size})" if context_size > 0 else "")
         )
 
         try:
@@ -395,18 +535,50 @@ class ClassificationService:
                     f"Found {len(cached_page_classifications)} cached page classifications, classifying {len(pages_to_classify)} remaining pages"
                 )
 
+                # Pre-load page content if context is enabled
+                page_content_cache: Dict[str, PageContextData] = {}
+                sorted_page_ids: List[str] = []
+                if context_size > 0:
+                    page_content_cache = self._preload_page_content(
+                        document, context_size
+                    )
+                    sorted_page_ids = sorted(
+                        document.pages.keys(),
+                        key=lambda x: int(x) if x.isdigit() else float("inf"),
+                    )
+
                 with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                     futures = {}
 
                     # Start processing only uncached pages
                     for page_id, page in pages_to_classify.items():
-                        future = executor.submit(
-                            self.classify_page,
-                            page_id=page_id,
-                            text_uri=page.parsed_text_uri,
-                            image_uri=page.image_uri,
-                            raw_text_uri=page.raw_text_uri,
-                        )
+                        if context_size > 0:
+                            # Get context for this page
+                            context = self._get_context_for_page(
+                                page_id,
+                                sorted_page_ids,
+                                page_content_cache,
+                                context_size,
+                            )
+                            future = executor.submit(
+                                self.classify_page_bedrock,
+                                page_id=page_id,
+                                text_uri=page.parsed_text_uri,
+                                image_uri=page.image_uri,
+                                raw_text_uri=page.raw_text_uri,
+                                before_texts=context["before_texts"],
+                                after_texts=context["after_texts"],
+                                before_images=context["before_images"],
+                                after_images=context["after_images"],
+                            )
+                        else:
+                            future = executor.submit(
+                                self.classify_page,
+                                page_id=page_id,
+                                text_uri=page.parsed_text_uri,
+                                image_uri=page.image_uri,
+                                raw_text_uri=page.raw_text_uri,
+                            )
                         futures[future] = page_id
 
                     # Process results as they complete
@@ -786,12 +958,99 @@ class ClassificationService:
 
         return content
 
+    def _build_text_with_context(
+        self,
+        current_text: str,
+        before_texts: List[str],
+        after_texts: List[str],
+    ) -> str:
+        """
+        Build text content with context pages for classification.
+
+        Args:
+            current_text: The text of the page being classified
+            before_texts: List of text from pages before the current page
+            after_texts: List of text from pages after the current page
+
+        Returns:
+            Formatted text with context pages wrapped in descriptive tags
+        """
+        parts = []
+
+        if before_texts:
+            context_text = "\n\n".join(before_texts)
+            parts.append(
+                f"For context, here is the OCR text for the page(s) immediately prior to the page you should classify:\n"
+                f"<context-pages-before>\n{context_text}\n</context-pages-before>"
+            )
+
+        parts.append(
+            f"Here is the OCR text for the page to classify:\n"
+            f"<current-page>\n{current_text}\n</current-page>"
+        )
+
+        if after_texts:
+            context_text = "\n\n".join(after_texts)
+            parts.append(
+                f"For context, here is the OCR text for the page(s) immediately after the page you should classify:\n"
+                f"<context-pages-after>\n{context_text}\n</context-pages-after>"
+            )
+
+        return "\n\n".join(parts)
+
+    def _build_images_with_context(
+        self,
+        current_image: Optional[bytes],
+        before_images: List[bytes],
+        after_images: List[bytes],
+    ) -> List[Dict[str, Any]]:
+        """
+        Build image content array with context pages for classification.
+
+        Args:
+            current_image: The image of the page being classified
+            before_images: List of images from pages before the current page
+            after_images: List of images from pages after the current page
+
+        Returns:
+            List of content items with labeled images
+        """
+        content = []
+
+        if before_images:
+            content.append(
+                {
+                    "text": "For context, here are the image(s) for the page(s) immediately prior to the page you should classify:"
+                }
+            )
+            for img in before_images:
+                content.append(image.prepare_bedrock_image_attachment(img))
+
+        if current_image:
+            content.append({"text": "Here is the image for the page to classify:"})
+            content.append(image.prepare_bedrock_image_attachment(current_image))
+
+        if after_images:
+            content.append(
+                {
+                    "text": "For context, here are the image(s) for the page(s) immediately after the page you should classify:"
+                }
+            )
+            for img in after_images:
+                content.append(image.prepare_bedrock_image_attachment(img))
+
+        return content
+
     def _build_content(
         self,
         task_prompt_template: str,
         document_text: str,
         class_names_and_descriptions: str,
         image_content: Optional[bytes] = None,
+        before_texts: Optional[List[str]] = None,
+        after_texts: Optional[List[str]] = None,
+        before_images: Optional[List[bytes]] = None,
+        after_images: Optional[List[bytes]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Build content array with support for optional FEW_SHOT_EXAMPLES and DOCUMENT_IMAGE placeholders.
@@ -848,6 +1107,10 @@ class ClassificationService:
         text_uri: Optional[str] = None,
         image_uri: Optional[str] = None,
         raw_text_uri: Optional[str] = None,
+        before_texts: Optional[List[str]] = None,
+        after_texts: Optional[List[str]] = None,
+        before_images: Optional[List[bytes]] = None,
+        after_images: Optional[List[bytes]] = None,
     ) -> PageClassification:
         """
         Classify a single page using Bedrock LLMs.
@@ -857,6 +1120,10 @@ class ClassificationService:
             text_uri: URI of the text content
             image_uri: URI of the image content
             raw_text_uri: URI of the raw text content
+            before_texts: Optional list of text content from preceding pages (for context)
+            after_texts: Optional list of text content from following pages (for context)
+            before_images: Optional list of image content from preceding pages (for context)
+            after_images: Optional list of image content from following pages (for context)
 
         Returns:
             PageClassification: Classification result for the page
@@ -927,13 +1194,81 @@ class ClassificationService:
         # Get classification configuration
         config = self._get_classification_config()
 
-        # Build content with support for placeholders
-        content = self._build_content(
-            config["task_prompt"],
-            text_content or "",
-            self._format_classes_list(),
-            image_content,
-        )
+        # Check if context is being used
+        has_context = bool(before_texts or after_texts or before_images or after_images)
+
+        if has_context:
+            # Build text content with context
+            document_text = self._build_text_with_context(
+                current_text=text_content or "",
+                before_texts=before_texts or [],
+                after_texts=after_texts or [],
+            )
+
+            # Build content array - start with text prompt
+            task_prompt = self._prepare_prompt_from_template(
+                config["task_prompt"],
+                {
+                    "DOCUMENT_TEXT": document_text,
+                    "CLASS_NAMES_AND_DESCRIPTIONS": self._format_classes_list(),
+                },
+                required_placeholders=[],
+            )
+
+            # Check if prompt uses DOCUMENT_IMAGE placeholder
+            if "{DOCUMENT_IMAGE}" in config["task_prompt"]:
+                # Split around image placeholder and insert context images
+                parts = task_prompt.split("{DOCUMENT_IMAGE}")
+                if len(parts) == 2:
+                    content = []
+                    if parts[0].strip():
+                        content.append({"text": parts[0]})
+
+                    # Add images with context
+                    content.extend(
+                        self._build_images_with_context(
+                            current_image=image_content,
+                            before_images=before_images or [],
+                            after_images=after_images or [],
+                        )
+                    )
+
+                    if parts[1].strip():
+                        content.append({"text": parts[1]})
+                else:
+                    # Fallback - add text then images
+                    content = [{"text": task_prompt}]
+                    content.extend(
+                        self._build_images_with_context(
+                            current_image=image_content,
+                            before_images=before_images or [],
+                            after_images=after_images or [],
+                        )
+                    )
+            else:
+                # No image placeholder - just use text
+                content = [{"text": task_prompt}]
+                # If images exist, append them with context
+                if image_content or before_images or after_images:
+                    content.extend(
+                        self._build_images_with_context(
+                            current_image=image_content,
+                            before_images=before_images or [],
+                            after_images=after_images or [],
+                        )
+                    )
+
+            logger.info(
+                f"Classifying page {page_id} with context: {len(before_texts or [])} pages before, {len(after_texts or [])} pages after"
+            )
+        else:
+            # Build content without context (original behavior)
+            content = self._build_content(
+                config["task_prompt"],
+                text_content or "",
+                self._format_classes_list(),
+                image_content,
+            )
 
         logger.info(f"Classifying page {page_id} with Bedrock")
 
@@ -1213,7 +1548,7 @@ class ClassificationService:
         self, content: List[Dict[str, Any]], config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Invoke Bedrock model with standard parameters.
+        Invoke Bedrock model (or LambdaHook) with standard parameters.
 
         Args:
             content: Content to send to the model
@@ -1231,6 +1566,7 @@ class ClassificationService:
             top_p=config["top_p"],
             max_tokens=config["max_tokens"],
             context="Classification",
+            model_lambda_hook_arn=self.config.classification.model_lambda_hook_arn,
         )
 
     def _create_unclassified_result(
@@ -1525,9 +1861,9 @@ class ClassificationService:
             page_ids = list(document.pages.keys())
             section = self._create_section(
                 section_id="1",
-                doc_type=self.single_class_name
-                if self.single_class_name
-                else "undefined",
+                doc_type=(
+                    self.single_class_name if self.single_class_name else "undefined"
+                ),
                 pages=page_ids,
                 confidence=1.0,
             )
@@ -1549,11 +1885,21 @@ class ClassificationService:
             return document
 
         # Check for limited page classification
-        # 0 or negative means ALL pages
-        if self.max_pages_for_classification > 0:
-            logger.info(
-                f"Using limited page classification: {self.max_pages_for_classification} pages"
-            )
+        # "ALL" means use all pages, otherwise parse as int
+        max_pages_str = str(self.max_pages_for_classification).upper()
+        use_limited_pages = False
+        max_pages_int = 0
+
+        if max_pages_str != "ALL":
+            try:
+                max_pages_int = int(self.max_pages_for_classification)
+                if max_pages_int > 0:
+                    use_limited_pages = True
+            except (ValueError, TypeError):
+                pass  # Invalid value, treat as ALL
+
+        if use_limited_pages:
+            logger.info(f"Using limited page classification: {max_pages_int} pages")
 
             # Create limited document for classification
             limited_document = self._limit_pages_for_classification(document)
@@ -1658,7 +2004,17 @@ class ClassificationService:
         self, document: Document, page_results: List[PageClassification]
     ) -> Document:
         """
-        Create single section containing all pages with first detected class.
+        Create single section containing all pages using majority voting.
+
+        Uses voting/mode strategy to determine the document classification:
+        - Counts occurrences of each classification across all pages
+        - Selects the most common classification (mode)
+        - If tied, uses the first page's classification for determinism
+        - Excludes unclassifiable/blank pages from voting to prevent them
+          from dominating when they complete processing first
+
+        This addresses GitHub Issue #167 where blank pages could incorrectly
+        determine the document classification.
 
         Args:
             document: Document to update
@@ -1667,11 +2023,57 @@ class ClassificationService:
         Returns:
             Document with single section containing all pages
         """
+        from collections import Counter
+
         if not page_results:
             return document
 
-        # Use first page's classification for entire document
-        first_classification = page_results[0].classification.doc_type
+        # Sort results by page ID for consistent ordering
+        sorted_results = self._sort_page_results(page_results)
+
+        # Only include classifications that match valid document types from config
+        # This automatically excludes any classification not defined in the config:
+        # - blank pages (unclassifiable_blank_page, blank, etc.)
+        # - errors (error (backoff/retry), unclassified)
+        # - LLM hallucinations or typos
+        votable_classifications = [
+            r.classification.doc_type
+            for r in sorted_results
+            if r.classification.doc_type in self.valid_doc_types
+        ]
+
+        if votable_classifications:
+            # Use voting: most common classification wins
+            classification_counts = Counter(votable_classifications)
+            most_common = classification_counts.most_common()
+
+            # Check for ties - if tied, use the classification from the earliest page
+            top_count = most_common[0][1]
+            tied_classes = [cls for cls, count in most_common if count == top_count]
+
+            if len(tied_classes) > 1:
+                # Tie-breaker: use first occurrence in page order
+                for result in sorted_results:
+                    if result.classification.doc_type in tied_classes:
+                        first_classification = result.classification.doc_type
+                        logger.info(
+                            f"Classification tie detected ({tied_classes}), using first page's class: '{first_classification}'"
+                        )
+                        break
+                else:
+                    first_classification = most_common[0][0]
+            else:
+                first_classification = most_common[0][0]
+
+            logger.info(
+                f"Classification voting results: {dict(classification_counts)} -> selected '{first_classification}'"
+            )
+        else:
+            # All pages are unclassifiable, use first page's classification
+            first_classification = sorted_results[0].classification.doc_type
+            logger.warning(
+                f"All pages are unclassifiable types, using first page's class: '{first_classification}'"
+            )
 
         # Set all pages to this classification
         for page_id in document.pages:
@@ -1946,6 +2348,54 @@ class ClassificationService:
 
         return header + rows
 
+    def _calculate_and_store_page_indices(self, document: Document) -> Document:
+        """
+        Calculate page_indices for all sections and store in section.attributes.
+
+        This ensures consistent page_indices calculation across all sections in a document packet.
+        Each section will have its page_indices calculated relative to the global minimum page ID,
+        preventing the bug where all sections had page_indices starting from 0.
+
+        Args:
+            document: Document with sections to process
+
+        Returns:
+            Document with page_indices stored in each section's attributes
+        """
+        if not document.sections:
+            return document
+
+        try:
+            # Calculate global minimum page ID across all sections
+            all_page_ids = []
+            for section in document.sections:
+                all_page_ids.extend(section.page_ids)
+
+            if all_page_ids:
+                global_min_page_id = min(int(page_id) for page_id in all_page_ids)
+                logger.info(
+                    f"Calculated global_min_page_id={global_min_page_id} for page_indices calculation"
+                )
+
+                # Calculate and store page_indices for each section
+                for section in document.sections:
+                    page_indices = [
+                        int(page_id) - global_min_page_id
+                        for page_id in section.page_ids
+                    ]
+                    section.attributes = section.attributes or {}
+                    section.attributes["page_indices"] = page_indices
+                    logger.debug(
+                        f"Section {section.section_id}: page_ids={section.page_ids} -> page_indices={page_indices}"
+                    )
+
+        except (ValueError, TypeError) as e:
+            logger.error(
+                f"Error calculating page_indices: {e}. Sections will not have page_indices pre-calculated."
+            )
+
+        return document
+
     def _update_document_status(
         self,
         document: Document,
@@ -1975,6 +2425,9 @@ class ClassificationService:
                 logger.warning(
                     f"Document classified with {len(document.errors)} errors"
                 )
+
+        # Calculate and store page_indices for each section for use during extraction
+        document = self._calculate_and_store_page_indices(document)
 
         return document
 
@@ -2046,9 +2499,9 @@ class ClassificationService:
             page_ids = list(document.pages.keys())
             section = Section(
                 section_id="1",
-                classification=self.single_class_name
-                if self.single_class_name
-                else "undefined",
+                classification=(
+                    self.single_class_name if self.single_class_name else "undefined"
+                ),
                 confidence=1.0,
                 page_ids=page_ids,
             )
