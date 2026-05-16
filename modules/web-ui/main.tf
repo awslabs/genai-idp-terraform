@@ -81,7 +81,7 @@ locals {
     EvaluationBaselineBucket       = var.evaluation_baseline_bucket_name
     IDPPattern                     = var.idp_pattern
     ShouldUseDocumentKnowledgeBase = var.knowledge_base_enabled ? "true" : "false"
-    Version                        = "0.4.8"
+    Version                        = var.idp_version
     StackName                      = var.display_name != null ? var.display_name : "${var.name_prefix}-processor"
     # Add other settings as needed
   }

@@ -48,6 +48,11 @@ variable "idp_pattern" {
   default     = ""
 }
 
+variable "idp_version" {
+  description = "Upstream IDP version string surfaced in the Web UI Deployment Info panel. Should track the IDP_VERSION file at the repo root."
+  type        = string
+}
+
 #
 # Infrastructure Configuration
 #

@@ -59,16 +59,19 @@ locals {
   # Use the config passed from parent module (from sources/config_library/)
   base_config = var.config
 
-  # Apply model overrides if provided, similar to CDK transforms
+  # Apply model overrides if provided, similar to CDK transforms.
+  # The base config can be sparse (e.g., lending-package-sample inherits
+  # everything from system defaults at runtime), so use try() to tolerate
+  # missing `evaluation` / `summarization` sections rather than failing.
   config_with_overrides = merge(
     local.base_config,
     # Only override evaluation if evaluation_model_id is provided
     var.evaluation_model_id != null ? {
       evaluation = merge(
-        local.base_config.evaluation,
+        try(local.base_config.evaluation, {}),
         {
           llm_method = merge(
-            local.base_config.evaluation.llm_method,
+            try(local.base_config.evaluation.llm_method, {}),
             {
               model = var.evaluation_model_id
             }
@@ -79,7 +82,7 @@ locals {
     # Only override summarization if summarization_model_id is provided
     var.summarization_model_id != null ? {
       summarization = merge(
-        local.base_config.summarization,
+        try(local.base_config.summarization, {}),
         {
           model = var.summarization_model_id
         }
