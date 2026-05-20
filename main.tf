@@ -475,6 +475,7 @@ module "bedrock_llm_processor" {
   log_retention_days = module.processing_environment.log_retention_days
 
   encryption_key_arn   = var.encryption_key_arn
+  enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
   # VPC configuration

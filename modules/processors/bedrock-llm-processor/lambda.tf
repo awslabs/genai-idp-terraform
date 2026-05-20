@@ -291,8 +291,8 @@ resource "aws_lambda_function" "hitl_wait" {
   timeout       = 300
   memory_size   = 512
 
-  filename         = data.archive_file.hitl_wait_lambda.output_path
-  source_code_hash = data.archive_file.hitl_wait_lambda.output_base64sha256
+  filename         = data.archive_file.hitl_wait_lambda[0].output_path
+  source_code_hash = data.archive_file.hitl_wait_lambda[0].output_base64sha256
 
   layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
 
@@ -343,8 +343,8 @@ resource "aws_lambda_function" "hitl_status_update" {
   timeout       = 60
   memory_size   = 256
 
-  filename         = data.archive_file.hitl_status_update_lambda.output_path
-  source_code_hash = data.archive_file.hitl_status_update_lambda.output_base64sha256
+  filename         = data.archive_file.hitl_status_update_lambda[0].output_path
+  source_code_hash = data.archive_file.hitl_status_update_lambda[0].output_base64sha256
 
   kms_key_arn = var.encryption_key_arn
 
@@ -445,6 +445,8 @@ data "archive_file" "summarization_lambda" {
 }
 
 data "archive_file" "hitl_wait_lambda" {
+  count = var.enable_hitl ? 1 : 0
+
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/hitl-wait-function"
   output_path = "${path.module}/hitl_wait_function.zip"
@@ -453,6 +455,8 @@ data "archive_file" "hitl_wait_lambda" {
 }
 
 data "archive_file" "hitl_status_update_lambda" {
+  count = var.enable_hitl ? 1 : 0
+
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/hitl-status-update-function"
   output_path = "${path.module}/hitl_status_update_function.zip"

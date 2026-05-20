@@ -127,6 +127,28 @@ resource "aws_s3_bucket" "logging_bucket" {
   tags          = var.tags
 }
 
+# CloudFront standard logging requires legacy ACLs on the destination bucket.
+# Modern S3 buckets default to BucketOwnerEnforced (no ACLs), which causes
+# CloudFront's UpdateDistribution to fail with:
+#   "The S3 bucket that you specified for CloudFront logs does not enable ACL access"
+# Switch the bucket to BucketOwnerPreferred and grant the log-delivery-write
+# canned ACL so the AWS log-delivery group can write objects.
+resource "aws_s3_bucket_ownership_controls" "logging_bucket" {
+  count  = var.web_ui.logging_enabled ? 1 : 0
+  bucket = aws_s3_bucket.logging_bucket[0].id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "logging_bucket" {
+  count      = var.web_ui.logging_enabled ? 1 : 0
+  bucket     = aws_s3_bucket.logging_bucket[0].id
+  acl        = "log-delivery-write"
+  depends_on = [aws_s3_bucket_ownership_controls.logging_bucket]
+}
+
 resource "aws_s3_bucket" "evaluation_baseline_bucket" {
   count         = var.enable_evaluation ? 1 : 0
   bucket        = "${var.prefix}-evaluation-baseline-${random_string.suffix.result}"

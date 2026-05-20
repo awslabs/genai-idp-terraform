@@ -106,10 +106,12 @@ variable "api" {
     knowledge_base     = { enabled = false }
   }
 
-  validation {
-    condition     = !var.api.chat_with_document.enabled || !var.api.knowledge_base.enabled || var.api.knowledge_base.knowledge_base_arn != null
-    error_message = "When api.knowledge_base.enabled is true, knowledge_base_arn must be provided."
-  }
+  # Note: We intentionally do not validate that knowledge_base_arn is non-null
+  # when knowledge_base.enabled is true. This example creates the OpenSearch
+  # Serverless collection + Bedrock Knowledge Base itself in `knowledge-base.tf`
+  # and wires the resulting ARN through `main.tf` at apply time. Validation
+  # rules run before resource creation, so requiring the ARN up-front would
+  # block the self-managed KB workflow that the example is designed for.
 
   validation {
     condition     = !var.api.agent_analytics.enabled || var.api.agent_analytics.model_id != null

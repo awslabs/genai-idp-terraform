@@ -85,6 +85,13 @@ module "processor_configuration" {
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
 
+  # Required for the seeder Lambda to merge user config with system defaults
+  # (NOTE-014/NOTE-014b). Without these layers attached, the seeder will
+  # store the sparse user YAML and the runtime will crash with
+  # "No system_prompt found in classification configuration".
+  base_layer_arn       = var.base_layer_arn
+  idp_common_layer_arn = var.idp_common_layer_arn
+
   vpc_config          = local.vpc_config
   lambda_tracing_mode = var.lambda_tracing_mode
   tags                = var.tags
@@ -95,20 +102,23 @@ locals {
   # Use the config passed from parent module (from sources/config_library/)
   base_config = var.config
 
-  # Apply model overrides if provided, similar to CDK transforms
+  # Apply model overrides if provided, similar to CDK transforms.
+  # The base config can be sparse (e.g., samples that inherit everything from
+  # system defaults at runtime), so use try() to tolerate missing top-level
+  # sections rather than failing at plan time.
   config_with_overrides = merge(
     local.base_config,
     # Override classification model: per-step var → model_id default
     {
       classification = merge(
-        local.base_config.classification,
+        try(local.base_config.classification, {}),
         { model = coalesce(var.classification_model_id, var.model_id) }
       )
     },
     # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
     {
       extraction = merge(
-        local.base_config.extraction,
+        try(local.base_config.extraction, {}),
         { model = coalesce(var.extraction_model_id, var.model_id) },
         var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
         var.enable_agentic_extraction ? {
@@ -126,17 +136,17 @@ locals {
     # Override summarization model: per-step var → model_id default
     {
       summarization = merge(
-        local.base_config.summarization,
+        try(local.base_config.summarization, {}),
         { model = coalesce(var.summarization_model_id, var.model_id) }
       )
     },
     # Only override evaluation model if provided (evaluation uses a different config path)
     var.evaluation_model_id != null ? {
       evaluation = merge(
-        local.base_config.evaluation,
+        try(local.base_config.evaluation, {}),
         {
           llm_method = merge(
-            local.base_config.evaluation.llm_method,
+            try(local.base_config.evaluation.llm_method, {}),
             {
               model = var.evaluation_model_id
             }
@@ -147,7 +157,7 @@ locals {
     # Only override assessment model if provided
     var.assessment_model_id != null ? {
       assessment = merge(
-        local.base_config.assessment,
+        try(local.base_config.assessment, {}),
         {
           model = var.assessment_model_id
         }

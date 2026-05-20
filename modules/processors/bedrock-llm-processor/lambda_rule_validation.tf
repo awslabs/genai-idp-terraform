@@ -124,7 +124,7 @@ resource "aws_iam_role_policy_attachment" "rule_validation_vpc" {
 }
 
 resource "aws_iam_role_policy" "rule_validation_kms" {
-  count = var.enable_rule_validation && var.encryption_key_arn != null && var.encryption_key_arn != "" ? 1 : 0
+  count = var.enable_rule_validation && var.enable_encryption ? 1 : 0
 
   name = "${local.name_prefix}-rule-validation-kms-policy"
   role = aws_iam_role.rule_validation_role[0].id

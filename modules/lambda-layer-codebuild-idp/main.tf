@@ -285,7 +285,13 @@ phases:
         # Install common system dependencies
         echo "Installing system dependencies..."
         yum install -y gcc gcc-c++ python3-devel zlib-devel libjpeg-devel libpng-devel
-        
+
+        # Packages already provided by the Lambda Python 3.12 runtime — pruning
+        # these saves ~100+ MB per layer and is what the upstream CloudFormation
+        # publish.py:build_lambda_layer does. Keeping these inside a layer is
+        # pure overhead — the runtime always wins on the import path.
+        RUNTIME_PROVIDED_PACKAGES="boto3 botocore s3transfer awscli urllib3 jmespath python_dateutil dateutil"
+
         for req_file in $(find . -name "requirements.txt"); do
           LAYER_NAME=$(basename $(dirname $req_file))
           echo "=========================================="
@@ -332,16 +338,8 @@ phases:
               mkdir -p /tmp/$LAYER_NAME/python/idp_common
               rsync -rLv ./idp_common_pkg/idp_common/ /tmp/$LAYER_NAME/python/idp_common/
               
-              # Clean up build artifacts but keep the package
-              echo "Cleaning up build artifacts..."
-              find /tmp/$LAYER_NAME/python -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
-              
-              # Clean up temporary directory
+              # Clean up temporary build directory (post-install cleanup is below,
+              # shared with the "other layers" branch).
               rm -rf /tmp/builddir
               
             else
@@ -370,7 +368,39 @@ phases:
               touch /tmp/$LAYER_NAME/python/__init__.py
             fi
           fi
-          
+
+          # ============================================================
+          # Shared post-install cleanup (runs for ALL layers).
+          # Mirrors upstream CloudFormation publish.py and CDK
+          # idp-python-layer-version.ts so we get the same trimmed size.
+          # ============================================================
+          echo "Cleaning up build artifacts for $LAYER_NAME..."
+
+          # 1. Remove Lambda-runtime-provided packages.
+          #    Strips both the package directory and its dist-info / egg-info.
+          for pkg in $RUNTIME_PROVIDED_PACKAGES; do
+            # Package directory (e.g. /tmp/$LAYER_NAME/python/boto3)
+            rm -rf "/tmp/$LAYER_NAME/python/$pkg"                 2>/dev/null || true
+            # dist-info / egg-info matches package name and PEP 503 normalized form
+            find "/tmp/$LAYER_NAME/python" -maxdepth 1 -type d \
+              \( -name "$${pkg}-*" -o -name "$${pkg//-/_}-*" \) \
+              -exec rm -rf {} + 2>/dev/null || true
+          done
+
+          # 2. Strip generic Python build artifacts.
+          find "/tmp/$LAYER_NAME/python" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "*.egg-info"  -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "build"       -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "tests"       -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "*.pyc"       -delete 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "*.pyo"       -delete 2>/dev/null || true
+
+          # 3. Show post-cleanup size for diagnostics.
+          echo "Post-cleanup size for $LAYER_NAME:"
+          du -sh /tmp/$LAYER_NAME/python || true
+
           # List installed packages
           echo "Installed packages for $LAYER_NAME:"
           ls -la /tmp/$LAYER_NAME/python/
@@ -464,8 +494,11 @@ resource "aws_lambda_layer_version" "layers" {
 
   compatible_runtimes = ["python3.12"]
 
-  # Force layer recreation when requirements change
-  source_code_hash = md5("${each.value}-${join(",", var.idp_common_extras)}-${local.idp_common_files_hash}")
+  # Force layer recreation when requirements change.
+  # Include the CodeBuild buildspec in the hash so trim/build logic changes
+  # publish a new layer version (otherwise CodeBuild rebuilds the zip in S3
+  # but Terraform never points the layer at the new artifact).
+  source_code_hash = md5("${each.value}-${join(",", var.idp_common_extras)}-${local.idp_common_files_hash}-${md5(aws_codebuild_project.lambda_layers_build.source[0].buildspec)}")
 
   depends_on = [aws_lambda_invocation.trigger_codebuild]
 }
