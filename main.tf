@@ -46,6 +46,20 @@ check "web_ui_requires_api" {
   }
 }
 
+# Validation: Agent Analytics requires Reporting
+# When agent_analytics is enabled but reporting is disabled, the configuration in
+# processing_environment_api is silently downgraded to { enabled = false } because
+# Agent Analytics depends on reporting.bucket_arn and reporting.database_name.
+# This check surfaces that dependency to the user instead of ignoring the setting.
+# See https://github.com/awslabs/genai-idp-terraform/issues/84
+#tfsec:ignore:*
+check "agent_analytics_requires_reporting" {
+  assert {
+    condition     = !local.agent_analytics_config.enabled || var.reporting.enabled
+    error_message = "When Agent Analytics is enabled (api.agent_analytics.enabled or the deprecated agent_analytics.enabled), reporting.enabled must also be true. Agent Analytics requires reporting.bucket_arn and reporting.database_name."
+  }
+}
+
 # Validation: Exactly one processor must be configured
 #tfsec:ignore:*
 check "single_processor_required" {
