@@ -102,9 +102,16 @@ data "archive_file" "requirements_source" {
 # No bucket resources are created in this module
 
 # Upload the zip file to S3
+#
+# Each idp-common-layer module instance writes to a *prefixed* S3 key so the
+# four parallel layer builds (idp_common_layer, idp_base_layer,
+# idp_reporting_layer, idp_agents_layer — each with different `extras`) don't
+# overwrite each other. Without the prefix every layer's CodeBuild project
+# downloads the same zip (whichever module applied last), which produces
+# four identical fat layers regardless of `idp_common_extras`.
 resource "aws_s3_object" "requirements_source" {
   bucket = local.lambda_layers_bucket_name
-  key    = "source/requirements_source.zip"
+  key    = "source/${var.layer_prefix}/requirements_source.zip"
   source = data.archive_file.requirements_source.output_path
 
   # Use a local variable for the etag to avoid the file not found error
