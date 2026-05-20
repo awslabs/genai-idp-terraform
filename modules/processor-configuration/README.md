@@ -41,9 +41,11 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the IDPCommonBaseLayer Lambda layer. The seeder Lambda needs<br/>`idp_common` available so it can call `merge_config_with_defaults`<br/>when storing a `Default` configuration. Without this layer attached<br/>the seeder still functions, but it skips the merge step and the<br/>runtime classification/extraction Lambdas will fail with<br/>`No system_prompt found in classification configuration` (NOTE-014b). | `string` | `null` | no |
 | <a name="input_configuration"></a> [configuration](#input\_configuration) | JSON configuration object to store under 'Default' key | `any` | n/a | yes |
 | <a name="input_configuration_table_name"></a> [configuration\_table\_name](#input\_configuration\_table\_name) | Name of the DynamoDB table to store configuration | `string` | n/a | yes |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting DynamoDB table | `string` | `null` | no |
+| <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP common Lambda layer (full processor-extras flavor). Optional — `base_layer_arn` alone is enough for the seeder. | `string` | `null` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource names | `string` | n/a | yes |
 | <a name="input_schema"></a> [schema](#input\_schema) | JSON schema object to store under 'Schema' key | `any` | n/a | yes |

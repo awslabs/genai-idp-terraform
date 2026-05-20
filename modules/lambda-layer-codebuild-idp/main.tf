@@ -71,11 +71,11 @@ resource "terraform_data" "copy_idp_common_source" {
     command = <<-EOT
       # Create the idp-common requirements directory structure in build dir
       mkdir -p "${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
-      
+
       # Copy the idp_common source contents to build directory
       if [ -d "${var.idp_common_source_path}" ]; then
         cp -r "${var.idp_common_source_path}"/* "${local.module_build_dir}/requirements/idp-common/idp_common_pkg/"
-        
+
         # Remove test files and cache to reduce size
         find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
         find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -299,30 +299,30 @@ phases:
           echo "Requirements file: $req_file"
           echo "Contents of requirements file:"
           cat $req_file
-          
+
           # Create layer directory
           mkdir -p /tmp/$LAYER_NAME/python
-          
+
           # Check if this is the idp-common layer
           if [ "$LAYER_NAME" = "idp-common" ]; then
             echo "Building idp-common layer with Python package..."
-            
+
             # Check if idp_common_pkg directory exists
             if [ -d "$(dirname $req_file)/idp_common_pkg" ]; then
               echo "Found idp_common_pkg directory"
-              
+
               # Create a temporary build directory
               mkdir -p /tmp/builddir
               rsync -rLv $(dirname $req_file)/ /tmp/builddir/
-              
+
               cd /tmp/builddir
-              
+
               # Install dependencies first
               if [ -s "requirements.txt" ]; then
                 echo "Installing dependencies..."
                 pip install -r requirements.txt -t /tmp/$LAYER_NAME/python --no-cache-dir
               fi
-              
+
               # Install the idp_common package
               echo "Installing idp_common package..."
               if [ -n "$IDP_COMMON_EXTRAS" ] && [ "$IDP_COMMON_EXTRAS" != "" ]; then
@@ -332,31 +332,31 @@ phases:
                 echo "Installing without extras"
                 pip install -e ./idp_common_pkg -t /tmp/$LAYER_NAME/python --no-cache-dir
               fi
-              
+
               # Copy the idp_common source code directly to ensure it's available
               echo "Copying idp_common source code..."
               mkdir -p /tmp/$LAYER_NAME/python/idp_common
               rsync -rLv ./idp_common_pkg/idp_common/ /tmp/$LAYER_NAME/python/idp_common/
-              
+
               # Clean up temporary build directory (post-install cleanup is below,
               # shared with the "other layers" branch).
               rm -rf /tmp/builddir
-              
+
             else
               echo "ERROR: idp_common_pkg directory not found!"
               exit 1
             fi
-            
+
           else
             # Normal installation for other layers
             echo "Building regular layer..."
-            
+
             # Check if requirements file is empty
             if [ -s "$req_file" ]; then
               # File is not empty, install dependencies
               echo "Installing dependencies for $LAYER_NAME..."
               pip install -r $req_file -t /tmp/$LAYER_NAME/python --no-cache-dir
-              
+
               # Check if installation was successful
               if [ $? -ne 0 ]; then
                 echo "Failed to install dependencies for $LAYER_NAME"
@@ -404,7 +404,7 @@ phases:
           # List installed packages
           echo "Installed packages for $LAYER_NAME:"
           ls -la /tmp/$LAYER_NAME/python/
-          
+
           # Check if idp_common is available for idp-common layer
           if [ "$LAYER_NAME" = "idp-common" ]; then
             echo "Checking idp_common availability:"
@@ -416,22 +416,22 @@ phases:
               exit 1
             fi
           fi
-          
+
           # Create zip file
           echo "Creating zip file for $LAYER_NAME..."
           cd /tmp/$LAYER_NAME
           zip -r /tmp/layers/$LAYER_NAME.zip python/
-          
+
           # Check if zip was successful
           if [ $? -ne 0 ]; then
             echo "Failed to create zip file for $LAYER_NAME"
             exit 1
           fi
-          
+
           # Check zip file size
           echo "Zip file size for $LAYER_NAME:"
           ls -lh /tmp/layers/$LAYER_NAME.zip
-          
+
           # Return to original directory - use CODEBUILD_SRC_DIR or fallback
           if [ -d "$CODEBUILD_SRC_DIR" ]; then
             cd $CODEBUILD_SRC_DIR

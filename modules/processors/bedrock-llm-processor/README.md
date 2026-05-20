@@ -140,6 +140,7 @@
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings | `string` | n/a | yes |
 | <a name="input_enable_agentic_extraction"></a> [enable\_agentic\_extraction](#input\_enable\_agentic\_extraction) | Whether to enable agentic extraction using Strands agent framework | `bool` | `false` | no |
 | <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | Whether the API is enabled | `bool` | `false` | no |
+| <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in for\_each/count. | `bool` | `false` | no |
 | <a name="input_enable_hitl"></a> [enable\_hitl](#input\_enable\_hitl) | Whether to enable Human-in-the-Loop (HITL) functionality for document review | `bool` | `false` | no |
 | <a name="input_enable_rule_validation"></a> [enable\_rule\_validation](#input\_enable\_rule\_validation) | Enable rule validation Lambda functions for compliance assessment (v0.4.13+) | `bool` | `false` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources | `string` | `null` | no |
