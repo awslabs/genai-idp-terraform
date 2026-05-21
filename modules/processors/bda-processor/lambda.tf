@@ -36,26 +36,20 @@ resource "aws_cloudwatch_log_group" "summarization_logs" {
   tags              = var.tags
 }
 
-resource "aws_cloudwatch_log_group" "hitl_wait_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.hitl_wait.function_name}"
-  retention_in_days = var.log_retention_days
-  kms_key_id        = var.encryption_key_arn
-  tags              = var.tags
-}
+# NOTE-007 (2026-05-20): The `hitl_wait`, `hitl_process`, and
+# `hitl_status_update` Lambdas (and their log groups, IAM, and ECR
+# image references) were orphaned in the v0.4.16 sync. Upstream
+# CloudFormation Pattern 1 buildspec only builds 5 images:
+# `bda_invoke`, `bda_completion`, `processresults`, `summarization`,
+# `evaluation` — there is no `hitl-*-function` image being produced.
+# The state machine's HITL flow is now a single `MarkHITLPending` Pass
+# state; reviewers complete sections via AppSync mutations
+# (`claimReview`, `releaseReview`, `completeSectionReview`,
+# `skipAllSectionsReview`) that already live in the
+# `processing-environment-api` module. Removed the Lambda resources,
+# log groups, IAM roles/policies/attachments, and template
+# substitutions. See notes.md NOTE-007.
 
-resource "aws_cloudwatch_log_group" "hitl_process_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.hitl_process.function_name}"
-  retention_in_days = var.log_retention_days
-  kms_key_id        = var.encryption_key_arn
-  tags              = var.tags
-}
-
-resource "aws_cloudwatch_log_group" "hitl_status_update_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.hitl_status_update.function_name}"
-  retention_in_days = var.log_retention_days
-  kms_key_id        = var.encryption_key_arn
-  tags              = var.tags
-}
 
 resource "aws_cloudwatch_log_group" "evaluation_function_logs" {
   name              = "/aws/lambda/${aws_lambda_function.evaluation_function.function_name}"
@@ -270,138 +264,14 @@ resource "aws_lambda_function" "summarization" {
 }
 
 # =============================================================================
-# HITL Wait Function
+# HITL Lambdas removed (NOTE-007, 2026-05-20)
 # =============================================================================
-
-resource "aws_lambda_function" "hitl_wait" {
-  function_name = "${var.name}-hitl-wait-${random_string.suffix.result}"
-  role          = aws_iam_role.hitl_wait_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:hitl-wait-function"
-  architectures = ["arm64"]
-  timeout       = 60
-  memory_size   = 256
-
-  kms_key_arn = var.encryption_key_arn
-
-  environment {
-    variables = {
-      LOG_LEVEL                       = var.log_level
-      METRIC_NAMESPACE                = var.metric_namespace
-      TRACKING_TABLE                  = local.tracking_table_name
-      CONFIGURATION_TABLE_NAME        = local.configuration_table_name
-      WORKING_BUCKET                  = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE          = var.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL                 = var.api_id != null ? var.api_graphql_url : ""
-      SAGEMAKER_A2I_REVIEW_PORTAL_URL = var.sagemaker_a2i_review_portal_url != null ? var.sagemaker_a2i_review_portal_url : ""
-      HITL_WORKTEAM_ARN               = var.hitl_workteam_arn != null ? var.hitl_workteam_arn : ""
-    }
-  }
-
-  dynamic "vpc_config" {
-    for_each = length(var.vpc_subnet_ids) > 0 ? [local.vpc_config] : []
-    content {
-      subnet_ids         = vpc_config.value.subnet_ids
-      security_group_ids = vpc_config.value.security_group_ids
-    }
-  }
-
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  depends_on = [null_resource.trigger_bda_build]
-
-  tags = var.tags
-}
-
-# =============================================================================
-# HITL Process Function
-# =============================================================================
-
-resource "aws_lambda_function" "hitl_process" {
-  function_name = "${var.name}-hitl-process-${random_string.suffix.result}"
-  role          = aws_iam_role.hitl_process_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:hitl-process-function"
-  architectures = ["arm64"]
-  timeout       = 300
-  memory_size   = 512
-
-  kms_key_arn = var.encryption_key_arn
-
-  environment {
-    variables = {
-      LOG_LEVEL                = var.log_level
-      METRIC_NAMESPACE         = var.metric_namespace
-      TRACKING_TABLE           = local.tracking_table_name
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      WORKING_BUCKET           = local.working_bucket_name
-      OUTPUT_BUCKET            = local.output_bucket_name
-      DOCUMENT_TRACKING_MODE   = var.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL          = var.api_id != null ? var.api_graphql_url : ""
-    }
-  }
-
-  dynamic "vpc_config" {
-    for_each = length(var.vpc_subnet_ids) > 0 ? [local.vpc_config] : []
-    content {
-      subnet_ids         = vpc_config.value.subnet_ids
-      security_group_ids = vpc_config.value.security_group_ids
-    }
-  }
-
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  depends_on = [null_resource.trigger_bda_build]
-
-  tags = var.tags
-}
-
-# =============================================================================
-# HITL Status Update Function
-# =============================================================================
-
-resource "aws_lambda_function" "hitl_status_update" {
-  function_name = "${var.name}-hitl-status-update-${random_string.suffix.result}"
-  role          = aws_iam_role.hitl_status_update_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.bda_processor.repository_url}:hitl-status-update-function"
-  architectures = ["arm64"]
-  timeout       = 300
-  memory_size   = 512
-
-  kms_key_arn = var.encryption_key_arn
-
-  environment {
-    variables = {
-      LOG_LEVEL                = var.log_level
-      METRIC_NAMESPACE         = var.metric_namespace
-      TRACKING_TABLE           = local.tracking_table_name
-      CONFIGURATION_TABLE_NAME = local.configuration_table_name
-      DOCUMENT_TRACKING_MODE   = var.api_id != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL          = var.api_id != null ? var.api_graphql_url : ""
-    }
-  }
-
-  dynamic "vpc_config" {
-    for_each = length(var.vpc_subnet_ids) > 0 ? [local.vpc_config] : []
-    content {
-      subnet_ids         = vpc_config.value.subnet_ids
-      security_group_ids = vpc_config.value.security_group_ids
-    }
-  }
-
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  depends_on = [null_resource.trigger_bda_build]
-
-  tags = var.tags
-}
+# `hitl_wait`, `hitl_process`, `hitl_status_update` Lambdas were
+# orphans referencing nonexistent ECR images. Upstream pattern-1
+# buildspec only builds 5 images: bda_invoke, bda_completion,
+# processresults, summarization, evaluation. HITL is now async via
+# AppSync mutations on the processing-environment-api side. See
+# notes.md NOTE-007 and the comment block at the top of this file.
 
 # =============================================================================
 # Evaluation Function (Docker image from ECR)

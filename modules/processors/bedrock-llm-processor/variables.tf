@@ -114,6 +114,12 @@ variable "base_layer_arn" {
   default     = null
 }
 
+variable "evaluation_layer_arn" {
+  description = "ARN of the dedicated evaluation Lambda layer (idp_common with evaluation+docs_service extras, includes munkres/numpy). Required when evaluation_enabled=true."
+  type        = string
+  default     = null
+}
+
 variable "enable_rule_validation" {
   description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
   type        = bool

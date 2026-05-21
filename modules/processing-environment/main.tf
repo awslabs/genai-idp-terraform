@@ -40,9 +40,6 @@ locals {
 
 
 
-  # Evaluation bucket name if provided
-  baseline_bucket_name = var.evaluation_config != null ? element(split(":", var.evaluation_config.baseline_bucket_arn), 5) : null
-
   # Reporting bucket name if provided
   reporting_bucket_name = var.enable_reporting ? element(split(":", var.reporting_bucket_arn), 5) : null
 
@@ -71,6 +68,14 @@ locals {
     table_name = element(split("/", var.concurrency_table_arn), 1)
     table_arn  = var.concurrency_table_arn
   }
+
+  # Build directory + per-instance ID for archive_file outputs
+  # (used by lambda_functions.tf and lambda_save_reporting_data.tf for the
+  # zip output_path. Previously these locals + the matching null_resource +
+  # random_id lived in lambda_evaluation.tf, which was deleted as part of
+  # NOTE-005 because it referenced a non-existent source path.)
+  module_build_dir   = "${path.module}/.terraform-build"
+  module_instance_id = substr(md5("${path.module}-processing-environment"), 0, 8)
 }
 
 # Create a random string for unique resource names
@@ -78,6 +83,25 @@ resource "random_string" "suffix" {
   length  = 8
   special = false
   upper   = false
+}
+
+# Create module-specific build directory (shared by all archive_file zips
+# in this module — queue_sender, workflow_tracker, lookup_function,
+# update_configuration, post_processing_decompressor, save_reporting_data).
+resource "null_resource" "create_module_build_dir" {
+  provisioner "local-exec" {
+    command = "mkdir -p ${local.module_build_dir}"
+  }
+}
+
+# Generate unique build ID for this module instance — used to name zip
+# outputs so concurrent applies don't collide.
+resource "random_id" "build_id" {
+  byte_length = 8
+  keepers = {
+    module_instance_id = local.module_instance_id
+    content_hash       = md5("processing-environment")
+  }
 }
 
 # Create DynamoDB tables if not provided

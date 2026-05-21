@@ -178,6 +178,22 @@ module "idp_agents_layer" {
   lambda_tracing_mode      = var.lambda_tracing_mode
 }
 
+# Evaluation layer: evaluation + docs_service extras — used by the
+# per-processor evaluation Lambda. Includes munkres (Hungarian algorithm
+# comparator) and numpy. Matches CDK upstream which uses
+# IdpPythonLayerVersion.getOrCreate(scope, "evaluation", "docs_service").
+# Only built when at least one processor has evaluation enabled.
+module "idp_evaluation_layer" {
+  count  = var.evaluation.enabled ? 1 : 0
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-evaluation-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["evaluation", "docs_service"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
 #
 # User Identity (Cognito) - Only create if needed and not provided externally
 #
@@ -256,12 +272,6 @@ module "processing_environment" {
   base_layer_arn      = module.idp_base_layer.layer_arn
   reporting_layer_arn = module.idp_reporting_layer.layer_arn
   agents_layer_arn    = module.idp_agents_layer.layer_arn
-
-  # Optional: Evaluation configuration
-  evaluation_config = var.evaluation.enabled ? {
-    baseline_bucket_arn  = var.evaluation.baseline_bucket_arn
-    evaluation_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${var.evaluation.model_id}"
-  } : null
 
   # Optional: API configuration for UI updates
   api = local.api_enabled ? {
@@ -382,6 +392,11 @@ module "processing_environment_api" {
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
   enable_mcp                  = try(var.api.enable_mcp, false)
 
+  # User pool for MCP OAuth 2.0 client_credentials flow.
+  # NOTE-006 (2026-05-20): the MCP custom resource needs a Cognito
+  # client to authenticate to the AgentCore Gateway.
+  user_pool_id = local.user_pool_id
+
   # v0.4.16 feature flags
   enable_hitl                     = try(var.api.enable_hitl, true)
   enable_capacity_planning        = try(var.api.enable_capacity_planning, false)
@@ -452,9 +467,13 @@ module "bda_processor" {
   # Optional: Document processing configuration
   config = var.bda_processor.config
 
-  # Human Review configuration
-  sagemaker_a2i_review_portal_url = var.human_review.enabled ? module.human_review[0].workforce_portal_url_parameter : null
-  hitl_workteam_arn               = var.human_review.enabled ? module.human_review[0].workteam_arn : null
+  # NOTE-007 (2026-05-20): HITL configuration vars
+  # `sagemaker_a2i_review_portal_url`/`hitl_workteam_arn` removed —
+  # they only fed the orphan HITL Lambdas in the BDA processor module.
+  # HITL on BDA now flows through `complete_section_review` (AppSync
+  # mutation handler) in the `processing-environment-api` module. The
+  # `human_review` module still provides the SageMaker workteam +
+  # portal URL for Pattern 2 (Bedrock LLM) HITL.
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -491,6 +510,8 @@ module "bedrock_llm_processor" {
   encryption_key_arn   = var.encryption_key_arn
   enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+  base_layer_arn       = module.idp_base_layer.layer_arn
+  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -503,7 +524,12 @@ module "bedrock_llm_processor" {
   evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
   max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
 
-
+  # Evaluation: per-pattern Lambda built from
+  # `sources/patterns/pattern-2/src/evaluation_function/`. NOTE-005 fixed
+  # the duplicate generic-evaluation modules; the per-processor Lambda
+  # is the only evaluation surface, matching upstream CDK / CloudFormation.
+  evaluation_enabled             = var.evaluation.enabled
+  evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
 
   # Optional: Document processing configuration
   config = var.bedrock_llm_processor.config
@@ -765,11 +791,13 @@ module "processor_attachment" {
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
   api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
 
-  # Optional: Evaluation configuration
-  evaluation_options = var.evaluation.enabled ? {
-    baseline_bucket_arn = var.evaluation.baseline_bucket_arn
-    model_id            = var.evaluation.model_id
-  } : null
+  # NOTE-005: evaluation_options removed. Each processor module
+  # (bda-processor, bedrock-llm-processor, sagemaker-udop-processor)
+  # creates its own evaluation Lambda from the per-pattern source path
+  # (`sources/patterns/pattern-{N}/src/evaluation_function/`) and wires
+  # it as the `EvaluationStep` in its Step Functions state machine —
+  # matching upstream CloudFormation/CDK. The processor-attachment
+  # module no longer creates a duplicate EventBridge-driven copy.
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids

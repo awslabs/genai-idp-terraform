@@ -10,9 +10,6 @@ locals {
   output_bucket_name  = element(split(":", var.output_bucket_arn), 5)
   working_bucket_name = element(split(":", var.working_bucket_arn), 5)
 
-  # Evaluation baseline bucket name (optional)
-  baseline_bucket_name = var.evaluation_options != null ? element(split(":", var.evaluation_options.baseline_bucket_arn), 5) : null
-
   # DynamoDB table names (format: arn:${data.aws_partition.current.partition}:dynamodb:region:account:table/table-name)
   configuration_table_name = element(split("/", var.configuration_table_arn), 1)
   tracking_table_name      = element(split("/", var.tracking_table_arn), 1)
@@ -26,16 +23,36 @@ locals {
     security_group_ids = var.vpc_security_group_ids
   } : null
 
-  # Evaluation model ARN - handle both ARN and model ID formats
-  evaluation_model_arn = var.evaluation_options != null ? (
-    startswith(var.evaluation_options.model_id, "arn:") ?
-    var.evaluation_options.model_id :
-    "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:foundation-model/${var.evaluation_options.model_id}"
-  ) : null
+  # Build directory for archive_file outputs (used by lambda.tf and any
+  # other file in this module that needs a place to drop generated zips).
+  # Previously this lived in evaluation.tf alongside the now-deleted
+  # duplicate evaluation Lambda; it has been moved here so the rest of
+  # the module continues to compile (NOTE-005).
+  module_build_dir   = "${path.module}/.terraform-build"
+  module_instance_id = substr(md5("${path.module}-processor-attachment"), 0, 8)
 }
 
 resource "random_string" "suffix" {
   length  = 8
   special = false
   upper   = false
+}
+
+# Create module-specific build directory. Shared by every archive_file in
+# this module (currently just queue_processor since NOTE-005 removed the
+# duplicate evaluation Lambda).
+resource "null_resource" "create_module_build_dir" {
+  provisioner "local-exec" {
+    command = "mkdir -p ${local.module_build_dir}"
+  }
+}
+
+# Generate unique build ID for this module instance. Used to name zip
+# outputs so multiple terraform applies don't trip over each other.
+resource "random_id" "build_id" {
+  byte_length = 8
+  keepers = {
+    module_instance_id = local.module_instance_id
+    content_hash       = md5("processor-attachment")
+  }
 }

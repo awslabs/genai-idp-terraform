@@ -133,15 +133,6 @@ variable "security_group_ids" {
   default     = []
 }
 
-variable "evaluation_config" {
-  description = "Optional evaluation configuration for document processing quality assessment"
-  type = object({
-    baseline_bucket_arn  = string
-    evaluation_model_arn = string
-  })
-  default = null
-}
-
 variable "enable_reporting" {
   description = "Whether to enable the reporting environment for analytics and evaluation capabilities"
   type        = bool

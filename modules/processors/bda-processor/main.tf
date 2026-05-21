@@ -186,16 +186,14 @@ resource "aws_sfn_state_machine" "document_processing" {
   role_arn = aws_iam_role.state_machine_role.arn
 
   definition = templatefile("${path.module}/../../../sources/patterns/pattern-1/statemachine/workflow.asl.json", {
-    InvokeBDALambdaArn          = aws_lambda_function.invoke_bda.arn
-    ProcessResultsLambdaArn     = aws_lambda_function.process_results.arn
-    HITLWaitFunctionArn         = aws_lambda_function.hitl_wait.arn
-    HITLStatusUpdateFunctionArn = aws_lambda_function.hitl_status_update.arn
-    IsSummarizationEnabled      = local.is_summarization_enabled ? "true" : "false"
-    SummarizationLambdaArn      = aws_lambda_function.summarization.arn
-    EvaluationLambdaArn         = aws_lambda_function.evaluation_function.arn
-    OutputBucket                = local.output_bucket_name
-    WorkingBucket               = local.working_bucket_name
-    BDAProjectArn               = var.data_automation_project_arn
+    InvokeBDALambdaArn      = aws_lambda_function.invoke_bda.arn
+    ProcessResultsLambdaArn = aws_lambda_function.process_results.arn
+    IsSummarizationEnabled  = local.is_summarization_enabled ? "true" : "false"
+    SummarizationLambdaArn  = aws_lambda_function.summarization.arn
+    EvaluationLambdaArn     = aws_lambda_function.evaluation_function.arn
+    OutputBucket            = local.output_bucket_name
+    WorkingBucket           = local.working_bucket_name
+    BDAProjectArn           = var.data_automation_project_arn
   })
 
   logging_configuration {

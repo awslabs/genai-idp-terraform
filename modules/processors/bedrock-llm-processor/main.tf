@@ -200,7 +200,7 @@ locals {
     }
   ]
 
-  # The state after ProcessResultsStep / HITLStatusUpdate depends on whether summarization is enabled
+  # The state after ProcessResultsStep / MarkHITLPending depends on whether summarization is enabled
   post_hitl_next = local.summ_enabled ? "SummarizationStep" : (local.eval_enabled ? "EvaluationStep" : "WorkflowComplete")
 
   # The state after SummarizationStep depends on whether evaluation is enabled
@@ -209,32 +209,18 @@ locals {
   # CheckHITLRequired default (when HITL not triggered) — same logic as post_hitl_next
   check_hitl_default = local.post_hitl_next
 
-  # Build the optional states map entries
+  # HITL state map.
+  # v0.4.16 design: HITL is async — workflow marks the document as
+  # `HITL_IN_PROGRESS` via `process_results` and continues without
+  # waiting. Reviewers complete sections through AppSync mutations
+  # (`claimReview`, `releaseReview`, `completeSectionReview`,
+  # `skipAllSectionsReview`). Matches upstream CloudFormation and CDK
+  # exactly — no Lambda task states for HITL.
   hitl_states = local.hitl_enabled ? {
-    HITLReview = {
-      Type     = "Task"
-      Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
-      Parameters = {
-        FunctionName = aws_lambda_function.hitl_wait[0].arn
-        "Payload" = {
-          "taskToken.$" = "$.Task.Token"
-          "Payload.$"   = "$"
-        }
-      }
-      ResultPath = "$.HITLWaitResult"
-      Retry      = local.standard_retry
-      Next       = "HITLStatusUpdate"
-    }
-    HITLStatusUpdate = {
-      Type     = "Task"
-      Resource = aws_lambda_function.hitl_status_update[0].arn
-      Parameters = {
-        "Result.$"         = "$.Result"
-        "HITLWaitResult.$" = "$.HITLWaitResult"
-      }
-      ResultPath = "$.HITLStatusResult"
-      Retry      = local.standard_retry
-      Next       = local.post_hitl_next
+    MarkHITLPending = {
+      Type    = "Pass"
+      Comment = "Document marked for async HITL review, workflow continues without waiting"
+      Next    = local.post_hitl_next
     }
   } : {}
 
@@ -371,7 +357,7 @@ locals {
           {
             Variable      = "$.Result.hitl_triggered"
             BooleanEquals = true
-            Next          = "HITLReview"
+            Next          = "MarkHITLPending"
           }
           ] : [
           {

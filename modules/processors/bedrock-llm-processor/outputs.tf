@@ -69,14 +69,6 @@ output "lambda_functions" {
       name = aws_lambda_function.summarization[0].function_name
       arn  = aws_lambda_function.summarization[0].arn
     } : null
-    hitl_wait = var.enable_hitl ? {
-      name = aws_lambda_function.hitl_wait[0].function_name
-      arn  = aws_lambda_function.hitl_wait[0].arn
-    } : null
-    hitl_status_update = var.enable_hitl ? {
-      name = aws_lambda_function.hitl_status_update[0].function_name
-      arn  = aws_lambda_function.hitl_status_update[0].arn
-    } : null
   }
 }
 
@@ -121,4 +113,10 @@ output "model_permission_debug" {
       } : null
     }
   }
+}
+
+
+output "evaluation_function_arn" {
+  description = "ARN of the evaluation Lambda function (used by the Step Functions state machine when evaluation is enabled). Null when evaluation is disabled."
+  value       = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : null
 }

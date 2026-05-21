@@ -15,7 +15,7 @@ resource "aws_lambda_function" "ocr" {
   filename         = data.archive_file.ocr_lambda.output_path
   source_code_hash = data.archive_file.ocr_lambda.output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  layers = [var.idp_common_layer_arn != null ? var.idp_common_layer_arn : var.base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -59,7 +59,7 @@ resource "aws_lambda_function" "classification" {
   filename         = data.archive_file.classification_lambda.output_path
   source_code_hash = data.archive_file.classification_lambda.output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  layers = [var.idp_common_layer_arn != null ? var.idp_common_layer_arn : var.base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -96,7 +96,7 @@ resource "aws_lambda_function" "extraction" {
   filename         = data.archive_file.extraction_lambda.output_path
   source_code_hash = data.archive_file.extraction_lambda.output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  layers = [var.idp_common_layer_arn != null ? var.idp_common_layer_arn : var.base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -132,7 +132,7 @@ resource "aws_lambda_function" "process_results" {
   filename         = data.archive_file.process_results_lambda.output_path
   source_code_hash = data.archive_file.process_results_lambda.output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  layers = [var.idp_common_layer_arn != null ? var.idp_common_layer_arn : var.base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -170,7 +170,7 @@ resource "aws_lambda_function" "summarization" {
   filename         = data.archive_file.summarization_lambda.output_path
   source_code_hash = data.archive_file.summarization_lambda.output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  layers = [var.idp_common_layer_arn != null ? var.idp_common_layer_arn : var.base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -249,7 +249,7 @@ resource "aws_lambda_function" "assessment" {
   filename         = data.archive_file.assessment_lambda.output_path
   source_code_hash = data.archive_file.assessment_lambda.output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  layers = [var.idp_common_layer_arn != null ? var.idp_common_layer_arn : var.base_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -280,98 +280,16 @@ resource "aws_cloudwatch_log_group" "assessment_lambda" {
   tags = local.common_tags
 }
 
-# HITL Wait Function (conditional)
-resource "aws_lambda_function" "hitl_wait" {
-  count = var.enable_hitl ? 1 : 0
-
-  function_name = "${local.name_prefix}-hitl-wait"
-  role          = aws_iam_role.hitl_wait_lambda[0].arn
-  handler       = "index.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 300
-  memory_size   = 512
-
-  filename         = data.archive_file.hitl_wait_lambda[0].output_path
-  source_code_hash = data.archive_file.hitl_wait_lambda[0].output_base64sha256
-
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
-
-  kms_key_arn = var.encryption_key_arn
-
-  environment {
-    variables = {
-      LOG_LEVEL                       = local.log_level
-      TRACKING_TABLE                  = local.tracking_table_name
-      WORKING_BUCKET                  = local.working_bucket_name
-      SAGEMAKER_A2I_REVIEW_PORTAL_URL = ""
-    }
-  }
-
-  dynamic "vpc_config" {
-    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
-    content {
-      subnet_ids         = local.vpc_subnet_ids
-      security_group_ids = local.vpc_security_group_ids
-    }
-  }
-
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "hitl_wait_lambda" {
-  count = var.enable_hitl ? 1 : 0
-
-  name              = "/aws/lambda/${aws_lambda_function.hitl_wait[0].function_name}"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
-
-# HITL Status Update Function (conditional)
-resource "aws_lambda_function" "hitl_status_update" {
-  count = var.enable_hitl ? 1 : 0
-
-  function_name = "${local.name_prefix}-hitl-status-update"
-  role          = aws_iam_role.hitl_status_update_lambda[0].arn
-  handler       = "index.handler"
-  runtime       = "python3.12"
-  timeout       = 60
-  memory_size   = 256
-
-  filename         = data.archive_file.hitl_status_update_lambda[0].output_path
-  source_code_hash = data.archive_file.hitl_status_update_lambda[0].output_base64sha256
-
-  kms_key_arn = var.encryption_key_arn
-
-  dynamic "vpc_config" {
-    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
-    content {
-      subnet_ids         = local.vpc_subnet_ids
-      security_group_ids = local.vpc_security_group_ids
-    }
-  }
-
-  tracing_config {
-    mode = var.lambda_tracing_mode
-  }
-
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "hitl_status_update_lambda" {
-  count = var.enable_hitl ? 1 : 0
-
-  name              = "/aws/lambda/${aws_lambda_function.hitl_status_update[0].function_name}"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
-}
+# NOTE-011 (2026-05-20): The `hitl_wait` and `hitl_status_update` Lambdas
+# (and the matching `HITLReview`/`HITLStatusUpdate` ASL states) were
+# orphaned in the v0.4.16 sync. Upstream CloudFormation and CDK both
+# moved HITL to async — `process_results` marks the document as
+# `HITL_IN_PROGRESS` and the workflow continues without waiting via a
+# `MarkHITLPending` Pass state. Reviewers complete sections through
+# AppSync mutations (`claimReview`, `releaseReview`,
+# `completeSectionReview`, `skipAllSectionsReview`) which already exist
+# in the `processing-environment-api` module. Removed the Lambda
+# resources, IAM, log groups, and ASL states. See notes.md NOTE-011.
 
 # Lambda deployment packages
 # Generate unique build ID for this configuration
@@ -444,26 +362,6 @@ data "archive_file" "summarization_lambda" {
   depends_on = [null_resource.create_module_build_dir]
 }
 
-data "archive_file" "hitl_wait_lambda" {
-  count = var.enable_hitl ? 1 : 0
-
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/hitl-wait-function"
-  output_path = "${path.module}/hitl_wait_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
-data "archive_file" "hitl_status_update_lambda" {
-  count = var.enable_hitl ? 1 : 0
-
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/hitl-status-update-function"
-  output_path = "${path.module}/hitl_status_update_function.zip"
-
-  depends_on = [null_resource.create_module_build_dir]
-}
-
 # Evaluation Function (conditional on evaluation_enabled and baseline bucket)
 data "archive_file" "evaluation_lambda" {
   count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
@@ -488,7 +386,19 @@ resource "aws_lambda_function" "evaluation_function" {
   filename         = data.archive_file.evaluation_lambda[0].output_path
   source_code_hash = data.archive_file.evaluation_lambda[0].output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  # Evaluation Lambda needs the dedicated evaluation+docs_service layer
+  # (includes munkres/numpy for the Hungarian-algorithm comparator). Falls
+  # back to idp_common_layer_arn (which only includes evaluation deps when
+  # the layer extras list it explicitly), then base_layer_arn as a last
+  # resort. Matches CDK upstream which uses
+  # IdpPythonLayerVersion.getOrCreate(scope, "evaluation", "docs_service").
+  layers = [
+    coalesce(
+      var.evaluation_layer_arn,
+      var.idp_common_layer_arn,
+      var.base_layer_arn,
+    )
+  ]
 
   kms_key_arn = var.encryption_key_arn
 
@@ -501,6 +411,7 @@ resource "aws_lambda_function" "evaluation_function" {
       PROCESSING_OUTPUT_BUCKET = local.output_bucket_name
       EVALUATION_OUTPUT_BUCKET = local.output_bucket_name
       BASELINE_BUCKET          = element(split(":", var.evaluation_baseline_bucket_arn), 5)
+      WORKING_BUCKET           = local.working_bucket_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
     }

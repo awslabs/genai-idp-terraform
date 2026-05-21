@@ -440,3 +440,9 @@ variable "user_pool_id" {
   type        = string
   default     = null
 }
+
+variable "mcp_callback_urls" {
+  description = "Optional list of OAuth 2.0 callback URLs for the MCP external app client. Required by Cognito when the `code` flow is enabled, but unused by AgentCore Gateway (which uses JWT validation). When empty, falls back to a Cognito-hosted UI placeholder. Wire this to the CloudFront distribution URL from the caller for cleanest behaviour."
+  type        = list(string)
+  default     = []
+}
