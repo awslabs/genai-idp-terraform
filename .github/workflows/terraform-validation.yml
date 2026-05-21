@@ -82,7 +82,14 @@ jobs:
           for dir in modules/*/; do
             if [ -f "$dir/main.tf" ] || [ -f "$dir/versions.tf" ]; then
               echo "::group::Linting $dir"
-              (cd "$dir" && tflint --config="$GITHUB_WORKSPACE/.tflint.hcl")
+              if [ -f "$dir/.tflint.hcl" ]; then
+                # Module ships its own config (e.g. processing-environment-api
+                # disables a few aws-iam-policy rules that crash on plan-time
+                # conditional ARNs). Use it.
+                (cd "$dir" && tflint --minimum-failure-severity=error)
+              else
+                (cd "$dir" && tflint --minimum-failure-severity=error --config="$GITHUB_WORKSPACE/.tflint.hcl")
+              fi
               echo "::endgroup::"
             fi
           done

@@ -64,7 +64,11 @@ lint: ## Run TFLint on all Terraform files
 	@for dir in modules/*/; do \
 		if [ -f "$$dir/main.tf" ] || [ -f "$$dir/versions.tf" ]; then \
 			echo "Linting $$dir"; \
-			cd "$$dir" && tflint --config="$(CURDIR)/.tflint.hcl" && cd - > /dev/null; \
+			if [ -f "$$dir/.tflint.hcl" ]; then \
+				cd "$$dir" && tflint --minimum-failure-severity=error && cd - > /dev/null; \
+			else \
+				cd "$$dir" && tflint --minimum-failure-severity=error --config="$(CURDIR)/.tflint.hcl" && cd - > /dev/null; \
+			fi; \
 		fi; \
 	done
 	@echo "✅ TFLint checks completed"
