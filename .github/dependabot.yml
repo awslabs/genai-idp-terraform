@@ -1,34 +1,49 @@
 # Dependabot configuration
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# IMPORTANT: every ecosystem must exclude `sources/**`. The `sources/`
+# directory is a snapshot of the upstream CloudFormation IDP repo
+# (`accelerated-intelligent-document-processing-on-aws`) at a specific
+# release. Dependency updates inside `sources/` MUST come from a fresh
+# upstream sync, not from independent Dependabot PRs against this repo.
 
 version: 2
 updates:
-  # Terraform dependencies (excludes /sources - managed upstream)
+  # Terraform configuration in /, /modules/**, and /examples/**.
+  # No .tf files exist under sources/, but exclude defensively.
   - package-ecosystem: "terraform"
     directories:
       - "/"
-      - "/examples/**"
       - "/modules/**"
+      - "/examples/**"
+    exclude-paths:
+      - "sources/**"
     schedule:
       interval: "weekly"
+    labels:
+      - "dependencies"
+      - "terraform"
 
-  # GitHub Actions
+  # GitHub Actions workflows under .github/workflows.
   - package-ecosystem: "github-actions"
     directory: "/"
+    exclude-paths:
+      - "sources/**"
     schedule:
       interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
 
-  # Python dependencies (excludes /sources - managed upstream)
+  # Python: only the docs site requirements. Lambda function
+  # requirements.txt files all live under sources/ and are managed
+  # upstream — those must be excluded.
   - package-ecosystem: "pip"
-    directories:
-      - "/docs"
-      - "/examples/**"
+    directory: "/docs"
+    exclude-paths:
+      - "sources/**"
     schedule:
       interval: "weekly"
-
-  # npm/yarn dependencies (excludes /sources - managed upstream)
-  - package-ecosystem: "npm"
-    directories:
-      - "/examples/**"
-    schedule:
-      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "python"
