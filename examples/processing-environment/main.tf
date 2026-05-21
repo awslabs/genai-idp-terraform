@@ -236,12 +236,6 @@ module "processing_environment" {
   enable_reporting     = var.enable_reporting
   reporting_bucket_arn = var.enable_reporting ? aws_s3_bucket.reporting_bucket[0].arn : null
 
-  # Optional: Evaluation configuration
-  evaluation_config = var.enable_evaluation ? {
-    baseline_bucket_arn  = aws_s3_bucket.evaluation_baseline_bucket[0].arn
-    evaluation_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${var.evaluation_model_id}"
-  } : null
-
   # Optional parameters
   encryption_key_arn = aws_kms_key.encryption_key.arn
 

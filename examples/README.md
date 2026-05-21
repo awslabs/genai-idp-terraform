@@ -262,6 +262,17 @@ Error: LimitExceededException: Rate exceeded
 
 ## What's New
 
+### **v0.4.16 Feature Parity**
+
+- **Configuration Versioning**: Versioned config storage with active-version tracking and full system-defaults merge in the configuration seeder.
+- **Capacity Planning** (Pattern 2): `calculateCapacity` AppSync query and UI panel.
+- **Lambda Hook Inference** (Pattern 2): Step Functions integration for `GENAIIDP-*` custom Lambdas at OCR, Classification, Extraction, Assessment, and Summarization steps.
+- **Rule Validation** (Pattern 2): Per-section validation orchestration.
+- **Bedrock AgentCore Gateway / MCP**: Provisioned via a `Custom::AgentCoreGateway` CloudFormation custom resource.
+- **Async HITL**: `process_results` flags documents `HITL_IN_PROGRESS` and the workflow continues via a `MarkHITLPending` Pass state. Reviewers complete sections through AppSync mutations (`claimReview`, `releaseReview`, `completeSectionReview`, `skipAllSectionsReview`).
+- **Per-processor evaluation Lambda**: Each pattern owns its evaluation Lambda built from `sources/patterns/pattern-{N}/src/evaluation_function/`.
+- **Test Studio**, **FCC / OmniAI / DocSplit dataset deployers**, **Agent Companion Chat**, **Error Analyzer**, **Discovery**, **Knowledge Base**, **Process Changes** — all available via the `api` block flags.
+
 ### **v0.3.18 Functional Parity**
 
 - **Assessment Functions**: Document quality measurement
