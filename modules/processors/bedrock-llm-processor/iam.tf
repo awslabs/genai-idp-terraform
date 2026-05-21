@@ -965,9 +965,13 @@ resource "aws_iam_role_policy" "evaluation_lambda" {
         Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*"]
       },
       {
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
-        Resource = "*"
+        Effect = "Allow"
+        Action = ["bedrock:InvokeModel"]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       },
       {
         Effect    = "Allow"
