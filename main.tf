@@ -71,6 +71,19 @@ check "single_processor_required" {
   }
 }
 
+# Validation: enable_encryption requires encryption_key_arn
+# Several module-internal IAM policies fall back to a KMS wildcard
+# (Resource = "*") when encryption_key_arn is null. Even though the root
+# variable already requires a non-null KMS key ARN, surface this dependency
+# explicitly so flipping enable_encryption=true with a null key fails fast.
+#tfsec:ignore:*
+check "enable_encryption_requires_key" {
+  assert {
+    condition     = !var.enable_encryption || var.encryption_key_arn != null
+    error_message = "When enable_encryption is true, encryption_key_arn must be set to a non-null KMS key ARN."
+  }
+}
+
 # Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.)
 # have been removed to eliminate "known after apply" warnings. These validations
 # are still enforced by Terraform's resource dependencies and will fail at apply
