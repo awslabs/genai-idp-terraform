@@ -47,12 +47,6 @@ resource "aws_iam_role_policy" "dataset_deployers" {
         Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
       },
       {
-        # Public HuggingFace dataset read (anonymous S3 access)
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:ListBucket"]
-        Resource = "*"
-      },
-      {
         # Write to test_sets bucket
         Effect = "Allow"
         Action = ["s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
@@ -64,7 +58,7 @@ resource "aws_iam_role_policy" "dataset_deployers" {
       {
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
