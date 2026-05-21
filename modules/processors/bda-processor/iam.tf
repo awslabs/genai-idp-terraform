@@ -307,13 +307,16 @@ resource "aws_iam_policy" "process_results_policy" {
         Resource = var.api_arn != null ? "${var.api_arn}/types/Mutation/*" : "*"
       },
       {
+        # Pattern-1 process_results lambda imports boto3.client("ssm") at
+        # module load but never calls put_parameter; it only reads the
+        # stack settings parameter via idp_common.utils.settings_helper
+        # when SETTINGS_PARAMETER env var is set.
         Action = [
           "ssm:GetParameter",
-          "ssm:PutParameter",
           "ssm:GetParametersByPath"
         ]
         Effect   = "Allow"
-        Resource = "*"
+        Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/*"
       },
       {
         Action = [
@@ -532,8 +535,14 @@ resource "aws_iam_policy" "summarization_default_bedrock_policy" {
           "bedrock:InvokeModel*",
           "bedrock:GetFoundationModel"
         ]
-        Effect   = "Allow"
-        Resource = "*" # Using broader permissions to ensure all model formats are covered
+        Effect = "Allow"
+        # Scoped to foundation models and inference profiles. Cross-region
+        # inference resolves to the same model resource ARN namespace.
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       }
     ]
   })
@@ -559,8 +568,12 @@ resource "aws_iam_policy" "summarization_bedrock_policy" {
           "bedrock:InvokeModel*",
           "bedrock:GetFoundationModel"
         ]
-        Effect   = "Allow"
-        Resource = "*" # Using broader permissions to ensure all model formats are covered
+        Effect = "Allow"
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       },
       {
         Action = [
@@ -1027,7 +1040,7 @@ resource "aws_iam_policy" "evaluation_function_policy" {
         # Invoke SaveReportingData Lambda for analytics
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:*"
+        Resource = var.save_reporting_function_name != "" ? "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${var.save_reporting_function_name}" : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-disabled"
       },
       {
         Effect   = "Allow"

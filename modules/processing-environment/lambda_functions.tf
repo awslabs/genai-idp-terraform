@@ -437,23 +437,27 @@ resource "aws_iam_role_policy" "post_processing_decompressor_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
-        Resource = [var.working_bucket_arn, "${var.working_bucket_arn}/*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["lambda:InvokeFunction"]
-        Resource = var.custom_post_processor_arn != null ? var.custom_post_processor_arn : "arn:${data.aws_partition.current.partition}:lambda:*:*:function:*"
-      }
-    ]
+    Statement = concat(
+      [
+        {
+          Effect   = "Allow"
+          Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+          Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+          Resource = [var.working_bucket_arn, "${var.working_bucket_arn}/*"]
+        }
+      ],
+      var.custom_post_processor_arn != null ? [
+        {
+          Effect   = "Allow"
+          Action   = ["lambda:InvokeFunction"]
+          Resource = var.custom_post_processor_arn
+        }
+      ] : []
+    )
   })
 }
 
