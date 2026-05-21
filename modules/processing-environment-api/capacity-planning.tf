@@ -32,7 +32,7 @@ resource "aws_iam_role_policy" "capacity_planning" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -62,12 +62,14 @@ resource "aws_iam_role_policy" "capacity_planning" {
         Action   = ["lambda:InvokeFunction"]
         Resource = "arn:${data.aws_partition.current.partition}:lambda:*:*:function:${local.api_name}-calculate-capacity"
       },
-      {
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
-      }
-    ]
+      ],
+      local.encryption_key_arn != null ? [
+        {
+          Effect   = "Allow"
+          Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+          Resource = local.encryption_key_arn
+        }
+    ] : [])
   })
 }
 

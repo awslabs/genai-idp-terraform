@@ -32,7 +32,7 @@ resource "aws_iam_role_policy" "complete_section_review" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -66,18 +66,22 @@ resource "aws_iam_role_policy" "complete_section_review" {
           "${local.input_bucket_arn}/*",
         ])
       },
-      {
-        # SQS send for reprocessing trigger
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
-        Resource = local.document_queue_arn != null ? local.document_queue_arn : "arn:${data.aws_partition.current.partition}:sqs:*:*:*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
-      }
-    ]
+      ],
+      local.document_queue_arn != null ? [
+        {
+          # SQS send for reprocessing trigger
+          Effect   = "Allow"
+          Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+          Resource = local.document_queue_arn
+        }
+      ] : [],
+      local.encryption_key_arn != null ? [
+        {
+          Effect   = "Allow"
+          Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+          Resource = local.encryption_key_arn
+        }
+    ] : [])
   })
 }
 
