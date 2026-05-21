@@ -173,10 +173,10 @@ resource "aws_iam_role_policy" "agentcore_gateway_manager" {
   role  = aws_iam_role.agentcore_gateway_manager[0].id
 
   # Permissions match upstream CloudFormation
-  # (template.yaml AgentCoreGatewayManagerFunction): bedrock-agent / -agentcore /
-  # -agentcore-control are the actual service prefixes used by the
-  # AgentCore Gateway control plane. The previous policy granted the
-  # nonexistent `bedrock:*AgentCoreGateway` actions.
+  # (template.yaml AgentCoreGatewayManagerFunction):
+  # `bedrock-agent` / `bedrock-agentcore` / `bedrock-agentcore-control`
+  # are the service prefixes used by the AgentCore Gateway control
+  # plane.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -239,13 +239,10 @@ resource "aws_iam_role" "agentcore_gateway_execution" {
   count = local.enable_mcp_effective ? 1 : 0
   name  = "${local.api_name}-agentcore-gateway-exec"
 
-  # NOTE-006 (2026-05-20): Trust principal must be
-  # `bedrock-agentcore.amazonaws.com`, NOT `bedrock.amazonaws.com`.
-  # AgentCore Gateway is a separate service that assumes this role
-  # to invoke target Lambdas. The previous policy caused
-  # `Gateway service is not authorized to perform AssumeRole on
-  # Gateway role` on stack create. The conditions narrow trust to
-  # this account / region — matches upstream CFN.
+  # AgentCore Gateway assumes this role to invoke target Lambdas. The
+  # trust principal must be `bedrock-agentcore.amazonaws.com`. The
+  # conditions narrow trust to this account / region — matches the
+  # upstream CloudFormation template.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -321,9 +318,9 @@ resource "null_resource" "build_agentcore_gateway_manager" {
       filesha256("${local.agentcore_gateway_manager_src}/${f}")
     ]))
     # Bump this string when the build pipeline below changes (e.g.
-    # adding/removing pip flags) — `triggers` are the only signal
-    # `null_resource` has for "re-run me".
-    build_pipeline_version = "v2-manylinux2014_x86_64"
+    # adding/removing pip flags). `null_resource.triggers` are the only
+    # signal terraform has for "re-run the build".
+    build_pipeline_version = "manylinux2014_x86_64"
   }
 
   provisioner "local-exec" {
@@ -338,16 +335,14 @@ resource "null_resource" "build_agentcore_gateway_manager" {
       # Copy source files
       cp -r "$SRC_DIR"/. "$BUILD_DIR/"
 
-      # Install deps for Lambda's runtime, NOT the build host's.
-      # `bedrock_agentcore_starter_toolkit` pulls in `pydantic` whose
-      # transitive dep `pydantic_core` ships native binaries
-      # (Rust-compiled `.so`/`.dylib`). Without `--platform` pip would
-      # grab the host's macOS `.dylib` and the import would fail at
-      # runtime with "No module named 'pydantic_core._pydantic_core'".
-      # `--only-binary=:all:` forces wheels (no source builds), and
-      # `--platform manylinux2014_x86_64` matches Lambda's runtime
-      # (the function defaults to x86_64; if you switch to arm64 use
-      # `manylinux2014_aarch64`).
+      # Install deps for the Lambda runtime (Linux x86_64), not the
+      # build host. `bedrock_agentcore_starter_toolkit` pulls in
+      # `pydantic`, whose transitive `pydantic_core` package ships
+      # native (Rust-compiled) binaries. The `--platform` /
+      # `--only-binary` / `--implementation` flags force pip to fetch
+      # the manylinux x86_64 wheel that Lambda can load at runtime.
+      # Switch `manylinux2014_x86_64` to `manylinux2014_aarch64` if the
+      # function is rebuilt for arm64.
       pip3 install \
         --target "$BUILD_DIR" \
         --upgrade \
@@ -378,11 +373,11 @@ resource "aws_lambda_function" "agentcore_gateway_manager" {
   timeout          = 900
   memory_size      = 512
 
-  # No layers — `bedrock_agentcore_starter_toolkit` and its
-  # transitive deps (boto3, pydantic, …) are heavy and we already
-  # bundle them into the zip via `null_resource.build_agentcore_gateway_manager`.
-  # Attaching `idp_common_layer_arn` on top busted the 250 MB
-  # function-code+layer cap.
+  # `bedrock_agentcore_starter_toolkit` and its transitive deps
+  # (boto3, pydantic, …) are bundled into the zip via
+  # `null_resource.build_agentcore_gateway_manager`. We don't attach
+  # the shared `idp_common` layer here because the combined size would
+  # exceed Lambda's 250 MB function-code-plus-layer limit.
 
   environment {
     variables = {
@@ -407,24 +402,24 @@ resource "aws_lambda_function" "agentcore_gateway_manager" {
 }
 
 # =============================================================================
-# Bedrock AgentCore Gateway via CloudFormation Custom Resource (NOTE-006)
+# Bedrock AgentCore Gateway via CloudFormation Custom Resource
 # =============================================================================
-# AgentCore Gateway is not yet a native CloudFormation resource type — the
-# previous code used `AWS::Bedrock::AgentCoreGateway` which CloudFormation
-# rejects with "Unrecognized resource type". Upstream CloudFormation
-# (template.yaml) handles this via a CFN custom resource:
+# AgentCore Gateway is not yet a native CloudFormation resource type, so
+# `AWS::Bedrock::AgentCoreGateway` is unrecognized in CloudFormation.
+# Upstream CloudFormation (template.yaml) handles this via a CFN custom
+# resource:
 #   Type: Custom::AgentCoreGateway
 #   Properties:
 #     ServiceToken: !GetAtt AgentCoreGatewayManagerFunction.Arn
 #     ...
 # The custom resource invokes the `agentcore_gateway_manager` Lambda
-# (already provisioned above) which calls the
-# `bedrock-agentcore-control` API directly to create/update/delete the
-# gateway. We mirror that pattern here by wrapping a one-resource
-# CloudFormation stack around `Custom::AgentCoreGateway`. Keeping the
-# CFN-stack wrapper (rather than rolling our own `null_resource +
-# local-exec`) preserves CFN's create/update/delete idempotency and
-# matches the upstream Lambda's expected `cfnresponse` callback shape.
+# (provisioned above) which calls the `bedrock-agentcore-control` API
+# directly to create/update/delete the gateway. We mirror that pattern
+# here by wrapping a one-resource CloudFormation stack around
+# `Custom::AgentCoreGateway`. Keeping the CFN-stack wrapper (rather than
+# a `null_resource + local-exec`) preserves CFN's create/update/delete
+# idempotency and matches the upstream Lambda's expected `cfnresponse`
+# callback shape.
 
 resource "aws_cloudformation_stack" "agentcore_gateway" {
   count = local.enable_mcp_effective ? 1 : 0
@@ -486,10 +481,9 @@ resource "aws_cognito_user_pool_client" "mcp_client" {
 
   generate_secret = true
 
-  # NOTE-006 (2026-05-20): Match upstream CFN `ExternalAppClient`
-  # exactly. Cognito does NOT support `openid` with the
-  # `client_credentials` flow — that flow requires a custom
-  # resource server scope. Upstream uses the `code` flow instead.
+  # Matches the upstream CloudFormation `ExternalAppClient`. Cognito
+  # does not support `openid` with the `client_credentials` flow, so we
+  # use the `code` flow with the standard scope set.
   explicit_auth_flows = [
     "ALLOW_ADMIN_USER_PASSWORD_AUTH",
     "ALLOW_USER_PASSWORD_AUTH",

@@ -280,17 +280,6 @@ resource "aws_cloudwatch_log_group" "assessment_lambda" {
   tags = local.common_tags
 }
 
-# NOTE-011 (2026-05-20): The `hitl_wait` and `hitl_status_update` Lambdas
-# (and the matching `HITLReview`/`HITLStatusUpdate` ASL states) were
-# orphaned in the v0.4.16 sync. Upstream CloudFormation and CDK both
-# moved HITL to async — `process_results` marks the document as
-# `HITL_IN_PROGRESS` and the workflow continues without waiting via a
-# `MarkHITLPending` Pass state. Reviewers complete sections through
-# AppSync mutations (`claimReview`, `releaseReview`,
-# `completeSectionReview`, `skipAllSectionsReview`) which already exist
-# in the `processing-environment-api` module. Removed the Lambda
-# resources, IAM, log groups, and ASL states. See notes.md NOTE-011.
-
 # Lambda deployment packages
 # Generate unique build ID for this configuration
 

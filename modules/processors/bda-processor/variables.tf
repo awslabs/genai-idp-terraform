@@ -172,15 +172,6 @@ variable "tags" {
   default     = {}
 }
 
-# NOTE-007 (2026-05-20): The HITL-related variables that fed the
-# orphan `hitl_wait`/`hitl_process`/`hitl_status_update` Lambdas
-# (`sagemaker_a2i_review_portal_url`, `hitl_workteam_arn`) were
-# removed alongside the Lambdas. Leaving them as deprecated
-# pass-throughs would be misleading — HITL is now driven entirely by
-# `complete_section_review` Lambda + AppSync mutations on the
-# `processing-environment-api` side. See lambda.tf and notes.md
-# NOTE-007.
-
 variable "lambda_tracing_mode" {
   description = "X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough"
   type        = string

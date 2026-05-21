@@ -70,10 +70,8 @@ locals {
   }
 
   # Build directory + per-instance ID for archive_file outputs
-  # (used by lambda_functions.tf and lambda_save_reporting_data.tf for the
-  # zip output_path. Previously these locals + the matching null_resource +
-  # random_id lived in lambda_evaluation.tf, which was deleted as part of
-  # NOTE-005 because it referenced a non-existent source path.)
+  # (used by lambda_functions.tf and lambda_save_reporting_data.tf for
+  # the zip output_path).
   module_build_dir   = "${path.module}/.terraform-build"
   module_instance_id = substr(md5("${path.module}-processing-environment"), 0, 8)
 }

@@ -36,20 +36,6 @@ resource "aws_cloudwatch_log_group" "summarization_logs" {
   tags              = var.tags
 }
 
-# NOTE-007 (2026-05-20): The `hitl_wait`, `hitl_process`, and
-# `hitl_status_update` Lambdas (and their log groups, IAM, and ECR
-# image references) were orphaned in the v0.4.16 sync. Upstream
-# CloudFormation Pattern 1 buildspec only builds 5 images:
-# `bda_invoke`, `bda_completion`, `processresults`, `summarization`,
-# `evaluation` — there is no `hitl-*-function` image being produced.
-# The state machine's HITL flow is now a single `MarkHITLPending` Pass
-# state; reviewers complete sections via AppSync mutations
-# (`claimReview`, `releaseReview`, `completeSectionReview`,
-# `skipAllSectionsReview`) that already live in the
-# `processing-environment-api` module. Removed the Lambda resources,
-# log groups, IAM roles/policies/attachments, and template
-# substitutions. See notes.md NOTE-007.
-
 
 resource "aws_cloudwatch_log_group" "evaluation_function_logs" {
   name              = "/aws/lambda/${aws_lambda_function.evaluation_function.function_name}"
@@ -262,16 +248,6 @@ resource "aws_lambda_function" "summarization" {
 
   tags = var.tags
 }
-
-# =============================================================================
-# HITL Lambdas removed (NOTE-007, 2026-05-20)
-# =============================================================================
-# `hitl_wait`, `hitl_process`, `hitl_status_update` Lambdas were
-# orphans referencing nonexistent ECR images. Upstream pattern-1
-# buildspec only builds 5 images: bda_invoke, bda_completion,
-# processresults, summarization, evaluation. HITL is now async via
-# AppSync mutations on the processing-environment-api side. See
-# notes.md NOTE-007 and the comment block at the top of this file.
 
 # =============================================================================
 # Evaluation Function (Docker image from ECR)

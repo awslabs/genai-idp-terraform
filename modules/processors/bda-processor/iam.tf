@@ -697,14 +697,6 @@ resource "aws_iam_role_policy_attachment" "bda_completion_policy_attachment" {
 # =============================================================================
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-#
-# NOTE-007 (2026-05-20): HITL Wait, Process, and Status Update IAM roles
-# / policies / attachments removed alongside the orphan Lambda
-# resources. v0.4.16 moves HITL to async via AppSync mutations on the
-# `processing-environment-api` side. See lambda.tf and notes.md
-# NOTE-007. The `process_results_hitl_policy` further up in this file
-# is intentionally kept — `process_results` legitimately needs
-# `sagemaker:StartHumanLoop` to mark documents `HITL_IN_PROGRESS`.
 
 # IAM Role for Evaluation Lambda Function
 # DISABLED: Using shared evaluation function from processor-attachment module
@@ -946,9 +938,6 @@ resource "aws_iam_role_policy_attachment" "bda_completion_vpc_attachment" {
 #   role       = aws_iam_role.evaluation_role[0].name
 #   policy_arn = aws_iam_policy.vpc_policy[0].arn
 # }
-
-# NOTE-007 (2026-05-20): HITL VPC attachments removed alongside the
-# orphan HITL roles. See lambda.tf comment block.
 
 # =============================================================================
 # IAM Role and Policy for Evaluation Function

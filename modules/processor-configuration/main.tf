@@ -13,8 +13,8 @@ resource "aws_lambda_function" "configuration_seeder" {
 
   # Pull in `idp_common` so the seeder can merge user config with system
   # defaults (the v0.4.16 runtime expects every config item to be a full
-  # IDPConfig — see NOTE-014/NOTE-014b). Falling back to the per-processor
-  # layer is fine if the dedicated base layer isn't wired (older deployments).
+  # IDPConfig). Falling back to the per-processor layer is fine if the
+  # dedicated base layer isn't wired (older deployments).
   layers = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   kms_key_arn = var.encryption_key_arn
@@ -61,8 +61,8 @@ resource "aws_lambda_invocation" "seed_default" {
 
   triggers = {
     configuration_hash = sha256(jsonencode(var.configuration))
-    # Re-invoke when the seeder Lambda source itself changes — this is how
-    # we propagate fixes like NOTE-014b to existing deployments without
+    # Re-invoke when the seeder Lambda source itself changes — this is
+    # how we propagate seeder fixes to existing deployments without
     # forcing the operator to taint the resource.
     seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
   }

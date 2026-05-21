@@ -25,9 +25,6 @@ locals {
 
   # Build directory for archive_file outputs (used by lambda.tf and any
   # other file in this module that needs a place to drop generated zips).
-  # Previously this lived in evaluation.tf alongside the now-deleted
-  # duplicate evaluation Lambda; it has been moved here so the rest of
-  # the module continues to compile (NOTE-005).
   module_build_dir   = "${path.module}/.terraform-build"
   module_instance_id = substr(md5("${path.module}-processor-attachment"), 0, 8)
 }
@@ -39,8 +36,7 @@ resource "random_string" "suffix" {
 }
 
 # Create module-specific build directory. Shared by every archive_file in
-# this module (currently just queue_processor since NOTE-005 removed the
-# duplicate evaluation Lambda).
+# this module.
 resource "null_resource" "create_module_build_dir" {
   provisioner "local-exec" {
     command = "mkdir -p ${local.module_build_dir}"

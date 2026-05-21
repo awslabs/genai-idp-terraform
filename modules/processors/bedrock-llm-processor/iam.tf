@@ -908,12 +908,6 @@ resource "aws_iam_role_policy_attachment" "summarization_lambda_vpc" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# NOTE-011 (2026-05-20): HITL Wait/Status Update IAM roles, policies, and
-# attachments removed alongside the corresponding orphan Lambda
-# resources. The v0.4.16 design moves HITL to async via AppSync
-# mutations on the processing-environment-api side. See lambda.tf and
-# notes.md NOTE-011.
-
 # Evaluation Lambda IAM Role
 resource "aws_iam_role" "evaluation_lambda" {
   count = var.evaluation_enabled ? 1 : 0

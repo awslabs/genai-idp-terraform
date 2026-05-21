@@ -118,10 +118,10 @@ module "processor_configuration" {
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
 
-  # Required for the seeder Lambda to merge user config with system defaults
-  # (NOTE-014/NOTE-014b). Without these layers attached, the seeder will
-  # store the sparse user YAML and the runtime will crash with
-  # "No system_prompt found in classification configuration".
+  # Required for the seeder Lambda to merge user config with system
+  # defaults. Without these layers attached, the seeder will store the
+  # sparse user YAML and the runtime will crash with "No system_prompt
+  # found in classification configuration".
   base_layer_arn       = var.base_layer_arn
   idp_common_layer_arn = var.idp_common_layer_arn
 

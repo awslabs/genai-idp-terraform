@@ -43,7 +43,7 @@ variable "base_layer_arn" {
     when storing a `Default` configuration. Without this layer attached
     the seeder still functions, but it skips the merge step and the
     runtime classification/extraction Lambdas will fail with
-    `No system_prompt found in classification configuration` (NOTE-014b).
+    `No system_prompt found in classification configuration`.
   EOT
   type        = string
   default     = null

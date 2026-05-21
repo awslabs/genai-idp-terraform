@@ -67,7 +67,7 @@ locals {
         type               = type
         state_machine_arn  = try(module_ref.state_machine_arn, null)
         state_machine_name = try(module_ref.state_machine_name, null)
-        # NOTE-005: each processor module owns its own evaluation Lambda
+        # Each processor module owns its own evaluation Lambda
         # (built from its pattern-specific source path). Null when the
         # processor is configured with evaluation disabled.
         evaluation_function_arn = try(module_ref.evaluation_function_arn, null)
