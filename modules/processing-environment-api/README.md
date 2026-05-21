@@ -81,7 +81,6 @@
 | [aws_appsync_resolver.get_chat_messages](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_config_version](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_config_versions](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
-| [aws_appsync_resolver.get_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_configuration_library_file](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.get_file_contents](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
@@ -326,6 +325,7 @@
 | [aws_sqs_queue.test_set_copy_dlq](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue) | resource |
 | [aws_sqs_queue.test_set_copy_queue](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue) | resource |
 | [null_resource.build_agent_chat_processor](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.build_agentcore_gateway_manager](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.create_module_build_dir](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.build_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
@@ -409,6 +409,7 @@
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | Log level for Lambda functions | `string` | `"INFO"` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention period in days | `number` | `7` | no |
 | <a name="input_lookup_function_name"></a> [lookup\_function\_name](#input\_lookup\_function\_name) | Name of the LookupFunction Lambda (used by Agent Chat Processor to look up document info) | `string` | `null` | no |
+| <a name="input_mcp_callback_urls"></a> [mcp\_callback\_urls](#input\_mcp\_callback\_urls) | Optional list of OAuth 2.0 callback URLs for the MCP external app client. Required by Cognito when the `code` flow is enabled, but unused by AgentCore Gateway (which uses JWT validation). When empty, falls back to a Cognito-hosted UI placeholder. Wire this to the CloudFront distribution URL from the caller for cleanest behaviour. | `list(string)` | `[]` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the GraphQL API | `string` | `null` | no |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket where processed document outputs are stored | `string` | `null` | no |
 | <a name="input_owner_contact"></a> [owner\_contact](#input\_owner\_contact) | The owner contact information for an API resource | `string` | `null` | no |

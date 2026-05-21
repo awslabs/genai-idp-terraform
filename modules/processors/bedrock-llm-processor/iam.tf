@@ -916,7 +916,7 @@ resource "aws_iam_role_policy_attachment" "summarization_lambda_vpc" {
 
 # Evaluation Lambda IAM Role
 resource "aws_iam_role" "evaluation_lambda" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+  count = var.evaluation_enabled ? 1 : 0
 
   name = "${local.name_prefix}-evaluation-lambda-role"
 
@@ -937,7 +937,7 @@ resource "aws_iam_role" "evaluation_lambda" {
 }
 
 resource "aws_iam_role_policy" "evaluation_lambda" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+  count = var.evaluation_enabled ? 1 : 0
 
   name = "${local.name_prefix}-evaluation-lambda-policy"
   role = aws_iam_role.evaluation_lambda[0].id
@@ -986,14 +986,14 @@ resource "aws_iam_role_policy" "evaluation_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "evaluation_lambda_vpc" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null && length(local.vpc_subnet_ids) > 0 ? 1 : 0
+  count = var.evaluation_enabled && length(local.vpc_subnet_ids) > 0 ? 1 : 0
 
   role       = aws_iam_role.evaluation_lambda[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "evaluation_lambda_kms" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+  count = var.evaluation_enabled ? 1 : 0
 
   role       = aws_iam_role.evaluation_lambda[0].name
   policy_arn = aws_iam_policy.kms_policy.arn
@@ -1002,7 +1002,7 @@ resource "aws_iam_role_policy_attachment" "evaluation_lambda_kms" {
 # Add AppSync permissions if API is provided (evaluation Lambda calls
 # `document_service.update_document` to publish status updates)
 resource "aws_iam_role_policy" "evaluation_lambda_appsync" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null && var.enable_api ? 1 : 0
+  count = var.evaluation_enabled && var.enable_api ? 1 : 0
 
   name = "${local.name_prefix}-evaluation-lambda-appsync-policy"
   role = aws_iam_role.evaluation_lambda[0].id

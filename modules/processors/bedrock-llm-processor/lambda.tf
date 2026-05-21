@@ -364,7 +364,7 @@ data "archive_file" "summarization_lambda" {
 
 # Evaluation Function (conditional on evaluation_enabled and baseline bucket)
 data "archive_file" "evaluation_lambda" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+  count = var.evaluation_enabled ? 1 : 0
 
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/pattern-2/src/evaluation_function"
@@ -374,7 +374,7 @@ data "archive_file" "evaluation_lambda" {
 }
 
 resource "aws_lambda_function" "evaluation_function" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+  count = var.evaluation_enabled ? 1 : 0
 
   function_name = "${local.name_prefix}-evaluation"
   role          = aws_iam_role.evaluation_lambda[0].arn
@@ -433,7 +433,7 @@ resource "aws_lambda_function" "evaluation_function" {
 }
 
 resource "aws_cloudwatch_log_group" "evaluation_lambda" {
-  count = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? 1 : 0
+  count = var.evaluation_enabled ? 1 : 0
 
   name              = "/aws/lambda/${aws_lambda_function.evaluation_function[0].function_name}"
   retention_in_days = local.log_retention_days

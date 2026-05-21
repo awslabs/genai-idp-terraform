@@ -480,7 +480,7 @@ resource "aws_cloudformation_stack" "agentcore_gateway" {
 # =============================================================================
 
 resource "aws_cognito_user_pool_client" "mcp_client" {
-  count        = local.enable_mcp_effective && var.user_pool_id != null ? 1 : 0
+  count        = local.enable_mcp_effective ? 1 : 0
   name         = "${local.api_name}-mcp-client"
   user_pool_id = var.user_pool_id
 
