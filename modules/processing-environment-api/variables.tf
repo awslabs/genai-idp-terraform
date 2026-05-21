@@ -77,7 +77,7 @@ variable "domain_name" {
 }
 
 variable "authorization_config" {
-  description = "Authorization configuration for the GraphQL API"
+  description = "Authorization configuration for the GraphQL API. Must be set explicitly; the module no longer defaults to API_KEY because that exposes every mutation to anyone with the key."
   type = object({
     default_authorization = object({
       authorization_type = string
@@ -121,6 +121,11 @@ variable "authorization_config" {
     })))
   })
   default = null
+
+  validation {
+    condition     = var.authorization_config == null || try(var.authorization_config.default_authorization.authorization_type, null) != "API_KEY"
+    error_message = "authorization_config.default_authorization.authorization_type must not be API_KEY. API_KEY exposes every AppSync mutation to anyone with the key. Use AMAZON_COGNITO_USER_POOLS, AWS_IAM, OPENID_CONNECT, or AWS_LAMBDA."
+  }
 }
 
 # S3 Bucket Variables - New ARN-based approach

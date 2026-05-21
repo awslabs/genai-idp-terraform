@@ -13,7 +13,11 @@ locals {
   api_name = var.name != null ? var.name : "ProcessingEnvironmentApi-${random_string.suffix.result}"
 
   # Safe authorization config handling
-  auth_type             = var.authorization_config != null ? try(var.authorization_config.default_authorization.authorization_type, "API_KEY") : "API_KEY"
+  # Note: authorization_config is required-by-validation to be set to a
+  # non-API_KEY auth type. If a caller passes null we still need a sane
+  # placeholder for plan-time so the resources don't error before the
+  # check fires; we use AWS_IAM as the safest fallback.
+  auth_type             = var.authorization_config != null ? try(var.authorization_config.default_authorization.authorization_type, "AWS_IAM") : "AWS_IAM"
   has_cognito_auth      = var.authorization_config != null && try(var.authorization_config.default_authorization.authorization_type, "") == "AMAZON_COGNITO_USER_POOLS"
   has_oidc_auth         = var.authorization_config != null && try(var.authorization_config.default_authorization.authorization_type, "") == "OPENID_CONNECT"
   has_lambda_auth       = var.authorization_config != null && try(var.authorization_config.default_authorization.authorization_type, "") == "AWS_LAMBDA"
