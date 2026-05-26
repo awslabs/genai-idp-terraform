@@ -65,7 +65,17 @@ resource "local_file" "requirements_files" {
   filename = "${local.module_build_dir}/requirements/${each.key}/requirements.txt"
 }
 
-# Copy idp_common source to build directory if provided
+# Copy idp_common source to build directory if provided.
+#
+# Uses rsync with an explicit exclude list and `--delete` so each run produces
+# a deterministic source tree regardless of what cruft may be sitting in the
+# developer's checkout (a `.venv/`, an `*.egg-info/`, a stale `build/` from a
+# local `pip install -e .`, IDE caches, etc.). Anything not on the exclude
+# list flows through, so upstream additions are picked up automatically.
+#
+# Without this, a `cp -r *` of the user's source tree could shovel hundreds
+# of MB of local virtualenvs/build artifacts into the layer zip and blow
+# past Lambda's 250 MiB unzipped cap (e.g. on the reporting layer).
 resource "terraform_data" "copy_idp_common_source" {
   count = var.idp_common_source_path != "" ? 1 : 0
 
@@ -76,24 +86,96 @@ resource "terraform_data" "copy_idp_common_source" {
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/pyproject.toml") : "",
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/setup.py") : "",
     # Monitor all Python files in the idp_common package directory
-    local.idp_common_files_hash
+    local.idp_common_files_hash,
+    # Re-stage when the rsync exclude list / staging logic in this
+    # module's main.tf changes, so existing deployments pick up future
+    # hardening here without needing to bump anything else.
+    filemd5("${path.module}/main.tf"),
   ]
 
   provisioner "local-exec" {
     command = <<-EOT
-      # Create the idp-common requirements directory structure in build dir
-      mkdir -p "${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
+      set -e
 
-      # Copy the idp_common source contents to build directory
-      if [ -d "${var.idp_common_source_path}" ]; then
-        cp -r "${var.idp_common_source_path}"/* "${local.module_build_dir}/requirements/idp-common/idp_common_pkg/"
+      DEST="${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
 
-        # Remove test files and cache to reduce size
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "*.pyc" -delete 2>/dev/null || true
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name ".pytest_cache" -type d -exec rm -rf {} + 2>/dev/null || true
+      mkdir -p "$DEST"
+
+      if [ ! -d "${var.idp_common_source_path}" ]; then
+        echo "ERROR: idp_common_source_path not found: ${var.idp_common_source_path}" >&2
+        exit 1
       fi
+
+      # Deterministic stage: rsync with an explicit exclude list and
+      # `--delete` so the destination contents are exactly what we
+      # specify, never what happens to be in the source tree.
+      #
+      # Excludes cover:
+      #   * Python build/dev artifacts (build/, dist/, *.egg-info, .eggs)
+      #   * Virtualenvs (.venv, venv, env, ENV)
+      #   * Caches (__pycache__, .pytest_cache, .mypy_cache, .ruff_cache, .tox)
+      #   * Compiled artifacts (*.pyc, *.pyo, *.so)
+      #   * Test code (tests/) — not needed at runtime, the buildspec
+      #     also strips it post-install as a belt-and-suspenders check
+      #   * Lock files (uv.lock, poetry.lock) — not used by `pip install`
+      #   * IDE / editor / OS metadata (.idea, .vscode, *.swp, .DS_Store)
+      #   * VCS metadata (.git, .gitignore, .gitattributes)
+      #   * Coverage / CI output (htmlcov, .coverage, coverage*.xml)
+      #   * Local dev tooling (clean_build.sh, verify_stickler.py)
+      #   * node_modules — defensive; shouldn't appear in a Python pkg
+      rsync -a --delete \
+        --exclude='__pycache__/' \
+        --exclude='*.py[cod]' \
+        --exclude='*$py.class' \
+        --exclude='*.so' \
+        --exclude='.pytest_cache/' \
+        --exclude='.mypy_cache/' \
+        --exclude='.ruff_cache/' \
+        --exclude='.tox/' \
+        --exclude='.venv/' \
+        --exclude='venv/' \
+        --exclude='env/' \
+        --exclude='ENV/' \
+        --exclude='build/' \
+        --exclude='dist/' \
+        --exclude='develop-eggs/' \
+        --exclude='downloads/' \
+        --exclude='eggs/' \
+        --exclude='.eggs/' \
+        --exclude='sdist/' \
+        --exclude='wheels/' \
+        --exclude='var/' \
+        --exclude='parts/' \
+        --exclude='*.egg-info/' \
+        --exclude='*.egg' \
+        --exclude='.installed.cfg' \
+        --exclude='tests/' \
+        --exclude='.coverage' \
+        --exclude='coverage.xml' \
+        --exclude='coverage/' \
+        --exclude='coverage_html/' \
+        --exclude='htmlcov/' \
+        --exclude='nosetests.xml' \
+        --exclude='test-results.xml' \
+        --exclude='test-reports/' \
+        --exclude='uv.lock' \
+        --exclude='poetry.lock' \
+        --exclude='.git/' \
+        --exclude='.gitignore' \
+        --exclude='.gitattributes' \
+        --exclude='.idea/' \
+        --exclude='.vscode/' \
+        --exclude='*.swp' \
+        --exclude='*.swo' \
+        --exclude='.DS_Store' \
+        --exclude='Thumbs.db' \
+        --exclude='node_modules/' \
+        --exclude='clean_build.sh' \
+        --exclude='verify_stickler.py' \
+        "${var.idp_common_source_path}/" "$DEST/"
+
+      echo "Staged idp_common source at $DEST:"
+      du -sh "$DEST" || true
     EOT
   }
 }
@@ -330,7 +412,9 @@ phases:
             if [ -d "$(dirname $req_file)/idp_common_pkg" ]; then
               echo "Found idp_common_pkg directory"
 
-              # Create a temporary build directory
+              # Create a temporary build directory.
+              # Wipe first so a previous failed build can't poison this one.
+              rm -rf /tmp/builddir
               mkdir -p /tmp/builddir
               rsync -rLv $(dirname $req_file)/ /tmp/builddir/
 
