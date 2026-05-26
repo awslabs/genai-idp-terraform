@@ -389,13 +389,12 @@ resource "aws_lambda_function" "agentcore_gateway_manager" {
 
   tracing_config { mode = var.lambda_tracing_mode }
 
-  dynamic "vpc_config" {
-    for_each = var.vpc_config != null ? [var.vpc_config] : []
-    content {
-      subnet_ids         = vpc_config.value.subnet_ids
-      security_group_ids = vpc_config.value.security_group_ids
-    }
-  }
+  # NOTE: this Lambda is a CloudFormation custom resource handler that
+  # calls the AgentCore control plane (`bedrock-agentcore-control`).
+  # AWS does NOT support PrivateLink for the AgentCore control plane
+  # (https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/security/vpc-interface-endpoints/),
+  # so this Lambda must run outside the VPC even when the rest of the
+  # stack uses one. Otherwise the API call hits a connect timeout.
 
   depends_on = [aws_cloudwatch_log_group.agentcore_gateway_manager]
   tags       = var.tags

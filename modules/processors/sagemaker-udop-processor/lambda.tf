@@ -292,6 +292,14 @@ resource "aws_lambda_function" "assessment_function" {
     }
   }
 
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [null_resource.trigger_udop_build]

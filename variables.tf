@@ -386,6 +386,13 @@ variable "api" {
     enable_capacity_planning        = optional(bool, false)
     enable_omni_ai_dataset          = optional(bool, false)
     enable_docplit_poly_seq_dataset = optional(bool, false)
+
+    # AppSync API visibility. Use "PRIVATE" for fully isolated VPC
+    # deployments — only clients with a route to the
+    # `appsync-api` interface VPC endpoint can reach the API. The
+    # default "GLOBAL" exposes the API on the public internet (still
+    # protected by the configured authorization).
+    visibility = optional(string, "GLOBAL")
   })
 
   default = {

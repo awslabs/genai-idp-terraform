@@ -416,6 +416,12 @@ module "processing_environment_api" {
   enable_docplit_poly_seq_dataset = try(var.api.enable_docplit_poly_seq_dataset, false)
   bda_project_arn                 = length(module.bda_processor) > 0 ? module.bda_processor[0].data_automation_project_arn : ""
 
+  # AppSync API visibility — "PRIVATE" makes the GraphQL endpoint
+  # reachable only through the `appsync-api` interface VPC endpoint.
+  # Required for fully isolated VPC deployments where the API must
+  # not have a public DNS resolution path.
+  visibility = try(var.api.visibility, "GLOBAL")
+
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
 

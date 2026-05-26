@@ -77,6 +77,14 @@ resource "aws_lambda_function" "classification" {
     }
   }
 
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
   tracing_config {
     mode = var.lambda_tracing_mode
   }
@@ -110,6 +118,14 @@ resource "aws_lambda_function" "extraction" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
     }
   }
 
@@ -149,6 +165,14 @@ resource "aws_lambda_function" "process_results" {
     }
   }
 
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
   tracing_config {
     mode = var.lambda_tracing_mode
   }
@@ -184,6 +208,14 @@ resource "aws_lambda_function" "summarization" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
     }
   }
 
@@ -262,6 +294,14 @@ resource "aws_lambda_function" "assessment" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
     }
   }
 

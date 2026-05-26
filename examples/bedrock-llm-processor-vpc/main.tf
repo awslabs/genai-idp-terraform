@@ -410,6 +410,25 @@ resource "aws_vpc_endpoint" "textract" {
   })
 }
 
+# AppSync interface endpoint — required when api.visibility = "PRIVATE".
+# Without this endpoint, Lambdas in the VPC cannot resolve or reach the
+# private GraphQL API. AppSync only supports PrivateLink for PRIVATE
+# APIs; GLOBAL APIs continue to be reached over the public internet.
+resource "aws_vpc_endpoint" "appsync_api" {
+  count = local.create_vpc_resources ? 1 : 0
+
+  vpc_id              = local.vpc_id
+  service_name        = "com.amazonaws.${data.aws_region.current.id}.appsync-api"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.vpc_subnet_ids
+  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
+  private_dns_enabled = true
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-appsync-api-endpoint"
+  })
+}
+
 # Create KMS key for encryption
 resource "aws_kms_key" "encryption_key" {
   description             = "KMS key for IDP Processing Environment"
@@ -547,6 +566,9 @@ locals {
     enable_capacity_planning        = var.api.enable_capacity_planning
     enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
     enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
+
+    # AppSync API visibility (GLOBAL or PRIVATE)
+    visibility = var.api.visibility
     } : {
     enabled            = false
     agent_analytics    = { enabled = false }
@@ -567,6 +589,9 @@ locals {
     enable_capacity_planning        = false
     enable_omni_ai_dataset          = false
     enable_docplit_poly_seq_dataset = false
+
+    # AppSync API visibility (GLOBAL or PRIVATE)
+    visibility = "GLOBAL"
   }
 }
 

@@ -168,6 +168,10 @@ variable "api" {
     enable_capacity_planning        = optional(bool, false)
     enable_omni_ai_dataset          = optional(bool, false)
     enable_docplit_poly_seq_dataset = optional(bool, false)
+
+    # AppSync API visibility. Set to "PRIVATE" to require all callers
+    # to reach the API via the `appsync-api` interface VPC endpoint.
+    visibility = optional(string, "GLOBAL")
   })
   default = { enabled = false }
 }

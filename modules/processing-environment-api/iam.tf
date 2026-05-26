@@ -500,7 +500,7 @@ resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_kms_attachm
 resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_vpc_attachment" {
   count      = var.evaluation_enabled && var.vpc_config != null ? 1 : 0
   role       = aws_iam_role.copy_to_baseline_resolver_role["enabled"].name
-  policy_arn = aws_iam_policy.copy_to_baseline_resolver_vpc_policy["enabled"].arn
+  policy_arn = aws_iam_policy.copy_to_baseline_resolver_vpc_policy[0].arn
 }
 
 # IAM resources from lambda_delete_document_resolver.tf

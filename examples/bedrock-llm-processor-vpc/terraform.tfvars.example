@@ -40,6 +40,13 @@ enable_reporting      = false
 api = {
   enabled = true
 
+  # AppSync API visibility. Set to "PRIVATE" together with the
+  # `appsync-api` interface VPC endpoint (provisioned in main.tf) to
+  # keep the GraphQL endpoint reachable only from inside the VPC.
+  # Default "GLOBAL" exposes the API on the public internet (still
+  # protected by the configured authorization mode).
+  visibility = "PRIVATE"
+
   # Agent Analytics (requires reporting to be enabled)
   agent_analytics = {
     enabled  = false
