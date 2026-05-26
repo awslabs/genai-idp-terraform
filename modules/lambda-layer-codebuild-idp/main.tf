@@ -5,10 +5,22 @@
 # Registry-compatible build directory approach
 locals {
   # Use the calling module's .terraform/tmp directory for build artifacts
-  # This ensures no files are created in the module directory
-  module_build_dir = "${path.root}/.terraform/tmp/lambda-layer-codebuild-idp"
-  # Unique identifier for this module instance (static to avoid unnecessary rebuilds)
-  module_instance_id = substr(md5("${path.module}-static"), 0, 8)
+  # This ensures no files are created in the module directory.
+  #
+  # Build dir MUST be per-layer because each layer module instance
+  # has its own `idp_common_extras` and writes its own
+  # requirements.txt + idp_common source archive. Sharing a single
+  # build dir across all five layer module instances causes the last
+  # writer to win, producing five identical fat layers regardless of
+  # the configured extras (and frequently blowing past Lambda's
+  # 250 MiB unzipped limit, e.g. on the reporting layer).
+  module_build_dir = "${path.root}/.terraform/tmp/lambda-layer-codebuild-idp/${var.layer_prefix}"
+  # Unique identifier for this module instance derived from the
+  # caller-supplied `layer_prefix` so each layer build has a stable,
+  # unique id. Using `path.module` here would resolve to the same
+  # value for every module instance and reintroduce cross-build
+  # collisions.
+  module_instance_id = substr(md5("${var.layer_prefix}-static"), 0, 8)
 
   # Bucket configuration - always use external bucket since it's always provided
   # Extract bucket name from S3 ARN format: arn:aws:s3:::bucket-name
