@@ -5,7 +5,7 @@
  * # Bedrock LLM Processor Example with Web UI
  *
  * This example demonstrates how to use the Bedrock LLM processor from the GenAI IDP Accelerator
- * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key, 
+ * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key,
  * and uses the top-level module to deploy the complete solution with the Bedrock LLM processor.
  */
 
@@ -125,6 +125,28 @@ resource "aws_s3_bucket" "logging_bucket" {
   bucket        = "${var.prefix}-logging-${random_string.suffix.result}"
   force_destroy = true
   tags          = var.tags
+}
+
+# CloudFront standard logging requires legacy ACLs on the destination bucket.
+# Modern S3 buckets default to BucketOwnerEnforced (no ACLs), which causes
+# CloudFront's UpdateDistribution to fail with:
+#   "The S3 bucket that you specified for CloudFront logs does not enable ACL access"
+# Switch the bucket to BucketOwnerPreferred and grant the log-delivery-write
+# canned ACL so the AWS log-delivery group can write objects.
+resource "aws_s3_bucket_ownership_controls" "logging_bucket" {
+  count  = var.web_ui.logging_enabled ? 1 : 0
+  bucket = aws_s3_bucket.logging_bucket[0].id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "logging_bucket" {
+  count      = var.web_ui.logging_enabled ? 1 : 0
+  bucket     = aws_s3_bucket.logging_bucket[0].id
+  acl        = "log-delivery-write"
+  depends_on = [aws_s3_bucket_ownership_controls.logging_bucket]
 }
 
 resource "aws_s3_bucket" "evaluation_baseline_bucket" {
@@ -391,8 +413,14 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    enable_hitl       = var.enable_hitl
-    config            = local.config
+    enable_hitl                = var.enable_hitl
+    enable_rule_validation     = var.enable_rule_validation
+    lambda_hook_ocr            = var.lambda_hook_ocr != "" ? var.lambda_hook_ocr : null
+    lambda_hook_classification = var.lambda_hook_classification != "" ? var.lambda_hook_classification : null
+    lambda_hook_extraction     = var.lambda_hook_extraction != "" ? var.lambda_hook_extraction : null
+    lambda_hook_assessment     = var.lambda_hook_assessment != "" ? var.lambda_hook_assessment : null
+    lambda_hook_summarization  = var.lambda_hook_summarization != "" ? var.lambda_hook_summarization : null
+    config                     = local.config
   }
 
   # Use external user identity instead of creating new one
@@ -425,11 +453,11 @@ module "genai_idp_accelerator" {
 
   # API configuration (consolidated)
   api = {
-    enabled                     = var.api.enabled
-    agent_analytics             = var.api.agent_analytics
-    discovery                   = var.api.discovery
-    chat_with_document          = var.api.chat_with_document
-    process_changes             = var.api.process_changes
+    enabled            = var.api.enabled
+    agent_analytics    = var.api.agent_analytics
+    discovery          = var.api.discovery
+    chat_with_document = var.api.chat_with_document
+    process_changes    = var.api.process_changes
     knowledge_base = var.api.knowledge_base.enabled ? {
       enabled            = true
       knowledge_base_arn = aws_bedrockagent_knowledge_base.knowledge_base[0].arn
@@ -443,6 +471,11 @@ module "genai_idp_accelerator" {
     enable_fcc_dataset          = var.api.enable_fcc_dataset
     enable_error_analyzer       = var.api.enable_error_analyzer
     enable_mcp                  = var.api.enable_mcp
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
   }
 
   # DEPRECATED: Individual API variables (backward compatibility)

@@ -115,7 +115,7 @@ resource "aws_lambda_function" "error_analyzer" {
   runtime          = "python3.12"
   timeout          = 300
   memory_size      = 512
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   environment {
     variables = {
@@ -210,7 +210,7 @@ resource "aws_lambda_function" "error_analyzer_resolver" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 30
-  layers           = compact([var.idp_common_layer_arn])
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   environment {
     variables = {

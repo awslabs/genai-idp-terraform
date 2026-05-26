@@ -48,9 +48,8 @@ output "processor_type" {
 locals {
   # Base processor configuration shared across all types
   base_processor_config = {
-    queue_processor_arn     = try(module.processor_attachment[0].queue_processor.function_arn, null)
-    queue_sender_arn        = module.processing_environment.queue_sender_function_arn
-    evaluation_function_arn = try(module.processor_attachment[0].evaluation_function.function_arn, null)
+    queue_processor_arn = try(module.processor_attachment[0].queue_processor.function_arn, null)
+    queue_sender_arn    = module.processing_environment.queue_sender_function_arn
   }
 
   # Processor-specific configurations
@@ -68,6 +67,10 @@ locals {
         type               = type
         state_machine_arn  = try(module_ref.state_machine_arn, null)
         state_machine_name = try(module_ref.state_machine_name, null)
+        # Each processor module owns its own evaluation Lambda
+        # (built from its pattern-specific source path). Null when the
+        # processor is configured with evaluation disabled.
+        evaluation_function_arn = try(module_ref.evaluation_function_arn, null)
       }
     ) if module_ref != null
   }

@@ -1,30 +1,18 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# SageMaker A2I variables (private_workforce_arn, workteam_name, user_pool_id,
+# stack_name) removed in v0.4.9.  HITL is now handled by
+# processing-environment-api.  Passing those variables will cause
+# `terraform validate` to fail — the intended breaking-change signal (DEC-006).
 
 variable "name_prefix" {
   description = "Prefix for resource names"
   type        = string
 }
 
-variable "user_pool_id" {
-  description = "ID of the Cognito User Pool"
-  type        = string
-}
-
-
-
 variable "output_bucket_arn" {
   description = "ARN of the S3 bucket for output storage"
-  type        = string
-}
-
-variable "private_workforce_arn" {
-  description = "ARN of the existing SageMaker private workforce"
-  type        = string
-}
-
-variable "workteam_name" {
-  description = "Name of the existing SageMaker workteam"
   type        = string
 }
 
@@ -63,11 +51,6 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
-variable "stack_name" {
-  description = "Name of the CloudFormation stack"
-  type        = string
-}
-
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
@@ -85,7 +68,10 @@ variable "lambda_tracing_mode" {
   }
 }
 
+# =============================================================================
 # Pattern-2 HITL Variables
+# =============================================================================
+
 variable "enable_pattern2_hitl" {
   description = "Enable HITL support for Pattern-2 workflows"
   type        = bool
@@ -134,13 +120,13 @@ variable "state_machine_arn" {
 }
 
 variable "hitl_wait_image_uri" {
-  description = "ECR image URI for the HITL wait Lambda function (Docker deployment). Required for v0.4.3+ fix. If null, falls back to zip deployment."
+  description = "ECR image URI for the HITL wait Lambda function (Docker deployment). If null, falls back to zip deployment."
   type        = string
   default     = null
 }
 
 variable "hitl_status_update_image_uri" {
-  description = "ECR image URI for the HITL status update Lambda function (Docker deployment). Required for v0.4.3+ fix. If null, falls back to zip deployment."
+  description = "ECR image URI for the HITL status update Lambda function (Docker deployment). If null, falls back to zip deployment."
   type        = string
   default     = null
 }

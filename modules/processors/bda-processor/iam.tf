@@ -307,13 +307,16 @@ resource "aws_iam_policy" "process_results_policy" {
         Resource = var.api_arn != null ? "${var.api_arn}/types/Mutation/*" : "*"
       },
       {
+        # Pattern-1 process_results lambda imports boto3.client("ssm") at
+        # module load but never calls put_parameter; it only reads the
+        # stack settings parameter via idp_common.utils.settings_helper
+        # when SETTINGS_PARAMETER env var is set.
         Action = [
           "ssm:GetParameter",
-          "ssm:PutParameter",
           "ssm:GetParametersByPath"
         ]
         Effect   = "Allow"
-        Resource = "*"
+        Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/*"
       },
       {
         Action = [
@@ -532,8 +535,14 @@ resource "aws_iam_policy" "summarization_default_bedrock_policy" {
           "bedrock:InvokeModel*",
           "bedrock:GetFoundationModel"
         ]
-        Effect   = "Allow"
-        Resource = "*" # Using broader permissions to ensure all model formats are covered
+        Effect = "Allow"
+        # Scoped to foundation models and inference profiles. Cross-region
+        # inference resolves to the same model resource ARN namespace.
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       }
     ]
   })
@@ -559,8 +568,12 @@ resource "aws_iam_policy" "summarization_bedrock_policy" {
           "bedrock:InvokeModel*",
           "bedrock:GetFoundationModel"
         ]
-        Effect   = "Allow"
-        Resource = "*" # Using broader permissions to ensure all model formats are covered
+        Effect = "Allow"
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       },
       {
         Action = [
@@ -697,254 +710,6 @@ resource "aws_iam_role_policy_attachment" "bda_completion_policy_attachment" {
 # =============================================================================
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-#
-# HITL Wait Function IAM Role
-resource "aws_iam_role" "hitl_wait_role" {
-  name = "${var.name}-hitl-wait-${random_string.suffix.result}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-# HITL Wait Function Policy
-resource "aws_iam_policy" "hitl_wait_policy" {
-  name = "${var.name}-hitl-wait-policy-${random_string.suffix.result}"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:Query",
-          "dynamodb:Scan"
-        ]
-        Resource = [
-          var.configuration_table_arn,
-          var.tracking_table_arn
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutMetricData"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          var.working_bucket_arn,
-          "${var.working_bucket_arn}/*"
-        ]
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_wait_policy_attachment" {
-  role       = aws_iam_role.hitl_wait_role.name
-  policy_arn = aws_iam_policy.hitl_wait_policy.arn
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_wait_kms_attachment" {
-  for_each   = toset(["enabled"])
-  role       = aws_iam_role.hitl_wait_role.name
-  policy_arn = aws_iam_policy.kms_policy["enabled"].arn
-}
-
-# HITL Process Function IAM Role
-resource "aws_iam_role" "hitl_process_role" {
-  name = "${var.name}-hitl-process-${random_string.suffix.result}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-# HITL Process Function Policy
-resource "aws_iam_policy" "hitl_process_policy" {
-  name = "${var.name}-hitl-process-policy-${random_string.suffix.result}"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:Query",
-          "dynamodb:Scan"
-        ]
-        Resource = [
-          var.configuration_table_arn,
-          var.tracking_table_arn
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutMetricData"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          var.working_bucket_arn,
-          "${var.working_bucket_arn}/*",
-          var.output_bucket_arn,
-          "${var.output_bucket_arn}/*"
-        ]
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_process_policy_attachment" {
-  role       = aws_iam_role.hitl_process_role.name
-  policy_arn = aws_iam_policy.hitl_process_policy.arn
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_process_kms_attachment" {
-  for_each   = toset(["enabled"])
-  role       = aws_iam_role.hitl_process_role.name
-  policy_arn = aws_iam_policy.kms_policy["enabled"].arn
-}
-
-# HITL Status Update Function IAM Role
-resource "aws_iam_role" "hitl_status_update_role" {
-  name = "${var.name}-hitl-status-${random_string.suffix.result}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-# HITL Status Update Function Policy
-resource "aws_iam_policy" "hitl_status_update_policy" {
-  name = "${var.name}-hitl-status-update-policy-${random_string.suffix.result}"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:Query",
-          "dynamodb:Scan"
-        ]
-        Resource = [
-          var.configuration_table_arn,
-          var.tracking_table_arn
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutMetricData"
-        ]
-        Resource = "*"
-      },
-
-    ]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_status_update_policy_attachment" {
-  role       = aws_iam_role.hitl_status_update_role.name
-  policy_arn = aws_iam_policy.hitl_status_update_policy.arn
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_status_update_kms_attachment" {
-  for_each   = toset(["enabled"])
-  role       = aws_iam_role.hitl_status_update_role.name
-  policy_arn = aws_iam_policy.kms_policy["enabled"].arn
-}
 
 # IAM Role for Evaluation Lambda Function
 # DISABLED: Using shared evaluation function from processor-attachment module
@@ -1187,25 +952,6 @@ resource "aws_iam_role_policy_attachment" "bda_completion_vpc_attachment" {
 #   policy_arn = aws_iam_policy.vpc_policy[0].arn
 # }
 
-# VPC permissions for HITL functions
-resource "aws_iam_role_policy_attachment" "hitl_wait_vpc_attachment" {
-  count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
-  role       = aws_iam_role.hitl_wait_role.name
-  policy_arn = aws_iam_policy.vpc_policy[0].arn
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_process_vpc_attachment" {
-  count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
-  role       = aws_iam_role.hitl_process_role.name
-  policy_arn = aws_iam_policy.vpc_policy[0].arn
-}
-
-resource "aws_iam_role_policy_attachment" "hitl_status_update_vpc_attachment" {
-  count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
-  role       = aws_iam_role.hitl_status_update_role.name
-  policy_arn = aws_iam_policy.vpc_policy[0].arn
-}
-
 # =============================================================================
 # IAM Role and Policy for Evaluation Function
 # =============================================================================
@@ -1294,7 +1040,7 @@ resource "aws_iam_policy" "evaluation_function_policy" {
         # Invoke SaveReportingData Lambda for analytics
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:*"
+        Resource = var.save_reporting_function_name != "" ? "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${var.save_reporting_function_name}" : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-disabled"
       },
       {
         Effect   = "Allow"

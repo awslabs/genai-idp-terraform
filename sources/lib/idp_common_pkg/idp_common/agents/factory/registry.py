@@ -75,11 +75,11 @@ agent_factory.register_agent(
     agent_id="Code-Intelligence-Agent",
     agent_name="Code Intelligence Agent",
     agent_description="""
-    Provides code intelligence for the IDP repository
+    Provides code intelligence for the IDP repository 
     (aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws).
     Can answer GENERIC questions about code structure, implementation details, architecture decisions,
     and help developers understand the codebase.
-
+    
     IMPORTANT SECURITY RESTRICTIONS:
     This agent connects to an external public MCP server and has strict security guardrails.
     It can ONLY answer generic questions about codebase architecture and structure.

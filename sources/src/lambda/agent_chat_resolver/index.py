@@ -34,23 +34,23 @@ DATA_RETENTION_DAYS = int(os.environ.get("DATA_RETENTION_DAYS", "30"))
 def handler(event, context):
     """
     Handle agent chat message requests from AppSync.
-
+    
     This function stores user messages in DynamoDB and invokes the agent chat processor
     for conversational, multi-turn interactions. All registered agents are automatically
     available to the orchestrator.
-
+    
     Args:
         event: The event dict from AppSync containing:
             - prompt: The user's message
             - sessionId: The conversation session ID
             - method: The message method (default: "chat")
         context: The Lambda context
-
+        
     Returns:
         AgentChatMessage with role, content, timestamp, isProcessing, and sessionId
     """
     logger.info(f"Received agent chat event: {json.dumps(event)}")
-
+    
     try:
         # Extract arguments from the event
         arguments = event.get("arguments", {})
@@ -59,31 +59,31 @@ def handler(event, context):
         method = arguments.get("method", "chat")
         enable_code_intelligence = arguments.get("enableCodeIntelligence", True)
         tool_metadata = arguments.get("toolMetadata")
-
+        
         # Validate required parameters
         if not prompt:
             error_msg = "prompt parameter is required"
             logger.error(error_msg)
             raise Exception(error_msg)
-
+            
         if not session_id:
             error_msg = "sessionId parameter is required"
             logger.error(error_msg)
             raise Exception(error_msg)
-
+            
         # Validate prompt length
         if len(prompt) > 100000:
             error_msg = "Prompt exceeds maximum length of 100000 characters"
             logger.error(f"{error_msg}. Prompt length: {len(prompt)}")
             raise Exception(error_msg)
-
+        
         # Calculate expiration time (TTL)
         current_time = int(time.time())
         expires_after = current_time + (DATA_RETENTION_DAYS * 24 * 60 * 60)
-
+        
         # Create timestamp in ISO-8601 format with Z suffix for UTC
         timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
+        
         # Determine message role and processing status
         assistant_methods = [
             "assistant_response", "assistant_final_response", "assistant_processing",
@@ -94,7 +94,7 @@ def handler(event, context):
             # Structured data event types
             "structured_data_start",
             # Tool section event types
-            "tool_execution_start", "tool_execution_complete",
+            "tool_execution_start", "tool_execution_complete", 
             "tool_result_start", "tool_result_complete"
         ]
         is_assistant_response = method in assistant_methods
@@ -103,7 +103,7 @@ def handler(event, context):
             "assistant_final_response", "assistant_error",
             "tool_execution_complete", "tool_result_complete"
         ]
-
+        
         # Only store certain message types in DynamoDB
         # Store user messages and final assistant responses only
         # All intermediate messages (tool executions, tool results, sub-agent messages) are NOT stored
@@ -114,11 +114,11 @@ def handler(event, context):
                 "assistant_error"  # Store final errors for debugging
             ]
         )
-
+        
         if is_final_response:
             # Store message in DynamoDB with session-based keys
             table = dynamodb.Table(CHAT_MESSAGES_TABLE)
-
+            
             message = {
                 "PK": session_id,  # Session-based partition key
                 "SK": timestamp,   # Timestamp as sort key for chronological ordering
@@ -128,20 +128,20 @@ def handler(event, context):
                 "isProcessing": not is_processing_complete,
                 "ExpiresAfter": expires_after
             }
-
+            
             table.put_item(Item=message)
             logger.info(f"Stored message in DynamoDB for session {session_id}: {method}")
-
+            
             # Manage session metadata for user messages
             if not is_assistant_response:  # This is a user message
                 # Get user identity for session metadata
                 identity = event.get("identity", {})
                 user_id = identity.get("username") or identity.get("sub") or "anonymous"
-
+                
                 manage_session_metadata(user_id, session_id, prompt, timestamp, expires_after)
         else:
             logger.info(f"Skipped storing streaming message in DynamoDB: {method}")
-
+        
         # Invoke the agent chat processor for user messages
         # The processor will handle the orchestrator creation and streaming response
         if not is_assistant_response and AGENT_CHAT_PROCESSOR_FUNCTION:
@@ -157,7 +157,7 @@ def handler(event, context):
                 })
             )
             logger.info(f"Invoked agent chat processor for session: {session_id} (Code Intelligence: {enable_code_intelligence})")
-
+        
         # Map method to messageType for frontend
         message_type = method if method in [
             "tool_execution_start", "tool_execution_complete",
@@ -166,7 +166,7 @@ def handler(event, context):
             "assistant_final_response",
             "structured_data_start"
         ] else None
-
+        
         # Return AgentChatMessage format
         response = {
             "role": str(role),
@@ -175,17 +175,17 @@ def handler(event, context):
             "isProcessing": not is_processing_complete,
             "sessionId": str(session_id)
         }
-
+        
         # Add messageType if it's a tool-related message
         if message_type:
             response["messageType"] = message_type
-
+            
         # Add toolMetadata if provided
         if tool_metadata:
             response["toolMetadata"] = tool_metadata
-
+            
         return response
-
+        
     except ClientError as e:
         error_msg = f"DynamoDB error: {str(e)}"
         logger.error(error_msg)
@@ -204,7 +204,7 @@ def handler(event, context):
 def manage_session_metadata(user_id, session_id, prompt, timestamp, expires_after):
     """
     Create or update session metadata in the ChatSessionsTable.
-
+    
     Args:
         user_id: The user ID for the session
         session_id: The session ID
@@ -216,9 +216,9 @@ def manage_session_metadata(user_id, session_id, prompt, timestamp, expires_afte
         if not CHAT_SESSIONS_TABLE:
             logger.warn("CHAT_SESSIONS_TABLE not configured, skipping session metadata management")
             return
-
+            
         sessions_table = dynamodb.Table(CHAT_SESSIONS_TABLE)
-
+        
         # Check if session already exists
         try:
             response = sessions_table.get_item(
@@ -227,18 +227,18 @@ def manage_session_metadata(user_id, session_id, prompt, timestamp, expires_afte
                     "sessionId": session_id
                 }
             )
-
+            
             if response.get("Item"):
                 # Session exists, update it
                 update_session_metadata(sessions_table, user_id, session_id, prompt, timestamp)
             else:
                 # New session, create it
                 create_session_metadata(sessions_table, user_id, session_id, prompt, timestamp, expires_after)
-
+                
         except ClientError as e:
             logger.error(f"Error managing session metadata: {str(e)}")
             # Don't fail the main operation if session metadata fails
-
+            
     except Exception as e:
         logger.error(f"Unexpected error managing session metadata: {str(e)}")
         # Don't fail the main operation if session metadata fails
@@ -251,10 +251,10 @@ def create_session_metadata(sessions_table, user_id, session_id, prompt, timesta
         title = prompt.strip()
         if len(title) > 50:
             title = title[:47] + "..."
-
+        
         # Create last message preview
         last_message = prompt[:100] + "..." if len(prompt) > 100 else prompt
-
+        
         session_record = {
             "userId": user_id,
             "sessionId": session_id,
@@ -265,10 +265,10 @@ def create_session_metadata(sessions_table, user_id, session_id, prompt, timesta
             "lastMessage": last_message,
             "ExpiresAfter": expires_after
         }
-
+        
         sessions_table.put_item(Item=session_record)
         logger.info(f"Created session metadata for {session_id}")
-
+        
     except ClientError as e:
         logger.error(f"Error creating session metadata: {str(e)}")
 
@@ -278,7 +278,7 @@ def update_session_metadata(sessions_table, user_id, session_id, prompt, timesta
     try:
         # Create last message preview
         last_message = prompt[:100] + "..." if len(prompt) > 100 else prompt
-
+        
         # Update the session record
         sessions_table.update_item(
             Key={
@@ -292,8 +292,8 @@ def update_session_metadata(sessions_table, user_id, session_id, prompt, timesta
                 ":last_message": last_message
             }
         )
-
+        
         logger.info(f"Updated session metadata for {session_id}")
-
+        
     except ClientError as e:
         logger.error(f"Error updating session metadata: {str(e)}")

@@ -7,6 +7,7 @@ import logging
 import traceback
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+from idp_common.utils.settings_helper import get_setting
 
 # Configure detailed logging
 logger = logging.getLogger()

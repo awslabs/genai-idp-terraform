@@ -5,7 +5,7 @@
  * # Processing Environment Module
  *
  * This module creates the core infrastructure for the Intelligent Document Processing solution.
- * It orchestrates the end-to-end document processing workflow, from document ingestion to 
+ * It orchestrates the end-to-end document processing workflow, from document ingestion to
  * structured data extraction and result tracking.
  */
 
@@ -19,6 +19,11 @@ locals {
   input_bucket_name   = element(split(":", var.input_bucket_arn), 5)
   output_bucket_name  = element(split(":", var.output_bucket_arn), 5)
   working_bucket_name = element(split(":", var.working_bucket_arn), 5)
+
+  # Resolved layer ARNs — fall back to idp_common_layer_arn when specific layers not provided
+  # (supports standalone module use without root-level layer instances)
+  effective_base_layer_arn      = var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn
+  effective_reporting_layer_arn = var.reporting_layer_arn != null ? var.reporting_layer_arn : var.idp_common_layer_arn
 
   # Lambda function names (to avoid circular dependencies in IAM policies)
   queue_sender_function_name         = "idp-queue-sender-${random_string.suffix.result}"
@@ -34,9 +39,6 @@ locals {
 
 
 
-
-  # Evaluation bucket name if provided
-  baseline_bucket_name = var.evaluation_config != null ? element(split(":", var.evaluation_config.baseline_bucket_arn), 5) : null
 
   # Reporting bucket name if provided
   reporting_bucket_name = var.enable_reporting ? element(split(":", var.reporting_bucket_arn), 5) : null
@@ -66,6 +68,12 @@ locals {
     table_name = element(split("/", var.concurrency_table_arn), 1)
     table_arn  = var.concurrency_table_arn
   }
+
+  # Build directory + per-instance ID for archive_file outputs
+  # (used by lambda_functions.tf and lambda_save_reporting_data.tf for
+  # the zip output_path).
+  module_build_dir   = "${path.module}/.terraform-build"
+  module_instance_id = substr(md5("${path.module}-processing-environment"), 0, 8)
 }
 
 # Create a random string for unique resource names
@@ -73,6 +81,25 @@ resource "random_string" "suffix" {
   length  = 8
   special = false
   upper   = false
+}
+
+# Create module-specific build directory (shared by all archive_file zips
+# in this module — queue_sender, workflow_tracker, lookup_function,
+# update_configuration, post_processing_decompressor, save_reporting_data).
+resource "null_resource" "create_module_build_dir" {
+  provisioner "local-exec" {
+    command = "mkdir -p ${local.module_build_dir}"
+  }
+}
+
+# Generate unique build ID for this module instance — used to name zip
+# outputs so concurrent applies don't collide.
+resource "random_id" "build_id" {
+  byte_length = 8
+  keepers = {
+    module_instance_id = local.module_instance_id
+    content_hash       = md5("processing-environment")
+  }
 }
 
 # Create DynamoDB tables if not provided

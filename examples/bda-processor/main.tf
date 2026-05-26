@@ -5,7 +5,7 @@
  * # BDA Processor Example with Web UI
  *
  * This example demonstrates how to use the BDA processor from the GenAI IDP Accelerator
- * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key, 
+ * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key,
  * and uses the top-level module to deploy the complete solution with the BDA processor.
  */
 
@@ -132,6 +132,28 @@ resource "aws_s3_bucket" "logging_bucket" {
   bucket        = "${var.prefix}-logs-${random_string.suffix.result}"
   force_destroy = true
   tags          = var.tags
+}
+
+# CloudFront standard logging requires legacy ACLs on the destination bucket.
+# Modern S3 buckets default to BucketOwnerEnforced (no ACLs), which causes
+# CloudFront's UpdateDistribution to fail with:
+#   "The S3 bucket that you specified for CloudFront logs does not enable ACL access"
+# Switch the bucket to BucketOwnerPreferred and grant the log-delivery-write
+# canned ACL so the AWS log-delivery group can write objects.
+resource "aws_s3_bucket_ownership_controls" "logging_bucket" {
+  count  = var.web_ui.logging_enabled ? 1 : 0
+  bucket = aws_s3_bucket.logging_bucket[0].id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "logging_bucket" {
+  count      = var.web_ui.logging_enabled ? 1 : 0
+  bucket     = aws_s3_bucket.logging_bucket[0].id
+  acl        = "log-delivery-write"
+  depends_on = [aws_s3_bucket_ownership_controls.logging_bucket]
 }
 
 # Optional: Create evaluation baseline bucket if evaluation is enabled
@@ -456,6 +478,11 @@ module "genai_idp_accelerator" {
     enable_fcc_dataset          = var.api.enable_fcc_dataset
     enable_error_analyzer       = var.api.enable_error_analyzer
     enable_mcp                  = var.api.enable_mcp
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
     knowledge_base = var.api.knowledge_base.enabled ? {
       enabled            = true
       knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null

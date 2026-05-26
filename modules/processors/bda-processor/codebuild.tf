@@ -68,8 +68,8 @@ resource "aws_iam_policy" "codebuild_policy" {
           "logs:PutLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name}-bda-processor-build-${random_string.suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name}-bda-processor-build-${random_string.suffix.result}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name}-bda-processor-build-${random_string.suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name}-bda-processor-build-${random_string.suffix.result}:*"
         ]
       },
       {
@@ -78,7 +78,7 @@ resource "aws_iam_policy" "codebuild_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = var.encryption_key_arn != null ? [var.encryption_key_arn] : ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/nonexistent"]
+        Resource = var.encryption_key_arn != null ? [var.encryption_key_arn] : ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/nonexistent"]
       },
       {
         # S3 access to pull the source zip and write build artifacts
@@ -154,7 +154,7 @@ resource "aws_codebuild_project" "bda_processor_build" {
 
     environment_variable {
       name  = "AWS_REGION"
-      value = data.aws_region.current.name
+      value = data.aws_region.current.id
     }
 
     environment_variable {
@@ -200,7 +200,7 @@ resource "null_resource" "trigger_bda_build" {
       echo "Starting BDA processor Docker image build..."
       BUILD_ID=$(aws codebuild start-build \
         --project-name "${aws_codebuild_project.bda_processor_build.name}" \
-        --region "${data.aws_region.current.name}" \
+        --region "${data.aws_region.current.id}" \
         --query 'build.id' \
         --output text)
       echo "Build started: $BUILD_ID"
@@ -211,7 +211,7 @@ resource "null_resource" "trigger_bda_build" {
         sleep 30
         BUILD_STATUS=$(aws codebuild batch-get-builds \
           --ids "$BUILD_ID" \
-          --region "${data.aws_region.current.name}" \
+          --region "${data.aws_region.current.id}" \
           --query 'builds[0].buildStatus' \
           --output text)
         echo "Build status: $BUILD_STATUS"
@@ -226,7 +226,7 @@ resource "null_resource" "trigger_bda_build" {
       aws ecr describe-images \
         --repository-name "${aws_ecr_repository.bda_processor.name}" \
         --image-ids imageTag=bda-invoke-function \
-        --region "${data.aws_region.current.name}" \
+        --region "${data.aws_region.current.id}" \
         --query 'imageDetails[0].imageTags' \
         --output text
       echo "ECR images verified successfully."

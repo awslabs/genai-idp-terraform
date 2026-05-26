@@ -16,7 +16,13 @@ phases:
         # Install common system dependencies
         echo "Installing system dependencies..."
         yum install -y gcc gcc-c++ python3-devel zlib-devel libjpeg-devel libpng-devel
-        
+
+        # Packages already provided by the Lambda Python 3.12 runtime — pruning
+        # these saves ~100+ MB per layer and is what the upstream CloudFormation
+        # `publish.py:build_lambda_layer` does. Keeping these inside a layer is
+        # pure overhead — the runtime always wins on the import path.
+        RUNTIME_PROVIDED_PACKAGES="boto3 botocore s3transfer awscli urllib3 jmespath python_dateutil dateutil"
+
         for req_file in $(find . -name "requirements.txt"); do
           LAYER_NAME=$(basename $(dirname $req_file))
           echo "=========================================="
@@ -24,30 +30,30 @@ phases:
           echo "Requirements file: $req_file"
           echo "Contents of requirements file:"
           cat $req_file
-          
+
           # Create layer directory
           mkdir -p /tmp/$LAYER_NAME/python
-          
+
           # Check if this is the idp-common layer
           if [ "$LAYER_NAME" = "idp-common" ]; then
             echo "Building idp-common layer with Python package..."
-            
+
             # Check if idp_common_pkg directory exists
             if [ -d "$(dirname $req_file)/idp_common_pkg" ]; then
               echo "Found idp_common_pkg directory"
-              
+
               # Create a temporary build directory
               mkdir -p /tmp/builddir
               rsync -rLv $(dirname $req_file)/ /tmp/builddir/
-              
+
               cd /tmp/builddir
-              
+
               # Install dependencies first
               if [ -s "requirements.txt" ]; then
                 echo "Installing dependencies..."
                 pip install -r requirements.txt -t /tmp/$LAYER_NAME/python --no-cache-dir
               fi
-              
+
               # Install the idp_common package
               echo "Installing idp_common package..."
               if [ -n "$IDP_COMMON_EXTRAS" ] && [ "$IDP_COMMON_EXTRAS" != "" ]; then
@@ -57,39 +63,31 @@ phases:
                 echo "Installing without extras"
                 pip install -e ./idp_common_pkg -t /tmp/$LAYER_NAME/python --no-cache-dir
               fi
-              
+
               # Copy the idp_common source code directly to ensure it's available
               echo "Copying idp_common source code..."
               mkdir -p /tmp/$LAYER_NAME/python/idp_common
               rsync -rLv ./idp_common_pkg/idp_common/ /tmp/$LAYER_NAME/python/idp_common/
-              
-              # Clean up build artifacts but keep the package
-              echo "Cleaning up build artifacts..."
-              find /tmp/$LAYER_NAME/python -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
-              
-              # Clean up temporary directory
+
+              # Clean up temporary build directory (post-install cleanup is below,
+              # shared with the "other layers" branch).
               rm -rf /tmp/builddir
-              
+
             else
               echo "ERROR: idp_common_pkg directory not found!"
               exit 1
             fi
-            
+
           else
             # Normal installation for other layers
             echo "Building regular layer..."
-            
+
             # Check if requirements file is empty
             if [ -s "$req_file" ]; then
               # File is not empty, install dependencies
               echo "Installing dependencies for $LAYER_NAME..."
               pip install -r $req_file -t /tmp/$LAYER_NAME/python --no-cache-dir
-              
+
               # Check if installation was successful
               if [ $? -ne 0 ]; then
                 echo "Failed to install dependencies for $LAYER_NAME"
@@ -101,11 +99,43 @@ phases:
               touch /tmp/$LAYER_NAME/python/__init__.py
             fi
           fi
-          
+
+          # ============================================================
+          # Shared post-install cleanup (runs for ALL layers).
+          # Mirrors upstream CloudFormation `publish.py` and CDK
+          # `idp-python-layer-version.ts` so we get the same trimmed size.
+          # ============================================================
+          echo "Cleaning up build artifacts for $LAYER_NAME..."
+
+          # 1. Remove Lambda-runtime-provided packages.
+          #    Strips both the package directory and its dist-info / egg-info.
+          for pkg in $RUNTIME_PROVIDED_PACKAGES; do
+            # Package directory (e.g. /tmp/$LAYER_NAME/python/boto3)
+            rm -rf "/tmp/$LAYER_NAME/python/$pkg"                 2>/dev/null || true
+            # dist-info / egg-info matches both `boto3-*` and `boto3_*` (PEP 503)
+            find "/tmp/$LAYER_NAME/python" -maxdepth 1 -type d \
+              \( -name "${pkg}-*" -o -name "${pkg//-/_}-*" \) \
+              -exec rm -rf {} + 2>/dev/null || true
+          done
+
+          # 2. Strip generic Python build artifacts.
+          find "/tmp/$LAYER_NAME/python" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "*.egg-info"  -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "build"       -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "tests"       -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "*.pyc"       -delete 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "*.pyo"       -delete 2>/dev/null || true
+
+          # 3. Show post-cleanup size for diagnostics.
+          echo "Post-cleanup size for $LAYER_NAME:"
+          du -sh /tmp/$LAYER_NAME/python || true
+
           # List installed packages
           echo "Installed packages for $LAYER_NAME:"
           ls -la /tmp/$LAYER_NAME/python/
-          
+
           # Check if idp_common is available for idp-common layer
           if [ "$LAYER_NAME" = "idp-common" ]; then
             echo "Checking idp_common availability:"
@@ -117,22 +147,22 @@ phases:
               exit 1
             fi
           fi
-          
+
           # Create zip file
           echo "Creating zip file for $LAYER_NAME..."
           cd /tmp/$LAYER_NAME
           zip -r /tmp/layers/$LAYER_NAME.zip python/
-          
+
           # Check if zip was successful
           if [ $? -ne 0 ]; then
             echo "Failed to create zip file for $LAYER_NAME"
             exit 1
           fi
-          
+
           # Check zip file size
           echo "Zip file size for $LAYER_NAME:"
           ls -lh /tmp/layers/$LAYER_NAME.zip
-          
+
           # Return to original directory - use CODEBUILD_SRC_DIR or fallback
           if [ -d "$CODEBUILD_SRC_DIR" ]; then
             cd $CODEBUILD_SRC_DIR

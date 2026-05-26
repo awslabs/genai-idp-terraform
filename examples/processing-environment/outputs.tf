@@ -63,3 +63,13 @@ output "lambda_functions" {
     }
   }
 }
+
+output "evaluation_baseline_bucket_arn" {
+  description = "ARN of the evaluation baseline bucket (when enable_evaluation = true). Pass this to a processor module's `evaluation_baseline_bucket_arn` to wire up the per-pattern evaluation Lambda."
+  value       = var.enable_evaluation ? aws_s3_bucket.evaluation_baseline_bucket[0].arn : null
+}
+
+output "reporting_bucket_arn" {
+  description = "ARN of the reporting bucket (when enable_reporting = true). Pass this to a processor module's reporting wiring."
+  value       = var.enable_reporting ? aws_s3_bucket.reporting_bucket[0].arn : null
+}

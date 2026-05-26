@@ -5,14 +5,14 @@
 
 locals {
   # Helper function to generate model permissions for any model_id
-  # Config.yaml first, variable override second (proper precedence)
+  # Precedence: per-step variable override → model_id default → config.yaml value
   bedrock_model_permissions = {
     for name, id in {
-      classification = var.classification_model_id != null ? var.classification_model_id : (can(local.config_with_overrides.classification.model) ? local.config_with_overrides.classification.model : null)
-      extraction     = var.extraction_model_id != null ? var.extraction_model_id : (can(local.config_with_overrides.extraction.model) ? local.config_with_overrides.extraction.model : null)
-      summarization  = var.summarization_model_id != null ? var.summarization_model_id : (can(local.config_with_overrides.summarization.model) ? local.config_with_overrides.summarization.model : null)
-      evaluation     = var.evaluation_model_id != null ? var.evaluation_model_id : (can(local.config_with_overrides.evaluation.llm_method.model) ? local.config_with_overrides.evaluation.llm_method.model : null)
-      assessment     = var.assessment_model_id != null ? var.assessment_model_id : (can(local.config_with_overrides.assessment.model) ? local.config_with_overrides.assessment.model : null)
+      classification = coalesce(var.classification_model_id, var.model_id)
+      extraction     = coalesce(var.extraction_model_id, var.model_id)
+      summarization  = coalesce(var.summarization_model_id, var.model_id)
+      evaluation     = var.evaluation_model_id != null ? var.evaluation_model_id : (can(local.config_with_overrides.evaluation.llm_method.model) ? local.config_with_overrides.evaluation.llm_method.model : var.model_id)
+      assessment     = var.assessment_model_id != null ? var.assessment_model_id : (can(local.config_with_overrides.assessment.model) ? local.config_with_overrides.assessment.model : var.model_id)
       } : name => id != null ? {
 
       # Parse model information

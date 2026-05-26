@@ -1,0 +1,163 @@
+  {
+      "description": "Bank check with MICR encoding, payee info, and amounts",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "x-aws-idp-document-type": "BANK_CHECK",
+      "properties": {
+        "checks": {
+          "description": "List of checks",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bankInfo": {
+                "type": "object",
+                "description": "Bank information",
+                "properties": {
+                  "bank": {
+                    "data_type": "string",
+                    "description": "Bank name (CHASE, BANK_OF_AMERICA, WELLS_FARGO, CITIBANK, US_BANK)",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "enum": [
+                      "CHASE",
+                      "BANK_OF_AMERICA",
+                      "WELLS_FARGO",
+                      "CITIBANK",
+                      "US_BANK"
+                    ],
+                    "x-aws-idp-evaluation-method": "EXACT"
+                  }
+                }
+              },
+              "personalInfo": {
+                "type": "object",
+                "description": "Account holder personal information",
+                "properties": {
+                  "zip": {
+                    "data_type": "string",
+                    "description": "ZIP code",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "EXACT"
+                  },
+                  "firstName": {
+                    "data_type": "string",
+                    "description": "Account holder first name",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "lastName": {
+                    "data_type": "string",
+                    "description": "Account holder last name",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "address": {
+                    "data_type": "string",
+                    "description": "Street address",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "state": {
+                    "data_type": "string",
+                    "description": "State abbreviation",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "EXACT"
+                  },
+                  "city": {
+                    "data_type": "string",
+                    "description": "City",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  }
+                }
+              },
+              "checkInfo": {
+                "type": "object",
+                "description": "Check details",
+                "properties": {
+                  "date": {
+                    "data_type": "string",
+                    "description": "Date of the check, formatted as YYYY-MM-DD",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "payee": {
+                    "data_type": "string",
+                    "description": "Payee name",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "micr": {
+                    "type": "object",
+                    "description": "MICR encoding data",
+                    "properties": {
+                      "accountNumber": {
+                        "data_type": "number",
+                        "description": "Account number, usually 8 - 12 digits",
+                        "x-aws-idp-confidence-threshold": "0.8",
+                        "type": "number",
+                        "x-aws-idp-evaluation-method": "NUMERIC_EXACT"
+                      },
+                      "routingNumber": {
+                        "data_type": "number",
+                        "description": "Routing number, usually 9 digits",
+                        "x-aws-idp-confidence-threshold": "0.8",
+                        "type": "number",
+                        "x-aws-idp-evaluation-method": "NUMERIC_EXACT"
+                      },
+                      "checkNumber": {
+                        "data_type": "number",
+                        "description": "Check number, usually 4 digits",
+                        "x-aws-idp-confidence-threshold": "0.8",
+                        "type": "number",
+                        "x-aws-idp-evaluation-method": "NUMERIC_EXACT"
+                      }
+                    }
+                  },
+                  "amountInWords": {
+                    "data_type": "string",
+                    "description": "Amount in words (excluding the word 'dollars')",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "memo": {
+                    "data_type": "string",
+                    "description": "Memo field",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                    "x-aws-idp-evaluation-threshold": "0.7"
+                  },
+                  "amount": {
+                    "data_type": "number",
+                    "description": "Check amount",
+                    "x-aws-idp-confidence-threshold": "0.8",
+                    "type": "number",
+                    "x-aws-idp-evaluation-method": "NUMERIC_EXACT"
+                  }
+                }
+              }
+            }
+          },
+          "instruction": "List of checks"
+        }
+      },
+      "$id": "BANK_CHECK"
+    }

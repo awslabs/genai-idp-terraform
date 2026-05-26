@@ -283,15 +283,21 @@ class DocSplitClassificationMetrics:
                     "ground_truth_class": gt_class,
                     "ground_truth_pages": sorted(gt_section["page_indices"]),
                     "matched": matched,
-                    "matched_section_id": matched_pred_section["section_id"]
-                    if matched_pred_section
-                    else None,
-                    "predicted_class": matched_pred_section["document_class"]
-                    if matched_pred_section
-                    else "No Match",
-                    "predicted_pages": sorted(matched_pred_section["page_indices"])
-                    if matched_pred_section
-                    else [],
+                    "matched_section_id": (
+                        matched_pred_section["section_id"]
+                        if matched_pred_section
+                        else None
+                    ),
+                    "predicted_class": (
+                        matched_pred_section["document_class"]
+                        if matched_pred_section
+                        else "No Match"
+                    ),
+                    "predicted_pages": (
+                        sorted(matched_pred_section["page_indices"])
+                        if matched_pred_section
+                        else []
+                    ),
                 }
             )
 
@@ -365,15 +371,21 @@ class DocSplitClassificationMetrics:
                     "ground_truth_pages": gt_pages,
                     "matched": matched,
                     "order_matched": order_matched,
-                    "matched_section_id": matched_pred_section["section_id"]
-                    if matched_pred_section
-                    else None,
-                    "predicted_class": matched_pred_section["document_class"]
-                    if matched_pred_section
-                    else "No Match",
-                    "predicted_pages": matched_pred_section["page_indices"]
-                    if matched_pred_section
-                    else [],
+                    "matched_section_id": (
+                        matched_pred_section["section_id"]
+                        if matched_pred_section
+                        else None
+                    ),
+                    "predicted_class": (
+                        matched_pred_section["document_class"]
+                        if matched_pred_section
+                        else "No Match"
+                    ),
+                    "predicted_pages": (
+                        matched_pred_section["page_indices"]
+                        if matched_pred_section
+                        else []
+                    ),
                 }
             )
 

@@ -117,6 +117,12 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the shared base Lambda layer (idp_common with docs_service extras, v0.4.11+). Not attached to BDA functions as they use container images which do not support Lambda layers."
+  type        = string
+  default     = null
+}
+
 variable "evaluation_model_id" {
   description = "Optional model used for evaluating extraction results. If not provided, the model from config.yaml will be used."
   type        = string
@@ -164,19 +170,6 @@ variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
   default     = {}
-}
-
-# HITL-related variables
-variable "sagemaker_a2i_review_portal_url" {
-  description = "URL for the SageMaker A2I review portal"
-  type        = string
-  default     = null
-}
-
-variable "hitl_workteam_arn" {
-  description = "ARN of the SageMaker workteam for HITL"
-  type        = string
-  default     = null
 }
 
 variable "lambda_tracing_mode" {

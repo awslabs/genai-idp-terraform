@@ -416,7 +416,7 @@ classes:
       - classPrompt: "This is an example of the class 'email'"
         name: "Email1"
         attributesPrompt: |
-          expected attributes are:
+          expected attributes are: 
              "from_address": "Kelahan, Ben",
              "to_address": "TI New York: 'TI Minnesota",
              "cc_address": "Ashley Bratich (MSMAIL)",

@@ -44,8 +44,8 @@ resource "aws_opensearchserverless_security_policy" "knowledge_base_encryption" 
   name  = "${var.prefix}-kb-encryption"
   type  = "encryption"
   policy = jsonencode({
-    Rules        = [{ Resource = ["collection/${var.prefix}-kb-collection"], ResourceType = "collection" }]
-    AWSOwnedKey  = true
+    Rules       = [{ Resource = ["collection/${var.prefix}-kb-collection"], ResourceType = "collection" }]
+    AWSOwnedKey = true
   })
 }
 
@@ -56,7 +56,7 @@ resource "aws_opensearchserverless_security_policy" "knowledge_base_network" {
   policy = jsonencode([{
     Rules = [
       { ResourceType = "collection", Resource = ["collection/${var.prefix}-kb-collection"] },
-      { ResourceType = "dashboard",  Resource = ["collection/${var.prefix}-kb-collection"] }
+      { ResourceType = "dashboard", Resource = ["collection/${var.prefix}-kb-collection"] }
     ]
     AllowFromPublic = true
   }])

@@ -11,8 +11,9 @@ The mapper acts as an abstraction layer, allowing the IDP system to use
 neutral evaluation configuration that can be translated to Stickler's format.
 """
 
+import copy
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Set
 
 from idp_common.config.schema_constants import (
     EVALUATION_METHOD_EXACT,
@@ -221,6 +222,206 @@ class SticklerConfigMapper:
                 logger.warning(f"Could not resolve $ref: {ref_path}")
                 return {}
         return {}
+
+    @classmethod
+    def _remove_empty_object_properties(
+        cls, schema: Dict[str, Any], field_path: str = ""
+    ) -> List[str]:
+        """
+        Recursively remove properties that are objects with empty properties.
+
+        Stickler's ModelFactory requires at least one field to create a Pydantic model.
+        Empty object properties (e.g., "AccidentInformation": {"type": "object", "properties": {}})
+        cause validation errors and provide no evaluation value anyway.
+
+        Args:
+            schema: Schema to process (modified in-place)
+            field_path: Current path for logging
+
+        Returns:
+            List of removed property paths for logging
+        """
+        removed: List[str] = []
+
+        if not isinstance(schema, dict):
+            return removed
+
+        if SCHEMA_PROPERTIES in schema:
+            props_to_remove = []
+
+            for prop_name, prop_schema in schema[SCHEMA_PROPERTIES].items():
+                prop_path = f"{field_path}.{prop_name}" if field_path else prop_name
+
+                if not isinstance(prop_schema, dict):
+                    continue
+
+                # Check if this is an empty object (type=object with empty or missing properties)
+                prop_type = prop_schema.get(SCHEMA_TYPE)
+                prop_properties = prop_schema.get(SCHEMA_PROPERTIES)
+
+                if prop_type == TYPE_OBJECT:
+                    # Empty if properties is {} or missing entirely for a plain object
+                    if isinstance(prop_properties, dict) and len(prop_properties) == 0:
+                        props_to_remove.append(prop_name)
+                        removed.append(prop_path)
+                        logger.info(
+                            f"Removing empty object property '{prop_path}' - "
+                            f"Stickler requires at least one field in nested objects"
+                        )
+                    elif prop_properties is not None:
+                        # Recurse into non-empty objects
+                        removed.extend(
+                            cls._remove_empty_object_properties(prop_schema, prop_path)
+                        )
+
+                # Also recurse into arrays
+                elif prop_type == TYPE_ARRAY and SCHEMA_ITEMS in prop_schema:
+                    removed.extend(
+                        cls._remove_empty_object_properties(
+                            prop_schema[SCHEMA_ITEMS], f"{prop_path}[]"
+                        )
+                    )
+
+            # Remove empty object properties
+            for prop_name in props_to_remove:
+                del schema[SCHEMA_PROPERTIES][prop_name]
+
+        # Check array items at this level too
+        if SCHEMA_ITEMS in schema:
+            removed.extend(
+                cls._remove_empty_object_properties(
+                    schema[SCHEMA_ITEMS], f"{field_path}[]"
+                )
+            )
+
+        # Process $defs as well
+        if "$defs" in schema:
+            for def_name, def_schema in list(schema["$defs"].items()):
+                # Check if the definition itself is an empty object
+                if (
+                    isinstance(def_schema, dict)
+                    and def_schema.get(SCHEMA_TYPE) == TYPE_OBJECT
+                    and isinstance(def_schema.get(SCHEMA_PROPERTIES), dict)
+                    and len(def_schema.get(SCHEMA_PROPERTIES, {})) == 0
+                ):
+                    logger.info(
+                        f"Removing empty $defs entry '{def_name}' - "
+                        f"Stickler requires at least one field in nested objects"
+                    )
+                    del schema["$defs"][def_name]
+                    removed.append(f"$defs.{def_name}")
+                else:
+                    removed.extend(
+                        cls._remove_empty_object_properties(
+                            def_schema, f"$defs.{def_name}"
+                        )
+                    )
+
+        return removed
+
+    @classmethod
+    def _inline_refs(
+        cls,
+        schema: Dict[str, Any],
+        defs: Dict[str, Any],
+        visited: Optional[Set[str]] = None,
+        field_path: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Recursively inline all $ref references in the schema.
+
+        This replaces all #/$defs/XXX references with the actual definition content,
+        allowing Stickler's JsonSchemaFieldConverter to process nested schemas
+        without losing $defs context.
+
+        Handles circular references by tracking visited definitions.
+
+        Args:
+            schema: Schema or sub-schema to process
+            defs: The $defs dictionary from the root schema
+            visited: Set of definition names already being processed (for circular ref detection)
+            field_path: Current path for logging
+
+        Returns:
+            Schema with all $ref references inlined
+        """
+        if visited is None:
+            visited = set()
+
+        if not isinstance(schema, dict):
+            return schema
+
+        # Handle $ref - inline the referenced definition
+        if "$ref" in schema:
+            ref_path = schema["$ref"]
+            if ref_path.startswith("#/$defs/"):
+                def_name = ref_path[8:]  # Remove "#/$defs/"
+                if def_name in defs:
+                    if def_name in visited:
+                        # Circular reference detected - keep $ref to avoid infinite loop
+                        logger.warning(
+                            f"Circular $ref detected at '{field_path}': {ref_path}. Keeping reference."
+                        )
+                        return schema
+
+                    # Mark as being processed
+                    visited.add(def_name)
+
+                    # Deep copy and recursively inline the definition
+                    inlined = copy.deepcopy(defs[def_name])
+                    inlined = cls._inline_refs(
+                        inlined, defs, visited.copy(), f"{field_path}({def_name})"
+                    )
+
+                    # Merge any other properties from the original schema (like description)
+                    # onto the inlined definition (original props take precedence)
+                    for key, value in schema.items():
+                        if key != "$ref" and key not in inlined:
+                            inlined[key] = value
+
+                    logger.debug(f"Inlined $ref '{ref_path}' at '{field_path}'")
+                    return inlined
+                else:
+                    logger.warning(
+                        f"Cannot inline $ref '{ref_path}' at '{field_path}': "
+                        f"definition not found in $defs. Available: {list(defs.keys())}"
+                    )
+
+        # Recursively process properties
+        if SCHEMA_PROPERTIES in schema:
+            schema[SCHEMA_PROPERTIES] = {
+                k: cls._inline_refs(v, defs, visited.copy(), f"{field_path}.{k}")
+                for k, v in schema[SCHEMA_PROPERTIES].items()
+            }
+
+        # Recursively process array items
+        if SCHEMA_ITEMS in schema:
+            schema[SCHEMA_ITEMS] = cls._inline_refs(
+                schema[SCHEMA_ITEMS], defs, visited.copy(), f"{field_path}[]"
+            )
+
+        # Process allOf, anyOf, oneOf
+        for keyword in ["allOf", "anyOf", "oneOf"]:
+            if keyword in schema:
+                schema[keyword] = [
+                    cls._inline_refs(
+                        item, defs, visited.copy(), f"{field_path}.{keyword}[{i}]"
+                    )
+                    for i, item in enumerate(schema[keyword])
+                ]
+
+        # Process additionalProperties if it's a schema
+        if "additionalProperties" in schema and isinstance(
+            schema["additionalProperties"], dict
+        ):
+            schema["additionalProperties"] = cls._inline_refs(
+                schema["additionalProperties"],
+                defs,
+                visited.copy(),
+                f"{field_path}.additionalProperties",
+            )
+
+        return schema
 
     @classmethod
     def _validate_method_for_field(
@@ -535,6 +736,28 @@ class SticklerConfigMapper:
         logger.info(
             f"Building Stickler config for model '{model_name}' with match_threshold={match_threshold}"
         )
+
+        # Inline all $ref references BEFORE translating extensions
+        # This is necessary because Stickler's JsonSchemaFieldConverter creates new
+        # converter instances for nested schemas without propagating root $defs,
+        # causing nested $ref resolution to fail
+        defs = schema.get("$defs", {}) or schema.get("definitions", {})
+        if defs:
+            num_defs = len(defs)
+            schema = cls._inline_refs(schema, defs, field_path=model_name)
+            logger.info(f"Inlined {num_defs} $defs references for model '{model_name}'")
+
+        # Remove empty object properties AFTER inlining refs but BEFORE translating extensions
+        # This prevents Stickler's ModelFactory from failing on nested objects with no fields
+        # (e.g., "AccidentInformation": {"type": "object", "properties": {}})
+        removed_properties = cls._remove_empty_object_properties(
+            schema, field_path=model_name
+        )
+        if removed_properties:
+            logger.info(
+                f"Removed {len(removed_properties)} empty object properties for model '{model_name}': "
+                f"{removed_properties}"
+            )
 
         # Translate IDP extensions to Stickler extensions throughout the schema
         cls._translate_extensions_in_schema(schema)

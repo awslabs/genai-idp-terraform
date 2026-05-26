@@ -85,7 +85,7 @@ resource "aws_iam_policy" "appsync_dynamodb_policy" {
             "kms:GenerateDataKey*"
           ]
           Effect   = "Allow"
-          Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+          Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
         }
       ]
     )
@@ -312,6 +312,24 @@ resource "aws_iam_role_policy_attachment" "configuration_resolver_vpc_attachment
   policy_arn = aws_iam_policy.configuration_resolver_vpc_policy[0].arn
 }
 
+# S3 config bucket read — needed by configuration_resolver for versioning/pricing (v0.4.12+)
+resource "aws_iam_role_policy" "configuration_resolver_s3" {
+  name = "ConfigurationResolverS3Policy-${random_string.suffix.result}"
+  role = aws_iam_role.configuration_resolver_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
+      Resource = [
+        local.output_bucket_arn,
+        "${local.output_bucket_arn}/*",
+      ]
+    }]
+  })
+}
+
 # IAM resources from lambda_copy_to_baseline_resolver.tf
 resource "aws_iam_role" "copy_to_baseline_resolver_role" {
   for_each = var.evaluation_enabled ? { "enabled" = true } : {}
@@ -482,7 +500,7 @@ resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_kms_attachm
 resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_vpc_attachment" {
   count      = var.evaluation_enabled && var.vpc_config != null ? 1 : 0
   role       = aws_iam_role.copy_to_baseline_resolver_role["enabled"].name
-  policy_arn = aws_iam_policy.copy_to_baseline_resolver_vpc_policy["enabled"].arn
+  policy_arn = aws_iam_policy.copy_to_baseline_resolver_vpc_policy[0].arn
 }
 
 # IAM resources from lambda_delete_document_resolver.tf
@@ -1262,6 +1280,3 @@ resource "aws_iam_role_policy_attachment" "upload_resolver_vpc_attachment" {
   role       = aws_iam_role.upload_resolver_role.name
   policy_arn = aws_iam_policy.upload_resolver_vpc_policy[0].arn
 }
-
-
-

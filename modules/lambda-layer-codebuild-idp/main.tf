@@ -5,10 +5,22 @@
 # Registry-compatible build directory approach
 locals {
   # Use the calling module's .terraform/tmp directory for build artifacts
-  # This ensures no files are created in the module directory
-  module_build_dir = "${path.root}/.terraform/tmp/lambda-layer-codebuild-idp"
-  # Unique identifier for this module instance (static to avoid unnecessary rebuilds)
-  module_instance_id = substr(md5("${path.module}-static"), 0, 8)
+  # This ensures no files are created in the module directory.
+  #
+  # Build dir MUST be per-layer because each layer module instance
+  # has its own `idp_common_extras` and writes its own
+  # requirements.txt + idp_common source archive. Sharing a single
+  # build dir across all five layer module instances causes the last
+  # writer to win, producing five identical fat layers regardless of
+  # the configured extras (and frequently blowing past Lambda's
+  # 250 MiB unzipped limit, e.g. on the reporting layer).
+  module_build_dir = "${path.root}/.terraform/tmp/lambda-layer-codebuild-idp/${var.layer_prefix}"
+  # Unique identifier for this module instance derived from the
+  # caller-supplied `layer_prefix` so each layer build has a stable,
+  # unique id. Using `path.module` here would resolve to the same
+  # value for every module instance and reintroduce cross-build
+  # collisions.
+  module_instance_id = substr(md5("${var.layer_prefix}-static"), 0, 8)
 
   # Bucket configuration - always use external bucket since it's always provided
   # Extract bucket name from S3 ARN format: arn:aws:s3:::bucket-name
@@ -53,7 +65,17 @@ resource "local_file" "requirements_files" {
   filename = "${local.module_build_dir}/requirements/${each.key}/requirements.txt"
 }
 
-# Copy idp_common source to build directory if provided
+# Copy idp_common source to build directory if provided.
+#
+# Uses rsync with an explicit exclude list and `--delete` so each run produces
+# a deterministic source tree regardless of what cruft may be sitting in the
+# developer's checkout (a `.venv/`, an `*.egg-info/`, a stale `build/` from a
+# local `pip install -e .`, IDE caches, etc.). Anything not on the exclude
+# list flows through, so upstream additions are picked up automatically.
+#
+# Without this, a `cp -r *` of the user's source tree could shovel hundreds
+# of MB of local virtualenvs/build artifacts into the layer zip and blow
+# past Lambda's 250 MiB unzipped cap (e.g. on the reporting layer).
 resource "terraform_data" "copy_idp_common_source" {
   count = var.idp_common_source_path != "" ? 1 : 0
 
@@ -64,24 +86,96 @@ resource "terraform_data" "copy_idp_common_source" {
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/pyproject.toml") : "",
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/setup.py") : "",
     # Monitor all Python files in the idp_common package directory
-    local.idp_common_files_hash
+    local.idp_common_files_hash,
+    # Re-stage when the rsync exclude list / staging logic in this
+    # module's main.tf changes, so existing deployments pick up future
+    # hardening here without needing to bump anything else.
+    filemd5("${path.module}/main.tf"),
   ]
 
   provisioner "local-exec" {
     command = <<-EOT
-      # Create the idp-common requirements directory structure in build dir
-      mkdir -p "${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
-      
-      # Copy the idp_common source contents to build directory
-      if [ -d "${var.idp_common_source_path}" ]; then
-        cp -r "${var.idp_common_source_path}"/* "${local.module_build_dir}/requirements/idp-common/idp_common_pkg/"
-        
-        # Remove test files and cache to reduce size
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name "*.pyc" -delete 2>/dev/null || true
-        find "${local.module_build_dir}/requirements/idp-common/idp_common_pkg" -name ".pytest_cache" -type d -exec rm -rf {} + 2>/dev/null || true
+      set -e
+
+      DEST="${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
+
+      mkdir -p "$DEST"
+
+      if [ ! -d "${var.idp_common_source_path}" ]; then
+        echo "ERROR: idp_common_source_path not found: ${var.idp_common_source_path}" >&2
+        exit 1
       fi
+
+      # Deterministic stage: rsync with an explicit exclude list and
+      # `--delete` so the destination contents are exactly what we
+      # specify, never what happens to be in the source tree.
+      #
+      # Excludes cover:
+      #   * Python build/dev artifacts (build/, dist/, *.egg-info, .eggs)
+      #   * Virtualenvs (.venv, venv, env, ENV)
+      #   * Caches (__pycache__, .pytest_cache, .mypy_cache, .ruff_cache, .tox)
+      #   * Compiled artifacts (*.pyc, *.pyo, *.so)
+      #   * Test code (tests/) — not needed at runtime, the buildspec
+      #     also strips it post-install as a belt-and-suspenders check
+      #   * Lock files (uv.lock, poetry.lock) — not used by `pip install`
+      #   * IDE / editor / OS metadata (.idea, .vscode, *.swp, .DS_Store)
+      #   * VCS metadata (.git, .gitignore, .gitattributes)
+      #   * Coverage / CI output (htmlcov, .coverage, coverage*.xml)
+      #   * Local dev tooling (clean_build.sh, verify_stickler.py)
+      #   * node_modules — defensive; shouldn't appear in a Python pkg
+      rsync -a --delete \
+        --exclude='__pycache__/' \
+        --exclude='*.py[cod]' \
+        --exclude='*$py.class' \
+        --exclude='*.so' \
+        --exclude='.pytest_cache/' \
+        --exclude='.mypy_cache/' \
+        --exclude='.ruff_cache/' \
+        --exclude='.tox/' \
+        --exclude='.venv/' \
+        --exclude='venv/' \
+        --exclude='env/' \
+        --exclude='ENV/' \
+        --exclude='build/' \
+        --exclude='dist/' \
+        --exclude='develop-eggs/' \
+        --exclude='downloads/' \
+        --exclude='eggs/' \
+        --exclude='.eggs/' \
+        --exclude='sdist/' \
+        --exclude='wheels/' \
+        --exclude='var/' \
+        --exclude='parts/' \
+        --exclude='*.egg-info/' \
+        --exclude='*.egg' \
+        --exclude='.installed.cfg' \
+        --exclude='tests/' \
+        --exclude='.coverage' \
+        --exclude='coverage.xml' \
+        --exclude='coverage/' \
+        --exclude='coverage_html/' \
+        --exclude='htmlcov/' \
+        --exclude='nosetests.xml' \
+        --exclude='test-results.xml' \
+        --exclude='test-reports/' \
+        --exclude='uv.lock' \
+        --exclude='poetry.lock' \
+        --exclude='.git/' \
+        --exclude='.gitignore' \
+        --exclude='.gitattributes' \
+        --exclude='.idea/' \
+        --exclude='.vscode/' \
+        --exclude='*.swp' \
+        --exclude='*.swo' \
+        --exclude='.DS_Store' \
+        --exclude='Thumbs.db' \
+        --exclude='node_modules/' \
+        --exclude='clean_build.sh' \
+        --exclude='verify_stickler.py' \
+        "${var.idp_common_source_path}/" "$DEST/"
+
+      echo "Staged idp_common source at $DEST:"
+      du -sh "$DEST" || true
     EOT
   }
 }
@@ -102,9 +196,16 @@ data "archive_file" "requirements_source" {
 # No bucket resources are created in this module
 
 # Upload the zip file to S3
+#
+# Each idp-common-layer module instance writes to a *prefixed* S3 key so the
+# four parallel layer builds (idp_common_layer, idp_base_layer,
+# idp_reporting_layer, idp_agents_layer — each with different `extras`) don't
+# overwrite each other. Without the prefix every layer's CodeBuild project
+# downloads the same zip (whichever module applied last), which produces
+# four identical fat layers regardless of `idp_common_extras`.
 resource "aws_s3_object" "requirements_source" {
   bucket = local.lambda_layers_bucket_name
-  key    = "source/requirements_source.zip"
+  key    = "source/${var.layer_prefix}/requirements_source.zip"
   source = data.archive_file.requirements_source.output_path
 
   # Use a local variable for the etag to avoid the file not found error
@@ -285,7 +386,13 @@ phases:
         # Install common system dependencies
         echo "Installing system dependencies..."
         yum install -y gcc gcc-c++ python3-devel zlib-devel libjpeg-devel libpng-devel
-        
+
+        # Packages already provided by the Lambda Python 3.12 runtime — pruning
+        # these saves ~100+ MB per layer and is what the upstream CloudFormation
+        # publish.py:build_lambda_layer does. Keeping these inside a layer is
+        # pure overhead — the runtime always wins on the import path.
+        RUNTIME_PROVIDED_PACKAGES="boto3 botocore s3transfer awscli urllib3 jmespath python_dateutil dateutil"
+
         for req_file in $(find . -name "requirements.txt"); do
           LAYER_NAME=$(basename $(dirname $req_file))
           echo "=========================================="
@@ -293,30 +400,32 @@ phases:
           echo "Requirements file: $req_file"
           echo "Contents of requirements file:"
           cat $req_file
-          
+
           # Create layer directory
           mkdir -p /tmp/$LAYER_NAME/python
-          
+
           # Check if this is the idp-common layer
           if [ "$LAYER_NAME" = "idp-common" ]; then
             echo "Building idp-common layer with Python package..."
-            
+
             # Check if idp_common_pkg directory exists
             if [ -d "$(dirname $req_file)/idp_common_pkg" ]; then
               echo "Found idp_common_pkg directory"
-              
-              # Create a temporary build directory
+
+              # Create a temporary build directory.
+              # Wipe first so a previous failed build can't poison this one.
+              rm -rf /tmp/builddir
               mkdir -p /tmp/builddir
               rsync -rLv $(dirname $req_file)/ /tmp/builddir/
-              
+
               cd /tmp/builddir
-              
+
               # Install dependencies first
               if [ -s "requirements.txt" ]; then
                 echo "Installing dependencies..."
                 pip install -r requirements.txt -t /tmp/$LAYER_NAME/python --no-cache-dir
               fi
-              
+
               # Install the idp_common package
               echo "Installing idp_common package..."
               if [ -n "$IDP_COMMON_EXTRAS" ] && [ "$IDP_COMMON_EXTRAS" != "" ]; then
@@ -326,39 +435,31 @@ phases:
                 echo "Installing without extras"
                 pip install -e ./idp_common_pkg -t /tmp/$LAYER_NAME/python --no-cache-dir
               fi
-              
+
               # Copy the idp_common source code directly to ensure it's available
               echo "Copying idp_common source code..."
               mkdir -p /tmp/$LAYER_NAME/python/idp_common
               rsync -rLv ./idp_common_pkg/idp_common/ /tmp/$LAYER_NAME/python/idp_common/
-              
-              # Clean up build artifacts but keep the package
-              echo "Cleaning up build artifacts..."
-              find /tmp/$LAYER_NAME/python -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
-              find /tmp/$LAYER_NAME/python -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
-              
-              # Clean up temporary directory
+
+              # Clean up temporary build directory (post-install cleanup is below,
+              # shared with the "other layers" branch).
               rm -rf /tmp/builddir
-              
+
             else
               echo "ERROR: idp_common_pkg directory not found!"
               exit 1
             fi
-            
+
           else
             # Normal installation for other layers
             echo "Building regular layer..."
-            
+
             # Check if requirements file is empty
             if [ -s "$req_file" ]; then
               # File is not empty, install dependencies
               echo "Installing dependencies for $LAYER_NAME..."
               pip install -r $req_file -t /tmp/$LAYER_NAME/python --no-cache-dir
-              
+
               # Check if installation was successful
               if [ $? -ne 0 ]; then
                 echo "Failed to install dependencies for $LAYER_NAME"
@@ -370,11 +471,43 @@ phases:
               touch /tmp/$LAYER_NAME/python/__init__.py
             fi
           fi
-          
+
+          # ============================================================
+          # Shared post-install cleanup (runs for ALL layers).
+          # Mirrors upstream CloudFormation publish.py and CDK
+          # idp-python-layer-version.ts so we get the same trimmed size.
+          # ============================================================
+          echo "Cleaning up build artifacts for $LAYER_NAME..."
+
+          # 1. Remove Lambda-runtime-provided packages.
+          #    Strips both the package directory and its dist-info / egg-info.
+          for pkg in $RUNTIME_PROVIDED_PACKAGES; do
+            # Package directory (e.g. /tmp/$LAYER_NAME/python/boto3)
+            rm -rf "/tmp/$LAYER_NAME/python/$pkg"                 2>/dev/null || true
+            # dist-info / egg-info matches package name and PEP 503 normalized form
+            find "/tmp/$LAYER_NAME/python" -maxdepth 1 -type d \
+              \( -name "$${pkg}-*" -o -name "$${pkg//-/_}-*" \) \
+              -exec rm -rf {} + 2>/dev/null || true
+          done
+
+          # 2. Strip generic Python build artifacts.
+          find "/tmp/$LAYER_NAME/python" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "*.egg-info"  -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "build"       -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type d -name "tests"       -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "__editable__*" -exec rm -rf {} + 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "*.pyc"       -delete 2>/dev/null || true
+          find "/tmp/$LAYER_NAME/python" -type f -name "*.pyo"       -delete 2>/dev/null || true
+
+          # 3. Show post-cleanup size for diagnostics.
+          echo "Post-cleanup size for $LAYER_NAME:"
+          du -sh /tmp/$LAYER_NAME/python || true
+
           # List installed packages
           echo "Installed packages for $LAYER_NAME:"
           ls -la /tmp/$LAYER_NAME/python/
-          
+
           # Check if idp_common is available for idp-common layer
           if [ "$LAYER_NAME" = "idp-common" ]; then
             echo "Checking idp_common availability:"
@@ -386,22 +519,22 @@ phases:
               exit 1
             fi
           fi
-          
+
           # Create zip file
           echo "Creating zip file for $LAYER_NAME..."
           cd /tmp/$LAYER_NAME
           zip -r /tmp/layers/$LAYER_NAME.zip python/
-          
+
           # Check if zip was successful
           if [ $? -ne 0 ]; then
             echo "Failed to create zip file for $LAYER_NAME"
             exit 1
           fi
-          
+
           # Check zip file size
           echo "Zip file size for $LAYER_NAME:"
           ls -lh /tmp/layers/$LAYER_NAME.zip
-          
+
           # Return to original directory - use CODEBUILD_SRC_DIR or fallback
           if [ -d "$CODEBUILD_SRC_DIR" ]; then
             cd $CODEBUILD_SRC_DIR
@@ -464,8 +597,11 @@ resource "aws_lambda_layer_version" "layers" {
 
   compatible_runtimes = ["python3.12"]
 
-  # Force layer recreation when requirements change
-  source_code_hash = md5("${each.value}-${join(",", var.idp_common_extras)}-${local.idp_common_files_hash}")
+  # Force layer recreation when requirements change.
+  # Include the CodeBuild buildspec in the hash so trim/build logic changes
+  # publish a new layer version (otherwise CodeBuild rebuilds the zip in S3
+  # but Terraform never points the layer at the new artifact).
+  source_code_hash = md5("${each.value}-${join(",", var.idp_common_extras)}-${local.idp_common_files_hash}-${md5(aws_codebuild_project.lambda_layers_build.source[0].buildspec)}")
 
   depends_on = [aws_lambda_invocation.trigger_codebuild]
 }

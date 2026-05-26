@@ -21,7 +21,7 @@ with patch.dict(
             "test_set_index",
             os.path.join(
                 os.path.dirname(__file__),
-                "../../../../src/lambda/test_set_resolver/index.py",
+                "../../../../nested/appsync/src/lambda/test_set_resolver/index.py",
             ),
         )
         if spec is None or spec.loader is None:

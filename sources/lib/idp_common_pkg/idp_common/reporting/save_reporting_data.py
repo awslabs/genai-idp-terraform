@@ -527,6 +527,12 @@ class SaveReportingData:
             if result:
                 results.append(result)
 
+        if "rule_validation_results" in data_to_save:
+            logger.info("Processing rule validation results")
+            result = self.save_rule_validation_results(document)
+            if result:
+                results.append(result)
+
         # Add more data types here as needed
         # if 'document_metadata' in data_to_save:
         #     logger.info("Processing document metadata")
@@ -688,40 +694,42 @@ class SaveReportingData:
             ),
             "execution_time": eval_result.get("execution_time", 0.0),
             # Doc split classification metrics (None if not available for backward compatibility)
-            "page_level_accuracy": doc_split_metrics.get("page_level_accuracy")
-            if doc_split_metrics
-            else None,
-            "split_accuracy_without_order": doc_split_metrics.get(
-                "split_accuracy_without_order"
-            )
-            if doc_split_metrics
-            else None,
-            "split_accuracy_with_order": doc_split_metrics.get(
-                "split_accuracy_with_order"
-            )
-            if doc_split_metrics
-            else None,
-            "total_pages": doc_split_metrics.get("total_pages")
-            if doc_split_metrics
-            else None,
-            "total_splits": doc_split_metrics.get("total_splits")
-            if doc_split_metrics
-            else None,
-            "correctly_classified_pages": doc_split_metrics.get(
-                "correctly_classified_pages"
-            )
-            if doc_split_metrics
-            else None,
-            "correctly_split_without_order": doc_split_metrics.get(
-                "correctly_split_without_order"
-            )
-            if doc_split_metrics
-            else None,
-            "correctly_split_with_order": doc_split_metrics.get(
-                "correctly_split_with_order"
-            )
-            if doc_split_metrics
-            else None,
+            "page_level_accuracy": (
+                doc_split_metrics.get("page_level_accuracy")
+                if doc_split_metrics
+                else None
+            ),
+            "split_accuracy_without_order": (
+                doc_split_metrics.get("split_accuracy_without_order")
+                if doc_split_metrics
+                else None
+            ),
+            "split_accuracy_with_order": (
+                doc_split_metrics.get("split_accuracy_with_order")
+                if doc_split_metrics
+                else None
+            ),
+            "total_pages": (
+                doc_split_metrics.get("total_pages") if doc_split_metrics else None
+            ),
+            "total_splits": (
+                doc_split_metrics.get("total_splits") if doc_split_metrics else None
+            ),
+            "correctly_classified_pages": (
+                doc_split_metrics.get("correctly_classified_pages")
+                if doc_split_metrics
+                else None
+            ),
+            "correctly_split_without_order": (
+                doc_split_metrics.get("correctly_split_without_order")
+                if doc_split_metrics
+                else None
+            ),
+            "correctly_split_with_order": (
+                doc_split_metrics.get("correctly_split_with_order")
+                if doc_split_metrics
+                else None
+            ),
         }
 
         # Save document metrics in Parquet format
@@ -855,20 +863,21 @@ class SaveReportingData:
                 )
 
                 config_loaded_count = 0
-                # Convert configuration pricing to lookup dictionary (same format as UI)
+                # Convert configuration pricing to lookup dictionary (convert strings to floats)
                 for service in self.config.pricing:
                     service_name = service.name
                     for unit_info in service.units:
                         unit_name = unit_info.name
                         try:
-                            price = unit_info.price
+                            # Convert price string to float for calculations
+                            price = float(unit_info.price)
                             if service_name not in pricing_map:
                                 pricing_map[service_name] = {}
                             pricing_map[service_name][unit_name] = price
                             config_loaded_count += 1
                         except (ValueError, TypeError) as e:
                             logger.warning(
-                                f"Invalid price value for {service_name}/{unit_name}: {unit_name}, error: {e}. Skipping entry."
+                                f"Invalid price value for {service_name}/{unit_name}: {unit_info.price}, error: {e}. Skipping entry."
                             )
 
                 if config_loaded_count > 0:
@@ -1390,4 +1399,259 @@ class SaveReportingData:
             "statusCode": 200,
             "body": f"Successfully saved {sections_processed} document sections "
             f"with {total_records_saved} total records to reporting bucket",
+        }
+
+    def _create_or_update_rule_validation_glue_table(
+        self, table_name: str, schema: pa.Schema
+    ) -> bool:
+        """
+        Create or update a Glue table for rule validation data.
+
+        Args:
+            table_name: Table name (e.g., 'rule_validation_summary')
+            schema: PyArrow schema for the table
+
+        Returns:
+            True if table was created or updated, False otherwise
+        """
+        if not self.glue_client or not self.database_name:
+            logger.warning(
+                f"Glue client or database name not configured, skipping table creation for {table_name}"
+            )
+            return False
+
+        columns = self._convert_schema_to_glue_columns(schema)
+
+        table_input = {
+            "Name": table_name,
+            "Description": f"Rule validation data: {table_name}",
+            "StorageDescriptor": {
+                "Columns": columns,
+                "Location": f"s3://{self.reporting_bucket}/{table_name}/",
+                "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+                "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                "Compressed": True,
+                "SerdeInfo": {
+                    "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+                },
+            },
+            "PartitionKeys": [{"Name": "date", "Type": "string"}],
+            "TableType": "EXTERNAL_TABLE",
+            "Parameters": {
+                "projection.enabled": "true",
+                "projection.date.type": "date",
+                "projection.date.format": "yyyy-MM-dd",
+                "projection.date.range": "2020-01-01,NOW",
+                "projection.date.interval": "1",
+                "projection.date.interval.unit": "DAYS",
+                "storage.location.template": f"s3://{self.reporting_bucket}/{table_name}/date=${{date}}/",
+            },
+        }
+
+        try:
+            existing_table_response = self.glue_client.get_table(
+                DatabaseName=self.database_name, Name=table_name
+            )
+            existing_columns = existing_table_response["Table"]["StorageDescriptor"][
+                "Columns"
+            ]
+            existing_column_names = {col["Name"] for col in existing_columns}
+            new_column_names = {col["Name"] for col in columns}
+
+            if not new_column_names.issubset(existing_column_names):
+                self.glue_client.update_table(
+                    DatabaseName=self.database_name, TableInput=table_input
+                )
+                logger.info(f"Updated Glue table {table_name}")
+                return True
+            return True
+
+        except Exception as e:
+            if "EntityNotFoundException" in str(e):
+                try:
+                    self.glue_client.create_table(
+                        DatabaseName=self.database_name, TableInput=table_input
+                    )
+                    logger.info(f"Created Glue table {table_name}")
+                    return True
+                except Exception as create_error:
+                    if "AlreadyExistsException" not in str(create_error):
+                        logger.error(
+                            f"Error creating table {table_name}: {str(create_error)}"
+                        )
+                    return False
+            else:
+                logger.error(
+                    f"Unexpected error checking/updating table {table_name}: {str(e)}"
+                )
+            return False
+
+    def save_rule_validation_results(
+        self, document: Document
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Save rule validation results for a document to the reporting bucket.
+
+        Args:
+            document: Document object containing rule validation result URI
+
+        Returns:
+            Dict with status and message, or None if no rule validation results
+        """
+        if (
+            not hasattr(document, "rule_validation_result")
+            or not document.rule_validation_result
+        ):
+            logger.warning(
+                f"No rule_validation_result available for document {document.id}"
+            )
+            return None
+
+        # Get the JSON summary file (not the markdown file)
+        if hasattr(document.rule_validation_result, "summary") and hasattr(
+            document.rule_validation_result.summary, "consolidated_summary_uri"
+        ):
+            # Replace .md with .json to get the JSON summary
+            json_uri = document.rule_validation_result.summary.consolidated_summary_uri.replace(
+                ".md", ".json"
+            )
+        elif document.rule_validation_result.output_uri:
+            # Fallback to output_uri, replace .md with .json if needed
+            json_uri = document.rule_validation_result.output_uri.replace(
+                ".md", ".json"
+            )
+        else:
+            logger.warning(
+                f"No output_uri in rule_validation_result for document {document.id}"
+            )
+            return None
+
+        try:
+            logger.info(f"Loading rule validation results from {json_uri}")
+            rule_validation_data = get_json_content(json_uri)
+
+            if not rule_validation_data:
+                logger.warning(
+                    f"Empty rule validation results for document {document.id}"
+                )
+                return None
+
+        except Exception as e:
+            error_msg = (
+                f"Error loading rule validation results from {json_uri}: {str(e)}"
+            )
+            logger.error(error_msg)
+            return {"statusCode": 500, "body": error_msg}
+
+        # Define schemas
+        document_summary_schema = pa.schema(
+            [
+                ("document_id", pa.string()),
+                ("input_key", pa.string()),
+                ("validation_date", pa.timestamp("ms")),
+                ("overall_status", pa.string()),
+                ("total_rule_types", pa.int32()),
+                ("total_rules", pa.int32()),
+                ("pass_count", pa.int32()),
+                ("fail_count", pa.int32()),
+                ("information_not_found_count", pa.int32()),
+            ]
+        )
+
+        rule_details_schema = pa.schema(
+            [
+                ("document_id", pa.string()),
+                ("rule_type", pa.string()),
+                ("rule", pa.string()),
+                ("recommendation", pa.string()),
+                ("reasoning", pa.string()),
+                ("supporting_pages", pa.string()),
+                ("validation_date", pa.timestamp("ms")),
+            ]
+        )
+
+        # Get timestamp
+        if document.initial_event_time:
+            try:
+                doc_time = datetime.datetime.fromisoformat(
+                    document.initial_event_time.replace("Z", "+00:00")
+                )
+                validation_date = doc_time
+                date_partition = doc_time.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                validation_date = datetime.datetime.now()
+                date_partition = validation_date.strftime("%Y-%m-%d")
+        else:
+            validation_date = datetime.datetime.now()
+            date_partition = validation_date.strftime("%Y-%m-%d")
+
+        document_id = rule_validation_data.get("document_id", document.id)
+        escaped_doc_id = re.sub(r"[/\\]", "_", document_id)
+
+        # Prepare document summary
+        overall_stats = rule_validation_data.get("overall_statistics", {})
+        recommendation_counts = overall_stats.get("recommendation_counts", {})
+
+        document_record = {
+            "document_id": document_id,
+            "input_key": document.input_key,
+            "validation_date": validation_date,
+            "overall_status": rule_validation_data.get("overall_status", "UNKNOWN"),
+            "total_rule_types": rule_validation_data.get("total_rule_types", 0),
+            "total_rules": overall_stats.get("total_rules", 0),
+            "pass_count": recommendation_counts.get("Pass", 0),
+            "fail_count": recommendation_counts.get("Fail", 0),
+            "information_not_found_count": recommendation_counts.get(
+                "Information Not Found", 0
+            ),
+        }
+
+        # Save document summary
+        doc_summary_key = f"rule_validation_summary/date={date_partition}/{escaped_doc_id}_summary.parquet"
+        self._save_records_as_parquet(
+            [document_record], doc_summary_key, document_summary_schema
+        )
+        logger.info(
+            f"Saved document summary to s3://{self.reporting_bucket}/{doc_summary_key}"
+        )
+        self._create_or_update_rule_validation_glue_table(
+            "rule_validation_summary", document_summary_schema
+        )
+
+        # Prepare rule details
+        rule_records = []
+        rule_details = rule_validation_data.get("rule_details", {})
+
+        for rule_type, rule_stats in rule_details.items():
+            rules_list = rule_stats.get("rules", [])
+            for rule_detail in rules_list:
+                rule_records.append(
+                    {
+                        "document_id": document_id,
+                        "rule_type": rule_type,
+                        "rule": rule_detail.get("rule", "Unknown"),
+                        "recommendation": rule_detail.get("recommendation", "Unknown"),
+                        "reasoning": rule_detail.get("reasoning", ""),
+                        "supporting_pages": json.dumps(
+                            rule_detail.get("supporting_pages", [])
+                        ),
+                        "validation_date": validation_date,
+                    }
+                )
+
+        if rule_records:
+            rule_details_key = f"rule_validation_details/date={date_partition}/{escaped_doc_id}_details.parquet"
+            self._save_records_as_parquet(
+                rule_records, rule_details_key, rule_details_schema
+            )
+            logger.info(
+                f"Saved {len(rule_records)} rule details to s3://{self.reporting_bucket}/{rule_details_key}"
+            )
+            self._create_or_update_rule_validation_glue_table(
+                "rule_validation_details", rule_details_schema
+            )
+
+        return {
+            "statusCode": 200,
+            "body": f"Successfully saved rule validation results: 1 summary + {len(rule_records)} rule details",
         }

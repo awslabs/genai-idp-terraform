@@ -65,6 +65,7 @@ class BDABlueprintCreator:
                 standardOutputConfiguration=project.get(
                     "standardOutputConfiguration", None
                 ),
+                overrideConfiguration=project.get("overrideConfiguration", None),
             )
             logger.info(f"Successfully updated data automation project: {projectArn}")
             return _blueprint
@@ -101,6 +102,7 @@ class BDABlueprintCreator:
                 standardOutputConfiguration=project.get(
                     "standardOutputConfiguration", None
                 ),
+                overrideConfiguration=project.get("overrideConfiguration", None),
             )
             logger.info(f"Successfully updated data automation project: {projectArn}")
             return response
@@ -278,6 +280,109 @@ class BDABlueprintCreator:
             logger.error(f"Error creating blueprint version: {e}")
             raise e
 
+    def create_blueprint_version_without_project_update(self, blueprint_arn):
+        """
+        Create a version of a Bedrock Document Analysis blueprint without updating the project.
+        This is used in parallel processing to avoid race conditions.
+
+        Args:
+            blueprint_arn (str): ARN of the blueprint
+
+        Returns:
+            dict: Created blueprint version details or None if error
+        """
+        try:
+            response = self.bedrock_client.create_blueprint_version(
+                blueprintArn=blueprint_arn
+            )
+            blueprint_response = response["blueprint"]
+            if blueprint_response is None:
+                raise ValueError(
+                    "Blueprint version creation failed. No blueprint response received."
+                )
+
+            logger.info(
+                f"Blueprint version created successfully: {blueprint_response['blueprintArn']}"
+            )
+            return {"status": "success", "blueprint": blueprint_response}
+        except ClientError as e:
+            logger.error(f"Error creating BDA blueprint version: {e}")
+            raise e
+        except Exception as e:
+            logger.error(f"Error creating blueprint version: {e}")
+            raise e
+
+    def bulk_update_data_automation_project(self, projectArn: str, blueprints: list):
+        """
+        Update an existing Bedrock Data Automation project with multiple blueprints at once.
+        This method is thread-safe and should be called after all parallel blueprint processing is complete.
+
+        Args:
+            projectArn (str): ARN of the project to update
+            blueprints (list): List of blueprint dicts with blueprintArn and blueprintVersion
+
+        Returns:
+            dict: Updated project details or None if error
+        """
+        try:
+            logger.info(f"Bulk updating project with {len(blueprints)} blueprints")
+
+            # Get current project state
+            project = self.bedrock_client.get_data_automation_project(
+                projectArn=projectArn, projectStage="LIVE"
+            )
+            project = project.get("project", None)
+
+            customOutputConfiguration = project.get("customOutputConfiguration", None)
+            if customOutputConfiguration is None:
+                customOutputConfiguration = {"blueprints": []}
+                project["customOutputConfiguration"] = customOutputConfiguration
+
+            existing_blueprints = customOutputConfiguration.get("blueprints", [])
+
+            # Create a map of existing blueprints by ARN for quick lookup
+            existing_map = {bp.get("blueprintArn"): bp for bp in existing_blueprints}
+
+            # Update or add new blueprints
+            for blueprint in blueprints:
+                blueprint_arn = blueprint.get("blueprintArn")
+                _blueprint = {
+                    "blueprintArn": blueprint_arn,
+                }
+                if blueprint.get("blueprintStage"):
+                    _blueprint["blueprintStage"] = blueprint.get("blueprintStage")
+                if blueprint.get("blueprintVersion"):
+                    _blueprint["blueprintVersion"] = blueprint.get("blueprintVersion")
+
+                # Update existing or add new
+                existing_map[blueprint_arn] = _blueprint
+
+            # Convert map back to list
+            updated_blueprints = list(existing_map.values())
+            customOutputConfiguration["blueprints"] = updated_blueprints
+
+            logger.info(f"Updating data automation project: {projectArn}")
+            self.bedrock_client.update_data_automation_project(
+                projectArn=projectArn,
+                projectDescription=project.get("projectDescription"),
+                projectStage=project.get("projectStage"),
+                customOutputConfiguration=customOutputConfiguration,
+                standardOutputConfiguration=project.get(
+                    "standardOutputConfiguration", None
+                ),
+                overrideConfiguration=project.get("overrideConfiguration", None),
+            )
+            logger.info(
+                f"Successfully bulk updated data automation project: {projectArn}"
+            )
+            return {"status": "success", "blueprints_count": len(updated_blueprints)}
+        except ClientError as e:
+            logger.error(f"Failed to bulk update data automation project: {e}")
+            raise e
+        except Exception as e:
+            logger.error(f"Error bulk updating project: {e}")
+            raise e
+
     def update_blueprint(self, blueprint_arn, stage, schema):
         """
         Update a Bedrock Document Analysis blueprint.
@@ -357,7 +462,6 @@ class BDABlueprintCreator:
                 projectArn=projectArn, projectStage="LIVE"
             )
             project = project.get("project", None)
-            logger.info(f"Updating project: {project}")
             customOutputConfiguration = project.get("customOutputConfiguration", None)
 
             return customOutputConfiguration
@@ -367,11 +471,71 @@ class BDABlueprintCreator:
             raise e
 
     def delete_blueprint(self, blueprint_arn, blueprint_version):
-        try:
-            return self.bedrock_client.delete_blueprint(
-                blueprintArn=blueprint_arn, blueprintVersion=blueprint_version
-            )
+        """
+        Delete a BDA blueprint and all its versions.
 
+        BDA requires all versions to be deleted before the base blueprint can be deleted.
+
+        Args:
+            blueprint_arn: ARN of the blueprint to delete
+            blueprint_version: Current/latest version number of the blueprint
+
+        Returns:
+            bool: True if deletion succeeded, False otherwise
+        """
+        try:
+            # Delete all versions including the current one (range is exclusive of end)
+            for version in range(1, int(blueprint_version) + 1):
+                try:
+                    logger.info(
+                        f"Deleting blueprint version {version}: {blueprint_arn}"
+                    )
+                    self.bedrock_client.delete_blueprint(
+                        blueprintArn=blueprint_arn, blueprintVersion=str(version)
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete version {version} of {blueprint_arn}: {e}"
+                    )
+                    continue
         except Exception as e:
-            logger.error(f"Error delete_blueprint: {e}")
-            raise e
+            logger.error(f"Error iterating versions for {blueprint_arn}: {e}")
+            return False
+
+        # Delete the base blueprint (no version specified)
+        try:
+            logger.info(f"Deleting base blueprint: {blueprint_arn}")
+            self.bedrock_client.delete_blueprint(blueprintArn=blueprint_arn)
+            logger.info(f"Successfully deleted blueprint: {blueprint_arn}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete base blueprint {blueprint_arn}: {e}")
+            return False
+
+    def list_all_blueprints_with_prefix(self, prefix: str):
+        """
+        List all custom blueprints that start with the given prefix.
+        Uses pagination to get all blueprints.
+
+        Args:
+            prefix: Blueprint name prefix to filter by
+
+        Returns:
+            list: List of blueprint dicts with blueprintArn, blueprintName, blueprintVersion
+        """
+        blueprints = []
+        try:
+            paginator = self.bedrock_client.get_paginator("list_blueprints")
+            for page in paginator.paginate(blueprintStage="LIVE"):
+                for blueprint in page.get("blueprints", []):
+                    blueprint_name = blueprint.get("blueprintName", "")
+                    # Skip AWS standard blueprints
+                    if "aws:blueprint" in blueprint.get("blueprintArn", ""):
+                        continue
+                    # Filter by prefix
+                    if blueprint_name.startswith(prefix):
+                        blueprints.append(blueprint)
+            logger.info(f"Found {len(blueprints)} blueprints with prefix '{prefix}'")
+        except Exception as e:
+            logger.error(f"Error listing blueprints with prefix '{prefix}': {e}")
+        return blueprints

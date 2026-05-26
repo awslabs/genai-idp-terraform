@@ -10,6 +10,17 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 data "aws_region" "current" {}
 
+# Deprecation warning: Pattern 3 (SageMaker UDOP) is deprecated as of v0.4.16
+# and will be REMOVED in v0.5.0. Migrate to Pattern 1 (BDA) or Pattern 2 (Bedrock LLM).
+# See docs/migration-guide.md for migration steps.
+check "pattern3_deprecation" {
+  assert {
+    # References var.name so Terraform evaluates at plan time (constant false expressions are rejected)
+    condition     = var.name == "__never_match_this_sentinel_value__"
+    error_message = "DEPRECATED: The SageMaker UDOP processor (Pattern 3) is deprecated as of v0.4.16 and will be removed in v0.5.0. Please migrate to Pattern 1 (BDA) or Pattern 2 (Bedrock LLM). See docs/migration-guide.md for migration steps."
+  }
+}
+
 # Random suffix for unique resource names (used by CodeBuild and ECR resources)
 resource "random_string" "suffix" {
   length  = 8
@@ -106,6 +117,13 @@ module "processor_configuration" {
   # Use the config passed from parent module (from config_library YAML files)
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
+
+  # Required for the seeder Lambda to merge user config with system
+  # defaults. Without these layers attached, the seeder will store the
+  # sparse user YAML and the runtime will crash with "No system_prompt
+  # found in classification configuration".
+  base_layer_arn       = var.base_layer_arn
+  idp_common_layer_arn = var.idp_common_layer_arn
 
   vpc_config          = local.vpc_config
   lambda_tracing_mode = var.lambda_tracing_mode

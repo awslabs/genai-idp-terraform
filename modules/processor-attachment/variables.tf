@@ -134,14 +134,7 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
-variable "evaluation_options" {
-  description = "Optional evaluation configuration"
-  type = object({
-    baseline_bucket_arn = string
-    model_id            = string
-  })
-  default = null
-}
+
 
 variable "s3_prefix" {
   description = "Optional S3 prefix to filter documents for processing"

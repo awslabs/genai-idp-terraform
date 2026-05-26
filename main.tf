@@ -4,7 +4,7 @@
 /**
  * # GenAI IDP Accelerator - Complete Deployment Module
  *
- * This module provides a one-stop solution for deploying an end-to-end GenAI Intelligent Document Processing (IDP) 
+ * This module provides a one-stop solution for deploying an end-to-end GenAI Intelligent Document Processing (IDP)
  * pipeline. It connects to your existing AWS resources (S3 buckets, KMS keys) and creates the processing infrastructure
  * including user identity management, processing environment, API, web UI, and the selected document processor.
  *
@@ -46,6 +46,20 @@ check "web_ui_requires_api" {
   }
 }
 
+# Validation: Agent Analytics requires Reporting
+# When agent_analytics is enabled but reporting is disabled, the configuration in
+# processing_environment_api is silently downgraded to { enabled = false } because
+# Agent Analytics depends on reporting.bucket_arn and reporting.database_name.
+# This check surfaces that dependency to the user instead of ignoring the setting.
+# See https://github.com/awslabs/genai-idp-terraform/issues/84
+#tfsec:ignore:*
+check "agent_analytics_requires_reporting" {
+  assert {
+    condition     = !local.agent_analytics_config.enabled || var.reporting.enabled
+    error_message = "When Agent Analytics is enabled (api.agent_analytics.enabled or the deprecated agent_analytics.enabled), reporting.enabled must also be true. Agent Analytics requires reporting.bucket_arn and reporting.database_name."
+  }
+}
+
 # Validation: Exactly one processor must be configured
 #tfsec:ignore:*
 check "single_processor_required" {
@@ -57,7 +71,20 @@ check "single_processor_required" {
   }
 }
 
-# Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.) 
+# Validation: enable_encryption requires encryption_key_arn
+# Several module-internal IAM policies fall back to a KMS wildcard
+# (Resource = "*") when encryption_key_arn is null. Even though the root
+# variable already requires a non-null KMS key ARN, surface this dependency
+# explicitly so flipping enable_encryption=true with a null key fails fast.
+#tfsec:ignore:*
+check "enable_encryption_requires_key" {
+  assert {
+    condition     = !var.enable_encryption || var.encryption_key_arn != null
+    error_message = "When enable_encryption is true, encryption_key_arn must be set to a non-null KMS key ARN."
+  }
+}
+
+# Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.)
 # have been removed to eliminate "known after apply" warnings. These validations
 # are still enforced by Terraform's resource dependencies and will fail at apply
 # time if the required resources don't exist.
@@ -130,6 +157,56 @@ module "idp_common_layer" {
   lambda_tracing_mode      = var.lambda_tracing_mode
 }
 
+# Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
+# post_processing_decompressor, and evaluation functions (v0.4.11+)
+module "idp_base_layer" {
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-base-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["docs_service"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
+# Reporting layer: reporting extras — used by save_reporting_data function (v0.4.11+)
+module "idp_reporting_layer" {
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-reporting-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["reporting"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
+# Agents layer: agents extras — used by agent companion chat and agent analytics functions (v0.4.11+)
+module "idp_agents_layer" {
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-agents-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["agents"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
+# Evaluation layer: evaluation + docs_service extras — used by the
+# per-processor evaluation Lambda. Includes munkres (Hungarian algorithm
+# comparator) and numpy. Matches CDK upstream which uses
+# IdpPythonLayerVersion.getOrCreate(scope, "evaluation", "docs_service").
+# Only built when at least one processor has evaluation enabled.
+module "idp_evaluation_layer" {
+  count  = var.evaluation.enabled ? 1 : 0
+  source = "./modules/idp-common-layer"
+
+  layer_prefix             = "${local.name_prefix}-evaluation-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["evaluation", "docs_service"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+}
+
 #
 # User Identity (Cognito) - Only create if needed and not provided externally
 #
@@ -150,12 +227,7 @@ module "human_review" {
   source = "./modules/human-review"
 
   name_prefix       = "${local.name_prefix}-human-review"
-  user_pool_id      = var.human_review.user_pool_id
   output_bucket_arn = var.output_bucket_arn
-
-  # Use externally created workforce and workteam
-  private_workforce_arn = var.human_review.private_workforce_arn
-  workteam_name         = var.human_review.workteam_name
 
   # Configuration
   log_level          = var.log_level
@@ -171,9 +243,6 @@ module "human_review" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
-
-  # Stack name for A2I resources
-  stack_name = local.name_prefix
 
   # Pattern-2 HITL configuration
   enable_pattern2_hitl      = var.human_review.enable_pattern2_hitl
@@ -212,11 +281,10 @@ module "processing_environment" {
   # Lambda layer
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
-  # Optional: Evaluation configuration
-  evaluation_config = var.evaluation.enabled ? {
-    baseline_bucket_arn  = var.evaluation.baseline_bucket_arn
-    evaluation_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${var.evaluation.model_id}"
-  } : null
+  # Shared layers (v0.4.11+)
+  base_layer_arn      = module.idp_base_layer.layer_arn
+  reporting_layer_arn = module.idp_reporting_layer.layer_arn
+  agents_layer_arn    = module.idp_agents_layer.layer_arn
 
   # Optional: API configuration for UI updates
   api = local.api_enabled ? {
@@ -337,10 +405,28 @@ module "processing_environment_api" {
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
   enable_mcp                  = try(var.api.enable_mcp, false)
 
+  # User pool for the MCP external app client. The MCP custom resource
+  # needs a Cognito client to authenticate to the AgentCore Gateway.
+  user_pool_id = local.user_pool_id
+
+  # v0.4.16 feature flags
+  enable_hitl                     = try(var.api.enable_hitl, true)
+  enable_capacity_planning        = try(var.api.enable_capacity_planning, false)
+  enable_omni_ai_dataset          = try(var.api.enable_omni_ai_dataset, false)
+  enable_docplit_poly_seq_dataset = try(var.api.enable_docplit_poly_seq_dataset, false)
+  bda_project_arn                 = length(module.bda_processor) > 0 ? module.bda_processor[0].data_automation_project_arn : ""
+
+  # AppSync API visibility — "PRIVATE" makes the GraphQL endpoint
+  # reachable only through the `appsync-api` interface VPC endpoint.
+  # Required for fully isolated VPC deployments where the API must
+  # not have a public DNS resolution path.
+  visibility = try(var.api.visibility, "GLOBAL")
+
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
 
-  # IDP Common Layer ARN for sub-modules
+  # Lambda layers
+  base_layer_arn           = module.processing_environment.base_layer_arn
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
@@ -399,9 +485,8 @@ module "bda_processor" {
   # Optional: Document processing configuration
   config = var.bda_processor.config
 
-  # Human Review configuration
-  sagemaker_a2i_review_portal_url = var.human_review.enabled ? module.human_review[0].workforce_portal_url_parameter : null
-  hitl_workteam_arn               = var.human_review.enabled ? module.human_review[0].workteam_arn : null
+  # HITL on BDA flows through `complete_section_review` (AppSync
+  # mutation handler) in the `processing-environment-api` module.
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -436,7 +521,10 @@ module "bedrock_llm_processor" {
   log_retention_days = module.processing_environment.log_retention_days
 
   encryption_key_arn   = var.encryption_key_arn
+  enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+  base_layer_arn       = module.idp_base_layer.layer_arn
+  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -449,7 +537,12 @@ module "bedrock_llm_processor" {
   evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
   max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
 
-
+  # Evaluation: per-pattern Lambda built from
+  # `sources/patterns/pattern-2/src/evaluation_function/`. The
+  # per-processor Lambda is the only evaluation surface, matching
+  # upstream CDK / CloudFormation.
+  evaluation_enabled             = var.evaluation.enabled
+  evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
 
   # Optional: Document processing configuration
   config = var.bedrock_llm_processor.config
@@ -507,8 +600,8 @@ module "sagemaker_udop_processor" {
   classification_max_workers = var.sagemaker_udop_processor.classification_max_workers
 
   # Optional: Model configurations
-  extraction_model_id    = null # Will use default from module
-  summarization_model_id = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
+  extraction_model_id             = null # Will use default from module
+  summarization_model_id          = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
@@ -537,6 +630,7 @@ module "web_ui" {
   name_prefix  = "${local.name_prefix}-web-ui"
   prefix       = var.prefix
   display_name = var.web_ui.display_name != null ? var.web_ui.display_name : local.name_prefix
+  idp_version  = trimspace(file("${path.module}/IDP_VERSION"))
 
   # User identity
   user_identity = {
@@ -677,7 +771,7 @@ module "processor_attachment" {
   # Processor configuration - dynamically determined based on active processor
   processor = local.processor_config
 
-  # Processing environment resources  
+  # Processing environment resources
   document_queue_arn             = module.processing_environment.document_queue_arn
   queue_sender_function_arn      = module.processing_environment.queue_sender_function_arn
   queue_sender_function_name     = module.processing_environment.queue_sender_function_name
@@ -690,7 +784,7 @@ module "processor_attachment" {
   working_bucket_arn = var.working_bucket_arn
   s3_prefix          = null # No prefix filtering
 
-  # Configuration  
+  # Configuration
   tracking_table_arn      = module.processing_environment.tracking_table_arn
   configuration_table_arn = module.processing_environment.configuration_table_arn
   concurrency_table_arn   = module.processing_environment.concurrency_table_arn
@@ -710,11 +804,12 @@ module "processor_attachment" {
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
   api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
 
-  # Optional: Evaluation configuration
-  evaluation_options = var.evaluation.enabled ? {
-    baseline_bucket_arn = var.evaluation.baseline_bucket_arn
-    model_id            = var.evaluation.model_id
-  } : null
+  # Each processor module (bda-processor, bedrock-llm-processor,
+  # sagemaker-udop-processor) creates its own evaluation Lambda from
+  # the per-pattern source path
+  # (`sources/patterns/pattern-{N}/src/evaluation_function/`) and wires
+  # it as the `EvaluationStep` in its Step Functions state machine —
+  # matching upstream CloudFormation/CDK.
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids

@@ -56,8 +56,8 @@ resource "aws_lambda_function" "save_reporting_data" {
   role        = aws_iam_role.save_reporting_data_role[0].arn
   description = "Lambda function that saves reporting data to the reporting bucket"
 
-  # Use the idp_common layer for reporting functionality
-  layers = [var.idp_common_layer_arn]
+  # save_reporting_data uses reporting extras — use reporting layer (v0.4.11+)
+  layers = [local.effective_reporting_layer_arn]
 
   kms_key_arn = var.encryption_key_arn
 

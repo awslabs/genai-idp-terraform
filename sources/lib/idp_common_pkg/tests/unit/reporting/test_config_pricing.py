@@ -154,8 +154,7 @@ def test_clear_pricing_cache():
 
 @pytest.mark.unit
 def test_pricing_with_invalid_price_values():
-    """Test that invalid price values in configuration cause validation error"""
-    from pydantic import ValidationError
+    """Test that invalid price values are logged and skipped during price loading"""
 
     mock_config = {
         "pricing": [
@@ -169,9 +168,17 @@ def test_pricing_with_invalid_price_values():
         ]
     }
 
-    # With IDPConfig validation, invalid prices should cause ValidationError
-    with pytest.raises(ValidationError) as exc_info:
-        IDPConfig.model_validate(mock_config)
+    # Prices are stored as strings, so validation doesn't fail during model creation
+    # Invalid prices are handled during float conversion in _get_pricing_from_config
+    idp_config = IDPConfig.model_validate(mock_config)
+    reporter = SaveReportingData("test-bucket", config=idp_config)
 
-    # Verify the error is about invalid price format
-    assert "float_parsing" in str(exc_info.value)
+    # The invalid price should be skipped and logged as a warning
+    # The valid price should be loaded successfully
+    invalid_cost = reporter._get_unit_cost("textract/detect_document_text", "pages")
+    valid_cost = reporter._get_unit_cost("textract/detect_document_text", "documents")
+
+    # Invalid price returns 0.0 (logged as warning and skipped)
+    assert invalid_cost == 0.0, f"Expected 0.0 for invalid price, got {invalid_cost}"
+    # Valid price returns the actual value
+    assert valid_cost == 0.002, f"Expected 0.002, got {valid_cost}"

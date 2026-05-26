@@ -36,6 +36,25 @@ variable "encryption_key_arn" {
   default     = null
 }
 
+variable "base_layer_arn" {
+  description = <<-EOT
+    ARN of the IDPCommonBaseLayer Lambda layer. The seeder Lambda needs
+    `idp_common` available so it can call `merge_config_with_defaults`
+    when storing a `Default` configuration. Without this layer attached
+    the seeder still functions, but it skips the merge step and the
+    runtime classification/extraction Lambdas will fail with
+    `No system_prompt found in classification configuration`.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "idp_common_layer_arn" {
+  description = "ARN of the IDP common Lambda layer (full processor-extras flavor). Optional — `base_layer_arn` alone is enough for the seeder."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

@@ -98,19 +98,28 @@ class ExtractionConfig(BaseModel):
 
     model: str = Field(
         default="us.amazon.nova-pro-v1:0",
-        description="Bedrock model ID for extraction",
+        description="Bedrock model ID for extraction. Use 'LambdaHook' to invoke a custom Lambda function instead of Bedrock.",
+    )
+    model_lambda_hook_arn: Optional[str] = Field(
+        default=None,
+        description="Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-.",
     )
     system_prompt: str = Field(
-        default="You are a document assistant. Respond only with JSON. Never make up data, only provide data found in the document being provided.",
-        description="System prompt for extraction",
+        default="",
+        description="System prompt for extraction (populated from system defaults)",
     )
     task_prompt: str = Field(
-        default="", description="Task prompt template for extraction"
+        default="",
+        description="Task prompt template for extraction (populated from system defaults)",
     )
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)
     top_k: float = Field(default=5.0, ge=0.0)
-    max_tokens: int = Field(default=10000, gt=0)
+    max_tokens: int = Field(
+        default=10000,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
     image: ImageConfig = Field(default_factory=ImageConfig)
     agentic: AgenticConfig = Field(default_factory=AgenticConfig)
     custom_prompt_lambda_arn: Optional[str] = Field(
@@ -147,7 +156,11 @@ class ClassificationConfig(BaseModel):
 
     model: str = Field(
         default="us.amazon.nova-pro-v1:0",
-        description="Bedrock model ID for classification",
+        description="Bedrock model ID for classification. Use 'LambdaHook' to invoke a custom Lambda function instead of Bedrock.",
+    )
+    model_lambda_hook_arn: Optional[str] = Field(
+        default=None,
+        description="Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-.",
     )
     system_prompt: str = Field(
         default="", description="System prompt for classification"
@@ -158,15 +171,24 @@ class ClassificationConfig(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)
     top_k: float = Field(default=5.0, ge=0.0)
-    max_tokens: int = Field(default=4096, gt=0)
-    maxPagesForClassification: int = Field(
-        default=0,
-        description="Max pages to use for classification. 0 or negative = ALL pages, positive = limit to N pages",
+    max_tokens: int = Field(
+        default=4096,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
+    maxPagesForClassification: str = Field(
+        default="ALL",
+        description="Max pages to use for classification. 'ALL' = all pages, or a number to limit to N pages",
     )
     classificationMethod: str = Field(default="multimodalPageLevelClassification")
     sectionSplitting: str = Field(
         default="llm_determined",
         description="Section splitting strategy: 'disabled' (entire doc as one section), 'page' (one section per page), 'llm_determined' (use LLM boundary detection)",
+    )
+    contextPagesCount: int = Field(
+        default=0,
+        description="Number of pages before/after target page to include as context for multimodalPageLevelClassification. "
+        "0=no context (default), 1=include 1 page on each side, 2=include 2 pages on each side.",
     )
     image: ImageConfig = Field(default_factory=ImageConfig)
 
@@ -188,13 +210,26 @@ class ClassificationConfig(BaseModel):
 
     @field_validator("maxPagesForClassification", mode="before")
     @classmethod
-    def parse_max_pages(cls, v: Any) -> int:
-        """Parse maxPagesForClassification - can be int or 'ALL' string (converted to 0)"""
+    def parse_max_pages(cls, v: Any) -> str:
+        """Parse maxPagesForClassification - accepts 'ALL' or numeric string/int.
+
+        Converts legacy value of 0 to 'ALL' for backward compatibility.
+        Returns string to match UI schema enum: ['ALL', '1', '2', '3', '5', '10']
+        """
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "ALL"
+        if isinstance(v, (int, float)):
+            # Convert legacy 0 to "ALL" for backward compatibility
+            if v <= 0:
+                return "ALL"
+            return str(int(v))
         if isinstance(v, str):
-            if v.upper() == "ALL":
-                return 0  # 0 means ALL pages
-            return int(v) if v else 0
-        return int(v)
+            v_upper = v.strip().upper()
+            # "ALL" or legacy "0" both mean all pages
+            if v_upper == "ALL" or v_upper == "0":
+                return "ALL"
+            return v.strip()
+        return str(v)
 
     @field_validator("sectionSplitting", mode="before")
     @classmethod
@@ -215,6 +250,17 @@ class ClassificationConfig(BaseModel):
             )
             return "llm_determined"
         return v
+
+    @field_validator("contextPagesCount", mode="before")
+    @classmethod
+    def parse_context_pages_count(cls, v: Any) -> int:
+        """Parse contextPagesCount from string or number, ensuring non-negative value"""
+        if isinstance(v, str):
+            v = int(v) if v else 0
+        result = int(v)
+        if result < 0:
+            return 0
+        return result
 
 
 class GranularAssessmentConfig(BaseModel):
@@ -240,88 +286,50 @@ class AssessmentConfig(BaseModel):
     """Document assessment configuration"""
 
     enabled: bool = Field(default=True, description="Enable assessment")
+    hitl_enabled: bool = Field(
+        default=False,
+        description="Enable Human-in-the-Loop review for low confidence extractions",
+    )
     model: Optional[str] = Field(
-        default=None, description="Bedrock model ID for assessment"
+        default=None,
+        description="Bedrock model ID for assessment. Use 'LambdaHook' to invoke a custom Lambda function instead of Bedrock.",
+    )
+    model_lambda_hook_arn: Optional[str] = Field(
+        default=None,
+        description="Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-.",
     )
     system_prompt: str = Field(
-        default="You are a document analysis assessment expert. Your role is to evaluate the confidence and accuracy of data extraction results by analyzing them against source documents.\n\nProvide accurate confidence scores for each assessment.",
-        description="System prompt for assessment",
+        default="",
+        description="System prompt for assessment (populated from system defaults)",
     )
     task_prompt: str = Field(
-        default="""<background>
-You are an expert document analysis assessment system. Your task is to evaluate the confidence of extraction results for a document of class {DOCUMENT_CLASS} and provide precise spatial localization for each field.
-</background>
-
-<task>
-Analyze the extraction results against the source document and provide confidence assessments AND bounding box coordinates for each extracted attribute. Consider factors such as:
-1. Text clarity and OCR quality in the source regions
-2. Alignment between extracted values and document content
-3. Presence of clear evidence supporting the extraction
-4. Potential ambiguity or uncertainty in the source material
-5. Completeness and accuracy of the extracted information
-6. Precise spatial location of each field in the document
-</task>
-
-<assessment-guidelines>
-For each attribute, provide:
-- A confidence score between 0.0 and 1.0 where:
-   - 1.0 = Very high confidence, clear and unambiguous evidence
-   - 0.8-0.9 = High confidence, strong evidence with minor uncertainty
-   - 0.6-0.7 = Medium confidence, reasonable evidence but some ambiguity
-   - 0.4-0.5 = Low confidence, weak or unclear evidence
-   - 0.0-0.3 = Very low confidence, little to no supporting evidence
-- A clear explanation of the confidence reasoning
-- Precise spatial coordinates where the field appears in the document
-
-Guidelines:
-- Base assessments on actual document content and OCR quality
-- Consider both text-based evidence and visual/layout clues
-- Account for OCR confidence scores when provided
-- Be objective and specific in reasoning
-- For bounding boxes, provide normalized coordinates (0.0 to 1.0) in the format: {"left": x1, "top": y1, "width": w, "height": h}
-</assessment-guidelines>
-
-<attributes-definitions>
-{ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
-</attributes-definitions>
-
-<<CACHEPOINT>>
-
-<document-image>
-{DOCUMENT_IMAGE}
-</document-image>
-
-<ocr-text-confidence-results>
-{OCR_TEXT_CONFIDENCE}
-</ocr-text-confidence-results>
-
-<<CACHEPOINT>>
-
-<extraction-results>
-{EXTRACTION_RESULTS}
-</extraction-results>
-
-Provide your assessment as a JSON object with this exact structure:
-{
-  "attribute_name": {
-    "confidence": 0.0 to 1.0,
-    "confidence_reason": "explanation",
-    "bounding_box": {"left": 0.0, "top": 0.0, "width": 0.0, "height": 0.0}
-  }
-}""",
-        description="Task prompt template for assessment",
+        default="",
+        description="Task prompt template for assessment (populated from system defaults)",
     )
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)
     top_k: float = Field(default=5.0, ge=0.0)
-    max_tokens: int = Field(default=10000, gt=0)
-    default_confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    max_tokens: int = Field(
+        default=10000,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
+    default_confidence_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for assessment and HITL triggering",
+    )
     validation_enabled: bool = Field(default=False, description="Enable validation")
     image: ImageConfig = Field(default_factory=ImageConfig)
     granular: GranularAssessmentConfig = Field(default_factory=GranularAssessmentConfig)
 
     @field_validator(
-        "temperature", "top_p", "top_k", "default_confidence_threshold", mode="before"
+        "temperature",
+        "top_p",
+        "top_k",
+        "default_confidence_threshold",
+        mode="before",
     )
     @classmethod
     def parse_float(cls, v: Any) -> float:
@@ -345,7 +353,11 @@ class SummarizationConfig(BaseModel):
     enabled: bool = Field(default=True, description="Enable summarization")
     model: str = Field(
         default="us.amazon.nova-premier-v1:0",
-        description="Bedrock model ID for summarization",
+        description="Bedrock model ID for summarization. Use 'LambdaHook' to invoke a custom Lambda function instead of Bedrock.",
+    )
+    model_lambda_hook_arn: Optional[str] = Field(
+        default=None,
+        description="Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-.",
     )
     system_prompt: str = Field(
         default="", description="System prompt for summarization"
@@ -356,7 +368,11 @@ class SummarizationConfig(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)
     top_k: float = Field(default=5.0, ge=0.0)
-    max_tokens: int = Field(default=4096, gt=0)
+    max_tokens: int = Field(
+        default=4096,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
 
     @field_validator("temperature", "top_p", "top_k", mode="before")
     @classmethod
@@ -388,7 +404,12 @@ class OCRConfig(BaseModel):
         default="textract", description="OCR backend (textract or bedrock)"
     )
     model_id: Optional[str] = Field(
-        default=None, description="Bedrock model ID for OCR (if backend=bedrock)"
+        default=None,
+        description="Bedrock model ID for OCR (if backend=bedrock). Use 'LambdaHook' to invoke a custom Lambda function instead of Bedrock.",
+    )
+    model_lambda_hook_arn: Optional[str] = Field(
+        default=None,
+        description="Lambda function ARN for custom inference (used when model_id is 'LambdaHook'). Function name must start with GENAIIDP-.",
     )
     system_prompt: Optional[str] = Field(
         default=None, description="System prompt for Bedrock OCR"
@@ -480,15 +501,15 @@ class ErrorAnalyzerConfig(BaseModel):
               3. Collect relevant logs from CloudWatch
               4. Identify any performance issues from X-Ray traces
           5. Provide root cause analysis based on the collected information
-
+          
           TOOL SELECTION STRATEGY:
           - If user provides a filename: Use cloudwatch_document_logs and dynamodb_status for document-specific analysis
           - For system-wide issues: Use cloudwatch_logs and dynamodb_query
           - For execution context: Use lambda_lookup or stepfunction_details
           - For distributed tracing: Use xray_trace or xray_performance_analysis
-
+          
           ALWAYS format your response with exactly these three sections in this order:
-
+          
           ## Root Cause
           Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
 
@@ -497,16 +518,16 @@ class ErrorAnalyzerConfig(BaseModel):
 
           <details>
               <summary><strong>Evidence</strong></summary>
-
+              
               Format evidence with source information. Include relevant data from tool responses:
-
+              
               **For CloudWatch logs:**
                   **Log Group:** [full log_group name]
               **Log Stream:** [full log_stream name]
                   ```
               [ERROR] timestamp message
           ```
-
+          
           **For other sources (DynamoDB, Step Functions, X-Ray):**
               **Source:** [service name and resource]
               ```
@@ -521,21 +542,21 @@ class ErrorAnalyzerConfig(BaseModel):
           - Include relevant data from all tool responses (CloudWatch, DynamoDB, Step Functions, X-Ray)
           - For CloudWatch: Show complete log group and log stream names without truncation
           - Present evidence data in code blocks with appropriate source labels
-
+                
               ANALYSIS GUIDELINES:
           - Use multiple tools for comprehensive analysis when needed
               - Start with document-specific tools for targeted queries
               - Use system-wide tools for pattern analysis
               - Combine DynamoDB status with CloudWatch logs for complete picture
               - Leverage X-Ray for distributed system issues
-
+                  
                   ROOT CAUSE DETERMINATION:
                   1. Document Status: Check dynamodb_status first
               2. Execution Details: Use stepfunction_details for workflow failures
               3. Log Analysis: Use cloudwatch_document_logs or cloudwatch_logs for error details
               4. Distributed tracing: Use xray_performance_analysis for service interaction issues
               5. Context: Use lambda_lookup for execution environment
-
+              
               RECOMMENDATION GUIDELINES:
               For code-related issues or system bugs:
                   - Do not suggest code modifications
@@ -551,10 +572,10 @@ class ErrorAnalyzerConfig(BaseModel):
 
                       TIME RANGE PARSING:
                       - recent: 1 hour
-              - last week: 168 hours
+              - last week: 168 hours  
                       - last day: 24 hours
                       - No time specified: 24 hours (default)
-
+              
               IMPORTANT: Do not include any search quality reflections, search quality scores, or meta-analysis sections in your response. Only provide the three required sections: Root Cause, Recommendations, and Evidence.""",
         description="System prompt for error analyzer",
     )
@@ -592,15 +613,15 @@ class ChatCompanionConfig(BaseModel):
               3. Collect relevant logs from CloudWatch
               4. Identify any performance issues from X-Ray traces
           5. Provide root cause analysis based on the collected information
-
+          
           TOOL SELECTION STRATEGY:
           - If user provides a filename: Use cloudwatch_document_logs and dynamodb_status for document-specific analysis
           - For system-wide issues: Use cloudwatch_logs and dynamodb_query
           - For execution context: Use lambda_lookup or stepfunction_details
           - For distributed tracing: Use xray_trace or xray_performance_analysis
-
+          
           ALWAYS format your response with exactly these three sections in this order:
-
+          
           ## Root Cause
           Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
 
@@ -609,16 +630,16 @@ class ChatCompanionConfig(BaseModel):
 
           <details>
               <summary><strong>Evidence</strong></summary>
-
+              
               Format evidence with source information. Include relevant data from tool responses:
-
+              
               **For CloudWatch logs:**
                   **Log Group:** [full log_group name]
               **Log Stream:** [full log_stream name]
                   ```
               [ERROR] timestamp message
           ```
-
+          
           **For other sources (DynamoDB, Step Functions, X-Ray):**
               **Source:** [service name and resource]
               ```
@@ -633,21 +654,21 @@ class ChatCompanionConfig(BaseModel):
           - Include relevant data from all tool responses (CloudWatch, DynamoDB, Step Functions, X-Ray)
           - For CloudWatch: Show complete log group and log stream names without truncation
           - Present evidence data in code blocks with appropriate source labels
-
+                
               ANALYSIS GUIDELINES:
           - Use multiple tools for comprehensive analysis when needed
               - Start with document-specific tools for targeted queries
               - Use system-wide tools for pattern analysis
               - Combine DynamoDB status with CloudWatch logs for complete picture
               - Leverage X-Ray for distributed system issues
-
+                  
                   ROOT CAUSE DETERMINATION:
                   1. Document Status: Check dynamodb_status first
               2. Execution Details: Use stepfunction_details for workflow failures
               3. Log Analysis: Use cloudwatch_document_logs or cloudwatch_logs for error details
               4. Distributed Tracing: Use xray_performance_analysis for service interaction issues
               5. Context: Use lambda_lookup for execution environment
-
+              
               RECOMMENDATION GUIDELINES:
               For code-related issues or system bugs:
                   - Do not suggest code modifications
@@ -663,10 +684,10 @@ class ChatCompanionConfig(BaseModel):
 
                       TIME RANGE PARSING:
                       - recent: 1 hour
-              - last week: 168 hours
+              - last week: 168 hours  
                       - last day: 24 hours
                       - No time specified: 24 hours (default)
-
+              
               IMPORTANT: Do not include any search quality reflections, search quality scores, or meta-analysis sections in your response. Only provide the three required sections: Root Cause, Recommendations, and Evidence.""",
         description="System prompt for error analyzer",
     )
@@ -687,37 +708,154 @@ class AgentsConfig(BaseModel):
 
 
 class PricingUnit(BaseModel):
-    """Pricing unit configuration"""
+    """Individual pricing unit within a service/API"""
 
-    name: str
-    price: float
+    name: str = Field(
+        description="Unit name (e.g., 'pages', 'inputTokens', 'outputTokens')"
+    )
+    price: str = Field(
+        description="Price as string (supports scientific notation like '6.0E-8')"
+    )
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def parse_price(cls, v: Any) -> str:
+        """Ensure price is stored as string"""
+        if v is None:
+            return "0.0"
+        return str(v)
 
 
-class PricingItem(BaseModel):
-    """Pricing item configuration"""
+class PricingEntry(BaseModel):
+    """Single pricing entry with service/API name and associated units"""
 
-    name: str
-    units: List[PricingUnit]
+    name: str = Field(
+        description="Service/API identifier (e.g., 'textract/detect_document_text', 'bedrock/us.amazon.nova-lite-v1:0')"
+    )
+    units: List[PricingUnit] = Field(
+        description="List of pricing units for this service/API"
+    )
 
 
-class CriteriaValidationConfig(BaseModel):
-    """Criteria validation configuration"""
+class PricingConfig(BaseModel):
+    """
+    Pricing configuration model.
+
+    This represents the Pricing configuration type stored in DynamoDB.
+    It contains a list of pricing entries, each with:
+    - name: Service/API identifier (format: service/api-name)
+    - units: List of pricing units with name and price
+
+    Structure matches the config.yaml pricing format from the original IDP config:
+    pricing:
+      - name: textract/detect_document_text
+        units:
+          - name: pages
+            price: "0.0015"
+      - name: bedrock/us.amazon.nova-lite-v1:0
+        units:
+          - name: inputTokens
+            price: "6.0E-8"
+          - name: outputTokens
+            price: "2.4E-7"
+
+    Uses DefaultPricing/CustomPricing pattern that mirrors Default/Custom for IDPConfig.
+    """
+
+    config_type: Literal["DefaultPricing", "CustomPricing"] = Field(
+        default="DefaultPricing", description="Discriminator for config type"
+    )
+
+    pricing: List[PricingEntry] = Field(
+        default_factory=list,
+        description="List of pricing entries with service/API name and units",
+    )
+
+    model_config = ConfigDict(
+        extra="forbid",  # Strict validation - only 'pricing' field allowed
+        validate_assignment=True,
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to a mutable dictionary."""
+        return self.model_dump(mode="python")
+
+
+class FactExtractionConfig(BaseModel):
+    """Fact extraction configuration for rule validation"""
 
     model: str = Field(
         default="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-        description="Bedrock model ID for criteria validation",
+        description="Bedrock model ID for fact extraction",
     )
-    system_prompt: str = Field(default="", description="System prompt")
-    task_prompt: str = Field(default="", description="Task prompt")
+    system_prompt: str = Field(default="", description="System prompt for fact extraction")
+    task_prompt: str = Field(default="", description="Task prompt for fact extraction")
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     top_p: float = Field(default=0.01, ge=0.0, le=1.0)
     top_k: float = Field(default=20.0, ge=0.0)
-    max_tokens: int = Field(default=4096, gt=0)
+    max_tokens: int = Field(
+        default=4096,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
+
+    @field_validator("temperature", "top_p", "top_k", mode="before")
+    @classmethod
+    def parse_float(cls, v: Any) -> float:
+        if isinstance(v, str):
+            return float(v) if v else 0.0
+        return float(v)
+
+    @field_validator("max_tokens", mode="before")
+    @classmethod
+    def parse_int(cls, v: Any) -> int:
+        if isinstance(v, str):
+            return int(v) if v else 0
+        return int(v)
+
+
+class RuleValidationOrchestratorConfig(BaseModel):
+    """Rule validation summarization configuration"""
+
+    model: str = Field(
+        default="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        description="Bedrock model ID for rule validation summarization",
+    )
+    system_prompt: str = Field(default="", description="System prompt for summarization")
+    task_prompt: str = Field(default="", description="Task prompt for summarization")
+    temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+    top_p: float = Field(default=0.01, ge=0.0, le=1.0)
+    top_k: float = Field(default=20.0, ge=0.0)
+    max_tokens: int = Field(
+        default=4096,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
+
+    @field_validator("temperature", "top_p", "top_k", mode="before")
+    @classmethod
+    def parse_float(cls, v: Any) -> float:
+        if isinstance(v, str):
+            return float(v) if v else 0.0
+        return float(v)
+
+    @field_validator("max_tokens", mode="before")
+    @classmethod
+    def parse_int(cls, v: Any) -> int:
+        if isinstance(v, str):
+            return int(v) if v else 0
+        return int(v)
+
+
+class RuleValidationConfig(BaseModel):
+    """Rule validation configuration"""
+
+    enabled: bool = Field(default=True, description="Enable rule validation")
     semaphore: int = Field(
-        default=3, gt=0, description="Number of concurrent API calls"
+        default=5, gt=0, description="Number of concurrent API calls"
     )
     max_chunk_size: int = Field(
-        default=180000, gt=0, description="Maximum tokens per chunk"
+        default=8000, gt=0, description="Maximum tokens per chunk"
     )
     token_size: int = Field(default=4, gt=0, description="Average characters per token")
     overlap_percentage: int = Field(
@@ -726,17 +864,20 @@ class CriteriaValidationConfig(BaseModel):
     response_prefix: str = Field(
         default="<response>", description="Response prefix marker"
     )
-
-    @field_validator("temperature", "top_p", "top_k", mode="before")
-    @classmethod
-    def parse_float(cls, v: Any) -> float:
-        """Parse float from string or number"""
-        if isinstance(v, str):
-            return float(v) if v else 0.0
-        return float(v)
+    recommendation_options: Optional[str] = Field(
+        default=None, description="Available recommendation options"
+    )
+    extraction_results: Optional[Dict[str, Any]] = Field(
+        default=None, description="Extraction results to include in rule validation prompts"
+    )
+    fact_extraction: Optional[FactExtractionConfig] = Field(
+        default=None, description="Configuration for fact extraction step"
+    )
+    rule_validation_orchestrator: Optional[RuleValidationOrchestratorConfig] = Field(
+        default=None, description="Configuration for rule validation summarization"
+    )
 
     @field_validator(
-        "max_tokens",
         "semaphore",
         "max_chunk_size",
         "token_size",
@@ -755,7 +896,11 @@ class EvaluationLLMMethodConfig(BaseModel):
     """Evaluation LLM method configuration"""
 
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=4096, gt=0)
+    max_tokens: int = Field(
+        default=4096,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
     top_k: float = Field(default=5.0, ge=0.0)
     task_prompt: str = Field(
         default="""
@@ -830,7 +975,11 @@ class DiscoveryModelConfig(BaseModel):
     system_prompt: str = Field(default="", description="System prompt for discovery")
     temperature: float = Field(default=1.0, ge=0.0, le=1.0)
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=10000, gt=0)
+    max_tokens: int = Field(
+        default=10000,
+        gt=0,
+        description="Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details.",
+    )
     user_prompt: str = Field(
         default="", description="User prompt template for discovery"
     )
@@ -863,6 +1012,20 @@ class DiscoveryConfig(BaseModel):
         default_factory=DiscoveryModelConfig,
         description="Configuration for discovery with ground truth",
     )
+
+
+# Known deprecated fields that should be logged when encountered
+# Defined at module level to avoid Pydantic converting to ModelPrivateAttr
+IDP_CONFIG_DEPRECATED_FIELDS = {
+    "criteria_bucket",
+    "criteria_types",
+    "request_bucket",
+    "request_history_prefix",
+    "cost_report_bucket",
+    "output_bucket",
+    "textract_page_tracker",
+    "summary",
+}
 
 
 class SchemaConfig(BaseModel):
@@ -906,8 +1069,8 @@ class IDPConfig(BaseModel):
             temperature = config.extraction.temperature
     """
 
-    config_type: Literal["Default", "Custom"] = Field(
-        default="Default", description="Discriminator for config type"
+    config_type: Literal["Config"] = Field(
+        default="Config", description="Configuration type"
     )
 
     notes: Optional[str] = Field(default=None, description="Configuration notes")
@@ -928,18 +1091,20 @@ class IDPConfig(BaseModel):
         ),
         description="Summarization configuration",
     )
-    criteria_validation: CriteriaValidationConfig = Field(
-        default_factory=CriteriaValidationConfig,
-        description="Criteria validation configuration",
+    rule_validation: RuleValidationConfig = Field(
+        default_factory=lambda: RuleValidationConfig(
+            model="us.anthropic.claude-3-5-sonnet-20240620-v1:0"
+        ),
+        description="Rule validation configuration",
     )
     agents: AgentsConfig = Field(
         default_factory=AgentsConfig, description="Agents configuration"
     )
-    pricing: List[PricingItem] = Field(
-        default_factory=list, description="Pricing configuration"
-    )
     classes: List[Dict[str, Any]] = Field(
         default_factory=list, description="Document class definitions (JSON Schema)"
+    )
+    rule_classes: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Rule class definitions for rule validation (JSON Schema)"
     )
     discovery: DiscoveryConfig = Field(
         default_factory=DiscoveryConfig, description="Discovery configuration"
@@ -948,38 +1113,62 @@ class IDPConfig(BaseModel):
         default_factory=EvaluationConfig, description="Evaluation configuration"
     )
 
-    # Criteria validation specific fields (used in pattern-2/criteria-validation)
-    summary: Optional[Dict[str, Any]] = Field(
-        default=None, description="Summary configuration for criteria validation"
-    )
-    criteria_types: Optional[List[str]] = Field(
-        default=None, description="List of criteria types for validation"
-    )
-    request_bucket: Optional[str] = Field(
-        default=None, description="S3 bucket for user history/request data"
-    )
-    request_history_prefix: Optional[str] = Field(
-        default=None, description="S3 prefix for request history"
-    )
-    criteria_bucket: Optional[str] = Field(
-        default=None, description="S3 bucket for criteria documents"
-    )
-    output_bucket: Optional[str] = Field(
-        default=None, description="S3 bucket for processing output"
-    )
-    textract_page_tracker: Optional[str] = Field(
-        default=None, description="S3 bucket for Textract page tracking"
-    )
-    cost_report_bucket: Optional[str] = Field(
-        default=None, description="S3 bucket for cost reports"
+    # Pricing configuration (optional - loaded separately but can be merged for convenience)
+    pricing: Optional[List[PricingEntry]] = Field(
+        default=None,
+        description="Pricing entries (optional - usually loaded from PricingConfig)",
     )
 
+    # Rule validation specific fields (used in pattern-2/rule-validation)
+    summary: Optional[Dict[str, Any]] = Field(
+        default=None, description="Summary configuration for rule validation"
+    )
+    rule_types: Optional[List[str]] = Field(
+        default=None, description="List of rule types for validation"
+    )
+
+
     model_config = ConfigDict(
-        # Do not allow extra fields - all config should be explicit
-        extra="forbid",
+        # Allow extra fields to be ignored - supports backward compatibility
+        # with older configs that may have deprecated fields
+        extra="ignore",
         # Validate on assignment
         validate_assignment=True,
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def log_deprecated_fields(cls, data: Any) -> Any:
+        """Log warnings for deprecated/unknown fields before they're silently ignored."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        if isinstance(data, dict):
+            # Get all field names defined in the model
+            defined_fields = set(cls.model_fields.keys())
+
+            # Find extra fields in the input data
+            extra_fields = set(data.keys()) - defined_fields
+
+            if extra_fields:
+                # Categorize as deprecated vs unknown
+                deprecated = extra_fields & IDP_CONFIG_DEPRECATED_FIELDS
+                unknown = extra_fields - IDP_CONFIG_DEPRECATED_FIELDS
+
+                if deprecated:
+                    logger.warning(
+                        f"IDPConfig: Ignoring deprecated fields (these are no longer used): "
+                        f"{sorted(deprecated)}"
+                    )
+
+                if unknown:
+                    logger.warning(
+                        f"IDPConfig: Ignoring unknown fields (not defined in model): "
+                        f"{sorted(unknown)}"
+                    )
+
+        return data
 
     def to_dict(self, **extra_fields: Any) -> Dict[str, Any]:
         """
@@ -1008,7 +1197,6 @@ class ConfigMetadata(BaseModel):
 
     created_at: Optional[str] = Field(default=None, description="Creation timestamp")
     updated_at: Optional[str] = Field(default=None, description="Update timestamp")
-    version: Optional[str] = Field(default=None, description="Configuration version")
 
 
 class ConfigurationRecord(BaseModel):
@@ -1022,7 +1210,7 @@ class ConfigurationRecord(BaseModel):
         # Create from IDPConfig
         config = IDPConfig(...)
         record = ConfigurationRecord(
-            configuration_type="Default",
+            configuration_type="config",
             config=config
         )
 
@@ -1034,13 +1222,22 @@ class ConfigurationRecord(BaseModel):
         idp_config = record.config
     """
 
-    configuration_type: str = Field(
-        description="Configuration type (Schema, Default, Custom)"
-    )
-    config: Annotated[Union[SchemaConfig, IDPConfig], Discriminator("config_type")] = (
-        Field(
-            description="The configuration - SchemaConfig for Schema type, IDPConfig for Default/Custom"
-        )
+    configuration_type: str = Field(description="Configuration type (Config, Schema, Pricing)")
+    version: Optional[str] = Field(default=None, description="Version Name")
+    is_active: Optional[bool] = Field(default=None, description="Whether this version is active")
+
+    @field_validator("version", mode="before")
+    @classmethod
+    def validate_version(cls, v: Any) -> Optional[str]:
+        """Ensure version field accepts None or string values"""
+        if v is None:
+            return None
+        return str(v) if v else None
+    description: Optional[str] = Field(default=None, description="Version description")
+    config: Annotated[
+        Union[SchemaConfig, IDPConfig, PricingConfig], Discriminator("config_type")
+    ] = Field(
+        description="The configuration - SchemaConfig for Schema type, PricingConfig for Pricing type, IDPConfig for Default/Custom"
     )
     metadata: Optional[ConfigMetadata] = Field(
         default=None, description="Optional metadata about the configuration"
@@ -1061,6 +1258,7 @@ class ConfigurationRecord(BaseModel):
             - Configuration: str (partition key)
             - All config fields stringified (except booleans)
         """
+
         # Get config as dict using Pydantic's model_dump
         config_dict = self.config.model_dump(mode="python")
 
@@ -1070,8 +1268,24 @@ class ConfigurationRecord(BaseModel):
         # Stringify values (preserve booleans, convert numbers to strings)
         stringified = self._stringify_values(config_dict)
 
+        configuration_type = f"{self.configuration_type}#{self.version}" if self.version else self.configuration_type
+
         # Build DynamoDB item
-        item = {"Configuration": self.configuration_type, **stringified}
+        item = {"Configuration": configuration_type, **stringified}
+
+        # Add ConfigurationRecord level fields
+        if self.is_active is not None:
+            item["IsActive"] = self.is_active
+        if self.description is not None:
+            item["Description"] = self.description
+        
+        # Add metadata fields as separate DynamoDB columns
+        if self.metadata:
+            metadata_dict = self.metadata.model_dump(mode="python", exclude_none=True)
+            if "created_at" in metadata_dict:
+                item["CreatedAt"] = metadata_dict["created_at"]
+            if "updated_at" in metadata_dict:
+                item["UpdatedAt"] = metadata_dict["updated_at"]
 
         return item
 
@@ -1082,9 +1296,8 @@ class ConfigurationRecord(BaseModel):
 
         This method:
         1. Extracts the Configuration key
-        2. Removes DynamoDB metadata
-        3. Auto-migrates legacy format if needed
-        4. Validates into IDPConfig (Pydantic handles type conversions)
+        2. Auto-migrates legacy format if needed
+        3. Validates into IDPConfig (Pydantic handles type conversions)
 
         Args:
             item: Raw DynamoDB item dict
@@ -1099,15 +1312,29 @@ class ConfigurationRecord(BaseModel):
 
         logger = logging.getLogger(__name__)
 
-        # Extract configuration type
-        config_type = item.get("Configuration")
-        if not config_type:
+        # Extract configuration key
+        config_key = item.get("Configuration")
+        if not config_key:
             raise ValueError("DynamoDB item missing 'Configuration' key")
+        
+        # Parse configuration type and version from single key
+        if "#" in config_key:
+            # Versioned format: Config#v0, Config#v1, etc.
+            config_type, version = config_key.split("#", 1)
+        else:
+            # Non-versioned format: Schema, Pricing, Default, Custom
+            config_type = config_key
+            version = ""
 
-        # Remove DynamoDB metadata keys
-        config_data = {k: v for k, v in item.items() if k != "Configuration"}
+        # Remove DynamoDB keys and metadata
+        config_data = {k: v for k, v in item.items() 
+                      if k not in ("Configuration", "IsActive", "CreatedAt", "UpdatedAt", "Description")}
 
-        # Add config_type discriminator for Pydantic
+        # Set config_type discriminator directly from DynamoDB Configuration key
+        # DynamoDB keys match Pydantic discriminators exactly:
+        # - "Schema" -> SchemaConfig
+        # - "Config#version" -> IDPConfig
+        # - "DefaultPricing", "CustomPricing" -> PricingConfig
         config_data["config_type"] = config_type
 
         # Auto-migrate legacy format if needed
@@ -1122,12 +1349,42 @@ class ConfigurationRecord(BaseModel):
                     config_data["classes"]
                 )
 
+        # Auto-migrate legacy format for rule_classes if needed
+        if config_data.get("rule_classes"):
+            from .migration import is_legacy_format, migrate_legacy_to_schema
+
+            if is_legacy_format(config_data["rule_classes"]):
+                logger.info(
+                    f"Migrating {config_type} rule_classes to JSON Schema format"
+                )
+                config_data["rule_classes"] = migrate_legacy_to_schema(
+                    config_data["rule_classes"]
+                )
+
+        # Remove legacy pricing field (now stored separately as DefaultPricing/CustomPricing)
+        # This handles migration for existing stacks with old embedded pricing
+        if config_data.get("pricing") is not None and config_type in ("Config", "Default", "Custom"):
+            logger.info(
+                f"Removing legacy pricing field from {config_type} configuration"
+            )
+            config_data.pop("pricing", None)
+
         # Parse into appropriate config type - Pydantic discriminator handles this automatically
         config = cls.model_validate(
             {"configuration_type": config_type, "config": config_data}
         ).config
 
-        return cls(configuration_type=config_type, config=config)
+        return cls(
+            configuration_type=config_type,
+            version=version,
+            is_active=item.get("IsActive"),
+            description=item.get("Description"),
+            config=config,
+            metadata=ConfigMetadata(
+                created_at=item.get("CreatedAt"),
+                updated_at=item.get("UpdatedAt")
+            )
+        )
 
     @staticmethod
     def _stringify_values(obj: Any) -> Any:

@@ -50,13 +50,19 @@ No modules.
 | [null_resource.create_module_build_dir](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
 | [archive_file.save_reporting_data_code](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the DynamoDB table for configuration settings | `string` | n/a | yes |
+| <a name="input_configuration_table_name"></a> [configuration\_table\_name](#input\_configuration\_table\_name) | Name of the DynamoDB table for configuration settings | `string` | n/a | yes |
 | <a name="input_crawler_schedule"></a> [crawler\_schedule](#input\_crawler\_schedule) | Schedule for the Glue crawler. Valid values: manual, 15min, hourly, daily | `string` | `"daily"` | no |
+| <a name="input_crawler_table_level"></a> [crawler\_table\_level](#input\_crawler\_table\_level) | Table level configuration for the Glue crawler (1-3). Higher levels allow more granular partitioning but may cause warnings if data doesn't support the level. | `number` | `2` | no |
+| <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in for\_each/count. | `bool` | `false` | no |
 | <a name="input_enable_partition_projection"></a> [enable\_partition\_projection](#input\_enable\_partition\_projection) | Enable partition projection for Glue tables | `bool` | `true` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encryption | `string` | `null` | no |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP common Lambda layer | `string` | n/a | yes |

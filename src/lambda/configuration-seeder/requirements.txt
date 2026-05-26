@@ -1,0 +1,3 @@
+# `idp_common` and its transitive deps come in via the IDPCommonBaseLayer
+# (attached by the processor-configuration Terraform module), so this file
+# stays empty for the inline zip. PyYAML lives in idp_common's `core` extras.

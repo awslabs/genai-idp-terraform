@@ -5,8 +5,8 @@
  * # Bedrock LLM Processor Example with Web UI and VPC
  *
  * This example demonstrates how to use the Bedrock LLM processor from the GenAI IDP Accelerator
- * with the integrated Web UI deployed in a VPC. It creates all the necessary resources including 
- * VPC, S3 buckets, KMS key, and uses the top-level module to deploy the complete solution with 
+ * with the integrated Web UI deployed in a VPC. It creates all the necessary resources including
+ * VPC, S3 buckets, KMS key, and uses the top-level module to deploy the complete solution with
  * the Bedrock LLM processor running in private subnets.
  */
 
@@ -410,6 +410,25 @@ resource "aws_vpc_endpoint" "textract" {
   })
 }
 
+# AppSync interface endpoint — required when api.visibility = "PRIVATE".
+# Without this endpoint, Lambdas in the VPC cannot resolve or reach the
+# private GraphQL API. AppSync only supports PrivateLink for PRIVATE
+# APIs; GLOBAL APIs continue to be reached over the public internet.
+resource "aws_vpc_endpoint" "appsync_api" {
+  count = local.create_vpc_resources ? 1 : 0
+
+  vpc_id              = local.vpc_id
+  service_name        = "com.amazonaws.${data.aws_region.current.id}.appsync-api"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.vpc_subnet_ids
+  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
+  private_dns_enabled = true
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-appsync-api-endpoint"
+  })
+}
+
 # Create KMS key for encryption
 resource "aws_kms_key" "encryption_key" {
   description             = "KMS key for IDP Processing Environment"
@@ -518,29 +537,61 @@ locals {
   # New api variable takes precedence when both are provided
   api_config = var.api.enabled || var.discovery != null || var.chat_with_document != null || var.process_changes != null ? {
     enabled = var.api.enabled || var.discovery != null || var.chat_with_document != null || var.process_changes != null
-    
+
     agent_analytics = var.api.agent_analytics
-    
+
     discovery = var.api.enabled ? var.api.discovery : (
       var.discovery != null ? var.discovery : { enabled = false }
     )
-    
+
     chat_with_document = var.api.enabled ? var.api.chat_with_document : (
       var.chat_with_document != null ? var.chat_with_document : { enabled = false }
     )
-    
+
     process_changes = var.api.enabled ? var.api.process_changes : (
       var.process_changes != null ? var.process_changes : { enabled = false }
     )
-    
+
     knowledge_base = var.api.knowledge_base
-  } : {
-    enabled = false
-    agent_analytics = { enabled = false }
-    discovery = { enabled = false }
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = var.api.enable_agent_companion_chat
+    enable_test_studio          = var.api.enable_test_studio
+    enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_error_analyzer       = var.api.enable_error_analyzer
+    enable_mcp                  = var.api.enable_mcp
+
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
+
+    # AppSync API visibility (GLOBAL or PRIVATE)
+    visibility = var.api.visibility
+    } : {
+    enabled            = false
+    agent_analytics    = { enabled = false }
+    discovery          = { enabled = false }
     chat_with_document = { enabled = false }
-    process_changes = { enabled = false }
-    knowledge_base = { enabled = false }
+    process_changes    = { enabled = false }
+    knowledge_base     = { enabled = false }
+
+    # v0.4.8 feature flags
+    enable_agent_companion_chat = false
+    enable_test_studio          = false
+    enable_fcc_dataset          = false
+    enable_error_analyzer       = false
+    enable_mcp                  = false
+
+    # v0.4.16 feature flags
+    enable_hitl                     = true
+    enable_capacity_planning        = false
+    enable_omni_ai_dataset          = false
+    enable_docplit_poly_seq_dataset = false
+
+    # AppSync API visibility (GLOBAL or PRIVATE)
+    visibility = "GLOBAL"
   }
 }
 
@@ -560,7 +611,7 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config            = local.config
+    config = local.config
   }
 
   # Resource ARNs
@@ -593,7 +644,7 @@ module "genai_idp_accelerator" {
   # Chat with Document configuration (backward compatibility)
   chat_with_document = local.api_config.chat_with_document
 
-  # Process Changes configuration (backward compatibility)  
+  # Process Changes configuration (backward compatibility)
   process_changes = local.api_config.process_changes
 
   # Feature flags

@@ -23,16 +23,20 @@ class ClassesDiscovery:
         input_bucket: str,
         input_prefix: str,
         region: Optional[str] = None,
+        version: Optional[str] = None,
     ):
         self.input_bucket = input_bucket
         self.input_prefix = input_prefix
         self.region = region or os.environ.get("AWS_REGION")
-
+        self.version = version
         try:
             self.config_reader = ConfigurationReader()
             self.config_manager = ConfigurationManager()
             self.config: IDPConfig = cast(
-                IDPConfig, self.config_reader.get_merged_configuration(as_model=True)
+                IDPConfig,
+                self.config_reader.get_merged_configuration(
+                    as_model=True, version=self.version
+                ),
             )
         except Exception as e:
             logger.error(f"Failed to load configuration from DynamoDB: {e}")
@@ -94,37 +98,9 @@ class ClassesDiscovery:
             # No need to transform - it's already in the right format
             current_class = model_response
 
-            custom_item_raw = self.config_manager.get_configuration("Custom")
-            custom_item = cast(Optional[IDPConfig], custom_item_raw)
-            classes = []
-            if custom_item and custom_item.classes:
-                classes = list(custom_item.classes)
-                # Check for existing class by $id or x-aws-idp-document-type
-                class_id = current_class.get("$id") or current_class.get(
-                    "x-aws-idp-document-type"
-                )
-                for i, class_obj in enumerate(classes):
-                    existing_id = class_obj.get("$id") or class_obj.get(
-                        "x-aws-idp-document-type"
-                    )
-                    if existing_id == class_id:
-                        classes[i] = current_class  # Replace existing
-                        break
-                else:
-                    classes.append(current_class)  # Add new if not found
-            else:
-                classes.append(current_class)
-
-            # Update configuration with new classes
-            # Load existing custom config to preserve all other fields
-            if not custom_item:
-                # If no custom config exists, get default as base
-                default_raw = self.config_manager.get_configuration("Default")
-                custom_item = cast(Optional[IDPConfig], default_raw) or IDPConfig()
-
-            # Update only the classes field, preserving all other config
-            custom_item.classes = classes
-            self.config_manager.save_configuration("Custom", custom_item)
+            # Merge the new class with existing Default + Custom classes
+            # and save to Custom config
+            self._merge_and_save_class(current_class)
 
             return {"status": "SUCCESS"}
 
@@ -175,37 +151,9 @@ class ClassesDiscovery:
             # No need to transform - it's already in the right format
             current_class = model_response
 
-            custom_item_raw = self.config_manager.get_configuration("Custom")
-            custom_item = cast(Optional[IDPConfig], custom_item_raw)
-            classes = []
-            if custom_item and custom_item.classes:
-                classes = list(custom_item.classes)
-                # Check for existing class by $id or x-aws-idp-document-type
-                class_id = current_class.get("$id") or current_class.get(
-                    "x-aws-idp-document-type"
-                )
-                for i, class_obj in enumerate(classes):
-                    existing_id = class_obj.get("$id") or class_obj.get(
-                        "x-aws-idp-document-type"
-                    )
-                    if existing_id == class_id:
-                        classes[i] = current_class  # Replace existing
-                        break
-                else:
-                    classes.append(current_class)  # Add new if not found
-            else:
-                classes.append(current_class)
-
-            # Update configuration with new classes
-            # Load existing custom config to preserve all other fields
-            if not custom_item:
-                # If no custom config exists, get default as base
-                default_raw = self.config_manager.get_configuration("Default")
-                custom_item = cast(Optional[IDPConfig], default_raw) or IDPConfig()
-
-            # Update only the classes field, preserving all other config
-            custom_item.classes = classes
-            self.config_manager.save_configuration("Custom", custom_item)
+            # Merge the new class with existing Default + Custom classes
+            # and save to Custom config
+            self._merge_and_save_class(current_class)
 
             return {"status": "SUCCESS"}
 
@@ -215,6 +163,88 @@ class ClassesDiscovery:
                 exc_info=True,
             )
             raise Exception(f"Failed to process document {input_prefix}: {str(e)}")
+
+    def _merge_and_save_class(self, new_class: Dict[str, Any]) -> None:
+        """
+        Merge a new discovered class with existing Default + Custom classes and save to Custom.
+
+        This method ensures that discovered classes are ADDITIVE to existing classes:
+        1. Read Default classes (base classes from deployment)
+        2. Read existing Custom classes (previous user customizations)
+        3. Build a merged list starting from Default, overriding with Custom
+        4. Add/update the new discovered class
+        5. Save the complete merged list to Custom
+
+        This is necessary because the Default+Custom merge uses array replacement,
+        not array concatenation. By saving the complete class list to Custom,
+        we ensure no classes are lost during the merge.
+
+        Args:
+            new_class: The newly discovered class schema to add/update
+        """
+        # Get class identifier for the new class
+        new_class_id = new_class.get("$id") or new_class.get("x-aws-idp-document-type")
+        logger.info(f"Merging discovered class: {new_class_id}")
+
+        # Step 1: Read Default classes (base classes from deployment)
+        default_config = self.config_manager.get_configuration("Config", "default")
+        default_classes: list = []
+        if (
+            default_config
+            and isinstance(default_config, IDPConfig)
+            and default_config.classes
+        ):
+            # Convert to list of dicts for easier manipulation
+            default_classes = [
+                cls
+                if isinstance(cls, dict)
+                else cls.model_dump()
+                if hasattr(cls, "model_dump")
+                else dict(cls)
+                for cls in default_config.classes
+            ]
+        logger.info(f"Found {len(default_classes)} classes in Default config")
+
+        # Step 2: Read existing Custom config (raw, no Pydantic defaults)
+        existing_custom = (
+            self.config_manager.get_raw_configuration("Config", version=self.version)
+            or {}
+        )
+        custom_classes = list(existing_custom.get("classes", []))
+        logger.info(f"Found {len(custom_classes)} classes in Custom config")
+
+        # Step 3: Build merged class list - start with Default, override with Custom
+        # Use a dict keyed by class ID for efficient deduplication
+        merged_classes_by_id: Dict[str, Dict[str, Any]] = {}
+
+        # Add Default classes first
+        for cls in default_classes:
+            cls_id = cls.get("$id") or cls.get("x-aws-idp-document-type")
+            if cls_id:
+                merged_classes_by_id[cls_id] = cls
+
+        # Override/add Custom classes
+        for cls in custom_classes:
+            cls_id = cls.get("$id") or cls.get("x-aws-idp-document-type")
+            if cls_id:
+                merged_classes_by_id[cls_id] = cls
+
+        # Step 4: Add/update the new discovered class
+        if new_class_id:
+            merged_classes_by_id[new_class_id] = new_class
+
+        # Convert back to list
+        merged_classes = list(merged_classes_by_id.values())
+        logger.info(f"Merged class list has {len(merged_classes)} classes")
+
+        # Step 5: Save to Custom config
+        # The merged list will replace Default.classes during runtime merge,
+        # ensuring all classes (Default + Custom + new) are preserved
+        existing_custom["classes"] = merged_classes
+        self.config_manager.save_raw_configuration(
+            "Config", existing_custom, version=self.version
+        )
+        logger.info(f"Saved {len(merged_classes)} classes to Custom config")
 
     def _validate_json_schema(self, schema: Dict[str, Any]) -> tuple[bool, str]:
         """
@@ -299,6 +329,9 @@ class ClassesDiscovery:
             self.without_gt_config.user_prompt or self._prompt_classes_discovery()
         )
         sample_format = self._sample_output_format()
+        logger.info(f"config prompt is : {self.without_gt_config.user_prompt}")
+        logger.info(f"prompt is : {user_prompt}")
+        logger.info(f"sample format is : {sample_format}")
 
         validation_feedback = ""
         for attempt in range(max_retries):
@@ -309,7 +342,6 @@ class ClassesDiscovery:
                     retry_prompt = f"\n\nPREVIOUS ATTEMPT FAILED: {validation_feedback}\nPlease fix the issue and generate a valid JSON Schema.\n\n"
 
                 full_prompt = f"{retry_prompt}{user_prompt}\nFormat the extracted data using the below JSON format:\n{sample_format}"
-
                 # Create content for the user message
                 content = self._create_content_list(
                     prompt=full_prompt,
@@ -522,6 +554,11 @@ class ClassesDiscovery:
                         - For repeating/table data, use type: "array" with "items" containing object schema
                         - Each field should have appropriate "type" based on ground truth values
                         - Add "description" for each field with extraction instructions and location hints
+                        
+                        Nesting Groups:
+                        - Do not nest the groups i.e. groups within groups.
+                        - All groups should be directly associated under main "properties".
+                        
 
                         Match field names, data types, and structure from the ground truth reference.
                         Image may contain multiple pages, process all pages.
@@ -547,12 +584,16 @@ class ClassesDiscovery:
                         - Add "description" with a brief summary of the document (less than 50 words)
 
                         For the "properties" object:
-                        - Group related fields as nested objects (type: "object") with their own "properties"
+                        - Group related fields as objects (type: "object") with their own "properties"
                         - For repeating/table data, use type: "array" with "items" containing object schema
                         - Each field should have "type" (string, number, boolean, etc.) and "description"
-                        - Field names should be less than 60 characters, use camelCase or snake_case
+                        - Field names should be less than 30 characters, use camelCase or snake_case, name should not start with number and name should not have special characters.
                         - Field descriptions should include location hints (box number, line number, section)
 
+                        Nesting Groups:
+                        - Do not nest the groups i.e. groups within groups.
+                        - All groups should be directly associated under main "properties".
+                        
                         Do not extract the actual values, only the schema structure.
                         Return the extracted schema in the exact JSON Schema format below:
                         {sample_output_format}

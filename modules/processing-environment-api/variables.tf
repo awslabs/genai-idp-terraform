@@ -77,7 +77,7 @@ variable "domain_name" {
 }
 
 variable "authorization_config" {
-  description = "Authorization configuration for the GraphQL API"
+  description = "Authorization configuration for the GraphQL API. Must be set explicitly; the module no longer defaults to API_KEY because that exposes every mutation to anyone with the key."
   type = object({
     default_authorization = object({
       authorization_type = string
@@ -121,6 +121,11 @@ variable "authorization_config" {
     })))
   })
   default = null
+
+  validation {
+    condition     = var.authorization_config == null || try(var.authorization_config.default_authorization.authorization_type, null) != "API_KEY"
+    error_message = "authorization_config.default_authorization.authorization_type must not be API_KEY. API_KEY exposes every AppSync mutation to anyone with the key. Use AMAZON_COGNITO_USER_POOLS, AWS_IAM, OPENID_CONNECT, or AWS_LAMBDA."
+  }
 }
 
 # S3 Bucket Variables - New ARN-based approach
@@ -335,6 +340,12 @@ variable "idp_common_layer_arn" {
   default     = null
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the base Lambda layer containing shared Python dependencies (from processing-environment module)"
+  type        = string
+  default     = null
+}
+
 variable "enable_encryption" {
   description = "Enable encryption for resources"
   type        = bool
@@ -353,6 +364,12 @@ variable "lambda_layers_bucket_arn" {
 
 variable "enable_agent_companion_chat" {
   description = "Enable Agent Companion Chat feature (multi-agent AI chat sessions)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_hitl" {
+  description = "Enable built-in HITL review via complete_section_review Lambda (v0.4.9+). Replaces SageMaker A2I."
   type        = bool
   default     = true
 }
@@ -381,6 +398,30 @@ variable "enable_mcp" {
   default     = false
 }
 
+variable "bda_project_arn" {
+  description = "ARN of the BDA Data Automation Project (used by sync_bda_idp resolver). Leave empty if not using BDA processor."
+  type        = string
+  default     = ""
+}
+
+variable "enable_capacity_planning" {
+  description = "Enable Capacity Planning feature (v0.4.13+). Deploys calculate_capacity and calculate_capacity_resolver Lambdas."
+  type        = bool
+  default     = false
+}
+
+variable "enable_omni_ai_dataset" {
+  description = "Enable OmniAI OCR Benchmark dataset deployer (v0.4.15+). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
+variable "enable_docplit_poly_seq_dataset" {
+  description = "Enable DocSplit RVL-CDIP-NMP Packet dataset deployer (v0.4.15+). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
 variable "post_processing_decompressor_arn" {
   description = "ARN of the post_processing_decompressor Lambda function (from processing-environment module)"
   type        = string
@@ -403,4 +444,10 @@ variable "user_pool_id" {
   description = "Cognito User Pool ID (used by MCP Integration for OAuth 2.0 app client)"
   type        = string
   default     = null
+}
+
+variable "mcp_callback_urls" {
+  description = "Optional list of OAuth 2.0 callback URLs for the MCP external app client. Required by Cognito when the `code` flow is enabled, but unused by AgentCore Gateway (which uses JWT validation). When empty, falls back to a Cognito-hosted UI placeholder. Wire this to the CloudFront distribution URL from the caller for cleanest behaviour."
+  type        = list(string)
+  default     = []
 }

@@ -85,6 +85,13 @@ module "processor_configuration" {
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
 
+  # Required for the seeder Lambda to merge user config with system
+  # defaults. Without these layers attached, the seeder will store the
+  # sparse user YAML and the runtime will crash with "No system_prompt
+  # found in classification configuration".
+  base_layer_arn       = var.base_layer_arn
+  idp_common_layer_arn = var.idp_common_layer_arn
+
   vpc_config          = local.vpc_config
   lambda_tracing_mode = var.lambda_tracing_mode
   tags                = var.tags
@@ -95,23 +102,24 @@ locals {
   # Use the config passed from parent module (from sources/config_library/)
   base_config = var.config
 
-  # Apply model overrides if provided, similar to CDK transforms
+  # Apply model overrides if provided, similar to CDK transforms.
+  # The base config can be sparse (e.g., samples that inherit everything from
+  # system defaults at runtime), so use try() to tolerate missing top-level
+  # sections rather than failing at plan time.
   config_with_overrides = merge(
     local.base_config,
-    # Only override classification model if provided
-    var.classification_model_id != null ? {
+    # Override classification model: per-step var → model_id default
+    {
       classification = merge(
-        local.base_config.classification,
-        {
-          model = var.classification_model_id
-        }
+        try(local.base_config.classification, {}),
+        { model = coalesce(var.classification_model_id, var.model_id) }
       )
-    } : {},
+    },
     # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
     {
       extraction = merge(
-        local.base_config.extraction,
-        var.extraction_model_id != null ? { model = var.extraction_model_id } : {},
+        try(local.base_config.extraction, {}),
+        { model = coalesce(var.extraction_model_id, var.model_id) },
         var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
         var.enable_agentic_extraction ? {
           agentic = merge(
@@ -125,22 +133,20 @@ locals {
         } : {}
       )
     },
-    # Only override summarization model if provided
-    var.summarization_model_id != null ? {
+    # Override summarization model: per-step var → model_id default
+    {
       summarization = merge(
-        local.base_config.summarization,
-        {
-          model = var.summarization_model_id
-        }
+        try(local.base_config.summarization, {}),
+        { model = coalesce(var.summarization_model_id, var.model_id) }
       )
-    } : {},
-    # Only override evaluation model if provided
+    },
+    # Only override evaluation model if provided (evaluation uses a different config path)
     var.evaluation_model_id != null ? {
       evaluation = merge(
-        local.base_config.evaluation,
+        try(local.base_config.evaluation, {}),
         {
           llm_method = merge(
-            local.base_config.evaluation.llm_method,
+            try(local.base_config.evaluation.llm_method, {}),
             {
               model = var.evaluation_model_id
             }
@@ -151,7 +157,7 @@ locals {
     # Only override assessment model if provided
     var.assessment_model_id != null ? {
       assessment = merge(
-        local.base_config.assessment,
+        try(local.base_config.assessment, {}),
         {
           model = var.assessment_model_id
         }
@@ -169,9 +175,9 @@ locals {
 # Local values for state machine definition
 locals {
   # Determine which optional features are active
-  hitl_enabled       = var.enable_hitl
-  summ_enabled       = var.is_summarization_enabled
-  eval_enabled       = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null
+  hitl_enabled = var.enable_hitl
+  summ_enabled = var.is_summarization_enabled
+  eval_enabled = var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null
 
   # Retry policy shared across most task states
   standard_retry = [
@@ -194,7 +200,7 @@ locals {
     }
   ]
 
-  # The state after ProcessResultsStep / HITLStatusUpdate depends on whether summarization is enabled
+  # The state after ProcessResultsStep / MarkHITLPending depends on whether summarization is enabled
   post_hitl_next = local.summ_enabled ? "SummarizationStep" : (local.eval_enabled ? "EvaluationStep" : "WorkflowComplete")
 
   # The state after SummarizationStep depends on whether evaluation is enabled
@@ -203,32 +209,18 @@ locals {
   # CheckHITLRequired default (when HITL not triggered) — same logic as post_hitl_next
   check_hitl_default = local.post_hitl_next
 
-  # Build the optional states map entries
+  # HITL state map.
+  # v0.4.16 design: HITL is async — workflow marks the document as
+  # `HITL_IN_PROGRESS` via `process_results` and continues without
+  # waiting. Reviewers complete sections through AppSync mutations
+  # (`claimReview`, `releaseReview`, `completeSectionReview`,
+  # `skipAllSectionsReview`). Matches upstream CloudFormation and CDK
+  # exactly — no Lambda task states for HITL.
   hitl_states = local.hitl_enabled ? {
-    HITLReview = {
-      Type     = "Task"
-      Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
-      Parameters = {
-        FunctionName    = aws_lambda_function.hitl_wait[0].arn
-        "Payload" = {
-          "taskToken.$" = "$.Task.Token"
-          "Payload.$"   = "$"
-        }
-      }
-      ResultPath = "$.HITLWaitResult"
-      Retry      = local.standard_retry
-      Next       = "HITLStatusUpdate"
-    }
-    HITLStatusUpdate = {
-      Type     = "Task"
-      Resource = aws_lambda_function.hitl_status_update[0].arn
-      Parameters = {
-        "Result.$"         = "$.Result"
-        "HITLWaitResult.$" = "$.HITLWaitResult"
-      }
-      ResultPath = "$.HITLStatusResult"
-      Retry      = local.standard_retry
-      Next       = local.post_hitl_next
+    MarkHITLPending = {
+      Type    = "Pass"
+      Comment = "Document marked for async HITL review, workflow continues without waiting"
+      Next    = local.post_hitl_next
     }
   } : {}
 
@@ -365,9 +357,9 @@ locals {
           {
             Variable      = "$.Result.hitl_triggered"
             BooleanEquals = true
-            Next          = "HITLReview"
+            Next          = "MarkHITLPending"
           }
-        ] : [
+          ] : [
           {
             Variable      = "$.Result.hitl_triggered"
             BooleanEquals = false

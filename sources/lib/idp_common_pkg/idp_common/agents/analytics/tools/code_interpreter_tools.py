@@ -7,10 +7,13 @@ Code interpreter tools for analytics agents.
 
 import json
 import logging
+import time
 
 import boto3
 from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter
 from strands import tool
+
+from ..analytics_logger import analytics_logger
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,7 @@ class CodeInterpreterTools:
         response = client.invoke(tool_name, arguments)
         for event in response["stream"]:
             return json.loads(json.dumps(event["result"], indent=2))
+        return {}
 
     def cleanup(self):
         """Clean up the code interpreter session."""
@@ -64,25 +68,26 @@ class CodeInterpreterTools:
         Returns:
             Success message indicating the file was written to the sandbox
         """
-        filename = "query_results.csv"
-        logger.info(
-            f"Downloading CSV from S3 and writing to code interpreter: {filename}"
-        )
-
-        # Parse S3 URI
-        if not s3_uri.startswith("s3://"):
-            raise ValueError("Invalid S3 URI format")
-
-        # Remove s3:// prefix and split bucket and key
-        s3_path = s3_uri[5:]  # Remove 's3://'
-        bucket_name, key = s3_path.split("/", 1)
-
-        logger.debug(f"Bucket: {bucket_name}, Key: {key}")
-
-        # Download from S3 using boto3
-        s3_client = self.session.client("s3")
-
+        start_time = time.time()
         try:
+            filename = "query_results.csv"
+            logger.info(
+                f"Downloading CSV from S3 and writing to code interpreter: {filename}"
+            )
+
+            # Parse S3 URI
+            if not s3_uri.startswith("s3://"):
+                raise ValueError("Invalid S3 URI format")
+
+            # Remove s3:// prefix and split bucket and key
+            s3_path = s3_uri[5:]  # Remove 's3://'
+            bucket_name, key = s3_path.split("/", 1)
+
+            logger.debug(f"Bucket: {bucket_name}, Key: {key}")
+
+            # Download from S3 using boto3
+            s3_client = self.session.client("s3")
+
             # Download the CSV content
             response = s3_client.get_object(Bucket=bucket_name, Key=key)
             csv_content = response["Body"].read().decode("utf-8")
@@ -104,13 +109,19 @@ class CodeInterpreterTools:
             )
             logger.debug(f"Files in code interpreter: {listing_files}")
 
-            return f"CSV file '{filename}' successfully written to code interpreter environment"
+            result = f"CSV file '{filename}' successfully written to code interpreter environment"
+            analytics_logger.log_content("write_query_results_to_code_sandbox", result)
+            return result
 
         except Exception as e:
             logger.error(
                 f"Error downloading from S3 or writing to code interpreter: {str(e)}"
             )
             raise
+        finally:
+            analytics_logger.log_event(
+                "write_query_results_to_code_sandbox", time.time() - start_time
+            )
 
     @tool
     def execute_python(self, code: str, description: str = "") -> str:
@@ -124,21 +135,26 @@ class CodeInterpreterTools:
         Returns:
             JSON string containing the execution result
         """
-        if description:
-            code = f"# {description}\n{code}"
-
-        logger.debug(f"Executing Python code: {description}")
-        logger.debug(f"Code:\n{code}")
-
+        start_time = time.time()
         try:
+            if description:
+                code = f"# {description}\n{code}"
+
+            logger.debug(f"Executing Python code: {description}")
+            logger.debug(f"Code:\n{code}")
+
             # Execute code using the invoke_code_interpreter_tool helper
             result = self._invoke_code_interpreter_tool(
                 "executeCode",
                 {"code": code, "language": "python", "clearContext": False},
             )
 
-            return json.dumps(result, indent=2)
+            result_json = json.dumps(result, indent=2)
+            # analytics_logger.log_content("execute_python", result_json)
+            return result_json
 
         except Exception as e:
             logger.error(f"Error executing code: {str(e)}")
             raise
+        finally:
+            analytics_logger.log_event("execute_python", time.time() - start_time)

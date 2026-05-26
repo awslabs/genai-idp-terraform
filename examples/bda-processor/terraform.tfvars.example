@@ -19,6 +19,12 @@ api = {
   enable_error_analyzer       = false  # AI-powered error diagnostics
   enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
 
+  # v0.4.16 feature flags
+  enable_hitl                     = true   # Built-in HITL review (replaces SageMaker A2I)
+  enable_capacity_planning        = false  # Capacity planning calculator (Pattern 2 only)
+  enable_omni_ai_dataset          = false  # OmniAI OCR Benchmark dataset (requires enable_test_studio)
+  enable_docplit_poly_seq_dataset = false  # DocSplit RVL-CDIP-NMP dataset (requires enable_test_studio)
+
   agent_analytics = {
     enabled  = false
     model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"

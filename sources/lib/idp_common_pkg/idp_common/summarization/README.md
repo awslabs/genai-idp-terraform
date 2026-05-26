@@ -19,22 +19,22 @@ The `DocumentSummary` class provides a flexible container for any JSON structure
 @dataclass
 class DocumentSummary:
     """Flexible model for document summary results that can handle any JSON structure."""
-
+    
     content: Dict[str, Any]
     """The raw content from the summarization result, containing any fields the LLM returned."""
-
+    
     metadata: Dict[str, Any] = field(default_factory=dict)
     """Optional metadata about the summarization process."""
-
+    
     def __getitem__(self, key: str) -> Any:
         """Allow dictionary-like access to summary fields."""
-
+    
     def get(self, key: str, default: Any = None) -> Any:
         """Get a summary field with an optional default value."""
-
+    
     def keys(self) -> List[str]:
         """Get a list of available keys in the summary."""
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
 ```
@@ -51,10 +51,10 @@ class DocumentSummarizationResult:
     summary: DocumentSummary
     execution_time: float = 0.0
     output_uri: Optional[str] = None
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
-
+        
     def to_markdown(self) -> str:
         """Convert summarization results to markdown format."""
 ```
@@ -66,7 +66,7 @@ The `SummarizationService` class handles the core summarization functionality:
 ```python
 class SummarizationService:
     """Service for summarizing documents using various backends."""
-
+    
     def __init__(
         self,
         region: str = None,
@@ -74,11 +74,11 @@ class SummarizationService:
         backend: str = "bedrock"
     ):
         # Initialize service with region, config and backend
-
+        
     def process_text(self, text: str, extraction_results: Dict[str, Any] = None) -> DocumentSummary:
         # Process raw text to generate a summary with flexible structure
         # Optionally include extraction results in the summarization context
-
+        
     def process_document_section(
         self,
         document: Document,
@@ -86,10 +86,10 @@ class SummarizationService:
     ) -> Document:
         # Process a specific section of a document and update the Document object with the summary
         # Stores summary results in S3 and updates section.attributes with URIs
-
+        
     def process_document(
-        self,
-        document: Document,
+        self, 
+        document: Document, 
         store_results: bool = True
     ) -> Document:
         # Process a Document object and update it with summary information
@@ -161,11 +161,11 @@ if section and section.attributes and 'summary_uri' in section.attributes:
     from idp_common import s3
     summary_uri = section.attributes['summary_uri']
     summary_content = s3.get_json_content(summary_uri)
-
+    
     # Print the summary content
     print(f"Summary for section {section_id} ({section.classification}):")
     print(json.dumps(summary_content, indent=2))
-
+    
     # Access the markdown version
     markdown_uri = section.attributes['summary_md_uri']
     markdown_content = s3.get_text_content(markdown_uri)
@@ -194,7 +194,6 @@ The service requires configuration with the following structure:
 ### Configuration Properties
 
 #### `enabled` (boolean)
-
 - **Purpose**: Controls whether summarization processing is performed
 - **Default**: `true` (for backward compatibility)
 - **Behavior**:
@@ -204,7 +203,6 @@ The service requires configuration with the following structure:
 **Cost Optimization**: When `enabled: false`, no LLM API calls are made, resulting in zero summarization costs.
 
 **Example - Disabling Summarization:**
-
 ```yaml
 summarization:
   enabled: false  # Disables all summarization processing
@@ -224,7 +222,6 @@ The service can handle any JSON structure returned by the model. You can use any
 ```
 
 Important considerations for the prompt template:
-
 1. Always request a valid JSON response format
 2. Specify the exact fields you want to include
 3. Include any formatting or style instructions directly in the prompt
@@ -237,7 +234,6 @@ The Summarization Service now supports integration with extraction results, allo
 ### Overview
 
 When extraction results are available (from previous extraction stages in the IDP pipeline), the service can automatically include them in the summarization context. This enables the LLM to:
-
 - Cross-reference extracted structured data with document text
 - Validate extracted values against document content
 - Generate summaries that incorporate both unstructured text and structured data
@@ -291,23 +287,23 @@ summarization:
   top_p: 0.1
   max_tokens: 4096
   system_prompt: |
-    You are an expert document analyzer. Create comprehensive summaries that integrate
+    You are an expert document analyzer. Create comprehensive summaries that integrate 
     both the document's textual content and any structured data that has been extracted.
   task_prompt: |
     Analyze the following document:
-
+    
     Document Text:
     {DOCUMENT_TEXT}
-
+    
     Extracted Structured Data:
     {EXTRACTION_RESULTS}
-
+    
     Provide a comprehensive summary in JSON format with:
     - 'overview': Brief document overview
     - 'key_findings': Important points from the text
     - 'extracted_data_summary': Summary of the extracted structured fields
     - 'validation_notes': Any discrepancies between text and extracted data
-
+    
     Ensure the response is valid JSON.
 ```
 
@@ -414,7 +410,6 @@ extraction_results = {
 ### Storage Location
 
 When sections have extraction results, they are stored at:
-
 ```
 s3://{output_bucket}/{document.input_key}/sections/{section_id}/extraction_result.json
 ```
@@ -461,7 +456,6 @@ The main advantage of this service is that it can work with any JSON structure r
 ### Summary Report
 
 When `store_results=True` (the default), the service generates a markdown summary report that is stored in S3 at the location:
-
 ```
 s3://{output_bucket}/{document.input_key}/summary/summary.md
 ```
@@ -494,7 +488,6 @@ Execution time: 1.25 seconds
 ```
 
 Special formatting is applied based on the data type:
-
 - Lists are formatted as bullet points
 - Dictionaries are formatted as nested sections
 - Strings are presented as-is
@@ -534,7 +527,6 @@ for section in document.sections:
 ```
 
 This approach:
-
 1. Processes each section separately using `process_document_section`
 2. Stores individual section summaries in S3
 3. Combines all section summaries into a comprehensive document summary
@@ -583,7 +575,6 @@ print(f"Summary Report URI: {document.summary_report_uri}")
 ```
 
 This approach:
-
 1. Combines text from all pages
 2. Generates a single summary for the entire document
 3. Stores the summary in S3
@@ -638,7 +629,7 @@ The `process_document_section` method allows you to generate summaries for speci
    - Extracts text from all pages in the section
    - Generates a summary using the Bedrock LLM
    - Stores the summary in S3 in both JSON and Markdown formats
-3. **Output**:
+3. **Output**: 
    - Updates the section's attributes with links to the summary files
    - Returns the updated Document object
 
@@ -652,14 +643,12 @@ The `process_document_section` method allows you to generate summaries for speci
 ### Storage Locations
 
 For a section with ID `section-id`, the summaries are stored at:
-
 - JSON: `s3://{output_bucket}/{document.input_key}/sections/{section_id}/summary.json`
 - Markdown: `s3://{output_bucket}/{document.input_key}/sections/{section_id}/summary.md`
 
 ### Section Attributes
 
 After processing, the section's attributes will contain:
-
 - `summary_uri`: S3 URI for the JSON summary
 - `summary_md_uri`: S3 URI for the Markdown summary
 
@@ -691,7 +680,7 @@ def process_section(section_id):
 with ThreadPoolExecutor(max_workers=4) as executor:
     section_ids = [section.section_id for section in document.sections]
     results = list(executor.map(process_section, section_ids))
-
+    
     # Merge results if needed
     # (This is a simplified example - you would need to merge the results properly)
     for result_doc in results:

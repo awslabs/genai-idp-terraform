@@ -13,7 +13,7 @@ resource "aws_appsync_resolver" "create_document" {
 
   request_template = <<EOF
 #set( $PK = "doc#$${ctx.args.input.ObjectKey}" )
-  
+
 #set( $shardsInDay = 6 )
 #set( $shardDivider = 24 / $shardsInDay )
 #set( $Integer = 0 )
@@ -25,7 +25,7 @@ resource "aws_appsync_resolver" "create_document" {
 #set( $shardPad = $date.format("%02d", $hourShard) )
 #set( $listPk = "list#$${date}#s#$${shardPad}" )
 #set( $listSk = "ts#$${now}#id#$${ctx.args.input.ObjectKey}" )
-  
+
 {
   "version" : "2018-05-29",
   "operation" : "TransactWriteItems",
@@ -275,4 +275,201 @@ EOF
     "nextToken": $util.toJson($ctx.result.nextToken)
 }
 EOF
+}
+
+# =============================================================================
+# DOCUMENT MANAGEMENT RESOLVERS (Lambda-backed)
+# =============================================================================
+
+# Upload Document Resolver
+resource "aws_appsync_resolver" "upload_document" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "uploadDocument"
+  data_source = aws_appsync_datasource.upload_resolver.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# Delete Document Resolver
+resource "aws_appsync_resolver" "delete_document" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "deleteDocument"
+  data_source = aws_appsync_datasource.delete_document_resolver.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# Reprocess Document Resolver
+resource "aws_appsync_resolver" "reprocess_document" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "reprocessDocument"
+  data_source = aws_appsync_datasource.reprocess_document_resolver.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# Get File Contents Resolver
+resource "aws_appsync_resolver" "get_file_contents" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getFileContents"
+  data_source = aws_appsync_datasource.get_file_contents_resolver.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# =============================================================================
+# CONFIGURATION RESOLVERS (Lambda-backed via configuration_resolver)
+# All routed through a single Lambda that dispatches on fieldName
+# =============================================================================
+
+resource "aws_appsync_resolver" "update_configuration" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "updateConfiguration"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "get_config_versions" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getConfigVersions"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "get_config_version" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getConfigVersion"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "set_active_version" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "setActiveVersion"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "delete_config_version" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "deleteConfigVersion"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "get_pricing" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getPricing"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "update_pricing" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "updatePricing"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "restore_default_pricing" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "restoreDefaultPricing"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "list_configuration_library" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "listConfigurationLibrary"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+resource "aws_appsync_resolver" "get_configuration_library_file" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getConfigurationLibraryFile"
+  data_source = aws_appsync_datasource.configuration.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# =============================================================================
+# STEP FUNCTIONS RESOLVER (Lambda-backed)
+# =============================================================================
+
+resource "aws_appsync_resolver" "get_step_function_execution" {
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "getStepFunctionExecution"
+  data_source = aws_appsync_datasource.get_stepfunction_execution_resolver.name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# =============================================================================
+# KNOWLEDGE BASE RESOLVER (Lambda-backed, conditional)
+# =============================================================================
+
+resource "aws_appsync_resolver" "query_knowledge_base" {
+  for_each    = var.knowledge_base.enabled ? toset(["enabled"]) : toset([])
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Query"
+  field       = "queryKnowledgeBase"
+  data_source = aws_appsync_datasource.query_knowledge_base_resolver["enabled"].name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# =============================================================================
+# EVALUATION / BASELINE RESOLVER (Lambda-backed, conditional)
+# =============================================================================
+
+resource "aws_appsync_resolver" "copy_to_baseline" {
+  for_each    = var.evaluation_enabled ? { "enabled" = true } : {}
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "copyToBaseline"
+  data_source = aws_appsync_datasource.copy_to_baseline_resolver["enabled"].name
+
+  request_template  = "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}"
+  response_template = "$util.toJson($context.result)"
 }

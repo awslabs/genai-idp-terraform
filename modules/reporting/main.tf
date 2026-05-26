@@ -497,7 +497,7 @@ locals {
     "manual" = null
     "15min"  = "cron(0/15 * * * ? *)"
     "hourly" = "cron(0 * * * ? *)"
-    "daily"  = "cron(0 0 * * ? *)"  # Changed from 1 AM to midnight to match CloudFormation
+    "daily"  = "cron(0 0 * * ? *)" # Changed from 1 AM to midnight to match CloudFormation
   }
   crawler_schedule_expression = local.crawler_schedule_map[var.crawler_schedule]
 }
@@ -526,7 +526,10 @@ resource "aws_glue_security_configuration" "document_sections_crawler_security" 
 
 # IAM Role for Glue Crawler
 resource "aws_iam_role" "document_sections_crawler_role" {
-  name = "${var.name_prefix}-doc-sections-crawler-role-${random_string.suffix.result}"
+  # Shortened from `-doc-sections-crawler-role-` to `-crawler-role-` so
+  # the role name fits IAM's 64-char cap when `var.name_prefix` is at
+  # the longer end (e.g. `idp-llmp-vpc-XXXXXXXX-reporting`, 32 chars).
+  name = "${var.name_prefix}-crawler-role-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -718,7 +721,10 @@ data "archive_file" "save_reporting_data_code" {
 
 # IAM role for save reporting data function
 resource "aws_iam_role" "save_reporting_data_role" {
-  name = "${var.name_prefix}-save-reporting-data-role-${random_string.suffix.result}"
+  # Shortened from `-save-reporting-data-role-` to `-save-reporting-` so
+  # the role name fits IAM's 64-char cap when `var.name_prefix` is at
+  # the longer end (e.g. `idp-llmp-vpc-XXXXXXXX-reporting`, 32 chars).
+  name = "${var.name_prefix}-save-reporting-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

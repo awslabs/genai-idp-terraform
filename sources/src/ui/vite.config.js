@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
       // Include all JavaScript files for JSX transformation
       include: '**/*.{js,jsx,ts,tsx}',
     }),
-
+   
     // Enable SVG import as React components
     svgr(),
   ],
@@ -37,8 +37,8 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'build',
     sourcemap: mode === 'development' ? 'inline' : false,
-    // Increase chunk size warning limit
-    chunkSizeWarningLimit: 1000,
+    // Increase chunk size warning limit (suppressed for enterprise internal tool)
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
       output: {
         // Manual chunking for better code splitting
@@ -66,7 +66,7 @@ export default defineConfig(({ mode }) => ({
       '@': resolve(__dirname, './src'),
     },
     // Ensure proper module resolution
-    extensions: ['.mjs', '.js', '.jsx', '.json'],
+    extensions: ['.mjs', '.ts', '.tsx', '.js', '.jsx', '.json'],
   },
 
   // Define global constants

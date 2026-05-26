@@ -133,6 +133,7 @@ class SummarizationService:
             top_p=config["top_p"],
             max_tokens=config["max_tokens"],
             context="Summarization",
+            model_lambda_hook_arn=self.config.summarization.model_lambda_hook_arn,
         )
 
     def _create_error_summary(self, error_message: str) -> DocumentSummary:
@@ -398,7 +399,9 @@ class SummarizationService:
             error_msg = f"Error summarizing section {section_id}: {str(e)}"
             logger.error(error_msg)
             document.errors.append(error_msg)
-            return document, {}
+            # Re-raise exception to propagate error to Step Functions
+            # This ensures workflow failures are properly reported instead of silently completing
+            raise
 
         return document, section_metering
 
@@ -461,6 +464,9 @@ class SummarizationService:
 
             # Initialize a dictionary to collect all section-specific metering data
             all_section_metering = {}
+
+            # Track exceptions from failed sections for proper error propagation
+            section_exceptions = {}
 
             # Process sections in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(
@@ -577,9 +583,22 @@ class SummarizationService:
                         )
                         logger.error(error_msg)
                         document.errors.append(error_msg)
+                        # Store exception for later re-raising to ensure Step Functions workflow fails properly
+                        section_exceptions[section.section_id] = e
 
             # Calculate execution time
             execution_time = time.time() - start_time
+
+            # Check if any sections failed and re-raise the first exception
+            # This ensures Step Functions workflow properly reports failures (GitHub Issue #166)
+            if section_exceptions:
+                first_failed_section = next(iter(section_exceptions.keys()))
+                first_exception = section_exceptions[first_failed_section]
+                logger.error(
+                    f"Summarization failed for {len(section_exceptions)} section(s). "
+                    f"Re-raising exception from section {first_failed_section} to fail the workflow."
+                )
+                raise first_exception
 
             # Merge all section-specific metering data into the document's metering data
             for section_metering in all_section_metering.values():

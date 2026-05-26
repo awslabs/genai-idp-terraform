@@ -12,7 +12,7 @@ import numpy as np
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger 
 from torch.utils.data import DataLoader
 from transformers import AutoProcessor
 
@@ -26,7 +26,7 @@ from model_versions import get_model_revision
 
 
 def train(
-    data_dir, model_dir, script_dir, output_dir, max_epochs, accumulate_grad_batches,
+    data_dir, model_dir, script_dir, output_dir, max_epochs, accumulate_grad_batches, 
     devices, base_model, lr, lr_warmup_steps, dropout_rate, b1, b2, weight_decay,
     print_every_n_steps, patience, fast_dev_run, precision, distributed_strategy
 ):
@@ -60,7 +60,7 @@ def train(
         collate_fn=lambda x: x[0], shuffle=True
     )
     val_dl = DataLoader(
-        val_ds, batch_size=1, num_workers=4,
+        val_ds, batch_size=1, num_workers=4, 
         collate_fn=lambda x: x[0], shuffle=True
     )
 
@@ -146,9 +146,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     train(
-        args.data_dir, args.model_dir, args.script_dir, args.output_dir,
-        args.max_epochs, args.accumulate_grad_batches, args.devices,
-        args.base_model, args.lr, args.lr_warmup_steps, args.dropout_rate,
-        args.b1, args.b2, args.weight_decay, args.print_every_n_steps,
+        args.data_dir, args.model_dir, args.script_dir, args.output_dir, 
+        args.max_epochs, args.accumulate_grad_batches, args.devices, 
+        args.base_model, args.lr, args.lr_warmup_steps, args.dropout_rate, 
+        args.b1, args.b2, args.weight_decay, args.print_every_n_steps, 
         args.patience, args.fast_dev_run, args.precision, args.distributed_strategy
     )

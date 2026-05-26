@@ -156,6 +156,7 @@ class TestClassesDiscovery:
                 input_bucket="test-bucket",
                 input_prefix="test-document.pdf",
                 region="us-west-2",
+                version="test-version",
             )
 
             # Store mocks for access in tests
@@ -271,8 +272,11 @@ class TestClassesDiscovery:
             }
         )
 
-        # Mock configuration retrieval
+        # Mock configuration retrieval for Default and Custom
         service.config_manager.get_configuration.return_value = mock_configuration_item
+        service.config_manager.get_raw_configuration.return_value = (
+            None  # No existing Custom
+        )
 
         # Call the method
         result = service.discovery_classes_with_document(
@@ -290,8 +294,11 @@ class TestClassesDiscovery:
         # Verify Bedrock was called
         service._mock_bedrock_client.invoke_model.assert_called_once()
 
-        # Verify configuration was saved via configuration manager
-        service.config_manager.save_configuration.assert_called_once()
+        # Verify configuration was saved via raw configuration (sparse delta pattern)
+        service.config_manager.save_raw_configuration.assert_called_once()
+        call_args = service.config_manager.save_raw_configuration.call_args
+        assert call_args[0][0] == "Config"  # First arg is config type
+        assert "classes" in call_args[0][1]  # Second arg is config dict with classes
 
     @patch("idp_common.utils.s3util.S3Util.get_bytes")
     def test_discovery_classes_with_document_s3_error(self, mock_get_bytes, service):
@@ -633,28 +640,30 @@ class TestClassesDiscovery:
         self, service, mock_configuration_item
     ):
         """Test that discovery updates existing class configuration."""
-        # Mock existing configuration object with classes attribute in JSON Schema format
-        existing_config = MagicMock()
-        existing_config.classes = [
-            {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "$id": "w4",
-                "type": "object",
-                "title": "W-4",
-                "description": "Old description",
-                "x-aws-idp-document-type": "W-4",
-                "properties": {},
-            },
-            {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "$id": "other_form",
-                "type": "object",
-                "title": "Other-Form",
-                "description": "Other form",
-                "x-aws-idp-document-type": "Other-Form",
-                "properties": {},
-            },
-        ]
+        # Mock existing Default configuration with classes in JSON Schema format
+        # Use actual IDPConfig so isinstance check passes
+        existing_default_config = IDPConfig(
+            classes=[
+                {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "w4",
+                    "type": "object",
+                    "title": "W-4",
+                    "description": "Old description",
+                    "x-aws-idp-document-type": "W-4",
+                    "properties": {},
+                },
+                {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "other_form",
+                    "type": "object",
+                    "title": "Other-Form",
+                    "description": "Other form",
+                    "x-aws-idp-document-type": "Other-Form",
+                    "properties": {},
+                },
+            ]
+        )
 
         with (
             patch("idp_common.utils.s3util.S3Util.get_bytes") as mock_get_bytes,
@@ -676,7 +685,12 @@ class TestClassesDiscovery:
                 "response": {"output": {"message": {"content": [{"text": "{}"}]}}},
                 "metering": {"tokens": 500},
             }
-            service.config_manager.get_configuration.return_value = existing_config
+            # get_configuration returns Default config (for reading Default classes)
+            service.config_manager.get_configuration.return_value = (
+                existing_default_config
+            )
+            # get_raw_configuration returns existing Custom (no existing Custom classes in this case)
+            service.config_manager.get_raw_configuration.return_value = {}
 
             result = service.discovery_classes_with_document(
                 "test-bucket", "test-document.pdf"
@@ -684,20 +698,13 @@ class TestClassesDiscovery:
 
             assert result["status"] == "SUCCESS"
 
-            # Verify that configuration manager was called to update/save configuration
-            assert (
-                service.config_manager.save_configuration.called
-                or service.config_manager.update_configuration.called
-            )
-            # Get the call args - might be save_configuration or update_configuration
-            if service.config_manager.save_configuration.called:
-                call_args = service.config_manager.save_configuration.call_args[0]
-                updated_classes = call_args[1].classes
-            else:
-                call_args = service.config_manager.update_configuration.call_args[0]
-                updated_classes = call_args[1].classes
+            # Verify that configuration manager was called with save_raw_configuration
+            service.config_manager.save_raw_configuration.assert_called_once()
+            call_args = service.config_manager.save_raw_configuration.call_args
+            assert call_args[0][0] == "Config"  # Config type
+            updated_classes = call_args[0][1]["classes"]  # Classes from saved config
 
-            # Should have 2 classes (Other-Form + updated W-4)
+            # Should have 2 classes (Other-Form from Default + updated W-4)
             assert len(updated_classes) == 2
 
             # Find the W-4 class and verify it was updated (by $id)
@@ -729,9 +736,10 @@ class TestClassesDiscovery:
                 "response": {"output": {"message": {"content": [{"text": "{}"}]}}},
                 "metering": {"tokens": 500},
             }
-            service.config_manager.get_configuration.return_value = (
-                None  # No existing config
-            )
+            # No Default config
+            service.config_manager.get_configuration.return_value = None
+            # No Custom config
+            service.config_manager.get_raw_configuration.return_value = None
 
             result = service.discovery_classes_with_document(
                 "test-bucket", "test-document.pdf"
@@ -739,20 +747,13 @@ class TestClassesDiscovery:
 
             assert result["status"] == "SUCCESS"
 
-            # Verify configuration was created via configuration manager
-            assert (
-                service.config_manager.save_configuration.called
-                or service.config_manager.update_configuration.called
-            )
-            # Get the call args - might be save_configuration or update_configuration
-            if service.config_manager.save_configuration.called:
-                call_args = service.config_manager.save_configuration.call_args[0]
-                updated_classes = call_args[1].classes
-            else:
-                call_args = service.config_manager.update_configuration.call_args[0]
-                updated_classes = call_args[1].classes
+            # Verify configuration was saved via save_raw_configuration
+            service.config_manager.save_raw_configuration.assert_called_once()
+            call_args = service.config_manager.save_raw_configuration.call_args
+            assert call_args[0][0] == "Config"  # Config type
+            updated_classes = call_args[0][1]["classes"]  # Classes from saved config
 
-            # Should have 1 class
+            # Should have 1 class (just the new one)
             assert len(updated_classes) == 1
             assert updated_classes[0]["$id"] == "w4"
             assert updated_classes[0]["description"] == "New form"

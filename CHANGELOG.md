@@ -6,6 +6,105 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.4.16-tf.1] - 2026-03-12
+
+### Summary
+
+Upgrade from v0.4.8-tf.0 to v0.4.16-tf.1, spanning 8 upstream IDP versions (v0.4.9–v0.4.16).
+Introduces built-in HITL (replacing SageMaker A2I), shared Lambda layers, configuration versioning,
+pricing management, capacity planning, rule validation, Lambda hook inference, BDA sync, abort
+workflow, dataset deployers, and Pattern 3 deprecation.
+
+### Breaking Changes
+
+- **SageMaker A2I removed**: All SageMaker A2I resources (`aws_sagemaker_flow_definition`,
+  `aws_sagemaker_human_task_ui`, `create_a2i_resources` Lambda, `get-workforce-url` Lambda) have
+  been removed from `modules/human-review/`. The `enable_hitl` and `private_workteam_arn` variables
+  are also removed from that module. HITL is now built into `processing-environment-api` via the
+  `complete_section_review` Lambda. See the [migration guide](docs/migration-guide.md) for
+  `terraform state rm` commands.
+
+- **`base_layer_arn` required**: All processor modules (`bda-processor`, `bedrock-llm-processor`,
+  `sagemaker-udop-processor`) and `processing-environment-api` now require a `base_layer_arn` input
+  variable. This is automatically wired from `module.processing_environment.base_layer_arn` in the
+  root module. Direct module users must add this input.
+
+### New Features
+
+#### Built-in HITL (`processing-environment-api`)
+
+- `complete_section_review` Lambda handles `claimReview`, `releaseReview`, `skipAllSectionsReview`,
+  and `completeSectionReview` via fieldName dispatch
+- AppSync resolvers for all four HITL operations
+- Controlled by `enable_hitl` variable (default: `true`)
+- `enable_hitl` variable removed from `human-review` module (now lives in `processing-environment-api`)
+
+#### Shared Lambda Layers (`processing-environment`)
+
+- Three new Lambda layer resources: `base`, `reporting`, and `agents` layers built from `sources/lib/`
+- All Lambda functions in all modules now attach the base layer via `compact([var.base_layer_arn, ...])`
+- Layer ARNs exposed as outputs: `base_layer_arn`, `reporting_layer_arn`, `agents_layer_arn`
+
+#### Configuration Versioning + Pricing (`processing-environment-api`)
+
+- `configuration_resolver` Lambda (sourced from CDK nested appsync tree) handles all 10 operations:
+  `getConfiguration`, `updateConfiguration`, `getConfigVersions`, `getConfigVersion`,
+  `setActiveVersion`, `deleteConfigVersion`, `getPricing`, `updatePricing`, `restoreDefaultPricing`,
+  `listConfigurationLibrary`, `getConfigurationLibraryFile`
+- AppSync resolvers for all configuration and pricing operations
+
+#### Abort Workflow (`processing-environment-api`)
+
+- `abort_workflow` Lambda (sourced from CDK nested appsync tree) with Step Functions `StopExecution`
+  and DynamoDB `GetItem`/`UpdateItem` IAM permissions
+- AppSync resolver for `abortWorkflow` mutation
+
+#### BDA Sync (`processing-environment-api`)
+
+- `sync_bda_idp` Lambda (sourced from CDK nested appsync tree) with Bedrock blueprint CRUD IAM
+- AppSync resolver for `syncBdaIdp` mutation
+- `bda_project_arn` input variable (default: `""`)
+
+#### Capacity Planning (`processing-environment-api`)
+
+- `calculate_capacity` and `calculate_capacity_resolver` Lambdas
+- AppSync resolver for `calculateCapacity` query
+- Controlled by `enable_capacity_planning` variable (default: `false`)
+
+#### Dataset Deployers (`processing-environment-api`)
+
+- `ocr_benchmark_deployer` Lambda for OmniAI OCR Benchmark dataset
+- `docsplit_testset_deployer` Lambda for DocSplit RVL-CDIP-NMP Packet dataset
+- Controlled by `enable_omni_ai_dataset` and `enable_docplit_poly_seq_dataset` (both default: `false`)
+
+#### Rule Validation (`bedrock-llm-processor`)
+
+- `rule_validation_function` and `rule_validation_orchestration_function` Lambdas
+- Controlled by `enable_rule_validation` variable (default: `false`)
+
+#### Lambda Hook Inference (`bedrock-llm-processor`)
+
+- `lambda_hook_ocr`, `lambda_hook_classification`, `lambda_hook_extraction`,
+  `lambda_hook_assessment`, `lambda_hook_summarization` variables
+- All hook ARNs must start with `GENAIIDP-` prefix (validated)
+- Step Functions execution role gets `lambda:InvokeFunction` for any non-empty hook ARNs
+
+### Deprecations
+
+- **Pattern 3 (SageMaker UDOP)**: Deprecated as of v0.4.16. Will be removed in v0.5.0.
+  A `check` block emits a deprecation warning on every `terraform plan`/`apply`.
+  Migrate to Pattern 1 (BDA) or Pattern 2 (Bedrock LLM).
+
+### Other Changes
+
+- Default `model_id` in `bedrock-llm-processor` updated to `us.amazon.nova-2-lite-v1:0`
+- GovCloud config library entries added to `sources/config_library/`
+- `bda-processor` exposes `data_automation_project_arn` output (consumed by BDA sync resolver)
+- Root `api` variable extended with v0.4.16 feature flags:
+  `enable_hitl`, `enable_capacity_planning`, `enable_omni_ai_dataset`, `enable_docplit_poly_seq_dataset`
+
+---
+
 ## [0.4.8-tf.0] - 2026-02-26
 
 ### Summary

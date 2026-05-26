@@ -1,0 +1,286 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"description": "This document issued by an employer to an employee contains wages received by an employee for a given period. It usually contains the breakdown of each of the income and tax deductions items.",
+	"class": "Payslip",
+	"type": "object",
+	"definitions": {
+		"Name": {
+			"type": "object",
+			"properties": {
+				"FirstName": {
+					"type": "string",
+					"inferenceType": "explicit"
+				},
+				"MiddleName": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "if available"
+				},
+				"LastName": {
+					"type": "string",
+					"inferenceType": "explicit"
+				},
+				"SuffixName": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "Such as PhD, Msc., etc"
+				}
+			}
+		},
+		"Address": {
+			"type": "object",
+			"properties": {
+				"Line1": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "What is the address line 1?"
+				},
+				"Line2": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "What is the address line 2?"
+				},
+				"State": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "What is the state? Use the two letter code"
+				},
+				"City": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "What is the city?"
+				},
+				"ZipCode": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "What is the address zip code?"
+				}
+			}
+		},
+		"Item": {
+			"type": "object",
+			"properties": {
+				"ItemDescription": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "The tax item description text"
+				},
+				"YTD": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The YTD value"
+				},
+				"Period": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The value for this period"
+				}
+			}
+		},
+		"FederalTaxes": {
+			"type": "object",
+			"properties": {
+				"ItemDescription": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "The tax item description text"
+				},
+				"YTD": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The YTD value"
+				},
+				"Period": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The value for this period"
+				}
+			}
+		},
+		"StateTaxes": {
+			"type": "object",
+			"properties": {
+				"ItemDescription": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "The tax item description text"
+				},
+				"YTD": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The YTD value"
+				},
+				"Period": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The value for this period"
+				}
+			}
+		},
+		"CityTaxes": {
+			"type": "object",
+			"properties": {
+				"ItemDescription": {
+					"type": "string",
+					"inferenceType": "explicit",
+					"instruction": "The tax item description text"
+				},
+				"YTD": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The YTD value"
+				},
+				"Period": {
+					"type": "number",
+					"inferenceType": "explicit",
+					"instruction": "The value for this period"
+				}
+			}
+		}
+	},
+	"properties": {
+		"PayPeriodStartDate": {
+			"type": "string",
+			"inferenceType": "inferred",
+			"instruction": "What is the Pay Period Start Date? YYYY-MM-DD Format"
+		},
+		"PayPeriodEndDate": {
+			"type": "string",
+			"inferenceType": "inferred",
+			"instruction": "What is the Pay Period End Date? YYYY-MM-DD Format"
+		},
+		"PayDate": {
+			"type": "string",
+			"inferenceType": "inferred",
+			"instruction": "What is the Pay Date? YYYY-MM-DD Format"
+		},
+		"EmployeeName": {
+			"$ref": "#/definitions/Name",
+			"instruction": "-"
+		},
+		"EmployeeAddress": {
+			"$ref": "#/definitions/Address",
+			"instruction": "-"
+		},
+		"CompanyAddress": {
+			"$ref": "#/definitions/Address",
+			"instruction": "-"
+		},
+		"FederalFilingStatus": {
+			"type": "string",
+			"inferenceType": "explicit",
+			"instruction": "What is the Federal Filing Status? If available"
+		},
+		"StateFilingStatus": {
+			"type": "string",
+			"inferenceType": "explicit",
+			"instruction": "What is the State Filing Status? (If available)"
+		},
+		"CurrentGrossPay": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the Current Gross Pay?"
+		},
+		"YTDGrossPay": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the YTD Gross Pay?"
+		},
+		"CurrentNetPay": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the Current Net Pay?"
+		},
+		"YTDNetPay": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the YTD Net Pay?"
+		},
+		"RegularHourlyRate": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the Regular Hourly Rate? (if available)"
+		},
+		"HolidayHourlyRate": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the Holiday Hourly Rate? (if available)"
+		},
+		"YTDFederalTax": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What is the YTD Federal Taxes amount?"
+		},
+		"YTDStateTax": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What are the YTD State Taxes?"
+		},
+		"is_ytd_gross_pay_highest": {
+			"type": "boolean",
+			"inferenceType": "explicit",
+			"instruction": "Is the YTD Gross Pay the largest amount in the entire paystub?"
+		},
+		"FederalTaxes": {
+			"type": "array",
+			"instruction": "-",
+			"items": {
+				"$ref": "#/definitions/FederalTaxes"
+			}
+		},
+		"StateTaxes": {
+			"type": "array",
+			"instruction": "-",
+			"items": {
+				"$ref": "#/definitions/StateTaxes"
+			}
+		},
+		"EmployeeNumber": {
+			"type": "string",
+			"inferenceType": "explicit",
+			"instruction": "What is the employee number?"
+		},
+		"PayrollNumber": {
+			"type": "string",
+			"inferenceType": "explicit",
+			"instruction": "What is the payroll number?"
+		},
+		"CityTaxes": {
+			"type": "array",
+			"instruction": "-",
+			"items": {
+				"$ref": "#/definitions/CityTaxes"
+			}
+		},
+		"YTDCityTax": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What are the YTD City Taxes?"
+		},
+		"CurrentTotalDeductions": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What are the current total deductions?"
+		},
+		"YTDTotalDeductions": {
+			"type": "number",
+			"inferenceType": "explicit",
+			"instruction": "What are the YTD total deductions?"
+		},
+		"is_gross_pay_valid": {
+			"type": "boolean",
+			"inferenceType": "inferred",
+			"instruction": "Is the YTD gross pay the largest dollar amount value on the paystub?"
+		},
+		"are_field_names_sufficient": {
+			"type": "boolean",
+			"inferenceType": "inferred",
+			"instruction": "Are field names / key values sufficient for any validation?"
+		},
+		"currency": {
+			"type": "string",
+			"inferenceType": "inferred",
+			"instruction": "What currency is used in this document? CAD, USD, EUR, etc."
+		}
+	}
+}

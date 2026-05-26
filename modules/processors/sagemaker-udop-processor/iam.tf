@@ -43,7 +43,11 @@ resource "aws_iam_policy" "bedrock_model_permissions" {
             "bedrock:GetFoundationModel",
             "bedrock:GetInferenceProfile"
           ]
-          Resource = "*"
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+            "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+            "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+          ]
         }
       ] : []
     )
@@ -246,7 +250,7 @@ resource "aws_iam_role_policy" "ocr_function_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -378,7 +382,7 @@ resource "aws_iam_role_policy" "classification_function_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -490,14 +494,18 @@ resource "aws_iam_role_policy" "extraction_function_policy" {
         Action = [
           "bedrock:InvokeModel"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       },
       {
         Effect = "Allow"
         Action = [
           "bedrock:GetFoundationModel"
         ]
-        Resource = "*"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
       },
       {
         Effect = "Allow"
@@ -517,7 +525,7 @@ resource "aws_iam_role_policy" "extraction_function_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -641,7 +649,7 @@ resource "aws_iam_role_policy" "process_results_function_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -715,7 +723,11 @@ resource "aws_iam_role_policy" "summarization_function_policy" {
         Action = [
           "bedrock:InvokeModel"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+        ]
       },
       {
         Effect = "Allow"
@@ -758,16 +770,9 @@ resource "aws_iam_role_policy" "summarization_function_policy" {
       {
         Effect = "Allow"
         Action = [
-          "bedrock:InvokeModel"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
           "bedrock:GetFoundationModel"
         ]
-        Resource = "*"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
       },
       {
         Effect = "Allow"
@@ -787,7 +792,7 @@ resource "aws_iam_role_policy" "summarization_function_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "*"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -974,7 +979,7 @@ resource "aws_iam_role_policy" "assessment_lambda_kms" {
           "kms:GenerateDataKey",
           "kms:DescribeKey"
         ]
-        Resource = var.encryption_key_arn != null ? var.encryption_key_arn : "*"
+        Resource = var.encryption_key_arn != null ? var.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
     }) : jsonencode({
@@ -1109,7 +1114,7 @@ resource "aws_iam_policy" "evaluation_function_policy" {
         # Invoke SaveReportingData Lambda for analytics
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:*"
+        Resource = var.save_reporting_function_name != "" ? "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${var.save_reporting_function_name}" : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:nonexistent-disabled"
       },
       {
         Effect   = "Allow"

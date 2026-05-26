@@ -49,7 +49,6 @@ terraform.rc
 
 # Terraform lock files
 .terraform.lock.hcl
-.tflint.hcl
 
 # GenAI IDP specific
 backend.tf

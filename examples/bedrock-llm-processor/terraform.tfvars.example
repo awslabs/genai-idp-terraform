@@ -16,9 +16,9 @@ data_tracking_retention_days = 365
 # config_file_path = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
 
 # Model Configuration
-classification_model_id = "us.amazon.nova-pro-v1:0"
-extraction_model_id     = "us.amazon.nova-pro-v1:0"
-summarization_model_id  = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+classification_model_id = "us.amazon.nova-2-lite-v1:0"
+extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
+summarization_model_id  = "us.amazon.nova-2-lite-v1:0"
 evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # Feature Toggles
@@ -36,6 +36,12 @@ api = {
   enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
   enable_error_analyzer       = false  # AI-powered error diagnostics
   enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
+
+  # v0.4.16 feature flags
+  enable_hitl                     = true   # Built-in HITL review (replaces SageMaker A2I)
+  enable_capacity_planning        = false  # Capacity planning calculator
+  enable_omni_ai_dataset          = false  # OmniAI OCR Benchmark dataset (requires enable_test_studio)
+  enable_docplit_poly_seq_dataset = false  # DocSplit RVL-CDIP-NMP dataset (requires enable_test_studio)
 
   agent_analytics = {
     enabled  = false
@@ -73,3 +79,15 @@ tags = {
   Environment = "dev"
   Project     = "genai-idp-accelerator"
 }
+
+# v0.4.16: Rule Validation (Pattern 2 only)
+enable_rule_validation = false  # Enable compliance rule validation
+
+# v0.4.16: Lambda Hook Inference (Pattern 2 only)
+# Inject custom Lambda functions into the Step Functions workflow at specific stages.
+# ARNs must start with the 'GENAIIDP-' prefix.
+# lambda_hook_ocr            = ""  # e.g. "GENAIIDP-my-custom-ocr-hook"
+# lambda_hook_classification = ""  # e.g. "GENAIIDP-my-custom-classification-hook"
+# lambda_hook_extraction     = ""  # e.g. "GENAIIDP-my-custom-extraction-hook"
+# lambda_hook_assessment     = ""  # e.g. "GENAIIDP-my-custom-assessment-hook"
+# lambda_hook_summarization  = ""  # e.g. "GENAIIDP-my-custom-summarization-hook"

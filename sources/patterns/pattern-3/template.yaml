@@ -37,7 +37,7 @@ Parameters:
 
   LogRetentionDays:
     Type: Number
-
+  
   LogLevel:
     Type: String
     Default: WARN
@@ -48,7 +48,7 @@ Parameters:
       - ERROR
       - CRITICAL
     Description: Default logging level for all Lambda functions
-
+  
   ExecutionTimeThresholdMs:
     Type: Number
     Default: 30000
@@ -60,25 +60,25 @@ Parameters:
 
   UpdateConfigurationFunctionArn:
     Type: String
-
+  
   ConfigurationTable:
     Type: String
-
+    
   AppSyncApiUrl:
     Type: String
     Default: ""
     Description: The AppSync API URL for status updates
-
+    
   AppSyncApiArn:
     Type: String
     Default: ""
     Description: The AppSync API ARN for IAM permissions
-
+    
   BedrockGuardrailId:
     Type: String
     Default: ""
     Description: "Optionally provide the Id (not name) of an existing Bedrock Guardrail to be used for Bedrock interactions"
-
+    
   BedrockGuardrailVersion:
     Type: String
     Default: ""
@@ -110,23 +110,10 @@ Parameters:
     Description: >-
       (Optional) ARN of an existing IAM Permissions Boundary policy to attach to all IAM roles.
       Required by some organizations with Service Control Policies (SCPs).
-      Format: arn:${AWS::Partition}:iam::account-id:policy/policy-name
+      Format: arn:partition:iam::account-id:policy/policy-name
       Leave blank if no Permissions Boundary is required.
     AllowedPattern: "^(|arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
-
-  EnableHITL:
-    Type: String
-    Default: "false"
-    AllowedValues:
-      - "true"
-      - "false"
-    Description: "Enable Human In The Loop (A2I) for document review"
-
-  SageMakerA2IReviewPortalURL:
-    Type: String
-    Default: ""
-    Description: "SageMaker A2I Review Portal URL for HITL workflows"
 
   EnableECRImageScanning:
     Type: String
@@ -155,7 +142,6 @@ Conditions:
   HasGuardrailConfig: !And [!Not [!Equals [!Ref BedrockGuardrailId, ""]], !Not [!Equals [!Ref BedrockGuardrailVersion, ""]]]
   HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
   HasAppSyncApi: !Not [!Equals [!Ref AppSyncApiArn, ""]]
-  IsHITLEnabled: !Equals [!Ref EnableHITL, "true"]
   IsECRImageScanningEnabled: !Equals [!Ref EnableECRImageScanning, "true"]
 
 Resources:
@@ -234,6 +220,7 @@ Resources:
     Type: AWS::ECR::Repository
     # checkov:skip=CKV_AWS_51: "Mutable tags allowed for workflow flexibility and version updates."
     Properties:
+      # checkov:skip=CKV_AWS_163: "ECR scanning controlled by parameter for environment-specific deployment requirements"
       ImageScanningConfiguration:
         ScanOnPush: !If [IsECRImageScanningEnabled, true, false]
       EncryptionConfiguration:
@@ -256,15 +243,13 @@ Resources:
 
   DockerBuildProject:
     Type: AWS::CodeBuild::Project
-    DependsOn:
-      - DockerBuildRole
-      - ECRRepository
+    # cdk-nag suppress: AwsSolutions-CB5 - Privileged mode required for Docker image builds
     Properties:
       Name: !Sub "${AWS::StackName}-docker-build"
       Description: !Sub >-
         Pattern-3 Docker image builder for GenAIIDP stack - ${AWS::StackName}
       ServiceRole: !GetAtt DockerBuildRole.Arn
-      EncryptionKey: alias/aws/s3
+      EncryptionKey: !Ref CustomerManagedEncryptionKeyArn
       Artifacts:
         Type: NO_ARTIFACTS
       Source:
@@ -393,9 +378,6 @@ Resources:
 
   DockerBuildRun:
     Type: Custom::CodeBuildRun
-    DependsOn:
-      - DockerBuildProject
-      - CodeBuildTrigger
     Properties:
       ServiceToken: !GetAtt CodeBuildTrigger.Arn
       BuildProjectName: !Ref DockerBuildProject
@@ -415,7 +397,6 @@ Resources:
     Type: Custom::ECRRepositoryCleanup
     DependsOn:
       - DockerBuildRun
-      - ECRRepository
     Properties:
       ServiceToken: !GetAtt CodeBuildTrigger.Arn
       RepositoryName: !Ref ECRRepository
@@ -511,11 +492,16 @@ Resources:
               model_id:
                 type: string
                 description: "Bedrock model ID (only used if backend is 'bedrock')"
-                enum:
+                enum: 
                   - "us.amazon.nova-lite-v1:0"
                   - "us.amazon.nova-pro-v1:0"
                   - "us.amazon.nova-premier-v1:0"
                   - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
                   - "us.anthropic.claude-3-haiku-20240307-v1:0"
                   - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -524,12 +510,18 @@ Resources:
                   - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
                   - "us.anthropic.claude-opus-4-20250514-v1:0"
                   - "us.anthropic.claude-opus-4-1-20250805-v1:0"
                   - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
                   - "eu.amazon.nova-lite-v1:0"
                   - "eu.amazon.nova-pro-v1:0"
                   - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
                   - "eu.anthropic.claude-3-haiku-20240307-v1:0"
                   - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -537,8 +529,21 @@ Resources:
                   - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
                   - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
                   - "qwen.qwen3-vl-235b-a22b"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
                 order: 2
                 dependsOn: {
                   field: "backend",
@@ -744,7 +749,7 @@ Resources:
                         properties:
                           itemDescription:
                             type: string
-                            description: Description of each list item. Instruct the LLM how to identify the list item (e.g. a transaction in a bank statement).
+                            description: Description of each list item. Instruct the LLM how to identify the list item (e.g. a transaction in a bank statement). 
                             order: 0
                           itemAttributes:
                             type: array
@@ -824,11 +829,16 @@ Resources:
               model:
                 type: string
                 description: Model identifier
-                enum:
+                enum: 
                   - "us.amazon.nova-lite-v1:0"
                   - "us.amazon.nova-pro-v1:0"
                   - "us.amazon.nova-premier-v1:0"
                   - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
                   - "us.anthropic.claude-3-haiku-20240307-v1:0"
                   - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -837,12 +847,18 @@ Resources:
                   - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
                   - "us.anthropic.claude-opus-4-20250514-v1:0"
                   - "us.anthropic.claude-opus-4-1-20250805-v1:0"
                   - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
                   - "eu.amazon.nova-lite-v1:0"
                   - "eu.amazon.nova-pro-v1:0"
                   - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
                   - "eu.anthropic.claude-3-haiku-20240307-v1:0"
                   - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -850,8 +866,21 @@ Resources:
                   - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
                   - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
                   - "qwen.qwen3-vl-235b-a22b"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
                 order: 1
               temperature:
                 type: number
@@ -870,7 +899,7 @@ Resources:
                 order: 4
               max_tokens:
                 type: number
-                description: Max tokens
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                 order: 5
               system_prompt:
                 type: string
@@ -882,7 +911,7 @@ Resources:
                 order: 7
               custom_prompt_lambda_arn:
                 type: string
-                description: "(Optional) ARN of a Lambda function to generate custom extraction prompts. Function name must start with 'GENAIIDP-'. If not provided, default prompts will be used. The Lambda function receives the complete config, prompt placeholders, default task prompt content, and serialized document, and returns custom system_prompt and task_prompt_content. Example: arn:${AWS::Partition}:lambda:us-east-1:123456789012:function:GENAIIDP-my-extractor"
+                description: "(Optional) ARN of a Lambda function to generate custom extraction prompts. Function name must start with 'GENAIIDP-'. If not provided, default prompts will be used. The Lambda function receives the complete config, prompt placeholders, default task prompt content, and serialized document, and returns custom system_prompt and task_prompt_content. Example: arn:partition:lambda:us-east-1:123456789012:function:GENAIIDP-my-extractor"
                 order: 8
           assessment:
             order: 4
@@ -965,7 +994,57 @@ Resources:
               model:
                 type: string
                 description: Bedrock model ID
-                enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0:1m", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                enum:
+                  - "us.amazon.nova-lite-v1:0"
+                  - "us.amazon.nova-pro-v1:0"
+                  - "us.amazon.nova-premier-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
+                  - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                  - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                  - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                  - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                  - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
+                  - "us.anthropic.claude-opus-4-20250514-v1:0"
+                  - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                  - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
+                  - "eu.amazon.nova-lite-v1:0"
+                  - "eu.amazon.nova-pro-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
+                  - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                  - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                  - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                  - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                  - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
+                  - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
+                  - "qwen.qwen3-vl-235b-a22b"
                 order: 3
               temperature:
                 type: number
@@ -981,7 +1060,7 @@ Resources:
                 order: 6
               max_tokens:
                 type: number
-                description: Max tokens
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                 order: 7
               system_prompt:
                 type: string
@@ -1006,7 +1085,57 @@ Resources:
               model:
                 type: string
                 description: Bedrock model ID
-                enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0:1m", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                enum:
+                  - "us.amazon.nova-lite-v1:0"
+                  - "us.amazon.nova-pro-v1:0"
+                  - "us.amazon.nova-premier-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
+                  - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                  - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                  - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                  - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                  - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
+                  - "us.anthropic.claude-opus-4-20250514-v1:0"
+                  - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                  - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
+                  - "eu.amazon.nova-lite-v1:0"
+                  - "eu.amazon.nova-pro-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
+                  - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                  - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                  - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                  - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                  - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
+                  - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
+                  - "qwen.qwen3-vl-235b-a22b"
                 order: 1
               temperature:
                 type: number
@@ -1022,7 +1151,7 @@ Resources:
                 order: 4
               max_tokens:
                 type: number
-                description: Max tokens
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                 order: 5
               system_prompt:
                 type: string
@@ -1050,7 +1179,57 @@ Resources:
                   model:
                     type: string
                     description: Bedrock model ID
-                    enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0:1m", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                    enum:
+                      - "us.amazon.nova-lite-v1:0"
+                      - "us.amazon.nova-pro-v1:0"
+                      - "us.amazon.nova-premier-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0:priority"
+                      - "us.amazon.nova-2-lite-v1:0:flex"
+                      - "global.amazon.nova-2-lite-v1:0"
+                      - "global.amazon.nova-2-lite-v1:0:priority"
+                      - "global.amazon.nova-2-lite-v1:0:flex"
+                      - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-6"
+                      - "us.anthropic.claude-sonnet-4-6:1m"
+                      - "us.anthropic.claude-opus-4-20250514-v1:0"
+                      - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                      - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "us.anthropic.claude-opus-4-6-v1"
+                      - "us.anthropic.claude-opus-4-6-v1:1m"
+                      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "global.anthropic.claude-sonnet-4-6"
+                      - "global.anthropic.claude-sonnet-4-6:1m"
+                      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "global.anthropic.claude-opus-4-6-v1"
+                      - "global.anthropic.claude-opus-4-6-v1:1m"
+                      - "eu.amazon.nova-lite-v1:0"
+                      - "eu.amazon.nova-pro-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0:priority"
+                      - "eu.amazon.nova-2-lite-v1:0:flex"
+                      - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "eu.anthropic.claude-sonnet-4-6"
+                      - "eu.anthropic.claude-sonnet-4-6:1m"
+                      - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "eu.anthropic.claude-opus-4-6-v1"
+                      - "eu.anthropic.claude-opus-4-6-v1:1m"
+                      - "qwen.qwen3-vl-235b-a22b"
                     order: 1
                   temperature:
                     type: number
@@ -1068,7 +1247,7 @@ Resources:
                     order: 4
                   max_tokens:
                     type: number
-                    description: Max tokens
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                     order: 5
                   system_prompt:
                     type: string
@@ -1095,7 +1274,57 @@ Resources:
                   model_id:
                     type: string
                     description: Bedrock model ID for discovery without ground truth
-                    enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0:1m", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                    enum:
+                      - "us.amazon.nova-lite-v1:0"
+                      - "us.amazon.nova-pro-v1:0"
+                      - "us.amazon.nova-premier-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0:priority"
+                      - "us.amazon.nova-2-lite-v1:0:flex"
+                      - "global.amazon.nova-2-lite-v1:0"
+                      - "global.amazon.nova-2-lite-v1:0:priority"
+                      - "global.amazon.nova-2-lite-v1:0:flex"
+                      - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-6"
+                      - "us.anthropic.claude-sonnet-4-6:1m"
+                      - "us.anthropic.claude-opus-4-20250514-v1:0"
+                      - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                      - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "us.anthropic.claude-opus-4-6-v1"
+                      - "us.anthropic.claude-opus-4-6-v1:1m"
+                      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "global.anthropic.claude-sonnet-4-6"
+                      - "global.anthropic.claude-sonnet-4-6:1m"
+                      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "global.anthropic.claude-opus-4-6-v1"
+                      - "global.anthropic.claude-opus-4-6-v1:1m"
+                      - "eu.amazon.nova-lite-v1:0"
+                      - "eu.amazon.nova-pro-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0:priority"
+                      - "eu.amazon.nova-2-lite-v1:0:flex"
+                      - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "eu.anthropic.claude-sonnet-4-6"
+                      - "eu.anthropic.claude-sonnet-4-6:1m"
+                      - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "eu.anthropic.claude-opus-4-6-v1"
+                      - "eu.anthropic.claude-opus-4-6-v1:1m"
+                      - "qwen.qwen3-vl-235b-a22b"
                     default: "us.amazon.nova-pro-v1:0"
                     order: 0
                   temperature:
@@ -1114,7 +1343,7 @@ Resources:
                     order: 2
                   max_tokens:
                     type: number
-                    description: Maximum number of tokens to generate
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                     minimum: 1000
                     maximum: 20000
                     default: 10000
@@ -1140,7 +1369,57 @@ Resources:
                   model_id:
                     type: string
                     description: Bedrock model ID for discovery with ground truth
-                    enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0:1m", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                    enum:
+                      - "us.amazon.nova-lite-v1:0"
+                      - "us.amazon.nova-pro-v1:0"
+                      - "us.amazon.nova-premier-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0:priority"
+                      - "us.amazon.nova-2-lite-v1:0:flex"
+                      - "global.amazon.nova-2-lite-v1:0"
+                      - "global.amazon.nova-2-lite-v1:0:priority"
+                      - "global.amazon.nova-2-lite-v1:0:flex"
+                      - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-6"
+                      - "us.anthropic.claude-sonnet-4-6:1m"
+                      - "us.anthropic.claude-opus-4-20250514-v1:0"
+                      - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                      - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "us.anthropic.claude-opus-4-6-v1"
+                      - "us.anthropic.claude-opus-4-6-v1:1m"
+                      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "global.anthropic.claude-sonnet-4-6"
+                      - "global.anthropic.claude-sonnet-4-6:1m"
+                      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "global.anthropic.claude-opus-4-6-v1"
+                      - "global.anthropic.claude-opus-4-6-v1:1m"
+                      - "eu.amazon.nova-lite-v1:0"
+                      - "eu.amazon.nova-pro-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0:priority"
+                      - "eu.amazon.nova-2-lite-v1:0:flex"
+                      - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "eu.anthropic.claude-sonnet-4-6"
+                      - "eu.anthropic.claude-sonnet-4-6:1m"
+                      - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "eu.anthropic.claude-opus-4-6-v1"
+                      - "eu.anthropic.claude-opus-4-6-v1:1m"
+                      - "qwen.qwen3-vl-235b-a22b"
                     default: "us.amazon.nova-pro-v1:0"
                     order: 0
                   temperature:
@@ -1159,7 +1438,7 @@ Resources:
                     order: 2
                   max_tokens:
                     type: number
-                    description: Maximum number of tokens to generate
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                     minimum: 1000
                     maximum: 20000
                     default: 10000
@@ -1202,7 +1481,57 @@ Resources:
                   model_id:
                     type: string
                     description: Model ID for the chat companion agents
-                    enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                    enum:
+                      - "us.amazon.nova-lite-v1:0"
+                      - "us.amazon.nova-pro-v1:0"
+                      - "us.amazon.nova-premier-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0:priority"
+                      - "us.amazon.nova-2-lite-v1:0:flex"
+                      - "global.amazon.nova-2-lite-v1:0"
+                      - "global.amazon.nova-2-lite-v1:0:priority"
+                      - "global.amazon.nova-2-lite-v1:0:flex"
+                      - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-6"
+                      - "us.anthropic.claude-sonnet-4-6:1m"
+                      - "us.anthropic.claude-opus-4-20250514-v1:0"
+                      - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                      - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "us.anthropic.claude-opus-4-6-v1"
+                      - "us.anthropic.claude-opus-4-6-v1:1m"
+                      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "global.anthropic.claude-sonnet-4-6"
+                      - "global.anthropic.claude-sonnet-4-6:1m"
+                      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "global.anthropic.claude-opus-4-6-v1"
+                      - "global.anthropic.claude-opus-4-6-v1:1m"
+                      - "eu.amazon.nova-lite-v1:0"
+                      - "eu.amazon.nova-pro-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0:priority"
+                      - "eu.amazon.nova-2-lite-v1:0:flex"
+                      - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "eu.anthropic.claude-sonnet-4-6"
+                      - "eu.anthropic.claude-sonnet-4-6:1m"
+                      - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "eu.anthropic.claude-opus-4-6-v1"
+                      - "eu.anthropic.claude-opus-4-6-v1:1m"
+                      - "qwen.qwen3-vl-235b-a22b"
                     default: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                     order: 0
               error_analyzer:
@@ -1230,47 +1559,6 @@ Resources:
                         description: Default time range in hours for analysis
                         default: 24
                         order: 2
-          pricing:
-            order: 9
-            type: array
-            sectionLabel: Pricing (Estimates only - check https://aws.amazon.com/bedrock/pricing/ & https://aws.amazon.com/textract/pricing/)
-            listLabel: Services
-            itemLabel: Service/API
-            columns: 2
-            items:
-              type: object
-              required:
-                - name
-                - units
-              properties:
-                name:
-                  type: string
-                  description: Service/API
-                units:
-                  type: array
-                  listLabel: Metered unit pricing
-                  itemLabel: Metered Unit price
-                  items:
-                    type: object
-                    required:
-                      - name
-                      - price
-                    properties:
-                      name:
-                        type: string
-                        description: Metered unit name
-                      price:
-                        type: number
-                        description: Estimated cost/unit
-            default:
-              - name: "lambda/requests"
-                units:
-                  - name: "invocations"
-                    price: 2.0E-7
-              - name: "lambda/duration"
-                units:
-                  - name: "gb_seconds"
-                    price: 1.66667E-5
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
@@ -1279,9 +1567,10 @@ Resources:
     Properties:
       ServiceToken: !Ref UpdateConfigurationFunctionArn
       Default: !Ref ConfigurationDefaultS3Uri
+      DefaultPricing: !Sub "s3://${ConfigurationBucket}/config_library/pricing.yaml"
       ConfigLibraryHash: !Ref ConfigLibraryHash
 
-
+  
   OCRFunction:
     Type: AWS::Serverless::Function
     DependsOn: DockerBuildRun
@@ -1350,7 +1639,7 @@ Resources:
             Resource: !Ref CustomerManagedEncryptionKeyArn
           # Textract APIs require '*' as they don't support resource-level permissions
           - Effect: Allow
-            Action:
+            Action: 
               - textract:DetectDocumentText
               - textract:AnalyzeDocument
             Resource: '*'
@@ -1374,11 +1663,11 @@ Resources:
             - Effect: Allow
               Action:
                 - appsync:GraphQL
-              Resource:
+              Resource: 
                 - !Sub "${AppSyncApiArn}/types/Mutation/*"
             - !Ref AWS::NoValue
 
-
+  
   OCRFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1480,7 +1769,7 @@ Resources:
             - Effect: Allow
               Action:
                 - appsync:GraphQL
-              Resource:
+              Resource: 
                 - !Sub "${AppSyncApiArn}/types/Mutation/*"
             - !Ref AWS::NoValue
           - !If
@@ -1489,14 +1778,14 @@ Resources:
               Action: bedrock:ApplyGuardrail
               Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
             - !Ref AWS::NoValue
-
+  
   ClassificationFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
       LogGroupName: !Sub "/${AWS::StackName}/lambda/ClassificationFunction"
       RetentionInDays: !Ref LogRetentionDays
-
+  
   ExtractionFunction:
     Type: AWS::Serverless::Function
     DependsOn: DockerBuildRun
@@ -1573,7 +1862,7 @@ Resources:
             - Effect: Allow
               Action:
                 - appsync:GraphQL
-              Resource:
+              Resource: 
                 - !Sub "${AppSyncApiArn}/types/Mutation/*"
             - !Ref AWS::NoValue
           - Effect: Allow
@@ -1684,12 +1973,12 @@ Resources:
             - Effect: Allow
               Action:
                 - appsync:GraphQL
-              Resource:
+              Resource: 
                 - !Sub "${AppSyncApiArn}/types/Mutation/*"
             - !Ref AWS::NoValue
           - Effect: Allow
             Action: bedrock:InvokeModel
-            Resource:
+            Resource: 
                 - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
                 - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
           - Effect: Allow
@@ -1779,11 +2068,11 @@ Resources:
             - Effect: Allow
               Action:
                 - appsync:GraphQL
-              Resource:
+              Resource: 
                 - !Sub "${AppSyncApiArn}/types/Mutation/*"
             - !Ref AWS::NoValue
 
-
+  
   ProcessResultsFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1805,7 +2094,7 @@ Resources:
           - id: W92
             reason: "Function does not require concurrent execution limits as it is designed to scale based on demand"
     # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
-    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"    
     # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
     # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
     Properties:
@@ -1858,7 +2147,7 @@ Resources:
             Resource: !Ref CustomerManagedEncryptionKeyArn
           - Effect: Allow
             Action: bedrock:InvokeModel
-            Resource:
+            Resource: 
                 - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
                 - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
           - Effect: Allow
@@ -1873,7 +2162,7 @@ Resources:
             - Effect: Allow
               Action:
                 - appsync:GraphQL
-              Resource:
+              Resource: 
                 - !Sub "${AppSyncApiArn}/types/Mutation/*"
             - !Ref AWS::NoValue
           - !If
@@ -2521,7 +2810,7 @@ Outputs:
   StateMachineArn:
     Description: Step Functions State machine ARN
     Value: !GetAtt DocumentProcessingStateMachine.Arn
-
+  
   StateMachineLogGroup:
     Description: Step Functions State machine LogGroup
     Value: !Ref StateMachineLogGroup

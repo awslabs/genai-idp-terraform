@@ -5,6 +5,7 @@
 CloudWatch tools for error analysis.
 """
 
+import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -18,6 +19,9 @@ from .dynamodb_tool import fetch_document_record
 from .xray_tool import extract_lambda_request_ids
 
 logger = logging.getLogger(__name__)
+
+# Cache for SSM settings to avoid repeated API calls
+_settings_cache: Dict[str, Any] = {}
 
 
 # =============================================================================
@@ -321,12 +325,13 @@ def _get_stack_name(document_record: Optional[Dict[str, Any]] = None) -> str:
 
 def _get_stack_log_groups(document_status: str = None) -> List[Dict[str, str]]:
     """
-    Get prioritized log groups from environment variable with status-aware prioritization.
+    Get prioritized log groups from SSM Settings with status-aware prioritization.
+    Reads CloudWatchLogGroups from the Settings parameter stored in SSM.
     """
-    env_log_groups = os.environ.get("CLOUDWATCH_LOG_GROUPS", "")
-    if env_log_groups:
+    log_groups_str = _get_cloudwatch_log_groups_from_settings()
+    if log_groups_str:
         log_groups = [
-            {"name": lg.strip()} for lg in env_log_groups.split(",") if lg.strip()
+            {"name": lg.strip()} for lg in log_groups_str.split(",") if lg.strip()
         ]
         logger.info(
             f"Log groups: [{len(log_groups)}]{[lg['name'] for lg in log_groups]}"
@@ -337,8 +342,40 @@ def _get_stack_log_groups(document_status: str = None) -> List[Dict[str, str]]:
         )
         return prioritized_groups
 
-    logger.warning("CLOUDWATCH_LOG_GROUPS environment variable not set")
+    logger.warning("CloudWatchLogGroups not found in SSM Settings")
     return []
+
+
+def _get_cloudwatch_log_groups_from_settings() -> str:
+    """
+    Get CloudWatchLogGroups from SSM Settings parameter.
+    Uses caching to avoid repeated SSM API calls.
+    """
+    global _settings_cache
+
+    # Check cache first
+    if "CloudWatchLogGroups" in _settings_cache:
+        return _settings_cache["CloudWatchLogGroups"]
+
+    # Get settings parameter name from environment
+    settings_param_name = os.environ.get("SETTINGS_PARAMETER_NAME", "")
+    if not settings_param_name:
+        logger.warning("SETTINGS_PARAMETER_NAME environment variable not set")
+        return ""
+
+    try:
+        ssm_client = boto3.client("ssm")
+        response = ssm_client.get_parameter(Name=settings_param_name)
+        settings_value = response.get("Parameter", {}).get("Value", "{}")
+        settings = json.loads(settings_value)
+
+        # Cache all settings for future use
+        _settings_cache.update(settings)
+
+        return settings.get("CloudWatchLogGroups", "")
+    except Exception as e:
+        logger.warning(f"Failed to get CloudWatchLogGroups from SSM: {e}")
+        return ""
 
 
 def _prioritize_log_groups(

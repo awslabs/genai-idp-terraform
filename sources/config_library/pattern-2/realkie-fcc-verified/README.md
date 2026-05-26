@@ -13,5 +13,5 @@ This directory contains the default (starting point) configuration for the FCC I
 
 **Level**: 2 - Minimal Testing
 
-- **Testing Evidence**: This configuration has been lightly tested with the RealKIE-FCC-Verified Dataset.
+- **Testing Evidence**: This configuration has been lightly tested with the RealKIE-FCC-Verified Dataset. 
 - **Known Limitations**: Performance may vary - consider this configuration a starting point. We welome Pull Requests to improve the accuracy.

@@ -72,6 +72,24 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the shared base Lambda layer (idp_common with docs_service extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
+variable "reporting_layer_arn" {
+  description = "ARN of the shared reporting Lambda layer (idp_common with reporting extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
+variable "agents_layer_arn" {
+  description = "ARN of the shared agents Lambda layer (idp_common with agents extras, v0.4.11+)"
+  type        = string
+  default     = null
+}
+
 variable "data_tracking_retention_days" {
   description = "The retention period for document tracking data in days"
   type        = number
@@ -113,15 +131,6 @@ variable "security_group_ids" {
   description = "List of security group IDs for Lambda functions"
   type        = list(string)
   default     = []
-}
-
-variable "evaluation_config" {
-  description = "Optional evaluation configuration for document processing quality assessment"
-  type = object({
-    baseline_bucket_arn  = string
-    evaluation_model_arn = string
-  })
-  default = null
 }
 
 variable "enable_reporting" {

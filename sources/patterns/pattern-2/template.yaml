@@ -79,19 +79,6 @@ Parameters:
     Default: ""
     Description: "If you provided a Bedrock Guardrail Id above, provide the corresponding Guardrail version here"
 
-  EnableHITL:
-    Type: String
-    Default: "false"
-    AllowedValues:
-      - "true"
-      - "false"
-    Description: "Enable Human In The Loop (A2I) for document review"
-
-  SageMakerA2IReviewPortalURL:
-    Type: String
-    Default: ""
-    Description: "SageMaker A2I Review Portal URL for HITL workflows"
-
   ConfigurationDefaultS3Uri:
     Type: String
     Description: "S3 URI (s3://bucket/path/config.json) to import default configuration from S3"
@@ -130,7 +117,7 @@ Parameters:
     Description: >-
       (Optional) ARN of an existing IAM Permissions Boundary policy to attach to all IAM roles.
       Required by some organizations with Service Control Policies (SCPs).
-      Format: arn:${AWS::Partition}:iam::account-id:policy/policy-name
+      Format: arn:partition:iam::account-id:policy/policy-name
       Leave blank if no Permissions Boundary is required.
     AllowedPattern: "^(|arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
@@ -238,6 +225,7 @@ Resources:
     Type: AWS::ECR::Repository
     # checkov:skip=CKV_AWS_51: "Mutable tags allowed for workflow flexibility and version updates."
     Properties:
+      # checkov:skip=CKV_AWS_163: "ECR scanning controlled by parameter for environment-specific deployment requirements"
       ImageScanningConfiguration:
         ScanOnPush: !If [IsECRImageScanningEnabled, true, false]
       EncryptionConfiguration:
@@ -260,15 +248,13 @@ Resources:
 
   DockerBuildProject:
     Type: AWS::CodeBuild::Project
-    DependsOn:
-      - DockerBuildRole
-      - ECRRepository
+    # cdk-nag suppress: AwsSolutions-CB5 - Privileged mode required for Docker image builds
     Properties:
       Name: !Sub "${AWS::StackName}-docker-build"
       Description: !Sub >-
         Pattern-2 Docker image builder for GenAIIDP stack - ${AWS::StackName}
       ServiceRole: !GetAtt DockerBuildRole.Arn
-      EncryptionKey: alias/aws/s3
+      EncryptionKey: !Ref CustomerManagedEncryptionKeyArn
       Artifacts:
         Type: NO_ARTIFACTS
       Source:
@@ -397,9 +383,6 @@ Resources:
 
   DockerBuildRun:
     Type: Custom::CodeBuildRun
-    DependsOn:
-      - DockerBuildProject
-      - CodeBuildTrigger
     Properties:
       ServiceToken: !GetAtt CodeBuildTrigger.Arn
       BuildProjectName: !Ref DockerBuildProject
@@ -414,15 +397,13 @@ Resources:
         - "processresults-function"
         - "summarization-function"
         - "evaluation-function"
-        - "hitl-wait-function"
-        - "hitl-status-update-function"
-        - "hitl-process-function"
+        - "rule-validation-function"
+        - "rule-validation-orchestration-function"
 
   EcrRepositoryCleanup:
     Type: Custom::ECRRepositoryCleanup
     DependsOn:
       - DockerBuildRun
-      - ECRRepository
     Properties:
       ServiceToken: !GetAtt CodeBuildTrigger.Arn
       RepositoryName: !Ref ECRRepository
@@ -505,12 +486,18 @@ Resources:
                 order: 3
               model_id:
                 type: string
-                description: "Bedrock model ID (only used if backend is 'bedrock')"
+                description: "Bedrock model ID (only used if backend is 'bedrock'). Select 'LambdaHook' to use a custom Lambda function for inference."
                 enum:
+                  - "LambdaHook"
                   - "us.amazon.nova-lite-v1:0"
                   - "us.amazon.nova-pro-v1:0"
                   - "us.amazon.nova-premier-v1:0"
                   - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
                   - "us.anthropic.claude-3-haiku-20240307-v1:0"
                   - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -519,12 +506,18 @@ Resources:
                   - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
                   - "us.anthropic.claude-opus-4-20250514-v1:0"
                   - "us.anthropic.claude-opus-4-1-20250805-v1:0"
                   - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
                   - "eu.amazon.nova-lite-v1:0"
                   - "eu.amazon.nova-pro-v1:0"
                   - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
                   - "eu.anthropic.claude-3-haiku-20240307-v1:0"
                   - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -532,28 +525,47 @@ Resources:
                   - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
                   - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
                   - "qwen.qwen3-vl-235b-a22b"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
                 order: 2
                 dependsOn: { field: "backend", value: "bedrock" }
+              model_lambda_hook_arn:
+                type: string
+                description: "Lambda function ARN for custom inference (used when model_id is 'LambdaHook'). Function name must start with GENAIIDP-."
+                default: ""
+                order: 3
+                dependsOn: { field: "model_id", value: "LambdaHook" }
               system_prompt:
                 type: string
                 description: "System prompt for Bedrock OCR (only used if backend is 'bedrock')"
                 default: "You are an expert OCR system. Extract all text from the provided image accurately, preserving layout where possible."
-                order: 3
+                order: 4
                 dependsOn: { field: "backend", value: "bedrock" }
               task_prompt:
                 type: string
                 description: "Task prompt for Bedrock OCR (only used if backend is 'bedrock')"
                 default: "Extract all text from this document image. Preserve the layout, including paragraphs, tables, and formatting."
-                order: 4
+                order: 5
                 dependsOn: { field: "backend", value: "bedrock" }
               features:
                 type: array
                 listLabel: "Textract Features"
                 itemLabel: "Feature"
                 description: "Textract features (only used if backend is 'textract')"
-                order: 5
+                order: 6
                 dependsOn: { field: "backend", values: ["textract"] }
                 items:
                   type: object
@@ -828,8 +840,9 @@ Resources:
                     order: 1
               model:
                 type: string
-                description: Model identifier
+                description: "Model identifier. Select 'LambdaHook' to use a custom Lambda function for inference."
                 enum:
+                  - "LambdaHook"
                   - !If
                     - HasCustomClassificationModelARN
                     - !Ref CustomClassificationModelARN
@@ -838,6 +851,11 @@ Resources:
                   - "us.amazon.nova-pro-v1:0"
                   - "us.amazon.nova-premier-v1:0"
                   - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
                   - "us.anthropic.claude-3-haiku-20240307-v1:0"
                   - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -846,12 +864,18 @@ Resources:
                   - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
                   - "us.anthropic.claude-opus-4-20250514-v1:0"
                   - "us.anthropic.claude-opus-4-1-20250805-v1:0"
                   - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
                   - "eu.amazon.nova-lite-v1:0"
                   - "eu.amazon.nova-pro-v1:0"
                   - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
                   - "eu.anthropic.claude-3-haiku-20240307-v1:0"
                   - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -859,9 +883,28 @@ Resources:
                   - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
                   - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
                   - "qwen.qwen3-vl-235b-a22b"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
                 order: 1
+              model_lambda_hook_arn:
+                type: string
+                description: "Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-."
+                default: ""
+                order: 2
+                dependsOn: { field: "model", value: "LambdaHook" }
               classificationMethod:
                 type: string
                 description: "Classification methodology to use"
@@ -882,6 +925,14 @@ Resources:
                 enum: ["disabled", "page", "llm_determined"]
                 default: "llm_determined"
                 order: 3.5
+              contextPagesCount:
+                type: integer
+                description: "Number of surrounding pages to include as context for multi-modal page-level classification. Value of 0 means no additional context (default). Value of 1 includes 1 page before and after. Value of 2 includes 2 pages before and after. Only applies to multimodalPageLevelClassification method."
+                minimum: 0
+                maximum: 5
+                default: 0
+                order: 3.6
+                dependsOn: { field: "classificationMethod", value: "multimodalPageLevelClassification" }
               temperature:
                 type: number
                 minimum: 0
@@ -899,7 +950,7 @@ Resources:
                 order: 6
               max_tokens:
                 type: number
-                description: Max tokens
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                 order: 7
               system_prompt:
                 type: string
@@ -963,8 +1014,9 @@ Resources:
                     order: 1
               model:
                 type: string
-                description: Model identifier
+                description: "Model identifier. Select 'LambdaHook' to use a custom Lambda function for inference."
                 enum:
+                  - "LambdaHook"
                   - !If
                     - HasCustomExtractionModelARN
                     - !Ref CustomExtractionModelARN
@@ -974,6 +1026,11 @@ Resources:
                   - "us.amazon.nova-pro-v1:0"
                   - "us.amazon.nova-premier-v1:0"
                   - "us.amazon.nova-2-lite-v1:0"
+                  - "us.amazon.nova-2-lite-v1:0:priority"
+                  - "us.amazon.nova-2-lite-v1:0:flex"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.amazon.nova-2-lite-v1:0:priority"
+                  - "global.amazon.nova-2-lite-v1:0:flex"
                   - "us.anthropic.claude-3-haiku-20240307-v1:0"
                   - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -981,12 +1038,18 @@ Resources:
                   - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "us.anthropic.claude-sonnet-4-6"
+                  - "us.anthropic.claude-sonnet-4-6:1m"
                   - "us.anthropic.claude-opus-4-20250514-v1:0"
                   - "us.anthropic.claude-opus-4-1-20250805-v1:0"
                   - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "us.anthropic.claude-opus-4-6-v1"
+                  - "us.anthropic.claude-opus-4-6-v1:1m"
                   - "eu.amazon.nova-lite-v1:0"
                   - "eu.amazon.nova-pro-v1:0"
                   - "eu.amazon.nova-2-lite-v1:0"
+                  - "eu.amazon.nova-2-lite-v1:0:priority"
+                  - "eu.amazon.nova-2-lite-v1:0:flex"
                   - "eu.anthropic.claude-3-haiku-20240307-v1:0"
                   - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
                   - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -994,40 +1057,59 @@ Resources:
                   - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
                   - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "eu.anthropic.claude-sonnet-4-6"
+                  - "eu.anthropic.claude-sonnet-4-6:1m"
                   - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "eu.anthropic.claude-opus-4-6-v1"
+                  - "eu.anthropic.claude-opus-4-6-v1:1m"
                   - "qwen.qwen3-vl-235b-a22b"
+                  - "global.amazon.nova-2-lite-v1:0"
+                  - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                  - "global.anthropic.claude-sonnet-4-6"
+                  - "global.anthropic.claude-sonnet-4-6:1m"
+                  - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                  - "global.anthropic.claude-opus-4-6-v1"
+                  - "global.anthropic.claude-opus-4-6-v1:1m"
                 order: 1
+              model_lambda_hook_arn:
+                type: string
+                description: "Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-."
+                default: ""
+                order: 2
+                dependsOn: { field: "model", value: "LambdaHook" }
               temperature:
                 type: number
                 minimum: 0
                 maximum: 1
                 description: "Sampling temperature: Controls randomness in model output (0.0 = deterministic, higher = more random). Used when top_p is 0. Set temperature=0.0 for consistent, deterministic outputs."
-                order: 2
+                order: 3
               top_k:
                 type: integer
                 minimum: 1
                 description: Sampling Top K
-                order: 3
+                order: 4
               top_p:
                 type: number
                 description: "Sampling Top P: Nucleus sampling threshold (0.0-1.0). When set to a positive value (> 0), overrides temperature parameter. Set to 0 to use temperature instead."
-                order: 4
+                order: 5
               max_tokens:
                 type: number
-                description: Max tokens
-                order: 5
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
+                order: 6
               system_prompt:
                 type: string
                 description: System prompt
-                order: 6
+                order: 7
               task_prompt:
                 type: string
                 description: Task prompt - supports placeholders {DOCUMENT_CLASS} (replaced with the detected class label), {ATTRIBUTE_NAMES_AND_DESCRIPTIONS} (replaced with the attribute names and descriptions for the detected class), {FEW_SHOT_EXAMPLES} (replaced by classPrompt and image data from examples in class definitions), {DOCUMENT_TEXT} (replaced by the OCR output), and {DOCUMENT_IMAGE} (replaced by the page image attachments for each page). Optionally use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.
-                order: 7
+                order: 8
               custom_prompt_lambda_arn:
                 type: string
-                description: "(Optional) ARN of a Lambda function to generate custom extraction prompts. Function name must start with 'GENAIIDP-'. If not provided, default prompts will be used. The Lambda function receives the complete config, prompt placeholders, default task prompt content, and serialized document, and returns custom system_prompt and task_prompt_content. Example: arn:${AWS::Partition}:lambda:us-east-1:123456789012:function:GENAIIDP-my-extractor"
-                order: 8
+                description: "(Optional) ARN of a Lambda function to generate custom extraction prompts. Function name must start with 'GENAIIDP-'. If not provided, default prompts will be used. The Lambda function receives the complete config, prompt placeholders, default task prompt content, and serialized document, and returns custom system_prompt and task_prompt_content. Example: arn:partition:lambda:us-east-1:123456789012:function:GENAIIDP-my-extractor"
+                order: 9
           assessment:
             order: 5
             type: object
@@ -1097,21 +1179,28 @@ Resources:
                     default: 1
                     order: 3
                     dependsOn: { field: "enabled", value: true }
+              hitl_enabled:
+                type: boolean
+                description: Enable Human-in-the-Loop (HITL) review for low confidence extractions
+                default: false
+                order: 4
               default_confidence_threshold:
                 type: number
-                description: Default confidence threshold for all attributes (0.0 to 1.0). If an attribute doesn't have its own threshold, this default will be used for confidence threshold alerts.
-                minimum: 0
-                maximum: 1
-                order: 4
+                description: Confidence Threshold (0.0-1.0) - Documents with confidence below this threshold will trigger HITL review and show confidence alerts
+                minimum: 0.0
+                maximum: 1.0
+                default: 0.8
+                order: 5
               model:
                 type: string
-                description: Bedrock model ID
+                description: "Bedrock model ID. Select 'LambdaHook' to use a custom Lambda function for inference."
                 enum:
                   [
+                    "LambdaHook",
                     "us.amazon.nova-lite-v1:0",
                     "us.amazon.nova-pro-v1:0",
                     "us.amazon.nova-premier-v1:0",
-                    "us.amazon.nova-2-lite-v1:0",
+                    "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
                     "us.anthropic.claude-3-haiku-20240307-v1:0",
                     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
                     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1120,12 +1209,16 @@ Resources:
                     "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
                     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
                     "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                    "us.anthropic.claude-sonnet-4-6",
+                    "us.anthropic.claude-sonnet-4-6:1m",
                     "us.anthropic.claude-opus-4-20250514-v1:0",
                     "us.anthropic.claude-opus-4-1-20250805-v1:0",
                     "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                    "us.anthropic.claude-opus-4-6-v1",
+                    "us.anthropic.claude-opus-4-6-v1:1m",
                     "eu.amazon.nova-lite-v1:0",
                     "eu.amazon.nova-pro-v1:0",
-                    "eu.amazon.nova-2-lite-v1:0",
+                    "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
                     "eu.anthropic.claude-3-haiku-20240307-v1:0",
                     "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
                     "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1133,36 +1226,55 @@ Resources:
                     "eu.anthropic.claude-sonnet-4-20250514-v1:0",
                     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
                     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                    "eu.anthropic.claude-sonnet-4-6",
+                    "eu.anthropic.claude-sonnet-4-6:1m",
                     "eu.anthropic.claude-opus-4-5-20251101-v1:0",
-                    "qwen.qwen3-vl-235b-a22b"
+                    "eu.anthropic.claude-opus-4-6-v1",
+                    "eu.anthropic.claude-opus-4-6-v1:1m",
+                    "qwen.qwen3-vl-235b-a22b",
+                    "global.amazon.nova-2-lite-v1:0",
+                    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                    "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                    "global.anthropic.claude-sonnet-4-6",
+                    "global.anthropic.claude-sonnet-4-6:1m",
+                    "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                    "global.anthropic.claude-opus-4-6-v1",
+                    "global.anthropic.claude-opus-4-6-v1:1m"
                   ]
                 order: 5
+              model_lambda_hook_arn:
+                type: string
+                description: "Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-."
+                default: ""
+                order: 6
+                dependsOn: { field: "model", value: "LambdaHook" }
               temperature:
                 type: number
                 description: "Sampling temperature: Controls randomness in model output (0.0 = deterministic, higher = more random). Used when top_p is 0. Set temperature=0.0 for consistent, deterministic outputs."
-                order: 6
+                order: 7
               top_k:
                 type: number
                 description: Sampling Top K
-                order: 7
+                order: 8
               top_p:
                 type: number
                 description: "Sampling Top P: Nucleus sampling threshold (0.0-1.0). When set to a positive value (> 0), overrides temperature parameter. Set to 0 to use temperature instead."
-                order: 8
+                order: 9
               max_tokens:
                 type: number
-                description: Max tokens
-                order: 9
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
+                order: 10
               system_prompt:
                 type: string
                 format: textarea
                 description: System prompt
-                order: 10
+                order: 11
               task_prompt:
                 type: string
                 format: textarea
                 description: Task prompt - supports placeholders {DOCUMENT_TEXT} (markdown text), {OCR_TEXT_CONFIDENCE} (OCR text blocks with confidence), {DOCUMENT_CLASS}, {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}, {EXTRACTION_RESULTS}, {GRANULAR_CONTEXT} and {DOCUMENT_IMAGE}. Use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.
-                order: 11
+                order: 12
           summarization:
             order: 6
             type: object
@@ -1175,13 +1287,14 @@ Resources:
                 order: 0
               model:
                 type: string
-                description: Bedrock model ID
+                description: "Bedrock model ID. Select 'LambdaHook' to use a custom Lambda function for inference."
                 enum:
                   [
+                    "LambdaHook",
                     "us.amazon.nova-lite-v1:0",
                     "us.amazon.nova-pro-v1:0",
                     "us.amazon.nova-premier-v1:0",
-                    "us.amazon.nova-2-lite-v1:0",
+                    "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
                     "us.anthropic.claude-3-haiku-20240307-v1:0",
                     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
                     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1190,12 +1303,16 @@ Resources:
                     "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
                     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
                     "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                    "us.anthropic.claude-sonnet-4-6",
+                    "us.anthropic.claude-sonnet-4-6:1m",
                     "us.anthropic.claude-opus-4-20250514-v1:0",
                     "us.anthropic.claude-opus-4-1-20250805-v1:0",
                     "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                    "us.anthropic.claude-opus-4-6-v1",
+                    "us.anthropic.claude-opus-4-6-v1:1m",
                     "eu.amazon.nova-lite-v1:0",
                     "eu.amazon.nova-pro-v1:0",
-                    "eu.amazon.nova-2-lite-v1:0",
+                    "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
                     "eu.anthropic.claude-3-haiku-20240307-v1:0",
                     "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
                     "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1203,36 +1320,55 @@ Resources:
                     "eu.anthropic.claude-sonnet-4-20250514-v1:0",
                     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
                     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                    "eu.anthropic.claude-sonnet-4-6",
+                    "eu.anthropic.claude-sonnet-4-6:1m",
                     "eu.anthropic.claude-opus-4-5-20251101-v1:0",
-                    "qwen.qwen3-vl-235b-a22b"
+                    "eu.anthropic.claude-opus-4-6-v1",
+                    "eu.anthropic.claude-opus-4-6-v1:1m",
+                    "qwen.qwen3-vl-235b-a22b",
+                    "global.amazon.nova-2-lite-v1:0",
+                    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                    "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                    "global.anthropic.claude-sonnet-4-6",
+                    "global.anthropic.claude-sonnet-4-6:1m",
+                    "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                    "global.anthropic.claude-opus-4-6-v1",
+                    "global.anthropic.claude-opus-4-6-v1:1m"
                   ]
                 order: 1
+              model_lambda_hook_arn:
+                type: string
+                description: "Lambda function ARN for custom inference (used when model is 'LambdaHook'). Function name must start with GENAIIDP-."
+                default: ""
+                order: 2
+                dependsOn: { field: "model", value: "LambdaHook" }
               temperature:
                 type: number
                 description: Sampling temperature
-                order: 2
+                order: 3
               top_k:
                 type: number
                 description: Sampling Top K
-                order: 3
+                order: 4
               top_p:
                 type: number
                 description: Sampling Top P
-                order: 4
+                order: 5
               max_tokens:
                 type: number
-                description: Max tokens
-                order: 5
+                description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
+                order: 6
               system_prompt:
                 type: string
                 format: textarea
                 description: System prompt
-                order: 6
+                order: 7
               task_prompt:
                 type: string
                 format: textarea
                 description: Task prompt - supports parameters {DOCUMENT_TEXT} and {EXTRACTION_RESULTS}. Optionally use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.
-                order: 7
+                order: 8
           evaluation:
             order: 7
             type: object
@@ -1254,7 +1390,7 @@ Resources:
                         "us.amazon.nova-lite-v1:0",
                         "us.amazon.nova-pro-v1:0",
                         "us.amazon.nova-premier-v1:0",
-                        "us.amazon.nova-2-lite-v1:0",
+                        "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
                         "us.anthropic.claude-3-haiku-20240307-v1:0",
                         "us.anthropic.claude-haiku-4-5-20251001-v1:0",
                         "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1263,12 +1399,16 @@ Resources:
                         "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
                         "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
                         "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-6",
+                        "us.anthropic.claude-sonnet-4-6:1m",
                         "us.anthropic.claude-opus-4-20250514-v1:0",
                         "us.anthropic.claude-opus-4-1-20250805-v1:0",
                         "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "us.anthropic.claude-opus-4-6-v1",
+                        "us.anthropic.claude-opus-4-6-v1:1m",
                         "eu.amazon.nova-lite-v1:0",
                         "eu.amazon.nova-pro-v1:0",
-                        "eu.amazon.nova-2-lite-v1:0",
+                        "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
                         "eu.anthropic.claude-3-haiku-20240307-v1:0",
                         "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
                         "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1276,8 +1416,21 @@ Resources:
                         "eu.anthropic.claude-sonnet-4-20250514-v1:0",
                         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
                         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "eu.anthropic.claude-sonnet-4-6",
+                        "eu.anthropic.claude-sonnet-4-6:1m",
                         "eu.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "eu.anthropic.claude-opus-4-6-v1",
+                        "eu.anthropic.claude-opus-4-6-v1:1m",
                         "qwen.qwen3-vl-235b-a22b",
+                        "global.amazon.nova-2-lite-v1:0",
+                        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "global.anthropic.claude-sonnet-4-6",
+                        "global.anthropic.claude-sonnet-4-6:1m",
+                        "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "global.anthropic.claude-opus-4-6-v1",
+                        "global.anthropic.claude-opus-4-6-v1:1m"
                       ]
                     order: 1
                   temperature:
@@ -1296,7 +1449,7 @@ Resources:
                     order: 4
                   max_tokens:
                     type: number
-                    description: Max tokens
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                     order: 5
                   system_prompt:
                     type: string
@@ -1328,7 +1481,7 @@ Resources:
                         "us.amazon.nova-lite-v1:0",
                         "us.amazon.nova-pro-v1:0",
                         "us.amazon.nova-premier-v1:0",
-                        "us.amazon.nova-2-lite-v1:0",
+                        "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
                         "us.anthropic.claude-3-haiku-20240307-v1:0",
                         "us.anthropic.claude-haiku-4-5-20251001-v1:0",
                         "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1337,12 +1490,16 @@ Resources:
                         "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
                         "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
                         "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-6",
+                        "us.anthropic.claude-sonnet-4-6:1m",
                         "us.anthropic.claude-opus-4-20250514-v1:0",
                         "us.anthropic.claude-opus-4-1-20250805-v1:0",
                         "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "us.anthropic.claude-opus-4-6-v1",
+                        "us.anthropic.claude-opus-4-6-v1:1m",
                         "eu.amazon.nova-lite-v1:0",
                         "eu.amazon.nova-pro-v1:0",
-                        "eu.amazon.nova-2-lite-v1:0",
+                        "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
                         "eu.anthropic.claude-3-haiku-20240307-v1:0",
                         "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
                         "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1350,8 +1507,21 @@ Resources:
                         "eu.anthropic.claude-sonnet-4-20250514-v1:0",
                         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
                         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "eu.anthropic.claude-sonnet-4-6",
+                        "eu.anthropic.claude-sonnet-4-6:1m",
                         "eu.anthropic.claude-opus-4-5-20251101-v1:0",
-                        "qwen.qwen3-vl-235b-a22b"
+                        "eu.anthropic.claude-opus-4-6-v1",
+                        "eu.anthropic.claude-opus-4-6-v1:1m",
+                        "qwen.qwen3-vl-235b-a22b",
+                        "global.amazon.nova-2-lite-v1:0",
+                        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "global.anthropic.claude-sonnet-4-6",
+                        "global.anthropic.claude-sonnet-4-6:1m",
+                        "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "global.anthropic.claude-opus-4-6-v1",
+                        "global.anthropic.claude-opus-4-6-v1:1m"
                       ]
                     default: "us.amazon.nova-pro-v1:0"
                     order: 0
@@ -1371,7 +1541,7 @@ Resources:
                     order: 2
                   max_tokens:
                     type: number
-                    description: Maximum number of tokens to generate
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                     minimum: 1000
                     maximum: 20000
                     default: 10000
@@ -1402,7 +1572,7 @@ Resources:
                         "us.amazon.nova-lite-v1:0",
                         "us.amazon.nova-pro-v1:0",
                         "us.amazon.nova-premier-v1:0",
-                        "us.amazon.nova-2-lite-v1:0",
+                        "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
                         "us.anthropic.claude-3-haiku-20240307-v1:0",
                         "us.anthropic.claude-haiku-4-5-20251001-v1:0",
                         "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1411,12 +1581,16 @@ Resources:
                         "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
                         "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
                         "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-6",
+                        "us.anthropic.claude-sonnet-4-6:1m",
                         "us.anthropic.claude-opus-4-20250514-v1:0",
                         "us.anthropic.claude-opus-4-1-20250805-v1:0",
                         "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "us.anthropic.claude-opus-4-6-v1",
+                        "us.anthropic.claude-opus-4-6-v1:1m",
                         "eu.amazon.nova-lite-v1:0",
                         "eu.amazon.nova-pro-v1:0",
-                        "eu.amazon.nova-2-lite-v1:0",
+                        "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
                         "eu.anthropic.claude-3-haiku-20240307-v1:0",
                         "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
                         "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -1424,8 +1598,21 @@ Resources:
                         "eu.anthropic.claude-sonnet-4-20250514-v1:0",
                         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
                         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "eu.anthropic.claude-sonnet-4-6",
+                        "eu.anthropic.claude-sonnet-4-6:1m",
                         "eu.anthropic.claude-opus-4-5-20251101-v1:0",
-                        "qwen.qwen3-vl-235b-a22b"
+                        "eu.anthropic.claude-opus-4-6-v1",
+                        "eu.anthropic.claude-opus-4-6-v1:1m",
+                        "qwen.qwen3-vl-235b-a22b",
+                        "global.amazon.nova-2-lite-v1:0",
+                        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "global.anthropic.claude-sonnet-4-6",
+                        "global.anthropic.claude-sonnet-4-6:1m",
+                        "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "global.anthropic.claude-opus-4-6-v1",
+                        "global.anthropic.claude-opus-4-6-v1:1m"
                       ]
                     default: "us.amazon.nova-pro-v1:0"
                     order: 0
@@ -1445,7 +1632,7 @@ Resources:
                     order: 2
                   max_tokens:
                     type: number
-                    description: Maximum number of tokens to generate
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
                     minimum: 1000
                     maximum: 20000
                     default: 10000
@@ -1488,7 +1675,57 @@ Resources:
                   model_id:
                     type: string
                     description: Model ID for the chat companion agents
-                    enum: ["us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-premier-v1:0", "us.amazon.nova-2-lite-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-opus-4-20250514-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-opus-4-5-20251101-v1:0", "eu.amazon.nova-lite-v1:0", "eu.amazon.nova-pro-v1:0", "eu.amazon.nova-2-lite-v1:0", "eu.anthropic.claude-3-haiku-20240307-v1:0", "eu.anthropic.claude-haiku-4-5-20251001-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0", "eu.anthropic.claude-3-7-sonnet-20250219-v1:0", "eu.anthropic.claude-sonnet-4-20250514-v1:0",  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", "eu.anthropic.claude-opus-4-5-20251101-v1:0", "qwen.qwen3-vl-235b-a22b"]
+                    enum:
+                      - "us.amazon.nova-lite-v1:0"
+                      - "us.amazon.nova-pro-v1:0"
+                      - "us.amazon.nova-premier-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0"
+                      - "us.amazon.nova-2-lite-v1:0:priority"
+                      - "us.amazon.nova-2-lite-v1:0:flex"
+                      - "global.amazon.nova-2-lite-v1:0"
+                      - "global.amazon.nova-2-lite-v1:0:priority"
+                      - "global.amazon.nova-2-lite-v1:0:flex"
+                      - "us.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "us.anthropic.claude-sonnet-4-20250514-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "us.anthropic.claude-sonnet-4-6"
+                      - "us.anthropic.claude-sonnet-4-6:1m"
+                      - "us.anthropic.claude-opus-4-20250514-v1:0"
+                      - "us.anthropic.claude-opus-4-1-20250805-v1:0"
+                      - "us.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "us.anthropic.claude-opus-4-6-v1"
+                      - "us.anthropic.claude-opus-4-6-v1:1m"
+                      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "global.anthropic.claude-sonnet-4-6"
+                      - "global.anthropic.claude-sonnet-4-6:1m"
+                      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "global.anthropic.claude-opus-4-6-v1"
+                      - "global.anthropic.claude-opus-4-6-v1:1m"
+                      - "eu.amazon.nova-lite-v1:0"
+                      - "eu.amazon.nova-pro-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0"
+                      - "eu.amazon.nova-2-lite-v1:0:priority"
+                      - "eu.amazon.nova-2-lite-v1:0:flex"
+                      - "eu.anthropic.claude-3-haiku-20240307-v1:0"
+                      - "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                      - "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+                      - "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                      - "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m"
+                      - "eu.anthropic.claude-sonnet-4-6"
+                      - "eu.anthropic.claude-sonnet-4-6:1m"
+                      - "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                      - "eu.anthropic.claude-opus-4-6-v1"
+                      - "eu.anthropic.claude-opus-4-6-v1:1m"
+                      - "qwen.qwen3-vl-235b-a22b"
                     default: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
                     order: 0
               error_analyzer:
@@ -1516,38 +1753,228 @@ Resources:
                         description: Default time range in hours for analysis
                         default: 24
                         order: 2
-          pricing:
+          rule_validation:
             order: 10
-            type: array
-            sectionLabel: Pricing (Estimates only - check https://aws.amazon.com/bedrock/pricing/ & https://aws.amazon.com/textract/pricing/)
-            listLabel: Services
-            itemLabel: Service/API
-            columns: 2
-            items:
-              type: object
-              required:
-                - name
-                - units
-              properties:
-                name:
-                  type: string
-                  description: Service/API
-                units:
-                  type: array
-                  listLabel: Metered unit pricing
-                  itemLabel: Metered Unit price
-                  items:
-                    type: object
-                    required:
-                      - name
-                      - price
-                    properties:
-                      name:
-                        type: string
-                        description: Metered unit name
-                      price:
-                        type: number
-                        description: Estimated cost/unit
+            type: object
+            sectionLabel: Rule Validation Inference
+            properties:
+              enabled:
+                type: boolean
+                description: Enable or disable rule validation processing
+                default: true
+                order: 0
+              recommendation_options:
+                type: string
+                format: text-area
+                description: "Recommendation options that define the possible outcomes for rule validation: Pass (criteria fully met), Fail (partially met or needs more info), Information Not Found (no relevant data)"
+                default: |-
+                  Pass: The requirement criteria are fully met.
+                  Fail: The requirement is partially met or requires additional information.
+                  Information Not Found: No relevant data exists in the user history.
+                order: 1
+                dependsOn: { field: "enabled", value: true }
+              semaphore:
+                type: integer
+                minimum: 1
+                maximum: 10
+                description: Number of concurrent API calls for rule validation
+                default: 5
+                order: 2
+                dependsOn: { field: "enabled", value: true }
+              max_chunk_size:
+                type: integer
+                minimum: 1000
+                maximum: 200000
+                description: Maximum chunk size (in characters) for rule validation processing
+                default: 8000
+                order: 3
+                dependsOn: { field: "enabled", value: true }
+              fact_extraction:
+                type: object
+                sectionLabel: Fact Extraction
+                description: Configuration for extracting relevant facts from documents
+                order: 4
+                dependsOn: { field: "enabled", value: true }
+                properties:
+                  model:
+                    type: string
+                    description: Bedrock model ID for fact extraction
+                    enum:
+                      [
+                        "us.amazon.nova-lite-v1:0",
+                        "us.amazon.nova-pro-v1:0",
+                        "us.amazon.nova-premier-v1:0",
+                        "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
+                        "us.anthropic.claude-3-haiku-20240307-v1:0",
+                        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                        "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+                        "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                        "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-6",
+                        "us.anthropic.claude-sonnet-4-6:1m",
+                        "us.anthropic.claude-opus-4-20250514-v1:0",
+                        "us.anthropic.claude-opus-4-1-20250805-v1:0",
+                        "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "us.anthropic.claude-opus-4-6-v1",
+                        "us.anthropic.claude-opus-4-6-v1:1m",
+                        "eu.amazon.nova-lite-v1:0",
+                        "eu.amazon.nova-pro-v1:0",
+                        "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
+                        "eu.anthropic.claude-3-haiku-20240307-v1:0",
+                        "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                        "eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                        "eu.anthropic.claude-sonnet-4-20250514-v1:0",
+                        "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "eu.anthropic.claude-sonnet-4-6",
+                        "eu.anthropic.claude-sonnet-4-6:1m",
+                        "eu.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "eu.anthropic.claude-opus-4-6-v1",
+                        "eu.anthropic.claude-opus-4-6-v1:1m",
+                        "qwen.qwen3-vl-235b-a22b",
+                        "global.amazon.nova-2-lite-v1:0",
+                        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "global.anthropic.claude-sonnet-4-6",
+                        "global.anthropic.claude-sonnet-4-6:1m",
+                        "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "global.anthropic.claude-opus-4-6-v1",
+                        "global.anthropic.claude-opus-4-6-v1:1m"
+                      ]
+                    default: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                    order: 0
+                  temperature:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                    description: "Sampling temperature: Controls randomness in model output (0.0 = deterministic, higher = more random)"
+                    default: 0.0
+                    order: 1
+                  top_k:
+                    type: integer
+                    minimum: 1
+                    description: Sampling Top K
+                    default: 20
+                    order: 2
+                  top_p:
+                    type: number
+                    description: "Sampling Top P: Nucleus sampling threshold (0.0-1.0)"
+                    default: 0.01
+                    order: 3
+                  max_tokens:
+                    type: integer
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
+                    default: 4096
+                    order: 4
+                  system_prompt:
+                    type: string
+                    format: textarea
+                    description: System prompt that defines the LLM's role as a fact extractor for identifying relevant information from documents
+                    order: 5
+                  task_prompt:
+                    type: string
+                    format: textarea
+                    description: Task prompt for fact extraction - supports placeholders {DOCUMENT_TEXT} (replaced with document content), {recommendation_options} (replaced with available recommendation options), {rule_type} (replaced with rule type), and {rule} (replaced with rule description). Optionally use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.
+                    order: 6
+              rule_validation_orchestrator:
+                type: object
+                sectionLabel: Rule Validation Orchestrator
+                description: Configuration for consolidating fact extraction results into final compliance decisions
+                order: 5
+                dependsOn: { field: "enabled", value: true }
+                properties:
+                  model:
+                    type: string
+                    description: Bedrock model ID for rule validation orchestrator
+                    enum:
+                      [
+                        "us.amazon.nova-lite-v1:0",
+                        "us.amazon.nova-pro-v1:0",
+                        "us.amazon.nova-premier-v1:0",
+                        "us.amazon.nova-2-lite-v1:0", "us.amazon.nova-2-lite-v1:0:priority", "us.amazon.nova-2-lite-v1:0:flex", "global.amazon.nova-2-lite-v1:0", "global.amazon.nova-2-lite-v1:0:priority", "global.amazon.nova-2-lite-v1:0:flex",
+                        "us.anthropic.claude-3-haiku-20240307-v1:0",
+                        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                        "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+                        "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                        "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "us.anthropic.claude-sonnet-4-6",
+                        "us.anthropic.claude-sonnet-4-6:1m",
+                        "us.anthropic.claude-opus-4-20250514-v1:0",
+                        "us.anthropic.claude-opus-4-1-20250805-v1:0",
+                        "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "us.anthropic.claude-opus-4-6-v1",
+                        "us.anthropic.claude-opus-4-6-v1:1m",
+                        "eu.amazon.nova-lite-v1:0",
+                        "eu.amazon.nova-pro-v1:0",
+                        "eu.amazon.nova-2-lite-v1:0", "eu.amazon.nova-2-lite-v1:0:priority", "eu.amazon.nova-2-lite-v1:0:flex",
+                        "eu.anthropic.claude-3-haiku-20240307-v1:0",
+                        "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                        "eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                        "eu.anthropic.claude-sonnet-4-20250514-v1:0",
+                        "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "eu.anthropic.claude-sonnet-4-6",
+                        "eu.anthropic.claude-sonnet-4-6:1m",
+                        "eu.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "eu.anthropic.claude-opus-4-6-v1",
+                        "eu.anthropic.claude-opus-4-6-v1:1m",
+                        "qwen.qwen3-vl-235b-a22b",
+                        "global.amazon.nova-2-lite-v1:0",
+                        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                        "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
+                        "global.anthropic.claude-sonnet-4-6",
+                        "global.anthropic.claude-sonnet-4-6:1m",
+                        "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                        "global.anthropic.claude-opus-4-6-v1",
+                        "global.anthropic.claude-opus-4-6-v1:1m"
+                      ]
+                    default: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                    order: 0
+                  temperature:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                    description: "Sampling temperature: Controls randomness in model output (0.0 = deterministic, higher = more random)"
+                    default: 0.0
+                    order: 1
+                  top_k:
+                    type: integer
+                    minimum: 1
+                    description: Sampling Top K
+                    default: 20
+                    order: 2
+                  top_p:
+                    type: number
+                    description: "Sampling Top P: Nucleus sampling threshold (0.0-1.0)"
+                    default: 0.01
+                    order: 3
+                  max_tokens:
+                    type: integer
+                    description: "Maximum number of output tokens. Ensure this does not exceed the selected model's limit. See model documentation for details."
+                    default: 4096
+                    order: 4
+                  system_prompt:
+                    type: string
+                    format: textarea
+                    description: System prompt for rule validation orchestrator - defines the LLM's role in consolidating extracted facts into final compliance decisions
+                    order: 5
+                  task_prompt:
+                    type: string
+                    format: textarea
+                    description: Task prompt for rule validation orchestrator - supports placeholders {recommendation_options}, {extracted_evidence}, {policy_class}, and {rule}. Optionally use <<CACHEPOINT>> to separate static and dynamic elements of prompt for Bedrock prompt caching.
+                    order: 6
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
@@ -1556,6 +1983,7 @@ Resources:
     Properties:
       ServiceToken: !Ref UpdateConfigurationFunctionArn
       Default: !Ref ConfigurationDefaultS3Uri
+      DefaultPricing: !Sub "s3://${ConfigurationBucket}/config_library/pricing.yaml"
       ConfigLibraryHash: !Ref ConfigLibraryHash
       CustomClassificationModelARN: !Ref CustomClassificationModelARN
       CustomExtractionModelARN: !Ref CustomExtractionModelARN
@@ -1651,6 +2079,14 @@ Resources:
                 - aws-marketplace:Unsubscribe
                 - aws-marketplace:ViewSubscriptions
               Resource: "*"
+            # Lambda invoke permission for LambdaHook custom inference
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:GENAIIDP-*"
+              Condition:
+                StringLike:
+                  "lambda:FunctionName": "GENAIIDP-*"
             # AppSync permissions for updating document status (only if AppSync API is available)
             - !If
               - HasAppSyncApi
@@ -1772,6 +2208,14 @@ Resources:
                 - aws-marketplace:Unsubscribe
                 - aws-marketplace:ViewSubscriptions
               Resource: "*"
+            # Lambda invoke permission for LambdaHook custom inference
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:GENAIIDP-*"
+              Condition:
+                StringLike:
+                  "lambda:FunctionName": "GENAIIDP-*"
             - !If
               - HasGuardrailConfig
               - Effect: Allow
@@ -2009,6 +2453,14 @@ Resources:
                 - aws-marketplace:Unsubscribe
                 - aws-marketplace:ViewSubscriptions
               Resource: "*"
+            # Lambda invoke permission for LambdaHook custom inference
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:GENAIIDP-*"
+              Condition:
+                StringLike:
+                  "lambda:FunctionName": "GENAIIDP-*"
             - !If
               - HasGuardrailConfig
               - Effect: Allow
@@ -2065,8 +2517,6 @@ Resources:
           DOCUMENT_TRACKING_MODE: !If [HasAppSyncApi, "appsync", "dynamodb"]
           WORKING_BUCKET: !Ref WorkingBucket
           OUTPUT_BUCKET: !Ref OutputBucket
-          ENABLE_HITL: !Ref EnableHITL
-          SAGEMAKER_A2I_REVIEW_PORTAL_URL: !Ref SageMakerA2IReviewPortalURL
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
       LoggingConfig:
         LogGroup: !Ref ProcessResultsFunctionLogGroup
@@ -2104,23 +2554,6 @@ Resources:
                 Resource:
                   - !Sub "${AppSyncApiArn}/types/Mutation/*"
               - !Ref AWS::NoValue
-            # SSM permissions for A2I FlowDefinition ARN
-            - Effect: Allow
-              Action:
-                - ssm:GetParameter
-              Resource:
-                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${StackName}/FlowDefinitionArn"
-            # SageMaker A2I permissions for starting human loops
-            - Effect: Allow
-              Action:
-                - sagemaker-a2i-runtime:StartHumanLoop
-                - sagemaker-a2i-runtime:DescribeHumanLoop
-                - sagemaker-a2i-runtime:StopHumanLoop
-              Resource: "*"
-            - Effect: Allow
-              Action:
-                - sagemaker:StartHumanLoop
-              Resource: !Sub "arn:${AWS::Partition}:sagemaker:*:*:flow-definition/*"
 
   ProcessResultsFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -2128,282 +2561,6 @@ Resources:
       KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
       LogGroupName: !Sub "/${AWS::StackName}/lambda/ProcessResultsFunction"
       RetentionInDays: !Ref LogRetentionDays
-
-  HITLWaitFunction:
-    Type: AWS::Serverless::Function
-    DependsOn: DockerBuildRun
-    Metadata:
-      SkipBuild: True
-      cfn_nag:
-        rules_to_suppress:
-          - id: W11
-            reason: "IAM policy allows broad permissions for DynamoDB operations which are necessary for tracking HITL tokens across multiple tables"
-          - id: W92
-            reason: "Function does not require reserved concurrency as it scales based on demand"
-          - id: W89
-            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
-    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
-    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
-    # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
-    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
-    Properties:
-      PermissionsBoundary:
-        !If [
-          HasPermissionsBoundary,
-          !Ref PermissionsBoundaryArn,
-          !Ref AWS::NoValue,
-        ]
-      PackageType: Image
-      ImageUri: !Sub "${ECRRepository.RepositoryUri}:hitl-wait-function-${ImageVersion}"
-      Architectures:
-        - arm64
-      ImageConfig:
-        Command:
-          - "index.handler"
-      Timeout: 300
-      MemorySize: 512
-      Environment:
-        Variables:
-          LOG_LEVEL: !Ref LogLevel
-          TRACKING_TABLE: !Ref TrackingTable
-          WORKING_BUCKET: !Ref WorkingBucket
-          SAGEMAKER_A2I_REVIEW_PORTAL_URL: !Ref SageMakerA2IReviewPortalURL
-      LoggingConfig:
-        LogGroup: !Ref HITLWaitFunctionLogGroup
-      Policies:
-        - AWSLambdaBasicExecutionRole
-        - !Ref LambdaECRAccessPolicy
-        - DynamoDBCrudPolicy:
-            TableName: !Ref TrackingTable
-        - S3CrudPolicy:
-            BucketName: !Ref WorkingBucket
-        - Statement:
-            - Effect: Allow
-              Action: cloudwatch:PutMetricData
-              Resource: "*"
-            - Effect: Allow
-              Action:
-                - kms:Encrypt
-                - kms:Decrypt
-                - kms:ReEncrypt*
-                - kms:GenerateDataKey*
-                - kms:DescribeKey
-              Resource: !Ref CustomerManagedEncryptionKeyArn
-            # AppSync permissions for updating document status (only if AppSync API is available)
-            - !If
-              - HasAppSyncApi
-              - Effect: Allow
-                Action:
-                  - appsync:GraphQL
-                Resource:
-                  - !Sub "${AppSyncApiArn}/types/Mutation/*"
-              - !Ref AWS::NoValue
-
-  HITLWaitFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
-      LogGroupName: !Sub "/${AWS::StackName}/lambda/HITLWaitFunction"
-      RetentionInDays: !Ref LogRetentionDays
-
-  HITLStatusUpdateFunction:
-    Type: AWS::Serverless::Function
-    DependsOn: DockerBuildRun
-    Metadata:
-      SkipBuild: True
-      cfn_nag:
-        rules_to_suppress:
-          - id: W89
-            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
-          - id: W92
-            reason: "Function does not require reserved concurrency as it scales based on demand"
-    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
-    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
-    # checkov:skip=CKV_AWS_116: "DLQ not required for Cfn Custom Resource function"
-    Properties:
-      PermissionsBoundary:
-        !If [
-          HasPermissionsBoundary,
-          !Ref PermissionsBoundaryArn,
-          !Ref AWS::NoValue,
-        ]
-      PackageType: Image
-      ImageUri: !Sub "${ECRRepository.RepositoryUri}:hitl-status-update-function-${ImageVersion}"
-      Architectures:
-        - arm64
-      ImageConfig:
-        Command:
-          - "index.handler"
-      Timeout: 60
-      LoggingConfig:
-        LogGroup: !Ref HITLStatusUpdateFunctionLogGroup
-      Policies:
-        - AWSLambdaBasicExecutionRole
-        - !Ref LambdaECRAccessPolicy
-        - S3CrudPolicy:
-            BucketName: !Ref WorkingBucket
-        - Statement:
-            - Effect: Allow
-              Action:
-                - kms:Decrypt
-                - kms:GenerateDataKey
-              Resource: !Ref CustomerManagedEncryptionKeyArn
-
-  HITLStatusUpdateFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
-      LogGroupName: !Sub "/${AWS::StackName}/lambda/HITLStatusUpdateFunction"
-      RetentionInDays: !Ref LogRetentionDays
-
-  #EventBridge Rule to check Human In the Loop Status change
-  HITLEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Description: "Rule for SageMaker A2I HumanLoop Status Change"
-      EventPattern:
-        detail-type:
-          - "SageMaker A2I HumanLoop Status Change"
-        source:
-          - "aws.sagemaker"
-        detail:
-          humanLoopStatus:
-            - "Completed"
-            - "Failed"
-            - "Stopped"
-      State: "ENABLED"
-      Targets:
-        - Arn: !GetAtt HITLProcessLambdaFunction.Arn
-          Id: "HITLProcessLambdaTarget"
-
-  HITLProcessLambdaLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
-      LogGroupName: !Sub "/${AWS::StackName}/lambda/HITLProcessLambdaFunction"
-      RetentionInDays: !Ref LogRetentionDays
-
-  HITLProcessLambdaFunction:
-    Type: AWS::Serverless::Function
-    DependsOn: DockerBuildRun
-    Metadata:
-      SkipBuild: True
-      cfn_nag:
-        rules_to_suppress:
-          - id: W89
-            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
-          - id: W92
-            reason: "Function does not require reserved concurrency as it scales based on demand"
-          - id: W58
-            reason: "DLQ not required for EventBridge triggered function as it handles A2I status updates"
-    # checkov:skip=CKV_AWS_116: "DLQ not required for EventBridge triggered function as it handles A2I status updates"
-    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
-    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
-    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
-    Properties:
-      PermissionsBoundary:
-        !If [
-          HasPermissionsBoundary,
-          !Ref PermissionsBoundaryArn,
-          !Ref AWS::NoValue,
-        ]
-      LoggingConfig:
-        LogGroup: !Ref HITLProcessLambdaLogGroup
-      PackageType: Image
-      ImageUri: !Sub "${ECRRepository.RepositoryUri}:hitl-process-function-${ImageVersion}"
-      Architectures:
-        - arm64
-      ImageConfig:
-        Command:
-          - "index.handler"
-      Timeout: 300
-      Role: !GetAtt HITLProcessLambdaRole.Arn
-      Environment:
-        Variables:
-          TRACKING_TABLE: !Ref TrackingTable
-
-  HITLProcessLambdaRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W11
-            reason: "State Machine send states does not support resource-level permissions"
-    Properties:
-      PermissionsBoundary:
-        !If [
-          HasPermissionsBoundary,
-          !Ref PermissionsBoundaryArn,
-          !Ref AWS::NoValue,
-        ]
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: !Sub "lambda.${AWS::URLSuffix}"
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-        - !Ref LambdaECRAccessPolicy
-      Policies:
-        - PolicyName: S3AccessPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                Resource:
-                  - !Sub "arn:${AWS::Partition}:s3:::${OutputBucket}/*"
-                  - !Sub "arn:${AWS::Partition}:s3:::sagemaker-*/*"
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource:
-                  - !Sub "arn:${AWS::Partition}:s3:::${OutputBucket}"
-                  - !Sub "arn:${AWS::Partition}:s3:::sagemaker-*"
-        - PolicyName: KMSAccessPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - kms:Decrypt
-                  - kms:GenerateDataKey
-                Resource: !Ref CustomerManagedEncryptionKeyArn
-        - PolicyName: DynamoDBAccessPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:GetItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TrackingTable}"
-        - PolicyName: StepFunctionsPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - states:SendTaskSuccess
-                  - states:SendTaskFailure
-                Resource: "*"
-
-  #Event Bridge permissions to invoke Lambda function during HITL change
-  EventBridgeInvokeLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref HITLProcessLambdaFunction
-      Action: "lambda:InvokeFunction"
-      Principal: !Sub "events.${AWS::URLSuffix}"
-      SourceArn: !GetAtt HITLEventRule.Arn
 
   SummarizationFunction:
     Type: AWS::Serverless::Function
@@ -2502,6 +2659,14 @@ Resources:
                 - aws-marketplace:Unsubscribe
                 - aws-marketplace:ViewSubscriptions
               Resource: "*"
+            # Lambda invoke permission for LambdaHook custom inference
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:GENAIIDP-*"
+              Condition:
+                StringLike:
+                  "lambda:FunctionName": "GENAIIDP-*"
             - !If
               - HasGuardrailConfig
               - Effect: Allow
@@ -2621,6 +2786,355 @@ Resources:
       LogGroupName: !Sub "/${AWS::StackName}/lambda/EvaluationFunction"
       RetentionInDays: !Ref LogRetentionDays
 
+  RuleValidationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      SkipBuild: True
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "Cloudwatch does not support resource-level permissions"
+          - id: W89
+            reason: "This Lambda function does not require VPC access as it only interacts with AWS services via AWS APIs"
+          - id: W92
+            reason: "Function does not require concurrent execution limits as it is designed to scale based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      # Container configuration
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:rule-validation-function-${ImageVersion}"
+      Architectures:
+        - arm64
+      ImageConfig:
+        Command:
+          - "index.handler"
+      # Local testing configuration (commented for deployment)
+      # CodeUri: src/rule-validation-function/
+      # Handler: index.handler
+      # Runtime: python3.12
+      Timeout: 900
+      MemorySize: 4096
+      Environment:
+        Variables:
+          METRIC_NAMESPACE: !Ref StackName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          GUARDRAIL_ID_AND_VERSION:
+            !If [
+              HasGuardrailConfig,
+              !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}",
+              "",
+            ]
+          LOG_LEVEL: !Ref LogLevel
+          APPSYNC_API_URL: !Ref AppSyncApiUrl
+          TRACKING_TABLE: !Ref TrackingTable
+          DOCUMENT_TRACKING_MODE: !If [HasAppSyncApi, "appsync", "dynamodb"]
+          WORKING_BUCKET: !Ref WorkingBucket
+      LoggingConfig:
+        LogGroup: !Ref RuleValidationFunctionLogGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaECRAccessPolicy
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref OutputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTable
+        - Statement:
+            - Effect: Allow
+              Action: cloudwatch:PutMetricData
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            # AppSync permissions for updating document status (only if AppSync API is available)
+            - !If
+              - HasAppSyncApi
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${AppSyncApiArn}/types/Mutation/*"
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+            - !If
+              - HasGuardrailConfig
+              - Effect: Allow
+                Action: bedrock:ApplyGuardrail
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
+              - !Ref AWS::NoValue
+
+  RuleValidationFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      LogGroupName: !Sub "/${AWS::StackName}/lambda/RuleValidationFunction"
+      RetentionInDays: !Ref LogRetentionDays
+
+  RuleValidationOrchestrationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      SkipBuild: True
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "Cloudwatch does not support resource-level permissions"
+          - id: W89
+            reason: "This Lambda function does not require VPC access as it only interacts with AWS services via AWS APIs"
+          - id: W92
+            reason: "Function does not require concurrent execution limits as it is designed to scale based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      # Container configuration
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:rule-validation-orchestration-function-${ImageVersion}"
+      Architectures:
+        - arm64
+      ImageConfig:
+        Command:
+          - "index.handler"
+      # Local testing configuration (commented for deployment)
+      # CodeUri: src/rule-validation-orchestration-function/
+      # Handler: index.handler
+      # Runtime: python3.12
+      Timeout: 900
+      MemorySize: 4096
+      Environment:
+        Variables:
+          METRIC_NAMESPACE: !Ref StackName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          GUARDRAIL_ID_AND_VERSION:
+            !If [
+              HasGuardrailConfig,
+              !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}",
+              "",
+            ]
+          LOG_LEVEL: !Ref LogLevel
+          APPSYNC_API_URL: !Ref AppSyncApiUrl
+          TRACKING_TABLE: !Ref TrackingTable
+          DOCUMENT_TRACKING_MODE: !If [HasAppSyncApi, "appsync", "dynamodb"]
+          WORKING_BUCKET: !Ref WorkingBucket
+          REPORTING_BUCKET: !Ref ReportingBucket
+          SAVE_REPORTING_FUNCTION_NAME: !Ref SaveReportingFunctionName
+      LoggingConfig:
+        LogGroup: !Ref RuleValidationOrchestrationFunctionLogGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaECRAccessPolicy
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref OutputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTable
+        - Statement:
+            - Effect: Allow
+              Action: cloudwatch:PutMetricData
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            - !If
+              - HasAppSyncApi
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${AppSyncApiArn}/types/Mutation/*"
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+            - Effect: Allow
+              Action:
+                - aws-marketplace:Subscribe
+                - aws-marketplace:Unsubscribe
+                - aws-marketplace:ViewSubscriptions
+              Resource: "*"
+            - !If
+              - HasGuardrailConfig
+              - Effect: Allow
+                Action:
+                  - bedrock:ApplyGuardrail
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${SaveReportingFunctionName}"
+
+  RuleValidationOrchestrationFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      LogGroupName: !Sub "/${AWS::StackName}/lambda/RuleValidationOrchestrationFunction"
+      RetentionInDays: !Ref LogRetentionDays
+
+  RuleValidationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      SkipBuild: True
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "Cloudwatch does not support resource-level permissions"
+          - id: W89
+            reason: "This Lambda function does not require VPC access as it only interacts with AWS services via AWS APIs"
+          - id: W92
+            reason: "Function does not require concurrent execution limits as it is designed to scale based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      # Container configuration
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:rule-validation-function-${ImageVersion}"
+      Architectures:
+        - arm64
+      ImageConfig:
+        Command:
+          - "index.handler"
+      # Local testing configuration (commented for deployment)
+      # CodeUri: src/rule-validation-function/
+      # Handler: index.handler
+      # Runtime: python3.12
+      Timeout: 900
+      MemorySize: 4096
+      Environment:
+        Variables:
+          METRIC_NAMESPACE: !Ref StackName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          GUARDRAIL_ID_AND_VERSION:
+            !If [
+              HasGuardrailConfig,
+              !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}",
+              "",
+            ]
+          LOG_LEVEL: !Ref LogLevel
+          APPSYNC_API_URL: !Ref AppSyncApiUrl
+          TRACKING_TABLE: !Ref TrackingTable
+          DOCUMENT_TRACKING_MODE: !If [HasAppSyncApi, "appsync", "dynamodb"]
+          WORKING_BUCKET: !Ref WorkingBucket
+      LoggingConfig:
+        LogGroup: !Ref RuleValidationFunctionLogGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaECRAccessPolicy
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref OutputBucket
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTable
+        - Statement:
+            - Effect: Allow
+              Action: cloudwatch:PutMetricData
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            # AppSync permissions for updating document status (only if AppSync API is available)
+            - !If
+              - HasAppSyncApi
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${AppSyncApiArn}/types/Mutation/*"
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+            - !If
+              - HasGuardrailConfig
+              - Effect: Allow
+                Action: bedrock:ApplyGuardrail
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
+              - !Ref AWS::NoValue
+
+  RuleValidationFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      LogGroupName: !Sub "/${AWS::StackName}/lambda/RuleValidationFunction"
+      RetentionInDays: !Ref LogRetentionDays
+
+  RuleValidationOrchestrationFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      LogGroupName: !Sub "/${AWS::StackName}/lambda/RuleValidationOrchestrationFunction"
+      RetentionInDays: !Ref LogRetentionDays
+
   DocumentProcessingStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -2638,10 +3152,10 @@ Resources:
         ExtractionFunctionArn: !GetAtt ExtractionFunction.Arn
         AssessmentFunctionArn: !GetAtt AssessmentFunction.Arn
         ProcessResultsLambdaArn: !GetAtt ProcessResultsFunction.Arn
-        HITLWaitFunctionArn: !GetAtt HITLWaitFunction.Arn
-        HITLStatusUpdateFunctionArn: !GetAtt HITLStatusUpdateFunction.Arn
         SummarizationLambdaArn: !GetAtt SummarizationFunction.Arn
         EvaluationLambdaArn: !GetAtt EvaluationFunction.Arn
+        RuleValidationLambdaArn: !GetAtt RuleValidationFunction.Arn
+        RuleValidationOrchestrationLambdaArn: !GetAtt RuleValidationOrchestrationFunction.Arn
         OutputBucket: !Ref OutputBucket
       Logging:
         Level: ALL
@@ -2662,13 +3176,13 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref ProcessResultsFunction
         - LambdaInvokePolicy:
-            FunctionName: !Ref HITLWaitFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref HITLStatusUpdateFunction
-        - LambdaInvokePolicy:
             FunctionName: !Ref SummarizationFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref EvaluationFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RuleValidationFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RuleValidationOrchestrationFunction
         - CloudWatchLogsFullAccess
 
   StateMachineLogGroup:
@@ -3148,6 +3662,56 @@ Resources:
                 "title": "Summarization Lambda Errors",
                 "view": "table"
               }
+            },
+            {
+              "type": "metric",
+              "x": 16,
+              "y": 24,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Duration", "FunctionName", "${RuleValidationFunction}"]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Rule Validation Function Duration",
+                "period": 300,
+                "annotations": {
+                  "horizontal": [{
+                    "value": ${ExecutionTimeThresholdMs},
+                    "label": "Threshold (${ExecutionTimeThresholdMs}ms)",
+                    "color": "#ff0000"
+                  }]
+                },
+                "stat": "Average",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 54,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${RuleValidationFunctionLogGroup}' | filter @type = \"REPORT\" | fields @timestamp, @logStream, @billedDuration, @maxMemoryUsed/1024/1024 as memoryUsedMB | filter @billedDuration > ${ExecutionTimeThresholdMs} | sort by @billedDuration desc | limit 20",
+                "region": "${AWS::Region}",
+                "title": "Rule Validation Lambda Long Running Invocations",
+                "view": "table"
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 54,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${RuleValidationFunctionLogGroup}' | fields @timestamp, @logStream, @message | filter @message like /ERROR/ or @message like /Task timed out/ | parse @message /RequestId: (?<requestId>[^ ]*)/ | sort @timestamp desc | limit 20",
+                "region": "${AWS::Region}",
+                "title": "Rule Validation Lambda Errors",
+                "view": "table"
+              }
             }
           ]
         }
@@ -3176,10 +3740,9 @@ Outputs:
         - !Ref ExtractionFunctionLogGroup
         - !Ref AssessmentFunctionLogGroup
         - !Ref ProcessResultsFunctionLogGroup
-        - !Ref HITLWaitFunctionLogGroup
-        - !Ref HITLStatusUpdateFunctionLogGroup
-        - !Ref HITLProcessLambdaLogGroup
         - !Ref SummarizationFunctionLogGroup
+        - !Ref RuleValidationFunctionLogGroup
+        - !Ref RuleValidationOrchestrationFunctionLogGroup
         - !Ref StateMachineLogGroup
 
   DashboardName:

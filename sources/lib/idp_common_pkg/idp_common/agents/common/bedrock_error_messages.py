@@ -272,9 +272,11 @@ class BedrockErrorMessageHandler:
             user_message=cls._enhance_message_with_retry_context(
                 error_info.user_message, retry_attempts
             ),
-            technical_details=f"{error_info.technical_details} (after {retry_attempts} retries)"
-            if retry_attempts > 0
-            else error_info.technical_details,
+            technical_details=(
+                f"{error_info.technical_details} (after {retry_attempts} retries)"
+                if retry_attempts > 0
+                else error_info.technical_details
+            ),
             retry_recommended=error_info.retry_recommended
             and retry_attempts < 3,  # Don't recommend retry after 3 attempts
             retry_delay_seconds=error_info.retry_delay_seconds,

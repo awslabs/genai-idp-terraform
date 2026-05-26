@@ -9,10 +9,11 @@ import mimetypes
 import base64
 import hashlib
 import os
-import re
+import re 
 from urllib.parse import urlparse
 from botocore.exceptions import ClientError
 from idp_common.bedrock.client import BedrockClient
+from idp_common.utils.settings_helper import get_setting
 
 # Set up logging
 logger = logging.getLogger()
@@ -23,7 +24,7 @@ def remove_text_between_brackets(text):
     start = text.find('{')
     # Find position of last closing bracket
     end = text.rfind('}')
-
+    
     # If both brackets exist, remove text between them including brackets
     if start != -1 and end != -1:
         return text[:start] + text[end+1:]
@@ -46,37 +47,37 @@ def get_full_text(bucket, key):
     try:
         dynamodb = boto3.resource('dynamodb')
         tracking_table = dynamodb.Table(os.environ['TRACKING_TABLE_NAME'])
-
+        
         doc_pk = f"doc#{key}"
         response = tracking_table.get_item(
             Key={'PK': doc_pk, 'SK': 'none'}
         )
-
+        
         if 'Item' not in response:
             logger.info(f"Document {key} not found")
             raise Exception(f"Document {key} not found")
-
+            
         document = response['Item']
         pages = document.get('Pages', {})
         sorted_pages = sorted(pages, key=lambda x: x['Id'])
 
         s3 = boto3.client('s3')
         all_text = ""
-
+        
         for page in sorted_pages:
             if 'TextUri' in page:
                 # Extract S3 key from URI
                 text_key = page['TextUri'].replace(f"s3://{bucket}/", "")
-
+                
                 try:
                     response = s3.get_object(Bucket=bucket, Key=text_key)
                     page_text = response['Body'].read().decode('utf-8')
                     all_text += f"<page-number>{page['Id']}</page-number>\n{page_text}\n\n"
                 except Exception as e:
                     logger.warning(f"Failed to load page {page['Id']}: {e}")
-
+                    
         return all_text
-
+        
     except Exception as e:
         logger.error(f"Error getting document pages: {str(e)}")
         raise Exception(f"Error getting document pages: {str(e)}")
@@ -85,23 +86,25 @@ def get_full_text(bucket, key):
 def get_summarization_model():
     """Get the summarization model from configuration table"""
     try:
+        from idp_common.config.configuration_manager import ConfigurationManager
         dynamodb = boto3.resource('dynamodb')
         config_table = dynamodb.Table(os.environ['CONFIGURATION_TABLE_NAME'])
-
+        
         # Query for the Default configuration
         response = config_table.get_item(
             Key={'Configuration': 'Default'}
         )
-
+        
         if 'Item' in response:
-            config_data = response['Item']
+            # Decompress if stored in compressed format
+            config_data = ConfigurationManager._decompress_item(response['Item'])
             # Extract summarization model from the configuration
             if 'summarization' in config_data and 'model' in config_data['summarization']:
                 return config_data['summarization']['model']
-
+        
         # Fallback to a default model if not found in config
         return 'us.amazon.nova-pro-v1:0'
-
+        
     except Exception as e:
         logger.error(f"Error getting summarization model from config: {str(e)}")
         return 'us.amazon.nova-pro-v1:0'  # Fallback default
@@ -182,25 +185,25 @@ def handler(event, context):
             # need to remove that JSON object first
             logger.info(f"New response: {remove_text_between_brackets(text).strip("\n")}")
             cleaned_up_text = remove_text_between_brackets(text).strip("\n")
-
+            
             chat_response = {"cr": {"content": [{"text": cleaned_up_text}]}}
-
+            
             return json.dumps(chat_response)
 
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
         logger.error(f"Error: {error_code} - {error_message}")
-
+        
         if error_code == 'NoSuchKey':
             raise Exception(f"File not found: {fulltext_key}")
         elif error_code == 'NoSuchBucket':
             raise Exception(f"Bucket not found: {output_bucket}")
         else:
             raise Exception(error_message)
-
+            
     except Exception as e:
         logger.error(f"{str(e)}")
         raise Exception(f"{str(e)}")
-
+    
     return response_data

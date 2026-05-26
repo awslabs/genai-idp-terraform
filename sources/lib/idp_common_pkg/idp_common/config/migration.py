@@ -183,9 +183,9 @@ def migrate_legacy_to_schema(
             else:
                 schema_attr = _migrate_simple_attribute(attr)
 
-            migrated_class[LEGACY_ATTRIBUTES][SCHEMA_PROPERTIES][attr_name] = (
-                schema_attr
-            )
+            migrated_class[LEGACY_ATTRIBUTES][SCHEMA_PROPERTIES][
+                attr_name
+            ] = schema_attr
 
         migrated_classes.append(migrated_class)
 

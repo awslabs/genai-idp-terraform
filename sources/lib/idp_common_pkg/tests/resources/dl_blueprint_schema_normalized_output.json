@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "class": "US-drivers-licenses",
+  "description": "Test schema for US drivers licenses",
+  "type": "object",
+  "definitions": {
+    "Address": {
+      "properties": {
+        "STREET_ADDRESS": {
+          "type": "string",
+          "inferenceType": "explicit",
+          "instruction": "The street address"
+        }
+      },
+      "type": "object"
+    },
+    "PersonalDetails": {
+      "properties": {
+        "SEX": {
+          "type": "string",
+          "inferenceType": "explicit",
+          "instruction": "One of [\"M\", \"F\"]"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "properties": {
+    "CLASS": {
+      "type": "string",
+      "inferenceType": "explicit",
+      "instruction": "The single letter class code, one of \"A\", \"B\" or \"C\""
+    },
+    "RESTRICTIONS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "instruction": "The restrictions listed",
+      "inferenceType": "explicit"
+    },
+    "ENDORSEMENTS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "instruction": "The endorsement codes if any",
+      "inferenceType": "explicit"
+    },
+    "NAME_DETAILS": {
+      "$ref": "#/definitions/Address",
+      "instruction": "-"
+    }
+  }
+}

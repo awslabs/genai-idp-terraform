@@ -63,9 +63,11 @@ def clean_schema_for_generation(
             cleaned[key] = clean_schema_for_generation(value, fields_to_remove)
         elif isinstance(value, list):
             cleaned[key] = [
-                clean_schema_for_generation(item, fields_to_remove)
-                if isinstance(item, dict)
-                else item
+                (
+                    clean_schema_for_generation(item, fields_to_remove)
+                    if isinstance(item, dict)
+                    else item
+                )
                 for item in value
             ]
         else:

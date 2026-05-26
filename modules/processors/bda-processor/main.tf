@@ -49,6 +49,13 @@ module "processor_configuration" {
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
 
+  # Required for the seeder Lambda to merge user config with system
+  # defaults. Without these layers attached, the seeder will store the
+  # sparse user YAML and the runtime will crash with "No system_prompt
+  # found in classification configuration".
+  base_layer_arn       = var.base_layer_arn
+  idp_common_layer_arn = var.idp_common_layer_arn
+
   vpc_config          = local.vpc_config
   lambda_tracing_mode = var.lambda_tracing_mode
   tags                = var.tags
@@ -59,16 +66,19 @@ locals {
   # Use the config passed from parent module (from sources/config_library/)
   base_config = var.config
 
-  # Apply model overrides if provided, similar to CDK transforms
+  # Apply model overrides if provided, similar to CDK transforms.
+  # The base config can be sparse (e.g., lending-package-sample inherits
+  # everything from system defaults at runtime), so use try() to tolerate
+  # missing `evaluation` / `summarization` sections rather than failing.
   config_with_overrides = merge(
     local.base_config,
     # Only override evaluation if evaluation_model_id is provided
     var.evaluation_model_id != null ? {
       evaluation = merge(
-        local.base_config.evaluation,
+        try(local.base_config.evaluation, {}),
         {
           llm_method = merge(
-            local.base_config.evaluation.llm_method,
+            try(local.base_config.evaluation.llm_method, {}),
             {
               model = var.evaluation_model_id
             }
@@ -79,7 +89,7 @@ locals {
     # Only override summarization if summarization_model_id is provided
     var.summarization_model_id != null ? {
       summarization = merge(
-        local.base_config.summarization,
+        try(local.base_config.summarization, {}),
         {
           model = var.summarization_model_id
         }
@@ -176,16 +186,14 @@ resource "aws_sfn_state_machine" "document_processing" {
   role_arn = aws_iam_role.state_machine_role.arn
 
   definition = templatefile("${path.module}/../../../sources/patterns/pattern-1/statemachine/workflow.asl.json", {
-    InvokeBDALambdaArn          = aws_lambda_function.invoke_bda.arn
-    ProcessResultsLambdaArn     = aws_lambda_function.process_results.arn
-    HITLWaitFunctionArn         = aws_lambda_function.hitl_wait.arn
-    HITLStatusUpdateFunctionArn = aws_lambda_function.hitl_status_update.arn
-    IsSummarizationEnabled      = local.is_summarization_enabled ? "true" : "false"
-    SummarizationLambdaArn      = aws_lambda_function.summarization.arn
-    EvaluationLambdaArn         = aws_lambda_function.evaluation_function.arn
-    OutputBucket                = local.output_bucket_name
-    WorkingBucket               = local.working_bucket_name
-    BDAProjectArn               = var.data_automation_project_arn
+    InvokeBDALambdaArn      = aws_lambda_function.invoke_bda.arn
+    ProcessResultsLambdaArn = aws_lambda_function.process_results.arn
+    IsSummarizationEnabled  = local.is_summarization_enabled ? "true" : "false"
+    SummarizationLambdaArn  = aws_lambda_function.summarization.arn
+    EvaluationLambdaArn     = aws_lambda_function.evaluation_function.arn
+    OutputBucket            = local.output_bucket_name
+    WorkingBucket           = local.working_bucket_name
+    BDAProjectArn           = var.data_automation_project_arn
   })
 
   logging_configuration {
