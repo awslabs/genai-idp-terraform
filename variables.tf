@@ -223,6 +223,7 @@ variable "sagemaker_udop_processor" {
   description = "Configuration for SageMaker UDOP processor"
   type = object({
     classification_endpoint_arn = string
+    extraction_model_id         = optional(string, null)
     summarization = optional(object({
       enabled  = optional(bool, true)
       model_id = optional(string, null)

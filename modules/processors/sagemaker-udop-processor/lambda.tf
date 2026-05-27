@@ -157,7 +157,7 @@ resource "aws_lambda_function" "extraction_function" {
 
   environment {
     variables = {
-      EXTRACTION_MODEL_ID      = local.config_with_overrides.extraction.model
+      EXTRACTION_MODEL_ID      = try(local.config_with_overrides.extraction.model, var.extraction_model_id, "")
       CONFIGURATION_TABLE_NAME = local.configuration_table_name
       METRIC_NAMESPACE         = local.metric_namespace
       GUARDRAIL_ID_AND_VERSION = var.extraction_guardrail != null ? "${var.extraction_guardrail.guardrail_id}:${var.extraction_guardrail.guardrail_version}" : ""

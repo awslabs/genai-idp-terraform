@@ -125,7 +125,7 @@ The configuration file defines document classes, extraction prompts, and process
 
 - **Pattern 1** (BDA): `sources/config_library/pattern-1/lending-package-sample/config.yaml`
 - **Pattern 2** (Bedrock LLM): `sources/config_library/pattern-2/lending-package-sample/config.yaml`  
-- **Pattern 3** (SageMaker UDOP): `sources/config_library/pattern-3/rvl-cdip-package-sample/config.yaml`
+- **Pattern 3** (SageMaker UDOP): `sources/config_library/pattern-3/rvl-cdip/config.yaml`
 
 ### Example Custom Configuration
 

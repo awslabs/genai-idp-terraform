@@ -600,7 +600,7 @@ module "sagemaker_udop_processor" {
   classification_max_workers = var.sagemaker_udop_processor.classification_max_workers
 
   # Optional: Model configurations
-  extraction_model_id             = null # Will use default from module
+  extraction_model_id             = var.sagemaker_udop_processor.extraction_model_id
   summarization_model_id          = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
