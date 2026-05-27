@@ -105,6 +105,21 @@ resource "aws_iam_role_policy_attachment" "codebuild_policy_attachment" {
   policy_arn = aws_iam_policy.codebuild_policy.arn
 }
 
+# Wait for IAM role + policy attachment to propagate before the
+# null_resource.trigger_udop_build provisioner kicks off the build.
+# Without this, the start-build call races IAM and CodeBuild fails
+# during QUEUED with ACCESS_DENIED on logs:CreateLogStream. Same pattern
+# already used in modules/lambda-layer-codebuild-idp/main.tf.
+resource "time_sleep" "wait_for_iam_propagation" {
+  depends_on = [
+    aws_iam_role.codebuild_role,
+    aws_iam_policy.codebuild_policy,
+    aws_iam_role_policy_attachment.codebuild_policy_attachment
+  ]
+
+  create_duration = "30s"
+}
+
 # =============================================================================
 # Source archive: zip sources/ and upload to S3 so CodeBuild has a workspace
 # =============================================================================
@@ -232,6 +247,7 @@ resource "null_resource" "trigger_udop_build" {
   depends_on = [
     aws_codebuild_project.udop_processor_build,
     aws_iam_role_policy_attachment.codebuild_policy_attachment,
+    time_sleep.wait_for_iam_propagation,
     aws_ecr_repository.udop_processor,
     aws_s3_object.pattern3_sources
   ]
