@@ -181,8 +181,26 @@ locals {
   )
 }
 
+# Wait for the Step Functions IAM role + inline policy to propagate
+# before CreateStateMachine. Without this, AWS validates log-destination
+# access synchronously and fails with:
+#   AccessDeniedException: The state machine IAM Role is not authorized
+#   to access the Log Destination
+# Same pattern as the codebuild role guard above.
+resource "time_sleep" "wait_for_sfn_iam_propagation" {
+  depends_on = [
+    aws_iam_role.step_functions_role,
+    aws_iam_role_policy.step_functions_policy,
+    aws_cloudwatch_log_group.step_functions_logs
+  ]
+
+  create_duration = "30s"
+}
+
 # Create Step Functions state machine
 resource "aws_sfn_state_machine" "document_processing" {
+  depends_on = [time_sleep.wait_for_sfn_iam_propagation]
+
   name     = "${local.name_prefix}-sagemaker-udop-processor"
   role_arn = aws_iam_role.step_functions_role.arn
 
