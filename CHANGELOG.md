@@ -6,6 +6,59 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.4.16-tf.2] - 2026-05-27
+
+### Summary
+
+Patch release fixing five bugs in the `examples/sagemaker-udop-processor`
+example that prevented it from planning, applying, and running
+end-to-end. Verified against a fresh AWS account: 446 resources
+provisioned cleanly, sample document processed by Step Functions to
+completion. No upstream IDP version change.
+
+### Fixes
+
+- **`config_file_path` default repaired.** Pointed at
+  `pattern-3/rvl-cdip-package-sample/` which doesn't exist; renamed to
+  `pattern-3/rvl-cdip/` (the real directory). Same path corrected in
+  `terraform.tfvars.example` and the docs reference.
+- **`extraction_model_id` wired end-to-end.** The slim `rvl-cdip`
+  config carries no `extraction` block, so reading
+  `local.config_with_overrides.extraction.model` crashed plan. Added
+  an `extraction_model_id` input on the example (default Claude 3.5
+  Sonnet), a matching optional field on the root
+  `sagemaker_udop_processor` variable, stopped hardcoding `null` at
+  the root → module call, and made the env-var read defensive with
+  `try(...)`.
+- **CodeBuild IAM propagation guarded.**
+  `null_resource.trigger_udop_build` started the CodeBuild project
+  immediately after the role policy attachment, racing IAM eventual
+  consistency. The build failed during QUEUED with `ACCESS_DENIED on
+  logs:CreateLogStream`. Added a `time_sleep.wait_for_iam_propagation`
+  (30s) gating the trigger — same pattern as
+  `lambda-layer-codebuild-idp`, `lambda-layer-codebuild`, and
+  `web-ui`.
+- **Step Functions IAM propagation guarded.**
+  `aws_sfn_state_machine.document_processing` validates log-destination
+  access synchronously, racing the inline policy. Failed with
+  `AccessDeniedException: The state machine IAM Role is not authorized
+  to access the Log Destination`. Same `time_sleep` guard added.
+- **Retired Bedrock model bumped in `terraform.tfvars.example`.**
+  `agent_analytics.model_id` was pinned to
+  `us.anthropic.claude-3-5-sonnet-20241022-v2:0` which AWS retired in
+  2026; Converse calls fail with `ResourceNotFoundException`. Bumped
+  to `us.anthropic.claude-haiku-4-5-20251001-v1:0`.
+
+### Migration
+
+No action required. This is a patch release covering the
+`examples/sagemaker-udop-processor` flow only. Existing deployments
+running other examples are unaffected. If you previously copied the
+broken `terraform.tfvars.example` model ID into your own tfvars,
+update it to a current Bedrock inference profile.
+
+---
+
 ## [0.4.16-tf.1] - 2026-03-12
 
 ### Summary

@@ -1,6 +1,8 @@
-# Migration Guide: v0.4.8-tf.0 → v0.4.16-tf.1
+# Migration Guide: v0.4.8-tf.0 → v0.4.16-tf.2
 
 This guide covers the two breaking changes introduced in v0.4.16-tf.1.
+v0.4.16-tf.2 is a patch release on top of tf.1 with no additional
+migration steps; see `CHANGELOG.md` for the patch-level fixes.
 
 ---
 

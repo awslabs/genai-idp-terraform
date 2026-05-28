@@ -280,11 +280,19 @@ variable "summarization_model_id" {
   default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 }
 
+# Extraction model is required by the UDOP Lambda env vars; the slim
+# rvl-cdip config doesn't ship one so we expose it explicitly.
+variable "extraction_model_id" {
+  description = "Model ID for information extraction (SageMaker UDOP processor)"
+  type        = string
+  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+}
+
 # Configuration File Path
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-3/rvl-cdip-package-sample/config.yaml"
+  default     = "../../sources/config_library/pattern-3/rvl-cdip/config.yaml"
 }
 
 variable "tags" {

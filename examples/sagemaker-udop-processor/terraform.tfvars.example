@@ -13,7 +13,7 @@ log_retention_days = 7
 data_tracking_retention_days = 365
 
 # Configuration File Path (optional - uses default RVL-CDIP package config)
-# config_file_path = "../../sources/config_library/pattern-3/rvl-cdip-package-sample/config.yaml"
+# config_file_path = "../../sources/config_library/pattern-3/rvl-cdip/config.yaml"
 
 # SageMaker Model Training Configuration
 training_config = {
@@ -53,7 +53,7 @@ api = {
 
   agent_analytics = {
     enabled  = false
-    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
   }
   discovery = {
     enabled = true  # Creates a dedicated discovery bucket and workflow
