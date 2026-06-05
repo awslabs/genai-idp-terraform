@@ -218,7 +218,7 @@ variable "process_changes" {
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-1/lending-package-sample/config.yaml"
+  default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 }
 
 # DEPRECATED: Knowledge Base variables (use 'api.knowledge_base' instead)

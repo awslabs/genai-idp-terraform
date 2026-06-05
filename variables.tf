@@ -291,11 +291,11 @@ variable "reporting" {
 # Human Review Configuration
 #
 variable "human_review" {
-  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api."
+  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api via complete_section_review (gated by the API enable_hitl flag). DEPRECATED in v0.5.12-tf.0: enable_pattern2_hitl and hitl_confidence_threshold are now accepted-but-ignored no-ops (the Pattern-2 Step Functions HITL trio was removed — it referenced upstream source paths that never existed). enabled still gates the legacy A2I IAM statements. These fields are retained as a deprecation shim so existing tfvars keep working; see docs/migration-v0.4.16-to-v0.5.12.md."
   type = object({
     enabled                   = optional(bool, false)
-    enable_pattern2_hitl      = optional(bool, false)
-    hitl_confidence_threshold = optional(number, 80)
+    enable_pattern2_hitl      = optional(bool, false) # DEPRECATED v0.5.12-tf.0: no-op (Pattern-2 HITL trio removed)
+    hitl_confidence_threshold = optional(number, 80)  # DEPRECATED v0.5.12-tf.0: no-op (Pattern-2 HITL trio removed)
   })
   default = {
     enabled                   = false

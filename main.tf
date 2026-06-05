@@ -221,41 +221,39 @@ module "user_identity" {
   tags = var.tags
 }
 
-# Human Review Environment (Optional)
-module "human_review" {
-  count  = var.human_review.enabled ? 1 : 0
-  source = "./modules/human-review"
+# Human Review Environment (REMOVED in v0.5.12-tf.0)
+#
+# The legacy `human-review` module only ever instantiated the Pattern-2
+# Step Functions HITL trio (pattern2-hitl-{wait,process,status-update}).
+# Those functions zipped Lambda source from
+# `sources/patterns/pattern-2/src/hitl-*-function`, a path that NEVER existed
+# upstream (absent at v0.3.18, v0.4.16, and v0.5.12) — and `pattern-2/` is gone
+# entirely from the v0.5.12 unified-only snapshot. Because the archive_file
+# source was always broken, the trio was never applyable when enabled, so no
+# real infrastructure can exist for it.
+#
+# HITL is now handled by the built-in `complete_section_review` Lambda +
+# AppSync resolvers in `processing-environment-api` (gated by `var.enable_hitl`,
+# added v0.4.16-tf.1), which fully supersedes the synchronous Step Functions
+# trio. The dead module (including its equally-orphaned A2I-era cognito-updater /
+# create-a2i-resources / get-workforce-url leftovers that referenced the
+# likewise-nonexistent `sources/src/lambda/hitl/*` paths) is removed in full.
+#
+# `var.human_review` is retained as a deprecation shim: its `enabled` field
+# still gates the legacy A2I IAM statements in locals.tf, and keeping the input
+# lets existing tfvars continue to plan. See
+# docs/migration-v0.4.16-to-v0.5.12.md.
+#
+# The trio was count-gated and never applyable, so the real-infrastructure
+# impact of this removal is none. The `removed {}` block makes the address
+# departure explicit and (lifecycle.destroy = false) ensures that if any state
+# entry somehow exists, Terraform drops it from state rather than destroying it.
+removed {
+  from = module.human_review
 
-  name_prefix       = "${local.name_prefix}-human-review"
-  output_bucket_arn = var.output_bucket_arn
-
-  # Configuration
-  log_level          = var.log_level
-  log_retention_days = var.log_retention_days
-  encryption_key_arn = var.encryption_key_arn
-
-  # VPC configuration
-  vpc_subnet_ids         = var.vpc_subnet_ids
-  vpc_security_group_ids = var.vpc_security_group_ids
-
-  # Lambda layer
-  idp_common_layer_arn = module.idp_common_layer.layer_arn
-
-  # Lambda tracing configuration
-  lambda_tracing_mode = var.lambda_tracing_mode
-
-  # Pattern-2 HITL configuration
-  enable_pattern2_hitl      = var.human_review.enable_pattern2_hitl
-  hitl_confidence_threshold = var.human_review.hitl_confidence_threshold
-
-  # Pattern-2 HITL dependencies (only needed when Pattern-2 HITL is enabled)
-  tracking_table_name = module.processing_environment.tracking_table_name
-  tracking_table_arn  = module.processing_environment.tracking_table_arn
-  working_bucket_name = local.working_bucket_name
-  working_bucket_arn  = var.working_bucket_arn
-  state_machine_arn   = var.bedrock_llm_processor != null ? try(module.bedrock_llm_processor[0].state_machine_arn, "") : ""
-
-  tags = var.tags
+  lifecycle {
+    destroy = false
+  }
 }
 
 #

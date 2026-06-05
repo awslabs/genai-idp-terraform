@@ -292,7 +292,7 @@ variable "extraction_model_id" {
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-3/rvl-cdip/config.yaml"
+  default     = "../../sources/config_library/unified/rvl-cdip/config.yaml"
 }
 
 variable "tags" {

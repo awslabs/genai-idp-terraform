@@ -116,7 +116,7 @@ variable "summarization_model_id" {
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
+  default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 }
 
 variable "tags" {

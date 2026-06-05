@@ -23,7 +23,7 @@ log_retention_days  = 7
 data_tracking_retention_days = 365
 
 # Configuration File Path (optional - uses default lending package config)
-# config_file_path = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
+# config_file_path = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
 # Model Configuration
 classification_model_id = "us.amazon.nova-pro-v1:0"
