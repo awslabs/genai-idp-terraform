@@ -1,0 +1,15 @@
+mutation UploadMultiDocDiscoveryZip(
+  $fileName: String!
+  $fileSize: Int!
+  $configVersion: String!
+) {
+  uploadMultiDocDiscoveryZip(
+    fileName: $fileName
+    fileSize: $fileSize
+    configVersion: $configVersion
+  ) {
+    testSetId
+    presignedUrl
+    objectKey
+  }
+}

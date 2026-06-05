@@ -1,0 +1,2 @@
+# boto3 is provided by the Lambda runtime - do not include it here
+# as it adds ~50MB to the deployment package unnecessarily

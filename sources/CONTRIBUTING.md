@@ -16,6 +16,7 @@ Thank you for your interest in contributing to the GenAI Intelligent Document Pr
   - [Making Changes](#making-changes)
   - [Testing Your Changes](#testing-your-changes)
 - [Pull Request Process](#pull-request-process)
+- [Make Commands](#make-commands)
 - [Coding Standards](#coding-standards)
 - [Documentation](#documentation)
 - [Reporting Bugs/Feature Requests](#reporting-bugsfeature-requests)
@@ -36,7 +37,7 @@ opensource-codeofconduct@amazon.com with any additional questions or comments.
    - Bash shell (Linux, MacOS)
    - AWS CLI
    - AWS SAM CLI
-   - Python 3.11 or later
+   - Python 3.12 or later
    - Docker
 
 2. **Fork and Clone the Repository**:
@@ -61,7 +62,6 @@ Familiarize yourself with the project structure:
 - `samples/`: Sample documents for testing
 - `scripts/`: Utility scripts for development, testing, and deployment
 - `src/`: Source code for the application
-  - `api/`: API definitions
   - `lambda/`: AWS Lambda functions
   - `ui/`: Web UI components
 
@@ -83,23 +83,22 @@ Familiarize yourself with the project structure:
 3. Write/update tests as necessary
 4. Ensure code passes linting rules:
    - For Python code: `ruff` is configured for this project
-   - For UI code: ESLint is configured in `src/ui/.eslintrc`
+   - For UI code: ESLint is configured in `src/ui/.eslintrc.json`
 
 ### Testing Your Changes
 
 1. **Local Testing**:
    ```bash
+   # Run all tests with make
+   make test
+
+   # Or run tests manually:
    # Run Python unit tests
    pytest lib/idp_common_pkg/tests/
 
-   # Test individual Lambda functions
-   cd patterns/pattern-2/
-   sam build
-   sam local invoke OCRFunction -e ../../testing/OCRFunction-event.json --env-vars ../../testing/env.json
-   
    # Verify UI code passes linting checks
-   cd src/ui/
-   npm run lint
+   make ui-lint
+   # Or manually: cd src/ui/ && npm run lint
    ```
 
 2. **Integration Testing**:
@@ -117,6 +116,102 @@ Familiarize yourself with the project structure:
    - Any relevant context or considerations
 4. **Address Review Feedback**: Be responsive to review comments and make requested changes
 5. **Merge**: Once approved, your contribution will be merged
+
+## Make Commands
+
+The project uses `make` to simplify common development tasks. Run `make` or `make all` to execute the default lint and test workflow.
+
+> **Tip:** Run `make help` to see a quick reference of all available targets with descriptions, organized by category.
+
+### Setup & Dependencies
+
+| Command | Description |
+|---------|-------------|
+| `make setup` | Install all packages into your current Python environment (no venv) |
+| `make setup-venv` | Create `.venv` virtual environment and install all packages into it |
+
+### Code Quality
+
+| Command | Description |
+|---------|-------------|
+| `make lint` | Run all linting: ruff, formatting, ARN partition checks, buildspec validation, UI lint, codegen check |
+| `make fastlint` | Quick lint without UI checks |
+| `make ruff-lint` | Run ruff linting with auto-fix |
+| `make format` | Format Python code with ruff |
+| `make lint-cicd` | CI/CD version — checks only, no modifications |
+| `make validate-buildspec` | Validate AWS CodeBuild buildspec files |
+| `make check-arn-partitions` | Check CloudFormation templates for hardcoded ARN partitions (GovCloud compatibility) |
+
+### Type Checking
+
+| Command | Description |
+|---------|-------------|
+| `make typecheck` | Run type checks with basedpyright |
+| `make typecheck-stats` | Type checks with detailed statistics |
+| `make typecheck-pr` | Type check only files changed vs `TARGET_BRANCH` (default: `main`) |
+
+### Testing
+
+| Command | Description |
+|---------|-------------|
+| `make all` | Run lint + test (default target) |
+| `make test` | Run all tests (idp_common, cli, sdk, capacity, config library) |
+| `make test-cli` | Run only IDP CLI tests |
+| `make test-config-library` | Run only config library validation tests |
+| `make test-capacity` | Run only capacity planning tests |
+| `make test-capacity-coverage` | Run capacity planning tests with coverage report |
+
+### UI Development
+
+| Command | Description |
+|---------|-------------|
+| `make ui-start` | Start UI dev server (requires `STACK_NAME` for `.env` generation from stack outputs) |
+| `make ui-lint` | Run UI linting with checksum caching (skips if unchanged) |
+| `make ui-build` | Build UI for production |
+
+**Example**: Start UI with auto-configured environment:
+```bash
+make ui-start STACK_NAME=my-idp-stack
+```
+
+### Code Generation
+
+| Command | Description |
+|---------|-------------|
+| `make codegen` | Regenerate GraphQL types and operations |
+| `make codegen-check` | Verify GraphQL codegen output is up-to-date |
+| `make classes-from-bda` | Generate standard class catalog from BDA standard blueprints |
+
+### Git Workflow
+
+| Command | Description |
+|---------|-------------|
+| `make commit` | Lint, test, auto-generate commit message, commit, and push |
+| `make fastcommit` | Fast lint only, auto-generate commit message, commit, and push |
+
+### Version Management
+
+| Command | Description |
+|---------|-------------|
+| `make version V=x.y.z` | Update version across all packages (PEP 440 validated) |
+
+### Documentation
+
+| Command | Description |
+|---------|-------------|
+| `make docs` | Build and serve the documentation site locally |
+| `make docs-setup` | One-time docs site setup (symlinks + npm install) |
+| `make docs-build` | Build documentation site (no serve) |
+| `make docs-deploy` | Deploy docs to GitHub Pages (from local build) |
+
+### Security (SRT)
+
+| Command | Description |
+|---------|-------------|
+| `make srt` | Run full SRT workflow (setup → scan → optional fix) |
+| `make srt-setup` | Download and configure SRT tool |
+| `make srt-scan` | Run SRT security assessment |
+| `make srt-fix` | Run SRT interactive fix |
 
 ## Coding Standards
 

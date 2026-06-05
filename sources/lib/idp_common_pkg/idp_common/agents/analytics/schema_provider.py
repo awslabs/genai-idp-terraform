@@ -54,6 +54,7 @@ def get_metering_table_description() -> str:
 - `unit_cost` (double): Cost per unit in USD
 - `estimated_cost` (double): Calculated total cost (value × unit_cost)
 - `timestamp` (timestamp): When the operation was performed
+- `config_version` (string): Configuration version used for processing (defaults to "default" if not specified)
 
 **Partitioned by**: date (YYYY-MM-DD format)
 
@@ -89,12 +90,21 @@ GROUP BY "context"
 ORDER BY total_cost DESC
 
 -- Token usage by model
-SELECT "service_api", 
+SELECT "service_api",
        SUM(CASE WHEN "unit" = 'inputTokens' THEN "value" ELSE 0 END) as input_tokens,
        SUM(CASE WHEN "unit" = 'outputTokens' THEN "value" ELSE 0 END) as output_tokens
-FROM metering 
+FROM metering
 WHERE "unit" IN ('inputTokens', 'outputTokens')
 GROUP BY "service_api"
+
+-- Cost by configuration version
+SELECT "config_version",
+       SUM("estimated_cost") as total_cost,
+       COUNT(DISTINCT "document_id") as document_count,
+       SUM("estimated_cost") / COUNT(DISTINCT "document_id") as avg_cost_per_doc
+FROM metering
+GROUP BY "config_version"
+ORDER BY total_cost DESC
 ```
 """
 
@@ -187,6 +197,7 @@ def get_evaluation_tables_description() -> str:
 - Use `document_id` to join between all three tables
 - Use `section_id` and `document_id` to join section and attribute evaluations
 - Join with metering table on `document_id` for cost vs accuracy analysis
+- `config_version` is available directly in all evaluation tables (no join needed)
 
 ### Sample Queries:
 ```sql
@@ -211,13 +222,40 @@ FROM attribute_evaluations
 WHERE "confidence" IS NOT NULL
 GROUP BY confidence_band
 
--- Cost per accuracy point by document type  
+-- Cost per accuracy point by document type
 SELECT se."section_type",
        AVG(se."accuracy") as avg_accuracy,
        SUM(m."estimated_cost") / COUNT(DISTINCT m."document_id") as avg_cost_per_doc
 FROM section_evaluations se
-JOIN metering m ON se."document_id" = m."document_id"  
+JOIN metering m ON se."document_id" = m."document_id"
 GROUP BY se."section_type"
+
+-- Filter by config_version (available directly in evaluation tables)
+SELECT "document_id",
+       "accuracy",
+       "f1_score",
+       "config_version"
+FROM document_evaluations
+WHERE "config_version" = 'your-config-version'
+
+-- Compare accuracy across configuration versions
+SELECT "config_version",
+       AVG("accuracy") as avg_accuracy,
+       AVG("f1_score") as avg_f1_score,
+       COUNT(DISTINCT "document_id") as document_count
+FROM document_evaluations
+GROUP BY "config_version"
+ORDER BY avg_f1_score DESC
+
+-- Cost vs quality analysis by config version
+SELECT e."config_version",
+       AVG(e."weighted_overall_score") as avg_quality_score,
+       SUM(m."estimated_cost") as total_cost,
+       SUM(m."estimated_cost") / AVG(e."weighted_overall_score") as cost_per_quality_point
+FROM document_evaluations e
+JOIN metering m ON e."document_id" = m."document_id"
+GROUP BY e."config_version"
+ORDER BY avg_quality_score DESC
 ```
 """
 
@@ -245,7 +283,7 @@ def get_rule_validation_tables_description() -> str:
 - `input_key` (string): S3 key of the input document
 - `validation_date` (timestamp): When the validation was performed
 - `overall_status` (string): Overall validation status (COMPLETE, FAILED, etc.)
-- `total_rule_types` (int): Number of rule types evaluated
+- `total_policy_types` (int): Number of policy types evaluated
 - `total_rules` (int): Total number of rules evaluated
 - `pass_count` (int): Number of rules that passed
 - `fail_count` (int): Number of rules that failed
@@ -259,7 +297,7 @@ def get_rule_validation_tables_description() -> str:
 
 #### Schema:
 - `document_id` (string): Unique identifier for the document
-- `rule_type` (string): Category/type of the rule
+- `policy_type` (string): Category/type of the policy class
 - `rule` (string): Description of the specific rule being validated
 - `recommendation` (string): Validation result (Pass, Fail, Information Not Found)
 - `reasoning` (string): Explanation for the recommendation
@@ -279,9 +317,9 @@ SELECT "document_id", "fail_count"
 FROM rule_validation_summary WHERE "fail_count" > 0
 
 -- Most common failures
-SELECT "rule_type", "rule", COUNT(*) as count
+SELECT "policy_type", "rule", COUNT(*) as count
 FROM rule_validation_details WHERE "recommendation" = 'Fail'
-GROUP BY "rule_type", "rule" ORDER BY count DESC LIMIT 10
+GROUP BY "policy_type", "rule" ORDER BY count DESC LIMIT 10
 ```
 """
 
@@ -371,6 +409,7 @@ def get_dynamic_document_sections_description(
                 "  - `timestamp` (timestamp): When the document was processed\n"
             )
             description += "  - `date` (string): Partition key in YYYY-MM-DD format\n"
+            description += "  - `config_version` (string): Configuration version used for processing\n"
             description += (
                 "  - Various `metadata.*` columns (strings): Processing metadata\n"
             )
@@ -450,6 +489,16 @@ FROM document_sections_w2 ds
 JOIN metering m ON ds."document_id" = m."document_id"
 WHERE ds."document_class.type" = 'W2'
 GROUP BY ds."section_classification", ds."document_class.type"
+
+-- CORRECT: Filter by configuration version
+SELECT "document_id",
+       "document_class.type",
+       "config_version",
+       "timestamp"
+FROM document_sections_w2
+WHERE "config_version" = 'fake_w2'
+AND date >= '2024-01-01'
+ORDER BY "timestamp" DESC
 ```
 
 **This schema information is generated from your actual configuration and shows exactly what tables and columns exist in your deployment.**
@@ -757,12 +806,13 @@ def _get_specific_document_sections_table_info(
 
 #### Standard Columns (present in all document_sections tables):
 - `"document_id"` (string): Unique identifier for the document
-- `"section_id"` (string): Unique identifier for the section  
+- `"section_id"` (string): Unique identifier for the section
 - `"section_classification"` (string): Type/class of the document section
 - `"section_confidence"` (string): Confidence score for classification
 - `"explainability_info"` (string): JSON with extraction field confidence scores and geometry
 - `"timestamp"` (timestamp): When document was processed in YYYY-MM-DD hh:mm:ss.ms format
 - `"date"` (string): Partition key in YYYY-MM-DD format
+- `"config_version"` (string): Configuration version used for processing
 
 #### Columns specific to this table:
 """
@@ -775,7 +825,7 @@ def _get_specific_document_sections_table_info(
         else:
             info += "No configuration-specific columns defined.\n"
 
-        info += f"""
+        info += f"""  # nosec B608 - AI agent prompt template with example SQL, not executed
 
 ### Sample Queries for {table_name}:
 ```sql

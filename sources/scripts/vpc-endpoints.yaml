@@ -1,0 +1,603 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  VPC Interface and Gateway Endpoints for IDP private AppSync deployment.
+  Run scripts/check-vpc-endpoints.sh first to detect pre-existing endpoints
+  and generate the exact deploy command. Deploy AFTER the IDP stack.
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: VPC ID where the IDP application is deployed.
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: >-
+      Comma-separated subnet IDs for the VPC Interface Endpoints.
+      Must match the LambdaSubnetIds used in the IDP application stack.
+
+  LambdaSecurityGroupId:
+    Type: String
+    Description: >-
+      Security Group ID exported from the IDP stack Output "LambdaVpcSecurityGroupId".
+      This SG is attached to all Lambda functions; endpoints allow inbound HTTPS from it.
+
+  RouteTableIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      (Optional) Comma-separated route table IDs for the private subnets.
+      When provided, free S3 and DynamoDB Gateway endpoints are created.
+      Leave empty to skip Gateway endpoints.
+
+  IDPStackName:
+    Type: String
+    Description: Name of the IDP application CloudFormation stack (used for tagging).
+
+  EnvironmentTag:
+    Type: String
+    Default: "private"
+    Description: Value for the Environment tag applied to all resources.
+
+  # ──────────────────────────────────────────────────────────
+  # Per-endpoint creation flags
+  #
+  # REQUIRED by the IDP application (14 endpoints):
+  #   appsync-api, appsync, sqs, states, kms, logs,
+  #   bedrock-runtime, ssm (Lambda→SSM Parameter Store calls),
+  #   secretsmanager, lambda, events, athena,
+  #   textract (OCR pattern — ocr/service.py calls Textract API),
+  #   sts (BDA pattern — bda/bda_service.py and bda/blueprint_optimizer.py call STS for AssumeRole)
+  #
+  # REQUIRED only for SSM Session Manager testing bastion (2 endpoints):
+  #   ssmmessages  — SSM Session Manager port-forwarding channel
+  #   ec2messages  — SSM agent ↔ SSM service communication
+  #   (If you are accessing the UI via VPN/Direct Connect in production,
+  #    you do NOT need ssmmessages or ec2messages.)
+  #
+  # Set any flag to "false" if the endpoint already exists in the VPC.
+  # Use scripts/check-vpc-endpoints.sh to auto-detect and generate the correct deploy command.
+  # ──────────────────────────────────────────────────────────
+
+  CreateAppSyncApiEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the appsync-api Interface endpoint. Set to "false" if already exists.
+
+  CreateAppSyncControlEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the appsync (control plane) Interface endpoint. Set to "false" if already exists.
+
+  CreateSqsEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the sqs Interface endpoint. Set to "false" if already exists.
+
+  CreateStatesEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the states (Step Functions) Interface endpoint. Set to "false" if already exists.
+
+  CreateKmsEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the kms Interface endpoint. Set to "false" if already exists.
+
+  CreateLogsEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the logs (CloudWatch Logs) Interface endpoint. Set to "false" if already exists.
+
+  CreateMonitoringEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Create the monitoring (CloudWatch) Interface endpoint. Required for the
+      DashboardMerger custom-resource Lambda which calls cloudwatch:GetDashboard
+      / PutDashboard during stack create/update. Set to "false" if already exists.
+
+  CreateBedrockRuntimeEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the bedrock-runtime Interface endpoint. Set to "false" if already exists.
+
+  CreateSsmEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the ssm Interface endpoint. Set to "false" if already exists.
+
+  CreateSsmMessagesEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the ssmmessages Interface endpoint. Required for SSM Session Manager port forwarding. Set to "false" if already exists.
+
+  CreateEc2MessagesEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the ec2messages Interface endpoint. Required for SSM Session Manager. Set to "false" if already exists.
+
+  CreateSecretsManagerEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the secretsmanager Interface endpoint. Set to "false" if already exists.
+
+  CreateLambdaEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the lambda Interface endpoint. Set to "false" if already exists.
+
+  CreateEventsEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the events (EventBridge) Interface endpoint. Set to "false" if already exists.
+
+  CreateAthenaEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Create the athena Interface endpoint. Set to "false" if already exists.
+
+  CreateTextractEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Create the textract Interface endpoint. Required for OCR pattern Lambda functions
+      that call the Textract API (ocr/service.py). Set to "false" if already exists.
+
+  CreateStsEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Create the sts Interface endpoint. Required for BDA pattern Lambda functions
+      that call STS AssumeRole (bda/bda_service.py, bda/blueprint_optimizer.py).
+      Set to "false" if already exists.
+
+Conditions:
+  CreateGatewayEndpoints: !Not
+    - !Equals [ !Join [ "", !Ref RouteTableIds ], "" ]
+  ShouldCreateAppSyncApiEndpoint: !Equals [ !Ref CreateAppSyncApiEndpoint, "true" ]
+  ShouldCreateAppSyncControlEndpoint: !Equals [ !Ref CreateAppSyncControlEndpoint, "true" ]
+  ShouldCreateSqsEndpoint: !Equals [ !Ref CreateSqsEndpoint, "true" ]
+  ShouldCreateStatesEndpoint: !Equals [ !Ref CreateStatesEndpoint, "true" ]
+  ShouldCreateKmsEndpoint: !Equals [ !Ref CreateKmsEndpoint, "true" ]
+  ShouldCreateLogsEndpoint: !Equals [ !Ref CreateLogsEndpoint, "true" ]
+  ShouldCreateMonitoringEndpoint: !Equals [ !Ref CreateMonitoringEndpoint, "true" ]
+  ShouldCreateBedrockRuntimeEndpoint: !Equals [ !Ref CreateBedrockRuntimeEndpoint, "true" ]
+  ShouldCreateSsmEndpoint: !Equals [ !Ref CreateSsmEndpoint, "true" ]
+  ShouldCreateSsmMessagesEndpoint: !Equals [ !Ref CreateSsmMessagesEndpoint, "true" ]
+  ShouldCreateEc2MessagesEndpoint: !Equals [ !Ref CreateEc2MessagesEndpoint, "true" ]
+  ShouldCreateSecretsManagerEndpoint: !Equals [ !Ref CreateSecretsManagerEndpoint, "true" ]
+  ShouldCreateLambdaEndpoint: !Equals [ !Ref CreateLambdaEndpoint, "true" ]
+  ShouldCreateEventsEndpoint: !Equals [ !Ref CreateEventsEndpoint, "true" ]
+  ShouldCreateAthenaEndpoint: !Equals [ !Ref CreateAthenaEndpoint, "true" ]
+  ShouldCreateTextractEndpoint: !Equals [ !Ref CreateTextractEndpoint, "true" ]
+  ShouldCreateStsEndpoint: !Equals [ !Ref CreateStsEndpoint, "true" ]
+
+Resources:
+
+  ##########################################################################
+  # Endpoint Security Group
+  # Allows inbound HTTPS (443) from the Lambda security group
+  ##########################################################################
+
+  VpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "VPC Endpoints for IDP stack ${IDPStackName}"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LambdaSecurityGroupId
+          Description: !Sub "Allow HTTPS from IDP Lambda functions (${IDPStackName})"
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-vpc-endpoints-sg"
+        - Key: ManagedBy
+          Value: "networking-team"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  # Egress rule on the Lambda SG allowing it to reach these VPC endpoints.
+  # Required when the Lambda SG does not have a default 0.0.0.0/0 egress
+  # (e.g. in hardened private-mode deployments where the ALB stack's
+  # LambdaToEndpointEgress is the only egress rule present).
+  LambdaToVpcEndpointsEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref LambdaSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      DestinationSecurityGroupId: !Ref VpcEndpointSecurityGroup
+      Description: !Sub "Allow HTTPS to VPC endpoints (${IDPStackName})"
+
+  ##########################################################################
+  # AppSync Endpoints
+  ##########################################################################
+
+  AppSyncApiVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateAppSyncApiEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.appsync-api"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-appsync-api"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  AppSyncControlVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateAppSyncControlEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.appsync"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-appsync-control"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  ##########################################################################
+  # AWS Service Interface Endpoints
+  ##########################################################################
+
+  SqsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateSqsEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sqs"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-sqs"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  StatesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateStatesEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.states"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-states"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  KmsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateKmsEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.kms"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-kms"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  CloudWatchLogsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateLogsEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-logs"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  MonitoringVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateMonitoringEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.monitoring"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-monitoring"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  BedrockRuntimeVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateBedrockRuntimeEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.bedrock-runtime"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-bedrock-runtime"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  SsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateSsmEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-ssm"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  SsmMessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateSsmMessagesEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-ssmmessages"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  Ec2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateEc2MessagesEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-ec2messages"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  SecretsManagerVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateSecretsManagerEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.secretsmanager"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-secretsmanager"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  LambdaVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateLambdaEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.lambda"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-lambda"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  EventsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateEventsEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.events"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-events"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  AthenaVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateAthenaEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.athena"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-athena"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  TextractVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateTextractEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.textract"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-textract"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  StsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: ShouldCreateStsEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sts"
+      VpcEndpointType: Interface
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${IDPStackName}-sts"
+        - Key: IDPStack
+          Value: !Ref IDPStackName
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  ##########################################################################
+  # Gateway Endpoints (free — only created when RouteTableIds are provided)
+  ##########################################################################
+
+  S3VpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateGatewayEndpoints
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds: !Ref RouteTableIds
+
+  DynamoDbVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateGatewayEndpoints
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+      VpcEndpointType: Gateway
+      RouteTableIds: !Ref RouteTableIds
+
+Outputs:
+  VpcEndpointSecurityGroupId:
+    Description: Security Group ID attached to all VPC Interface Endpoints
+    Value: !Ref VpcEndpointSecurityGroup
+
+  S3EndpointId:
+    Condition: CreateGatewayEndpoints
+    Description: VPC Endpoint ID for S3 (Gateway)
+    Value: !Ref S3VpcEndpoint
+
+  DynamoDbEndpointId:
+    Condition: CreateGatewayEndpoints
+    Description: VPC Endpoint ID for DynamoDB (Gateway)
+    Value: !Ref DynamoDbVpcEndpoint

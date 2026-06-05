@@ -149,9 +149,9 @@ df = pd.read_csv("query_results.csv")
 def generate_colors(n):
     colors = []
     for i in range(n):
-        r = random.randint(0, 255)
-        g = random.randint(0, 255)
-        b = random.randint(0, 255)
+        r = random.randint(0, 255)  # nosec B311 - chart color generation, not security
+        g = random.randint(0, 255)  # nosec B311
+        b = random.randint(0, 255)  # nosec B311
         colors.append(f"rgba({r}, {g}, {b}, 0.2)")
     return colors
 

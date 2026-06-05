@@ -1,0 +1,428 @@
+{
+  "Comment": "Fine-tuning workflow state machine with Distributed Map for parallel document processing",
+  "TimeoutSeconds": 86400,
+  "StartAt": "ListDocuments",
+  "States": {
+    "ListDocuments": {
+      "Type": "Task",
+      "Resource": "${FinetuningListDocumentsArn}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "testSetId.$": "$.testSetId",
+        "trainSplit.$": "$.trainSplit"
+      },
+      "ResultPath": "$.listResult",
+      "Next": "ProcessDocumentsInParallel",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "ProcessDocumentsInParallel": {
+      "Type": "Map",
+      "ItemsPath": "$.listResult.documents",
+      "ItemSelector": {
+        "jobId.$": "$.listResult.jobId",
+        "classes.$": "$.listResult.classes",
+        "document.$": "$$.Map.Item.Value"
+      },
+      "MaxConcurrency": 100,
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "ProcessSingleDocument",
+        "States": {
+          "ProcessSingleDocument": {
+            "Type": "Task",
+            "Resource": "${FinetuningProcessDocumentArn}",
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultWriter": {
+        "Resource": "arn:aws:states:::s3:putObject",
+        "Parameters": {
+          "Bucket": "${FinetuningDataBucket}",
+          "Prefix.$": "States.Format('finetuning/{}/map-results/', $.listResult.jobId)"
+        }
+      },
+      "ResultPath": "$.mapOutput",
+      "Next": "MergeTrainingData",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "MergeTrainingData": {
+      "Type": "Task",
+      "Resource": "${FinetuningMergeDataArn}",
+      "Parameters": {
+        "jobId.$": "$.listResult.jobId",
+        "trainSplit.$": "$.listResult.trainSplit",
+        "classes.$": "$.listResult.classes",
+        "mapResultsBucket.$": "$.mapOutput.ResultWriterDetails.Bucket",
+        "mapResultsPrefix.$": "$.mapOutput.ResultWriterDetails.Key"
+      },
+      "ResultPath": "$.dataGeneration",
+      "Next": "CreateBedrockJob",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "CreateBedrockJob": {
+      "Type": "Task",
+      "Resource": "${FinetuningJobCreatorArn}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "baseModel.$": "$.baseModel",
+        "jobName.$": "$.jobName",
+        "trainingDataUri.$": "$.dataGeneration.trainingDataUri",
+        "validationDataUri.$": "$.dataGeneration.validationDataUri"
+      },
+      "ResultPath": "$.bedrockJob",
+      "Next": "UpdateStatusToTraining",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "UpdateStatusToTraining": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${TrackingTableName}",
+        "Key": {
+          "PK": {
+            "S.$": "States.Format('finetuning#{}', $.jobId)"
+          },
+          "SK": {
+            "S": "metadata"
+          }
+        },
+        "UpdateExpression": "SET #status = :status, bedrockJobArn = :arn, trainingStartedAt = :ts",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {
+            "S": "TRAINING"
+          },
+          ":arn": {
+            "S.$": "$.bedrockJob.bedrockJobArn"
+          },
+          ":ts": {
+            "S.$": "$$.State.EnteredTime"
+          }
+        }
+      },
+      "ResultPath": null,
+      "Next": "InitializeTrainingPollCount"
+    },
+    "InitializeTrainingPollCount": {
+      "Type": "Pass",
+      "Result": 0,
+      "ResultPath": "$.trainingPollCount",
+      "Next": "WaitForTraining"
+    },
+    "WaitForTraining": {
+      "Type": "Wait",
+      "Seconds": 300,
+      "Next": "CheckTrainingStatus"
+    },
+    "CheckTrainingStatus": {
+      "Type": "Task",
+      "Resource": "${FinetuningJobStatusCheckerArn}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "bedrockJobArn.$": "$.bedrockJob.bedrockJobArn"
+      },
+      "ResultPath": "$.trainingStatus",
+      "Next": "IncrementTrainingPollCount",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "IncrementTrainingPollCount": {
+      "Type": "Pass",
+      "Parameters": {
+        "count.$": "States.MathAdd($.trainingPollCount, 1)"
+      },
+      "ResultPath": "$.trainingPollCountResult",
+      "Next": "UpdateTrainingPollCount"
+    },
+    "UpdateTrainingPollCount": {
+      "Type": "Pass",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "testSetId.$": "$.testSetId",
+        "trainSplit.$": "$.trainSplit",
+        "baseModel.$": "$.baseModel",
+        "jobName.$": "$.jobName",
+        "listResult.$": "$.listResult",
+        "mapOutput.$": "$.mapOutput",
+        "dataGeneration.$": "$.dataGeneration",
+        "bedrockJob.$": "$.bedrockJob",
+        "trainingStatus.$": "$.trainingStatus",
+        "trainingPollCount.$": "$.trainingPollCountResult.count"
+      },
+      "Next": "EvaluateTrainingStatus"
+    },
+    "EvaluateTrainingStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.trainingStatus.isComplete",
+          "BooleanEquals": true,
+          "Next": "CreateDeployment"
+        },
+        {
+          "Variable": "$.trainingStatus.isFailed",
+          "BooleanEquals": true,
+          "Next": "MarkFailed"
+        }
+      ],
+      "Default": "WaitForTraining"
+    },
+    "CreateDeployment": {
+      "Type": "Task",
+      "Resource": "${FinetuningDeploymentHandlerArn}",
+      "Parameters": {
+        "operation": "create",
+        "jobId.$": "$.jobId",
+        "customModelArn.$": "$.trainingStatus.customModelArn",
+        "jobName.$": "$.jobName"
+      },
+      "ResultPath": "$.deployment",
+      "Next": "InitializeDeploymentPollCount",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "InitializeDeploymentPollCount": {
+      "Type": "Pass",
+      "Result": 0,
+      "ResultPath": "$.deploymentPollCount",
+      "Next": "WaitForDeployment"
+    },
+    "WaitForDeployment": {
+      "Type": "Wait",
+      "Seconds": 120,
+      "Next": "CheckDeploymentStatus"
+    },
+    "CheckDeploymentStatus": {
+      "Type": "Task",
+      "Resource": "${FinetuningDeploymentHandlerArn}",
+      "Parameters": {
+        "operation": "check",
+        "jobId.$": "$.jobId",
+        "customModelDeploymentArn.$": "$.deployment.customModelDeploymentArn"
+      },
+      "ResultPath": "$.deploymentStatus",
+      "Next": "IncrementDeploymentPollCount",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "Lambda.AWSLambdaException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ]
+    },
+    "IncrementDeploymentPollCount": {
+      "Type": "Pass",
+      "Parameters": {
+        "count.$": "States.MathAdd($.deploymentPollCount, 1)"
+      },
+      "ResultPath": "$.deploymentPollCountResult",
+      "Next": "UpdateDeploymentPollCount"
+    },
+    "UpdateDeploymentPollCount": {
+      "Type": "Pass",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "testSetId.$": "$.testSetId",
+        "trainSplit.$": "$.trainSplit",
+        "baseModel.$": "$.baseModel",
+        "jobName.$": "$.jobName",
+        "listResult.$": "$.listResult",
+        "mapOutput.$": "$.mapOutput",
+        "dataGeneration.$": "$.dataGeneration",
+        "bedrockJob.$": "$.bedrockJob",
+        "trainingStatus.$": "$.trainingStatus",
+        "trainingPollCount.$": "$.trainingPollCount",
+        "deployment.$": "$.deployment",
+        "deploymentStatus.$": "$.deploymentStatus",
+        "deploymentPollCount.$": "$.deploymentPollCountResult.count"
+      },
+      "Next": "EvaluateDeploymentStatus"
+    },
+    "EvaluateDeploymentStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.deploymentStatus.isComplete",
+          "BooleanEquals": true,
+          "Next": "MarkCompleted"
+        },
+        {
+          "Variable": "$.deploymentStatus.isFailed",
+          "BooleanEquals": true,
+          "Next": "MarkFailed"
+        },
+        {
+          "Variable": "$.deploymentPollCount",
+          "NumericGreaterThanEquals": 60,
+          "Next": "DeploymentTimeout"
+        }
+      ],
+      "Default": "WaitForDeployment"
+    },
+    "DeploymentTimeout": {
+      "Type": "Pass",
+      "Result": {
+        "Cause": "Deployment exceeded maximum wait time of 2 hours (60 polls x 2 minutes)"
+      },
+      "ResultPath": "$.error",
+      "Next": "MarkFailed"
+    },
+    "MarkCompleted": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${TrackingTableName}",
+        "Key": {
+          "PK": {
+            "S.$": "States.Format('finetuning#{}', $.jobId)"
+          },
+          "SK": {
+            "S": "metadata"
+          }
+        },
+        "UpdateExpression": "SET #status = :status, deploymentCompletedAt = :ts",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {
+            "S": "COMPLETED"
+          },
+          ":ts": {
+            "S.$": "$$.State.EnteredTime"
+          }
+        }
+      },
+      "End": true
+    },
+    "MarkFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${TrackingTableName}",
+        "Key": {
+          "PK": {
+            "S.$": "States.Format('finetuning#{}', $.jobId)"
+          },
+          "SK": {
+            "S": "metadata"
+          }
+        },
+        "UpdateExpression": "SET #status = :status, errorMessage = :err",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {
+            "S": "FAILED"
+          },
+          ":err": {
+            "S.$": "States.Format('Error: {}', $.error.Cause)"
+          }
+        }
+      },
+      "Next": "FailExecution"
+    },
+    "FailExecution": {
+      "Type": "Fail",
+      "Error": "FinetuningJobFailed",
+      "Cause": "The fine-tuning job failed. Check the errorMessage in DynamoDB for details."
+    }
+  }
+}

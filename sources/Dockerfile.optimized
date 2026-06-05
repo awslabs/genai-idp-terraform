@@ -1,44 +1,60 @@
-# Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Optimized multi-stage Dockerfile for Lambda container images.
-# Build arg FUNCTION_PATH points to the function directory relative to the sources/ root
-# (e.g. patterns/pattern-1/src/bda_invoke_function).
-# Build context must be the sources/ directory root.
+# Optimized Dockerfile for Lambda functions with minimal dependencies
+# This builds each function with ONLY the dependencies it needs
 
-ARG FUNCTION_PATH
+# checkov:skip=CKV_DOCKER_3: "The Dockerfile uses the official AWS Lambda Python base image (public.ecr.aws/lambda/python:3.12-arm64), which already configures the appropriate non-root user for Lambda execution"
+# checkov:skip=CKV_DOCKER_2: "The Dockerfile.optimized is specifically designed for AWS Lambda container images, which don't use Docker HEALTHCHECK instructions."
 
-# ── Stage 1: build dependencies ──────────────────────────────────────────────
+# Use specific version to avoid network issues
+FROM ghcr.io/astral-sh/uv:0.9.6 AS uv
+
+# Builder stage - bundle dependencies into Lambda task root
 FROM public.ecr.aws/lambda/python:3.12-arm64 AS builder
 
-ARG FUNCTION_PATH
+# Enable bytecode compilation to improve cold-start performance
+ENV UV_COMPILE_BYTECODE=1
 
+# Disable installer metadata to create a deterministic layer
+ENV UV_NO_INSTALLER_METADATA=1
+
+# Enable copy mode to support bind mount caching
+ENV UV_LINK_MODE=copy
+
+# Build argument for function path
+ARG FUNCTION_PATH
+ARG INSTALL_IDP_COMMON=true
+ARG INSTALL_GIT=false
+
+# Create working directory
 WORKDIR /build
 
-# Copy the shared library package
-COPY lib/idp_common_pkg /build/lib/idp_common_pkg
+# Copy idp_common_pkg and requirements for installation
+COPY lib/idp_common_pkg /tmp/idp_common_pkg
+COPY ${FUNCTION_PATH}/requirements.txt* /build/
 
-# Copy the function source
-COPY ${FUNCTION_PATH} /build/function
+# Install all dependencies including idp_common_pkg in one step
+# Using mount from uv stage instead of COPY to avoid layer bloat
+RUN --mount=from=uv,source=/uv,target=/bin/uv \
+  --mount=type=cache,target=/root/.cache/uv \
+  if [ -f /build/requirements.txt ]; then \
+  sed 's|^\.\./\.\.\(/\.\.\)\?/lib/idp_common_pkg|/tmp/idp_common_pkg|' /build/requirements.txt > /tmp/requirements.txt && \
+  uv pip install --python python3.12 --target "${LAMBDA_TASK_ROOT}" -r /tmp/requirements.txt && \
+  rm /tmp/requirements.txt; \
+  fi && \
+  rm -rf /tmp/idp_common_pkg
 
-# Rewrite the relative ../../lib/idp_common_pkg path in requirements.txt to an absolute path,
-# then install everything into /build/deps using a venv so that extras (e.g.
-# [evaluation,docs_service]) and their transitive dependencies are fully resolved.
-RUN python -m venv /build/venv && \
-    sed 's|../../lib/idp_common_pkg|/build/lib/idp_common_pkg|g' \
-        /build/function/requirements.txt > /tmp/requirements_resolved.txt && \
-    /build/venv/bin/pip install --no-cache-dir -r /tmp/requirements_resolved.txt && \
-    cp -r /build/venv/lib/python3.12/site-packages/. /build/deps/
-
-# ── Stage 2: final Lambda image ───────────────────────────────────────────────
+# Final stage - minimal runtime
 FROM public.ecr.aws/lambda/python:3.12-arm64
 
+# Conditionally install git (required for mlflow/gitpython)
+ARG INSTALL_GIT=false
+RUN if [ "$INSTALL_GIT" = "true" ]; then dnf install -y git && dnf clean all; fi
+
+# Copy the runtime dependencies from the builder stage
+COPY --from=builder ${LAMBDA_TASK_ROOT} ${LAMBDA_TASK_ROOT}
+
+# Copy function code
 ARG FUNCTION_PATH
+COPY ${FUNCTION_PATH}/*.py ${LAMBDA_TASK_ROOT}/
 
-# Copy installed packages from builder stage
-COPY --from=builder /build/deps ${LAMBDA_TASK_ROOT}
-
-# Copy function source files
-COPY ${FUNCTION_PATH} ${LAMBDA_TASK_ROOT}
-
+# Set handler
 CMD ["index.handler"]

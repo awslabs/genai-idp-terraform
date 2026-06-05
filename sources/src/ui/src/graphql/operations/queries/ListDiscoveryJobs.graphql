@@ -1,0 +1,24 @@
+query ListDiscoveryJobs {
+  listDiscoveryJobs {
+    DiscoveryJobs {
+      jobId
+      documentKey
+      groundTruthKey
+      status
+      createdAt
+      updatedAt
+      errorMessage
+      version
+      discoveredClassName
+      statusMessage
+      pageRange
+      jobType
+      currentStep
+      totalDocuments
+      clustersFound
+      discoveredClasses
+      reflectionReport
+    }
+    nextToken
+  }
+}

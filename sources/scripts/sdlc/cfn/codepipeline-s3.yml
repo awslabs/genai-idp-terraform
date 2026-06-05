@@ -8,12 +8,12 @@ Parameters:
   PipelineName:
     Type: String
     Description: 'Name of the CodePipeline'
-    Default: idp-sdlc-deploy-pipeline
+    Default: genaiic-sdlc-deploy-pipeline
 
-  BucketName:
+  BucketNamePrefix:
     Type: String
-    Description: 'Name of the S3 bucket containing the deployment assets'
-    Default: idp-sdlc-sourcecode-YOUR_AWS_ACCOUNT-YOUR_REGION
+    Description: 'Prefix for the S3 bucket name'
+    Default: genaiic-sdlc-sourcecode
   
   FileKey:
     Type: String
@@ -24,11 +24,56 @@ Parameters:
     Type: String
     Description: 'Optional ARN of an existing IAM role for CodeBuild. If not provided, a new role will be created.'
     Default: ''
+    
+  KMSKeyArn:
+    Type: String
+    Description: 'ARN of customer-managed KMS key for encrypting CodePipeline artifacts'
+    Default: ''
 
 Conditions:
+  CreateKMSKey: !Equals [!Ref KMSKeyArn, '']
   CreateCodeBuildRole: !Equals [!Ref CodeBuildRoleArn, '']
 
 Resources:
+  PipelineKMSKey:
+    Type: AWS::KMS::Key
+    Condition: CreateKMSKey
+    Properties:
+      Description: 'KMS key for CodePipeline artifact encryption'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CodePipeline Service
+            Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+          - Sid: Allow CodeBuild Service
+            Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+
+  PipelineKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Condition: CreateKMSKey
+    Properties:
+      AliasName: !Sub 'alias/${PipelineName}-key'
+      TargetKeyId: !Ref PipelineKMSKey
+
   CodePipelineRole:
       Type: 'AWS::IAM::Role'
       Properties:
@@ -52,27 +97,37 @@ Resources:
                     - 's3:ListBucket'
                     - 's3:PutObject'
                   Resource:
-                    - !Sub 'arn:aws:s3:::${BucketName}/*'
+                    - !Sub 'arn:aws:s3:::${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}/*'
                     - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
-                    - !Sub 'arn:aws:s3:::${BucketName}'
+                    - !Sub 'arn:aws:s3:::${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}'
                     - !Sub 'arn:aws:s3:::${ArtifactBucket}'
                 - Effect: Allow
                   Action:
                     - 'codebuild:BatchGetBuilds'
                     - 'codebuild:StartBuild'
                   Resource: !GetAtt IdkInstallCodeBuild.Arn
+                - Effect: Allow
+                  Action:
+                    - 'kms:Decrypt'
+                    - 'kms:GenerateDataKey'
+                  Resource: !If [CreateKMSKey, !GetAtt PipelineKMSKey.Arn, !Ref KMSKeyArn]
 
   CodeBuildRole:
     Type: 'AWS::IAM::Role'
     Condition: CreateCodeBuildRole
     # checkov:skip=CKV_AWS_111: "This role requires specific permissions for CodeBuild deployment operations"
+    # checkov:skip=CKV_AWS_109: "SDLC deployment role requires IAM permissions for infrastructure provisioning - access restricted to idp-* resources"
+    # checkov:skip=CKV_AWS_110: "SDLC deployment role requires IAM permissions for infrastructure provisioning - access restricted to idp-* resources"
     # checkov:skip=CKV_AWS_107: "This role requires access to resources for deployment operations"
     Metadata:
       cfn_nag:
         rules_to_suppress:
+          - id: F3
+            reason: "CodeBuild role requires broad permissions for dynamic deployment operations. Scoped to SDLC pipeline only. All operations logged in CloudTrail."
           - id: W11
-            reason: "Required for EC2 resource discovery during deployment"
+            reason: "Some IAM List/Get operations and service-linked roles require wildcard resources"
     Properties:
+      MaxSessionDuration: 14400  # 4 hours - allows tests to run beyond default 60-minute token expiration
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -80,23 +135,153 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: 'sts:AssumeRole'
-      # TODO: Adjust these rights as appropriate >>>
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
-      # <<< TODO: Adjust these rights as appropriate
       Policies:
-        - PolicyName: CodeBuildPolicy
+        - PolicyName: CloudFormationAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - 'ec2:DescribeAvailabilityZones'
-                  - 'ec2:DescribeVpcs'
-                  - 'ec2:DescribeSubnets'
-                  - 'ec2:DescribeSecurityGroups'
-                  - 'sts:AssumeRole'
+                  - cloudformation:*
+                Resource: 
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/idp-*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/idp-*/*'
+              # ValidateTemplate doesn't support resource-level permissions
+              - Effect: Allow
+                Action:
+                  - cloudformation:ValidateTemplate
                 Resource: '*'
+        - PolicyName: LimitedIAMAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Read-only IAM operations (require wildcard)
+              - Effect: Allow
+                Action:
+                  - iam:Get*
+                  - iam:List*
+                Resource: '*'
+              # Write IAM operations (scoped to IDP resources)
+              - Effect: Allow
+                Action:
+                  - iam:*
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/idp-*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/idp-*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:instance-profile/idp-*'
+              # PassRole for CloudFormation service role
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/idp-*'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: 
+                      - cloudformation.amazonaws.com
+                      - lambda.amazonaws.com
+                      - states.amazonaws.com
+                      - appsync.amazonaws.com
+                      - bedrock.amazonaws.com
+              # Service-linked roles
+              - Effect: Allow
+                Action:
+                  - iam:CreateServiceLinkedRole
+                  - iam:DeleteServiceLinkedRole
+                  - iam:GetServiceLinkedRoleDeletionStatus
+                Resource: 'arn:aws:iam::*:role/aws-service-role/*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # SDLC source bucket
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub 'arn:aws:s3:::genaiic-sdlc-sourcecode-${AWS::AccountId}-${AWS::Region}'
+                  - !Sub 'arn:aws:s3:::genaiic-sdlc-sourcecode-${AWS::AccountId}-${AWS::Region}/*'
+              # IDP stack buckets
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - 'arn:aws:s3:::idp-*'
+                  - 'arn:aws:s3:::idp-*/*'
+        - PolicyName: MonitoringAndCleanupAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Lambda
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:idp-*'
+              # Lambda ListFunctions - required for Test Studio to discover TestRunnerFunction
+              # Note: AWS does not support resource-level permissions for ListFunctions
+              - Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                Resource: '*'
+              # DynamoDB
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: 
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/idp-*'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/idp-*/index/*'
+              # Step Functions
+              - Effect: Allow
+                Action:
+                  - states:*
+                Resource:
+                  - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:idp-*'
+                  - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:idp-*:*'
+              # AppSync - required for cleanup
+              - Effect: Allow
+                Action:
+                  - appsync:ListGraphqlApis
+                  - appsync:GetGraphqlApi
+                  - appsync:DeleteGraphqlApi
+                Resource: '*'
+              # CloudFront - required for cleanup
+              - Effect: Allow
+                Action:
+                  - cloudfront:ListDistributions
+                  - cloudfront:GetDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:ListResponseHeadersPolicies
+                  - cloudfront:GetResponseHeadersPolicy
+                  - cloudfront:DeleteResponseHeadersPolicy
+                Resource: '*'
+        - PolicyName: STSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: '*'
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+        - PolicyName: CloudWatchMetricsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: GENAIDP
 
   ArtifactBucket:
     Type: 'AWS::S3::Bucket'
@@ -105,19 +290,58 @@ Resources:
       cfn_nag:
         rules_to_suppress:
           - id: W51
-            reason: "CodePipeline manages access to this bucket; explicit bucket policy not required"
+            reason: "Bucket policy enforces SSL; CodePipeline manages additional access controls"
           - id: W35
             reason: "This is a temporary deployment artifact bucket; access logging not required"
           - id: W41
-            reason: "Using default SSE encryption which is applied automatically by S3"
+            reason: "Bucket uses KMS CMK encryption via PipelineKMSKey"
+      security-matrix:
+        rules_to_suppress:
+          - id: S3-001
+            reason: "This is a temporary deployment artifact bucket; access logging not required"
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-S1
+            reason: "Temporary SDLC deployment artifact bucket; access logging intentionally omitted"
+          - id: AwsSolutions-S2
+            reason: "Internal SDLC artifact bucket with public access already blocked"
+          - id: AwsSolutions-S5
+            reason: "Internal SDLC artifact bucket not used with CloudFront"
+          - id: AwsSolutions-S10
+            reason: "SSL enforced via ArtifactBucketPolicy"
+          - id: NIST.800.53.R5-S3BucketLoggingEnabled
+            reason: "Temporary SDLC deployment artifact bucket; access logging intentionally omitted"
     Properties:
       VersioningConfiguration:
         Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !If [CreateKMSKey, !GetAtt PipelineKMSKey.Arn, !Ref KMSKeyArn]
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnforceSSLOnly
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub "${ArtifactBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": false
 
   IdkInstallCodeBuild:
     Type: 'AWS::CodeBuild::Project'
@@ -126,15 +350,23 @@ Resources:
         rules_to_suppress:
           - id: W32
             reason: "Using default AWS managed KMS key for this deployment pipeline"
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-CB4
+            reason: "SDLC deployment pipeline uses AWS-managed key; CMK adoption tracked in security backlog"
     Properties:
       Name: app-sdlc
       ServiceRole: !If [CreateCodeBuildRole, !GetAtt CodeBuildRole.Arn, !Ref CodeBuildRoleArn]
+      TimeoutInMinutes: 120
       Artifacts:
         Type: CODEPIPELINE
       Environment:
         Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
+        ComputeType: BUILD_GENERAL1_LARGE
         Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: SOURCE_BUCKET
+            Value: !Sub '${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}'
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
@@ -144,30 +376,33 @@ Resources:
               runtime-versions:
                 python: 3.12
               commands:
-                - n 22 && node --version || { echo "Node setup failed"; exit 1; }
-                - npm install -g aws-cdk || { echo "CDK installation failed"; exit 1; }
-                - curl -sSL https://install.python-poetry.org | python3 - || { echo "Poetry installation failed"; exit 1; }
-                - export PATH="/root/.local/bin:$PATH"
-                - cd ./scripts/sdlc/idp-cli  # This command won't cause exit on failure
-                - poetry install || { echo "Poetry dependencies installation failed"; exit 1; }
+                - n 22.14.0 && node --version || { echo "Node setup failed"; exit 1; }
+                - npm install -g npm@11 || echo "npm upgrade skipped, using bundled $(npm --version)"
+                - pip install uv || { echo "uv installation failed"; exit 1; }
+                - export IDP_ADMIN_EMAIL=$(aws s3api head-object --bucket ${SOURCE_BUCKET} --key deploy/code.zip --query 'Metadata."gitlab-user-email"' --output text 2>/dev/null || echo "")
+                - make setup || { echo "IDP Common and IDP CLI installation failed"; exit 1; }
+                - pip install rich scikit-learn || echo "Additional package installation failed, using fallbacks"
+                - export PATH="$PWD/.venv/bin:$PATH"
+                - which idp-cli || { echo "idp-cli not found in PATH"; exit 1; }
             build:
               commands:
-                - export IDP_CFN_PREFIX=$(make cfn-prefix) || { echo "CFN prefix generation failed"; exit 1; }
-                - make install -e IDP_CFN_PREFIX=$IDP_CFN_PREFIX
-                - make smoketest -e IDP_CFN_PREFIX=$IDP_CFN_PREFIX
-            post_build:
-              commands:
-                - echo "Running cleanup regardless of build result..."
-                - make uninstall -e IDP_CFN_PREFIX=$IDP_CFN_PREFIX || echo "Cleanup failed but continuing"
+                - python3 scripts/sdlc/codebuild_deployment.py
+              finally:
+                - echo "Cleanup handled by codebuild deployment script"
 
   DeploymentPipeline:
     Type: 'AWS::CodePipeline::Pipeline'
     Properties:
       Name: !Ref PipelineName
       RoleArn: !GetAtt CodePipelineRole.Arn
+      ExecutionMode: PARALLEL
+      PipelineType: V2
       ArtifactStore:
         Type: S3
         Location: !Ref ArtifactBucket
+        EncryptionKey:
+          Id: !If [CreateKMSKey, !GetAtt PipelineKMSKey.Arn, !Ref KMSKeyArn]
+          Type: KMS
       Stages:
         - Name: Source
           Actions:
@@ -178,9 +413,9 @@ Resources:
                 Provider: S3
                 Version: '1'
               Configuration:
-                S3Bucket: !Ref BucketName
+                S3Bucket: !Sub '${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}'
                 S3ObjectKey: !Ref FileKey
-                PollForSourceChanges: true
+                PollForSourceChanges: false
               OutputArtifacts:
                 - Name: SourceOutput
               RunOrder: 1
@@ -202,7 +437,6 @@ Resources:
 
   CodeBuildRoleS3Policy:
     Type: 'AWS::IAM::Policy'
-    Condition: CreateCodeBuildRole
     Properties:
       PolicyName: CodeBuildS3Access
       Roles: 
@@ -216,23 +450,24 @@ Resources:
               - 's3:GetObjectVersion'
               - 's3:PutObject'
             Resource: 
-              - !Sub 'arn:aws:s3:::${BucketName}/*'
+              - !Sub 'arn:aws:s3:::${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}/*'
               - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
           - Effect: Allow
             Action:
               - 's3:ListBucket'
             Resource: 
-              - !Sub 'arn:aws:s3:::${BucketName}'
+              - !Sub 'arn:aws:s3:::${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}'
               - !Sub 'arn:aws:s3:::${ArtifactBucket}'
 
   CodeBuildLogsPolicy:
     Type: 'AWS::IAM::Policy'
-    Condition: CreateCodeBuildRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
+          - id: F4
+            reason: "logs:* used for CodeBuild to manage logs across multiple stacks with dynamic log group names"
           - id: W12
-            reason: "Logs policy requires * resource to create log groups dynamically"
+            reason: "Wildcard resource required for CloudWatch Logs to create log groups dynamically across different stacks"
     # checkov:skip=CKV_AWS_111: "CloudWatch Logs policies require write access for log creation"
     Properties:
       PolicyName: CodeBuildLogs
@@ -243,7 +478,115 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - 'logs:CreateLogGroup'
-              - 'logs:CreateLogStream'
-              - 'logs:PutLogEvents'
+              - 'logs:*'
             Resource: '*'
+
+  CodeBuildBedrockPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CodeBuildBedrockAccess
+      Roles: 
+        - !Ref CodeBuildRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'bedrock:InvokeModel'
+              - 'bedrock:InvokeModelWithResponseStream'
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/*'
+              - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
+          - Effect: Allow
+            Action:
+              - 'bedrock:ListBlueprints'
+              - 'bedrock:ListDataAutomationProjects'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'bedrock:CreateBlueprint'
+              - 'bedrock:CreateBlueprintVersion'
+              - 'bedrock:UpdateBlueprint'
+              - 'bedrock:DeleteBlueprint'
+              - 'bedrock:GetBlueprint'
+              - 'bedrock:CreateDataAutomationProject'
+              - 'bedrock:UpdateDataAutomationProject'
+              - 'bedrock:GetDataAutomationProject'
+              - 'bedrock:DeleteDataAutomationProject'
+            Resource:
+              - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:blueprint/*'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:data-automation-project/*'
+          - Effect: Allow
+            Action:
+              - 'bedrock:ListIngestionJobs'
+              - 'bedrock:StopIngestionJob'
+            Resource: '*'
+
+  CodeBuildKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F4
+            reason: "Broad KMS permissions required for stack life cycle in pipeline account"
+          - id: W12
+            reason: "KMS operations require wildcard resource for key discovery during stack deployment."
+    # checkov:skip=CKV_AWS_111: "Write access required for KMS key management during stack deployment and teardown in SDLC pipeline"
+    # checkov:skip=CKV_AWS_109: "Wildcard KMS permissions required for dynamic key discovery and management across multiple stacks in pipeline account"
+    Properties:
+      PolicyName: CodeBuildKMSAccess
+      Roles: 
+        - !Ref CodeBuildRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'kms:*'
+            Resource: '*'
+
+  # CloudWatch Events Rule to trigger pipeline on S3 changes
+  PipelineTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: genaiic-sdlc-pipeline-trigger
+      Description: Trigger CodePipeline on S3 object changes
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Sub '${BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}'
+          object:
+            key:
+              - !Ref FileKey
+      State: ENABLED
+      Targets:
+        - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${PipelineName}'
+          Id: PipelineTrigger
+          RoleArn: !GetAtt PipelineTriggerRole.Arn
+
+  # IAM Role for CloudWatch Events to trigger CodePipeline
+  PipelineTriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: genaiic-sdlc-pipeline-trigger-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: TriggerPipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codepipeline:StartPipelineExecution
+                Resource: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${PipelineName}'

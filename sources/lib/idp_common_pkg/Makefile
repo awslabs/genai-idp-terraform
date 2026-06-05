@@ -1,18 +1,21 @@
+# Accept PYTHON from parent Makefile, or auto-detect
+PYTHON ?= $(shell command -v python3 2>/dev/null || pyenv which python 2>/dev/null || echo python)
+
 .PHONY: test test-cicd clean
 
 test: test-unit
 
 test-unit:
-	python -m pytest -m "unit" --ignore=idp_common/agents/testing
+	$(PYTHON) -m pytest -m "unit" --ignore=idp_common/agents/testing
 
 test-integration:
-	python -m pytest -m "integration" --ignore=idp_common/agents/testing
+	$(PYTHON) -m pytest -m "integration" --ignore=idp_common/agents/testing
 
 test-cicd: test-unit-cicd
 
 test-unit-cicd:
 	pip install -e ".[test]"
-	python -m pytest -m "unit" --cov=idp_common --cov-report=xml:test-reports/coverage.xml --cov-report=term --junitxml=test-reports/test-results.xml tests/
+	$(PYTHON) -m pytest -m "unit" --cov=idp_common --cov-report=xml:test-reports/coverage.xml --cov-report=term --junitxml=test-reports/test-results.xml tests/
 
 clean:
 	rm -rf .pytest_cache
@@ -27,4 +30,4 @@ clean:
 	
 # A convenience target to install the idp_common library with all, dev dependencies in edit mode
 dev:
-	pip install -e ".[all, dev]"
+	pip install -e ".[all,dev]"

@@ -82,6 +82,81 @@ class ImageConfig(BaseModel):
         return bool(v)
 
 
+class TableParsingConfig(BaseModel):
+    """Configuration for deterministic table parsing tool in agentic extraction.
+
+    When enabled, the extraction agent gains a parse_table tool that can
+    deterministically parse well-formatted Markdown tables from OCR output
+    without LLM inference. The agent decides when to use this tool based
+    on table quality and confidence metrics.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable the parse_table tool for the extraction agent. "
+        "When enabled, the agent can use deterministic table parsing "
+        "for well-formatted Markdown tables in OCR output (works with any OCR backend "
+        "that produces Markdown tables: Textract with TABLES/LAYOUT, or Bedrock OCR).",
+    )
+    min_confidence_threshold: float = Field(
+        default=95.0,
+        ge=0.0,
+        le=100.0,
+        description="Minimum average OCR text confidence (Textract 0-100 scale) "
+        "for the agent to prefer table parsing over LLM extraction. "
+        "Included in the agent's system prompt as guidance.",
+    )
+    min_parse_success_rate: float = Field(
+        default=0.90,
+        ge=0.0,
+        le=1.0,
+        description="Minimum parse_success_rate from the parse_table tool "
+        "for the agent to trust the parsed results. Below this threshold, "
+        "the agent should fall back to LLM extraction.",
+    )
+    use_confidence_data: bool = Field(
+        default=True,
+        description="Whether to load and provide OCR confidence data to the "
+        "parse_table tool for quality assessment.",
+    )
+    max_empty_line_gap: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description=(
+            "Maximum consecutive empty lines to tolerate within a table "
+            "before treating it as table boundary. Helps handle OCR page "
+            "breaks and artifacts. Higher values are more tolerant but may "
+            "merge unrelated tables."
+        ),
+    )
+    auto_merge_adjacent_tables: bool = Field(
+        default=True,
+        description="Automatically merge consecutive tables with identical column "
+        "structure. Helps recover from table splits caused by OCR artifacts like "
+        "page breaks. Disable if documents contain multiple similar tables that "
+        "should remain separate.",
+    )
+
+    @field_validator(
+        "min_confidence_threshold", "min_parse_success_rate", mode="before"
+    )
+    @classmethod
+    def parse_float(cls, v: Any) -> float:
+        """Parse float from string or number"""
+        if isinstance(v, str):
+            return float(v) if v else 0.0
+        return float(v)
+
+    @field_validator("max_empty_line_gap", mode="before")
+    @classmethod
+    def parse_int(cls, v: Any) -> int:
+        """Parse int from string or number"""
+        if isinstance(v, str):
+            return int(v) if v else 0
+        return int(v)
+
+
 class AgenticConfig(BaseModel):
     """Agentic extraction configuration"""
 
@@ -91,6 +166,61 @@ class AgenticConfig(BaseModel):
         default=None,
         description="Model used for reviewing and correcting extraction work",
     )
+    max_concurrent_batches: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Max concurrent page-batch agents for parallel extraction. "
+        "1 = sequential (default). >1 splits pages into N batches and runs N agents "
+        "concurrently. Reduces wall-clock time but increases Bedrock RPM. "
+        "Tune based on your Bedrock quota.",
+    )
+    table_parsing: TableParsingConfig = Field(
+        default_factory=TableParsingConfig,
+        description="Configuration for deterministic table parsing tool. "
+        "When enabled, the extraction agent can parse well-formatted "
+        "Markdown tables from OCR output without LLM inference.",
+    )
+
+
+class MissingFieldHandlingConfig(BaseModel):
+    """Controls how extraction treats fields whose source pages are absent.
+
+    See ``x-aws-idp-page-types`` and ``x-aws-idp-source-page-types`` schema
+    extensions for the page-type → property mapping that drives this.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable BLANK vs MISSING field handling. When enabled, properties "
+            "whose declared source page-types are absent from the section are "
+            "marked as MISSING per the configured representation. Default off "
+            "to preserve existing behavior."
+        ),
+    )
+    representation: str = Field(
+        default="omit",
+        description=(
+            "How to represent missing fields in extraction output. 'omit' drops "
+            "the key entirely; 'null_with_metadata' keeps the key as null and "
+            "lists it under a sibling 'missing_fields' array."
+        ),
+    )
+
+    @field_validator("representation", mode="before")
+    @classmethod
+    def validate_representation(cls, v: Any) -> str:
+        """Reject unknown representations early so misconfiguration fails fast."""
+        if v is None:
+            return "omit"
+        v_str = str(v)
+        if v_str not in ("omit", "null_with_metadata"):
+            raise ValueError(
+                "missing_field_handling.representation must be 'omit' or "
+                f"'null_with_metadata', got {v_str!r}"
+            )
+        return v_str
 
 
 class ExtractionConfig(BaseModel):
@@ -122,6 +252,15 @@ class ExtractionConfig(BaseModel):
     )
     image: ImageConfig = Field(default_factory=ImageConfig)
     agentic: AgenticConfig = Field(default_factory=AgenticConfig)
+    missing_field_handling: MissingFieldHandlingConfig = Field(
+        default_factory=MissingFieldHandlingConfig,
+        description=(
+            "Configuration for distinguishing BLANK fields (page present, "
+            "field empty) from MISSING fields (page absent). Requires class "
+            "schemas to declare 'x-aws-idp-page-types' and properties to "
+            "declare 'x-aws-idp-source-page-types'."
+        ),
+    )
     custom_prompt_lambda_arn: Optional[str] = Field(
         default=None, description="ARN of custom prompt Lambda"
     )
@@ -391,6 +530,69 @@ class SummarizationConfig(BaseModel):
         return int(v)
 
 
+class ChatConfig(BaseModel):
+    """Chat-with-Document configuration.
+
+    Controls the interactive "Chat with Document" feature available on the
+    Document Detail screen. This is decoupled from summarization so that
+    chat can use a different (typically larger-context) model.
+    """
+
+    enabled: bool = Field(default=True, description="Enable Chat-with-Document")
+    model: str = Field(
+        default="us.anthropic.claude-opus-4-7:1m",
+        description=(
+            "Bedrock model ID used for Chat-with-Document. A large-context "
+            "model is recommended because the entire document text is sent "
+            "in a single prompt. Use 'LambdaHook' to invoke a custom Lambda "
+            "function instead of Bedrock."
+        ),
+    )
+    model_lambda_hook_arn: Optional[str] = Field(
+        default=None,
+        description=(
+            "Lambda function ARN for custom inference (used when model is "
+            "'LambdaHook'). Function name must start with GENAIIDP-."
+        ),
+    )
+    system_prompt: str = Field(
+        default=(
+            "You are an assistant that answers questions about the attached "
+            "document text. If you don't know the answer, say so. Do not "
+            "invent information. Use the prior chat history provided as "
+            "context. Respond in plain text, not JSON."
+        ),
+        description="System prompt for the Chat-with-Document assistant",
+    )
+    temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+    top_p: float = Field(default=0.1, ge=0.0, le=1.0)
+    top_k: float = Field(default=5.0, ge=0.0)
+    max_tokens: int = Field(
+        default=4096,
+        gt=0,
+        description=(
+            "Maximum number of output (response) tokens. Ensure this does "
+            "not exceed the selected model's limit."
+        ),
+    )
+
+    @field_validator("temperature", "top_p", "top_k", mode="before")
+    @classmethod
+    def parse_float(cls, v: Any) -> float:
+        """Parse float from string or number"""
+        if isinstance(v, str):
+            return float(v) if v else 0.0
+        return float(v)
+
+    @field_validator("max_tokens", mode="before")
+    @classmethod
+    def parse_int(cls, v: Any) -> int:
+        """Parse int from string or number"""
+        if isinstance(v, str):
+            return int(v) if v else 0
+        return int(v)
+
+
 class OCRFeature(BaseModel):
     """OCR feature configuration"""
 
@@ -442,11 +644,21 @@ class ErrorAnalyzerParameters(BaseModel):
         default=24, gt=0, description="Default time range in hours for log searches"
     )
 
-    max_log_message_length: int = 400
-    max_events_per_log_group: int = 5
-    max_log_groups: int = 20
-    max_stepfunction_timeline_events: int = 3
-    max_stepfunction_error_length: int = 400
+    max_log_message_length: int = Field(
+        default=400, gt=0, description="Maximum length for log messages before truncation"
+    )
+    max_events_per_log_group: int = Field(
+        default=5, gt=0, description="Maximum events to collect per log group"
+    )
+    max_log_groups: int = Field(
+        default=20, gt=0, description="Maximum number of log groups to search"
+    )
+    max_stepfunction_timeline_events: int = Field(
+        default=50, gt=0, description="Maximum Step Function timeline events to include"
+    )
+    max_stepfunction_error_length: int = Field(
+        default=400, gt=0, description="Maximum length for Step Function error messages"
+    )
 
     # X-Ray analysis thresholds
     xray_slow_segment_threshold_ms: int = Field(
@@ -460,8 +672,32 @@ class ErrorAnalyzerParameters(BaseModel):
     xray_response_time_threshold_ms: int = Field(
         default=10000, gt=0, description="Response time threshold in milliseconds"
     )
+    xray_analysis_hours: int = Field(
+        default=3,
+        gt=0,
+        le=6,
+        description="Hours to look back for X-Ray service graph analysis (max 6)",
+    )
+    settings_cache_ttl_seconds: int = Field(
+        default=300,
+        gt=0,
+        description="TTL in seconds for the SSM settings cache",
+    )
 
-    @field_validator("max_log_events", "time_range_hours_default", mode="before")
+    @field_validator(
+        "max_log_events",
+        "time_range_hours_default",
+        "max_log_message_length",
+        "max_events_per_log_group",
+        "max_log_groups",
+        "max_stepfunction_timeline_events",
+        "max_stepfunction_error_length",
+        "xray_slow_segment_threshold_ms",
+        "xray_response_time_threshold_ms",
+        "xray_analysis_hours",
+        "settings_cache_ttl_seconds",
+        mode="before",
+    )
     @classmethod
     def parse_int(cls, v: Any) -> int:
         """Parse int from string or number"""
@@ -474,9 +710,23 @@ class ErrorAnalyzerConfig(BaseModel):
     """Error analyzer agent configuration"""
 
     model_id: str = Field(
-        default="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        default="us.anthropic.claude-sonnet-4-6",
         description="Bedrock model ID for error analyzer",
     )
+    lookback_hours: int = Field(
+        default=24,
+        gt=0,
+        description="How far back the error analyzer searches logs, traces, and execution history (in hours). Default: 24.",
+    )
+
+    @field_validator("lookback_hours", mode="before")
+    @classmethod
+    def parse_lookback_hours(cls, v: Any) -> int:
+        """Parse lookback_hours from string or number"""
+        if isinstance(v, str):
+            return int(v) if v else 24
+        return int(v)
+
     error_patterns: list[str] = Field(
         default=[
             "ERROR",
@@ -492,91 +742,174 @@ class ErrorAnalyzerConfig(BaseModel):
         description="Error patterns to search for in logs",
     )
     system_prompt: str = Field(
-        default="""
-            You are an intelligent error analysis agent for the GenAI IDP system with access to specialized diagnostic tools.
+        default="""You are an intelligent error analysis agent for the GenAI IDP (Intelligent Document Processing) system with access to specialized diagnostic tools.
 
-              GENERAL TROUBLESHOOTING WORKFLOW:
-              1. Identify document status from DynamoDB
-                  2. Find any errors reported during Step Function execution
-              3. Collect relevant logs from CloudWatch
-              4. Identify any performance issues from X-Ray traces
-          5. Provide root cause analysis based on the collected information
-          
-          TOOL SELECTION STRATEGY:
-          - If user provides a filename: Use cloudwatch_document_logs and dynamodb_status for document-specific analysis
-          - For system-wide issues: Use cloudwatch_logs and dynamodb_query
-          - For execution context: Use lambda_lookup or stepfunction_details
-          - For distributed tracing: Use xray_trace or xray_performance_analysis
-          
-          ALWAYS format your response with exactly these three sections in this order:
-          
-          ## Root Cause
-          Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
+SYSTEM ARCHITECTURE:
+The GenAI IDP system processes documents through an AWS Step Functions state machine with the following pipeline stages:
+- OCR Stage: Extracts text/layout from documents using Amazon Textract or Amazon Bedrock Data Automation (BDA)
+- Classification Stage: Identifies the document class using a Bedrock LLM
+- Extraction Stage: Extracts structured fields using a Bedrock LLM based on class-specific configuration
+- Assessment Stage: Evaluates extraction quality using a Bedrock LLM
+- Summarization Stage (optional): Generates a document summary
+- Evaluation Stage (optional): Scores extraction accuracy against ground truth
 
-          ## Recommendations
-              Provide specific, actionable steps to resolve the issue. Limit to top three recommendations only.
+BDA Alternative Branch:
+- InvokeBDA → BDA Completion (EventBridge-triggered) → BDA ProcessResults
+- BDA jobs are asynchronous; failures may appear in EventBridge delivery or the BDA service itself
 
-          <details>
-              <summary><strong>Evidence</strong></summary>
-              
-              Format evidence with source information. Include relevant data from tool responses:
-              
-              **For CloudWatch logs:**
-                  **Log Group:** [full log_group name]
-              **Log Stream:** [full log_stream name]
-                  ```
-              [ERROR] timestamp message
-          ```
-          
-          **For other sources (DynamoDB, Step Functions, X-Ray):**
-              **Source:** [service name and resource]
-              ```
-          Relevant data from tool response
-              ```
+Key AWS services involved:
+- AWS Step Functions: Orchestrates the pipeline workflow
+- AWS Lambda: Executes each stage as an independent function
+- Amazon DynamoDB: Tracks document status and metadata per stage
+- Amazon CloudWatch: Captures logs from each Lambda function
+- AWS X-Ray: Provides distributed tracing across Lambda and Bedrock calls
+- Amazon Bedrock: Provides LLM inference for classification, extraction, assessment, and summarization
+- Amazon Textract: Performs OCR for non-BDA documents
+- Amazon S3: Stores input documents, OCR results, and extracted output
 
-          </details>
+INVESTIGATION WORKFLOW:
+1. Identify the document status in DynamoDB to understand which pipeline stage failed
+2. Retrieve Step Functions execution details to get the execution timeline and error event
+3. Collect CloudWatch logs from the failing Lambda stage for detailed error messages
+4. Use X-Ray traces to identify performance bottlenecks or cascading failures across services
+5. Synthesize all evidence to determine root cause — never stop at the first error message
 
-              FORMATTING RULES:
-          - Use the exact three-section structure above
-          - Make Evidence section collapsible using HTML details tags
-          - Include relevant data from all tool responses (CloudWatch, DynamoDB, Step Functions, X-Ray)
-          - For CloudWatch: Show complete log group and log stream names without truncation
-          - Present evidence data in code blocks with appropriate source labels
-                
-              ANALYSIS GUIDELINES:
-          - Use multiple tools for comprehensive analysis when needed
-              - Start with document-specific tools for targeted queries
-              - Use system-wide tools for pattern analysis
-              - Combine DynamoDB status with CloudWatch logs for complete picture
-              - Leverage X-Ray for distributed system issues
-                  
-                  ROOT CAUSE DETERMINATION:
-                  1. Document Status: Check dynamodb_status first
-              2. Execution Details: Use stepfunction_details for workflow failures
-              3. Log Analysis: Use cloudwatch_document_logs or cloudwatch_logs for error details
-              4. Distributed tracing: Use xray_performance_analysis for service interaction issues
-              5. Context: Use lambda_lookup for execution environment
-              
-              RECOMMENDATION GUIDELINES:
-              For code-related issues or system bugs:
-                  - Do not suggest code modifications
-              - Include error details, timestamps, and context
+TOOL USAGE:
+- Document-specific analysis (user provides a filename or document ID):
+  → Use cloudwatch_document_logs and dynamodb_status as primary tools
+- System-wide or batch analysis (no specific document):
+  → Use cloudwatch_logs and dynamodb_query to identify patterns
+- Workflow failures and execution timeline:
+  → Use stepfunction_details for the execution event history
+- Lambda configuration and environment context:
+  → Use lambda_lookup to check timeout settings, memory, and environment variables
+- Distributed service interaction issues:
+  → Use xray_trace or xray_performance_analysis
 
-              For configuration-related issues:
-                  - Direct users to UI configuration panel
-                      - Specify exact configuration section and parameter names
+Always use at least 2 different tool sources before concluding a root cause. If a tool call returns no useful data, try an alternative — never guess without evidence.
 
-                      For operational issues:
-                      - Provide immediate troubleshooting steps
-                      - Include preventive measures
+INVESTIGATION STRATEGY:
+Use this approach for all investigations, whether a single document or a large batch:
 
-                      TIME RANGE PARSING:
-                      - recent: 1 hour
-              - last week: 168 hours  
-                      - last day: 24 hours
-                      - No time specified: 24 hours (default)
-              
-              IMPORTANT: Do not include any search quality reflections, search quality scores, or meta-analysis sections in your response. Only provide the three required sections: Root Cause, Recommendations, and Evidence.""",
+1. TRIAGE: Check DynamoDB for document status and which stage failed. For batches, get a count of failed documents and their error status distribution.
+
+2. SAMPLE: For multiple failures, select 2-3 representative failed documents. Avoid over-sampling — additional documents yield diminishing returns.
+
+3. TRACE THE CAUSAL CHAIN for each sampled document:
+   DynamoDB status → Step Functions execution timeline → CloudWatch error logs → X-Ray traces
+
+4. APPLY THE "5 WHYS" — Never stop at the first error. Keep asking "what caused THIS?":
+   Finding: "Extraction Lambda timed out" → Why?
+   "Lambda waited 14 minutes on Bedrock InvokeModel" → Why was it slow?
+   "Bedrock returned ThrottlingException, triggering exponential backoff" → Why throttled?
+   "Batch of 200 docs with extraction concurrency=10 exceeded Bedrock RPM quota"
+   ROOT CAUSE: "Extraction concurrency too high for the configured Bedrock account quota"
+
+5. DISTINGUISH SYSTEMIC vs ISOLATED FAILURES:
+   - Same error type across many documents → systemic issue (quota, permissions, configuration, service limit)
+   - Different errors across documents → per-document issues (bad input, edge cases, unsupported format)
+
+6. VALIDATE: Does the identified root cause explain ALL observed failures?
+
+ROOT CAUSE vs SYMPTOM GUIDE:
+- SYMPTOM: "Document processing failed"
+- SYMPTOM: "Extraction Lambda returned error"
+- CLOSER:  "ThrottlingException from Bedrock InvokeModel"
+- ROOT CAUSE: "Bedrock RPM quota exceeded — batch concurrency generated too many concurrent API calls"
+
+- SYMPTOM: "Classification failed"
+- CLOSER:  "Textract API timeout"
+- ROOT CAUSE: "150-page PDF exceeded Textract async processing limit for the configured region"
+
+COMMON ERROR PATTERNS:
+Use these patterns to guide your investigation and accelerate diagnosis:
+
+1. THROTTLING — ThrottlingException, TooManyRequestsException, "Rate exceeded", "Too many requests"
+   Likely cause: Batch size × concurrency > Bedrock RPM/TPM quota, or Textract TPS limit exceeded
+   Check: Concurrent Lambda executions, batch size, Bedrock model quotas
+
+2. TIMEOUT — "Task timed out", "Lambda timeout", "socket timeout", "Connection reset"
+   Likely cause: Large document (many pages), undersized Lambda timeout or memory, slow Bedrock inference
+   Check: Document page count, Lambda timeout configuration, model response latency in X-Ray
+
+3. CONFIGURATION ERROR — KeyError, missing field, "not found in config", validation error, AttributeError
+   Likely cause: Class definition or attribute names in config don't match expected schema; config changes deployed incorrectly
+   Check: DynamoDB config table, class definitions, attribute names for the affected document class
+
+4. PERMISSIONS — AccessDeniedException, "not authorized", "is not authorized to perform", ExpiredToken
+   Likely cause: Missing IAM policy, cross-account access issue, Bedrock model access not granted, KMS policy gap
+   Check: Lambda execution role policies, Bedrock model access in the console, S3 bucket policies
+
+5. INPUT QUALITY — empty extraction results, very low confidence, "unable to parse", Textract errors on specific pages
+   Likely cause: Poor scan quality, handwritten content, unsupported file format, corrupted PDF
+   Check: OCR output in S3, original document quality, Textract response for page-level errors
+
+6. BDA-SPECIFIC — "BDA Job Failed", blueprint mismatch, async job timeout, missing EventBridge event
+   Likely cause: Blueprint schema mismatch with document type, BDA service limit, EventBridge delivery failure
+   Check: BDA project configuration, blueprint compatibility, EventBridge rule and DLQ
+
+7. BEDROCK MODEL ERRORS — ModelErrorException, "model returned an error", context length exceeded
+   Likely cause: Document content too large for model context window, model unavailable in region, prompt issue
+   Check: Document page count, OCR text length, model availability, extraction prompt configuration
+
+OUTPUT FORMAT:
+Always format your response with exactly these three sections in this order:
+
+## Root Cause
+**Confidence:** [HIGH | MEDIUM | LOW]
+Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
+
+## Recommendations
+Provide specific, actionable steps to resolve the issue. Limit to top three recommendations only.
+
+<details>
+<summary><strong>Evidence</strong></summary>
+
+Format evidence with source information. Include relevant data from tool responses:
+
+**For CloudWatch logs:**
+**Log Group:** [full log_group name]
+**Log Stream:** [full log_stream name]
+```
+[ERROR] timestamp message
+```
+
+**For other sources (DynamoDB, Step Functions, X-Ray):**
+**Source:** [service name and resource]
+```
+Relevant data from tool response
+```
+
+</details>
+
+FORMATTING RULES:
+- Use the exact three-section structure above
+- Add Confidence (HIGH/MEDIUM/LOW) as the first line of the Root Cause section
+- Make the Evidence section collapsible using HTML details tags
+- Include relevant data from all tool responses used
+- For CloudWatch: Show complete log group and log stream names without truncation
+- Present evidence data in code blocks with appropriate source labels
+
+RECOMMENDATION GUIDELINES:
+For code-related issues or system bugs:
+- Do not suggest code modifications — users cannot change Lambda code
+- Describe the error in detail with timestamps and context so it can be reported
+
+For configuration-related issues:
+- Direct users to the UI configuration panel
+- Specify the exact configuration section and parameter name
+
+For operational issues (throttling, timeouts, quotas):
+- Provide immediate remediation steps (e.g., reduce concurrency, reprocess failed documents)
+- Include preventive measures to avoid recurrence
+
+COMMON MISTAKES TO AVOID:
+- Do NOT report "Lambda function returned error" as a root cause — that is a symptom
+- Do NOT recommend "check CloudWatch logs" as a recommendation — you are already doing that
+- Do NOT suggest code changes — users cannot modify Lambda functions
+- Do NOT speculate about root cause without corroborating tool evidence
+- Do NOT investigate more than 3 sample documents in a batch — focus on pattern recognition
+- Do NOT include search quality reflections, meta-analysis, or sections not listed in the output format above""",
         description="System prompt for error analyzer",
     )
     parameters: ErrorAnalyzerParameters = Field(
@@ -588,7 +921,7 @@ class ChatCompanionConfig(BaseModel):
     """Chat companion agent configuration"""
 
     model_id: str = Field(
-        default="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        default="global.anthropic.claude-sonnet-4-6",
         description="Bedrock model ID for chat companion",
     )
 
@@ -604,91 +937,174 @@ class ChatCompanionConfig(BaseModel):
         "ThrottlingException",
     ]
     system_prompt: str = Field(
-        default="""
-            You are an intelligent error analysis agent for the GenAI IDP system with access to specialized diagnostic tools.
+        default="""You are an intelligent error analysis agent for the GenAI IDP (Intelligent Document Processing) system with access to specialized diagnostic tools.
 
-              GENERAL TROUBLESHOOTING WORKFLOW:
-              1. Identify document status from DynamoDB
-                  2. Find any errors reported during Step Function execution
-              3. Collect relevant logs from CloudWatch
-              4. Identify any performance issues from X-Ray traces
-          5. Provide root cause analysis based on the collected information
-          
-          TOOL SELECTION STRATEGY:
-          - If user provides a filename: Use cloudwatch_document_logs and dynamodb_status for document-specific analysis
-          - For system-wide issues: Use cloudwatch_logs and dynamodb_query
-          - For execution context: Use lambda_lookup or stepfunction_details
-          - For distributed tracing: Use xray_trace or xray_performance_analysis
-          
-          ALWAYS format your response with exactly these three sections in this order:
-          
-          ## Root Cause
-          Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
+SYSTEM ARCHITECTURE:
+The GenAI IDP system processes documents through an AWS Step Functions state machine with the following pipeline stages:
+- OCR Stage: Extracts text/layout from documents using Amazon Textract or Amazon Bedrock Data Automation (BDA)
+- Classification Stage: Identifies the document class using a Bedrock LLM
+- Extraction Stage: Extracts structured fields using a Bedrock LLM based on class-specific configuration
+- Assessment Stage: Evaluates extraction quality using a Bedrock LLM
+- Summarization Stage (optional): Generates a document summary
+- Evaluation Stage (optional): Scores extraction accuracy against ground truth
 
-          ## Recommendations
-              Provide specific, actionable steps to resolve the issue. Limit to top three recommendations only.
+BDA Alternative Branch:
+- InvokeBDA → BDA Completion (EventBridge-triggered) → BDA ProcessResults
+- BDA jobs are asynchronous; failures may appear in EventBridge delivery or the BDA service itself
 
-          <details>
-              <summary><strong>Evidence</strong></summary>
-              
-              Format evidence with source information. Include relevant data from tool responses:
-              
-              **For CloudWatch logs:**
-                  **Log Group:** [full log_group name]
-              **Log Stream:** [full log_stream name]
-                  ```
-              [ERROR] timestamp message
-          ```
-          
-          **For other sources (DynamoDB, Step Functions, X-Ray):**
-              **Source:** [service name and resource]
-              ```
-          Relevant data from tool response
-              ```
+Key AWS services involved:
+- AWS Step Functions: Orchestrates the pipeline workflow
+- AWS Lambda: Executes each stage as an independent function
+- Amazon DynamoDB: Tracks document status and metadata per stage
+- Amazon CloudWatch: Captures logs from each Lambda function
+- AWS X-Ray: Provides distributed tracing across Lambda and Bedrock calls
+- Amazon Bedrock: Provides LLM inference for classification, extraction, assessment, and summarization
+- Amazon Textract: Performs OCR for non-BDA documents
+- Amazon S3: Stores input documents, OCR results, and extracted output
 
-          </details>
+INVESTIGATION WORKFLOW:
+1. Identify the document status in DynamoDB to understand which pipeline stage failed
+2. Retrieve Step Functions execution details to get the execution timeline and error event
+3. Collect CloudWatch logs from the failing Lambda stage for detailed error messages
+4. Use X-Ray traces to identify performance bottlenecks or cascading failures across services
+5. Synthesize all evidence to determine root cause — never stop at the first error message
 
-              FORMATTING RULES:
-          - Use the exact three-section structure above
-          - Make Evidence section collapsible using HTML details tags
-          - Include relevant data from all tool responses (CloudWatch, DynamoDB, Step Functions, X-Ray)
-          - For CloudWatch: Show complete log group and log stream names without truncation
-          - Present evidence data in code blocks with appropriate source labels
-                
-              ANALYSIS GUIDELINES:
-          - Use multiple tools for comprehensive analysis when needed
-              - Start with document-specific tools for targeted queries
-              - Use system-wide tools for pattern analysis
-              - Combine DynamoDB status with CloudWatch logs for complete picture
-              - Leverage X-Ray for distributed system issues
-                  
-                  ROOT CAUSE DETERMINATION:
-                  1. Document Status: Check dynamodb_status first
-              2. Execution Details: Use stepfunction_details for workflow failures
-              3. Log Analysis: Use cloudwatch_document_logs or cloudwatch_logs for error details
-              4. Distributed Tracing: Use xray_performance_analysis for service interaction issues
-              5. Context: Use lambda_lookup for execution environment
-              
-              RECOMMENDATION GUIDELINES:
-              For code-related issues or system bugs:
-                  - Do not suggest code modifications
-              - Include error details, timestamps, and context
+TOOL USAGE:
+- Document-specific analysis (user provides a filename or document ID):
+  → Use cloudwatch_document_logs and dynamodb_status as primary tools
+- System-wide or batch analysis (no specific document):
+  → Use cloudwatch_logs and dynamodb_query to identify patterns
+- Workflow failures and execution timeline:
+  → Use stepfunction_details for the execution event history
+- Lambda configuration and environment context:
+  → Use lambda_lookup to check timeout settings, memory, and environment variables
+- Distributed service interaction issues:
+  → Use xray_trace or xray_performance_analysis
 
-              For configuration-related issues:
-                  - Direct users to UI configuration panel
-                      - Specify exact configuration section and parameter names
+Always use at least 2 different tool sources before concluding a root cause. If a tool call returns no useful data, try an alternative — never guess without evidence.
 
-                      For operational issues:
-                      - Provide immediate troubleshooting steps
-                      - Include preventive measures
+INVESTIGATION STRATEGY:
+Use this approach for all investigations, whether a single document or a large batch:
 
-                      TIME RANGE PARSING:
-                      - recent: 1 hour
-              - last week: 168 hours  
-                      - last day: 24 hours
-                      - No time specified: 24 hours (default)
-              
-              IMPORTANT: Do not include any search quality reflections, search quality scores, or meta-analysis sections in your response. Only provide the three required sections: Root Cause, Recommendations, and Evidence.""",
+1. TRIAGE: Check DynamoDB for document status and which stage failed. For batches, get a count of failed documents and their error status distribution.
+
+2. SAMPLE: For multiple failures, select 2-3 representative failed documents. Avoid over-sampling — additional documents yield diminishing returns.
+
+3. TRACE THE CAUSAL CHAIN for each sampled document:
+   DynamoDB status → Step Functions execution timeline → CloudWatch error logs → X-Ray traces
+
+4. APPLY THE "5 WHYS" — Never stop at the first error. Keep asking "what caused THIS?":
+   Finding: "Extraction Lambda timed out" → Why?
+   "Lambda waited 14 minutes on Bedrock InvokeModel" → Why was it slow?
+   "Bedrock returned ThrottlingException, triggering exponential backoff" → Why throttled?
+   "Batch of 200 docs with extraction concurrency=10 exceeded Bedrock RPM quota"
+   ROOT CAUSE: "Extraction concurrency too high for the configured Bedrock account quota"
+
+5. DISTINGUISH SYSTEMIC vs ISOLATED FAILURES:
+   - Same error type across many documents → systemic issue (quota, permissions, configuration, service limit)
+   - Different errors across documents → per-document issues (bad input, edge cases, unsupported format)
+
+6. VALIDATE: Does the identified root cause explain ALL observed failures?
+
+ROOT CAUSE vs SYMPTOM GUIDE:
+- SYMPTOM: "Document processing failed"
+- SYMPTOM: "Extraction Lambda returned error"
+- CLOSER:  "ThrottlingException from Bedrock InvokeModel"
+- ROOT CAUSE: "Bedrock RPM quota exceeded — batch concurrency generated too many concurrent API calls"
+
+- SYMPTOM: "Classification failed"
+- CLOSER:  "Textract API timeout"
+- ROOT CAUSE: "150-page PDF exceeded Textract async processing limit for the configured region"
+
+COMMON ERROR PATTERNS:
+Use these patterns to guide your investigation and accelerate diagnosis:
+
+1. THROTTLING — ThrottlingException, TooManyRequestsException, "Rate exceeded", "Too many requests"
+   Likely cause: Batch size × concurrency > Bedrock RPM/TPM quota, or Textract TPS limit exceeded
+   Check: Concurrent Lambda executions, batch size, Bedrock model quotas
+
+2. TIMEOUT — "Task timed out", "Lambda timeout", "socket timeout", "Connection reset"
+   Likely cause: Large document (many pages), undersized Lambda timeout or memory, slow Bedrock inference
+   Check: Document page count, Lambda timeout configuration, model response latency in X-Ray
+
+3. CONFIGURATION ERROR — KeyError, missing field, "not found in config", validation error, AttributeError
+   Likely cause: Class definition or attribute names in config don't match expected schema; config changes deployed incorrectly
+   Check: DynamoDB config table, class definitions, attribute names for the affected document class
+
+4. PERMISSIONS — AccessDeniedException, "not authorized", "is not authorized to perform", ExpiredToken
+   Likely cause: Missing IAM policy, cross-account access issue, Bedrock model access not granted, KMS policy gap
+   Check: Lambda execution role policies, Bedrock model access in the console, S3 bucket policies
+
+5. INPUT QUALITY — empty extraction results, very low confidence, "unable to parse", Textract errors on specific pages
+   Likely cause: Poor scan quality, handwritten content, unsupported file format, corrupted PDF
+   Check: OCR output in S3, original document quality, Textract response for page-level errors
+
+6. BDA-SPECIFIC — "BDA Job Failed", blueprint mismatch, async job timeout, missing EventBridge event
+   Likely cause: Blueprint schema mismatch with document type, BDA service limit, EventBridge delivery failure
+   Check: BDA project configuration, blueprint compatibility, EventBridge rule and DLQ
+
+7. BEDROCK MODEL ERRORS — ModelErrorException, "model returned an error", context length exceeded
+   Likely cause: Document content too large for model context window, model unavailable in region, prompt issue
+   Check: Document page count, OCR text length, model availability, extraction prompt configuration
+
+OUTPUT FORMAT:
+Always format your response with exactly these three sections in this order:
+
+## Root Cause
+**Confidence:** [HIGH | MEDIUM | LOW]
+Identify the specific underlying technical reason why the error occurred. Focus on the primary cause, not symptoms.
+
+## Recommendations
+Provide specific, actionable steps to resolve the issue. Limit to top three recommendations only.
+
+<details>
+<summary><strong>Evidence</strong></summary>
+
+Format evidence with source information. Include relevant data from tool responses:
+
+**For CloudWatch logs:**
+**Log Group:** [full log_group name]
+**Log Stream:** [full log_stream name]
+```
+[ERROR] timestamp message
+```
+
+**For other sources (DynamoDB, Step Functions, X-Ray):**
+**Source:** [service name and resource]
+```
+Relevant data from tool response
+```
+
+</details>
+
+FORMATTING RULES:
+- Use the exact three-section structure above
+- Add Confidence (HIGH/MEDIUM/LOW) as the first line of the Root Cause section
+- Make the Evidence section collapsible using HTML details tags
+- Include relevant data from all tool responses used
+- For CloudWatch: Show complete log group and log stream names without truncation
+- Present evidence data in code blocks with appropriate source labels
+
+RECOMMENDATION GUIDELINES:
+For code-related issues or system bugs:
+- Do not suggest code modifications — users cannot change Lambda code
+- Describe the error in detail with timestamps and context so it can be reported
+
+For configuration-related issues:
+- Direct users to the UI configuration panel
+- Specify the exact configuration section and parameter name
+
+For operational issues (throttling, timeouts, quotas):
+- Provide immediate remediation steps (e.g., reduce concurrency, reprocess failed documents)
+- Include preventive measures to avoid recurrence
+
+COMMON MISTAKES TO AVOID:
+- Do NOT report "Lambda function returned error" as a root cause — that is a symptom
+- Do NOT recommend "check CloudWatch logs" as a recommendation — you are already doing that
+- Do NOT suggest code changes — users cannot modify Lambda functions
+- Do NOT speculate about root cause without corroborating tool evidence
+- Do NOT investigate more than 3 sample documents in a batch — focus on pattern recognition
+- Do NOT include search quality reflections, meta-analysis, or sections not listed in the output format above""",
         description="System prompt for error analyzer",
     )
     parameters: ErrorAnalyzerParameters = Field(
@@ -1001,6 +1417,154 @@ class DiscoveryModelConfig(BaseModel):
         return int(v)
 
 
+
+class MultiDocumentDiscoveryConfig(BaseModel):
+    """Multi-document discovery configuration for batch clustering.
+
+    Settings for discovering document classes from a collection of documents
+    using embedding-based clustering and AI analysis.
+    """
+
+    embedding_model_id: str = Field(
+        default="us.cohere.embed-v4:0",
+        description="Bedrock model ID for generating document embeddings",
+    )
+    analysis_model_id: str = Field(
+        default="us.anthropic.claude-sonnet-4-6",
+        description="Bedrock model ID for analyzing document clusters",
+    )
+    temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Temperature for cluster analysis model",
+    )
+    max_tokens: int = Field(
+        default=10000,
+        gt=0,
+        description="Maximum output tokens for cluster analysis. "
+        "Ensure this does not exceed the selected model's limit.",
+    )
+    max_documents: int = Field(
+        default=500,
+        gt=0,
+        description="Maximum documents to process in a single discovery run",
+    )
+    min_cluster_size: int = Field(
+        default=2,
+        gt=0,
+        description="Minimum documents required to form a cluster",
+    )
+    num_sample_documents: int = Field(
+        default=3,
+        gt=0,
+        description="Number of sample documents selected per cluster for analysis",
+    )
+    max_sample_size: int = Field(
+        default=5,
+        gt=0,
+        description="Maximum sample size for cluster analysis",
+    )
+    max_concurrent_embeddings: int = Field(
+        default=5,
+        gt=0,
+        description="Maximum concurrent embedding API requests",
+    )
+    max_concurrent_clusters: int = Field(
+        default=3,
+        gt=0,
+        description="Maximum concurrent cluster analysis requests",
+    )
+    system_prompt: str = Field(
+        default="",
+        description="System prompt for the cluster analysis agent (leave empty to use built-in Jinja2 template)",
+    )
+
+    @field_validator("temperature", mode="before")
+    @classmethod
+    def parse_float(cls, v: Any) -> float:
+        """Parse float from string or number"""
+        if isinstance(v, str):
+            return float(v) if v else 0.0
+        return float(v)
+
+    @field_validator(
+        "max_tokens",
+        "max_documents",
+        "min_cluster_size",
+        "num_sample_documents",
+        "max_sample_size",
+        "max_concurrent_embeddings",
+        "max_concurrent_clusters",
+        mode="before",
+    )
+    @classmethod
+    def parse_int(cls, v: Any) -> int:
+        """Parse int from string or number"""
+        if isinstance(v, str):
+            return int(v) if v else 0
+        return int(v)
+
+
+class RuleDiscoveryAgenticConfig(BaseModel):
+    """Agentic rule discovery configuration"""
+
+    enabled: bool = Field(default=False, description="Enable agentic rule discovery")
+    review_agent: bool = Field(
+        default=False, description="Enable review agent for rule discovery"
+    )
+    review_agent_model: str | None = Field(
+        default=None,
+        description="Model used for reviewing and correcting rule discovery work",
+    )
+
+
+class RuleDiscoveryConfig(BaseModel):
+    """Rule discovery configuration for extracting rules from policy documents"""
+
+    model: str = Field(
+        default="global.anthropic.claude-sonnet-4-6",
+        description="Bedrock model ID for rule discovery",
+    )
+    system_prompt: str = Field(
+        default="", description="System prompt for rule discovery"
+    )
+    task_prompt: str = Field(
+        default="", description="Task prompt template for rule discovery"
+    )
+    temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+    top_p: float = Field(default=0.0, ge=0.0, le=1.0)
+    top_k: float = Field(default=5.0, ge=0.0)
+    max_tokens: int = Field(default=64000, gt=0)
+    agentic: RuleDiscoveryAgenticConfig = Field(
+        default_factory=RuleDiscoveryAgenticConfig,
+        description="Agentic rule discovery configuration",
+    )
+
+    @field_validator("temperature", "top_p", "top_k", mode="before")
+    @classmethod
+    def parse_float(cls, v: Any) -> float:
+        """Parse float from string or number"""
+        if isinstance(v, str):
+            return float(v) if v else 0.0
+        return float(v)
+
+    @field_validator("max_tokens", mode="before")
+    @classmethod
+    def parse_int(cls, v: Any) -> int:
+        """Parse int from string or number"""
+        if isinstance(v, str):
+            return int(v) if v else 0
+        return int(v)
+
+    @model_validator(mode="after")
+    def set_default_review_agent_model(self) -> Self:
+        """Set review_agent_model to rule discovery model if not specified."""
+        if not self.agentic.review_agent_model:
+            self.agentic.review_agent_model = self.model
+        return self
+
+
 class DiscoveryConfig(BaseModel):
     """Discovery configuration"""
 
@@ -1011,6 +1575,18 @@ class DiscoveryConfig(BaseModel):
     with_ground_truth: DiscoveryModelConfig = Field(
         default_factory=DiscoveryModelConfig,
         description="Configuration for discovery with ground truth",
+    )
+    auto_split: DiscoveryModelConfig = Field(
+        default_factory=DiscoveryModelConfig,
+        description="Configuration for auto-detecting document section boundaries in multi-page packages",
+    )
+    multi_document: MultiDocumentDiscoveryConfig = Field(
+        default_factory=MultiDocumentDiscoveryConfig,
+        description="Configuration for multi-document batch discovery using embedding clustering",
+    )
+    rules: RuleDiscoveryConfig = Field(
+        default_factory=RuleDiscoveryConfig,
+        description="Configuration for rules discovery from policy documents",
     )
 
 
@@ -1025,6 +1601,14 @@ IDP_CONFIG_DEPRECATED_FIELDS = {
     "output_bucket",
     "textract_page_tracker",
     "summary",
+    "processing_mode",  # Renamed to use_bda (bool) in Phase 1
+    # DynamoDB storage metadata fields (not part of IDPConfig model)
+    "BdaProjectArn",
+    "BdaSyncStatus",
+    "BdaLastSyncedAt",
+    "_config_format",
+    "_config_storage",
+    "rule_classes",  # Renamed to policy_classes in v0.5.9
 }
 
 
@@ -1073,6 +1657,32 @@ class IDPConfig(BaseModel):
         default="Config", description="Configuration type"
     )
 
+    use_bda: bool = Field(
+        default=False,
+        description="Use Bedrock Data Automation (BDA) for document processing. "
+        "When true, BDA handles OCR, classification, and extraction as a single managed service. "
+        "When false (default), uses the step-by-step pipeline with configurable OCR, classification, "
+        "extraction, and assessment stages.",
+    )
+
+    enable_blueprint_optimization: bool = Field(
+        default=False,
+        description="Enable BDA blueprint optimization during discovery. "
+        "When true and a ground truth file is provided, discovery will automatically "
+        "optimize the BDA blueprint using the InvokeBlueprintOptimizationAsync API "
+        "to improve extraction accuracy. Defaults to false.",
+    )
+
+    managed: bool = Field(
+        default=False,
+        description="Stack-managed configuration that is overwritten on stack updates.",
+    )
+
+    test_set: Optional[str] = Field(
+        default=None,
+        description="Associated test set name (documentation/reference only).",
+    )
+
     notes: Optional[str] = Field(default=None, description="Configuration notes")
     ocr: OCRConfig = Field(default_factory=OCRConfig, description="OCR configuration")
     classification: ClassificationConfig = Field(
@@ -1091,6 +1701,11 @@ class IDPConfig(BaseModel):
         ),
         description="Summarization configuration",
     )
+    chat: ChatConfig = Field(
+        default_factory=ChatConfig,
+        description="Chat-with-Document configuration (used by the interactive "
+        "document Q&A feature in the Web UI)",
+    )
     rule_validation: RuleValidationConfig = Field(
         default_factory=lambda: RuleValidationConfig(
             model="us.anthropic.claude-3-5-sonnet-20240620-v1:0"
@@ -1103,8 +1718,8 @@ class IDPConfig(BaseModel):
     classes: List[Dict[str, Any]] = Field(
         default_factory=list, description="Document class definitions (JSON Schema)"
     )
-    rule_classes: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Rule class definitions for rule validation (JSON Schema)"
+    policy_classes: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Policy class definitions for rule validation (JSON Schema). Also receives rule classes extracted by Policy Discovery."
     )
     discovery: DiscoveryConfig = Field(
         default_factory=DiscoveryConfig, description="Discovery configuration"
@@ -1122,9 +1737,6 @@ class IDPConfig(BaseModel):
     # Rule validation specific fields (used in pattern-2/rule-validation)
     summary: Optional[Dict[str, Any]] = Field(
         default=None, description="Summary configuration for rule validation"
-    )
-    rule_types: Optional[List[str]] = Field(
-        default=None, description="List of rule types for validation"
     )
 
 
@@ -1145,6 +1757,13 @@ class IDPConfig(BaseModel):
         logger = logging.getLogger(__name__)
 
         if isinstance(data, dict):
+            # Migrate rule_classes → policy_classes (renamed in v0.5.9)
+            if "rule_classes" in data and "policy_classes" not in data:
+                data["policy_classes"] = data.pop("rule_classes")
+                logger.info("Migrated config key 'rule_classes' → 'policy_classes'")
+            elif "rule_classes" in data:
+                del data["rule_classes"]
+
             # Get all field names defined in the model
             defined_fields = set(cls.model_fields.keys())
 
@@ -1268,10 +1887,16 @@ class ConfigurationRecord(BaseModel):
         # Stringify values (preserve booleans, convert numbers to strings)
         stringified = self._stringify_values(config_dict)
 
+        # Map managed field to PascalCase DynamoDB convention (before spreading into item)
+        managed_value = stringified.pop("managed", None)
+
         configuration_type = f"{self.configuration_type}#{self.version}" if self.version else self.configuration_type
 
         # Build DynamoDB item
         item = {"Configuration": configuration_type, **stringified}
+
+        if managed_value is not None:
+            item["Managed"] = managed_value
 
         # Add ConfigurationRecord level fields
         if self.is_active is not None:
@@ -1327,15 +1952,29 @@ class ConfigurationRecord(BaseModel):
             version = ""
 
         # Remove DynamoDB keys and metadata
-        config_data = {k: v for k, v in item.items() 
-                      if k not in ("Configuration", "IsActive", "CreatedAt", "UpdatedAt", "Description")}
+        # Remove DynamoDB partition key, record metadata, and storage metadata fields
+        # These are not part of the config data model
+        _DYNAMODB_NON_CONFIG_FIELDS = {
+            "Configuration", "IsActive", "CreatedAt", "UpdatedAt", "Description",
+            "BdaProjectArn", "BdaSyncStatus", "BdaLastSyncedAt", "Managed",
+            "_config_format", "_config_storage",
+        }
+        config_data = {k: v for k, v in item.items() if k not in _DYNAMODB_NON_CONFIG_FIELDS}
+
+        # Map PascalCase DynamoDB field back to lowercase Pydantic field
+        if "Managed" in item:
+            config_data["managed"] = item["Managed"]
 
         # Set config_type discriminator directly from DynamoDB Configuration key
         # DynamoDB keys match Pydantic discriminators exactly:
         # - "Schema" -> SchemaConfig
         # - "Config#version" -> IDPConfig
         # - "DefaultPricing", "CustomPricing" -> PricingConfig
-        config_data["config_type"] = config_type
+        # Legacy non-versioned "Default" / "Custom" keys map to IDPConfig
+        if config_type in ("Default", "Custom"):
+            config_data["config_type"] = "Config"
+        else:
+            config_data["config_type"] = config_type
 
         # Auto-migrate legacy format if needed
         if config_data.get("classes"):
@@ -1349,16 +1988,16 @@ class ConfigurationRecord(BaseModel):
                     config_data["classes"]
                 )
 
-        # Auto-migrate legacy format for rule_classes if needed
-        if config_data.get("rule_classes"):
+        # Auto-migrate legacy format for policy_classes if needed
+        if config_data.get("policy_classes"):
             from .migration import is_legacy_format, migrate_legacy_to_schema
 
-            if is_legacy_format(config_data["rule_classes"]):
+            if is_legacy_format(config_data["policy_classes"]):
                 logger.info(
-                    f"Migrating {config_type} rule_classes to JSON Schema format"
+                    f"Migrating {config_type} policy_classes to JSON Schema format"
                 )
-                config_data["rule_classes"] = migrate_legacy_to_schema(
-                    config_data["rule_classes"]
+                config_data["policy_classes"] = migrate_legacy_to_schema(
+                    config_data["policy_classes"]
                 )
 
         # Remove legacy pricing field (now stored separately as DefaultPricing/CustomPricing)

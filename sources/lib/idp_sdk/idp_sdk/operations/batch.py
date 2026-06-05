@@ -3,6 +3,7 @@
 
 """Batch operations for IDP SDK."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
@@ -20,10 +21,14 @@ from idp_sdk.models import (
     BatchReprocessResult,
     BatchStatus,
     DocumentDeletionResult,
+    DocumentsAbortedResult,
     DocumentStatus,
+    ExecutionsStoppedResult,
     RerunStep,
     StopWorkflowsResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class BatchOperation:
@@ -72,7 +77,7 @@ class BatchOperation:
         Returns:
             BatchProcessResult with batch processing information
         """
-        from idp_sdk.core.batch_processor import BatchProcessor
+        from idp_sdk._core.batch_processor import BatchProcessor
 
         name = self._client._require_stack(stack_name)
 
@@ -97,26 +102,37 @@ class BatchOperation:
             )
 
         try:
+            # BatchProcessor.__init__ signature: (stack_name, config_path=None, region=None)
+            # config_version is NOT a constructor arg — pass it to the processing methods instead
             processor = BatchProcessor(
                 stack_name=name,
                 config_path=config_path,
-                config_version=config_version,
                 region=self._client._region,
             )
 
             if test_set:
                 result = self._process_test_set(
-                    processor, test_set, context, number_of_files
+                    processor, test_set, context, number_of_files, config_version
                 )
             elif manifest:
-                result = processor.process_batch(
+                # Pass config_version to process_batch if the method supports it
+                import inspect
+
+                manifest_sig = inspect.signature(processor.process_batch)
+                manifest_kwargs = dict(
                     manifest_path=manifest,
                     output_prefix=batch_prefix,
                     batch_id=batch_id,
                     number_of_files=number_of_files,
                 )
+                if "config_version" in manifest_sig.parameters and config_version:
+                    manifest_kwargs["config_version"] = config_version
+                result = processor.process_batch(**manifest_kwargs)
             elif directory:
-                result = processor.process_batch_from_directory(
+                import inspect
+
+                dir_sig = inspect.signature(processor.process_batch_from_directory)
+                dir_kwargs = dict(
                     dir_path=directory,
                     file_pattern=file_pattern,
                     recursive=recursive,
@@ -124,14 +140,23 @@ class BatchOperation:
                     batch_id=batch_id,
                     number_of_files=number_of_files,
                 )
+                if "config_version" in dir_sig.parameters and config_version:
+                    dir_kwargs["config_version"] = config_version
+                result = processor.process_batch_from_directory(**dir_kwargs)
             else:
-                result = processor.process_batch_from_s3_uri(
+                import inspect
+
+                s3_kwargs = dict(
                     s3_uri=s3_uri,
                     file_pattern=file_pattern,
                     recursive=recursive,
                     output_prefix=batch_prefix,
                     batch_id=batch_id,
                 )
+                sig = inspect.signature(processor.process_batch_from_s3_uri)
+                if "config_version" in sig.parameters and config_version:
+                    s3_kwargs["config_version"] = config_version
+                result = processor.process_batch_from_s3_uri(**s3_kwargs)
 
             return BatchProcessResult(
                 batch_id=result["batch_id"],
@@ -199,8 +224,14 @@ class BatchOperation:
         test_set: str,
         context: Optional[str],
         number_of_files: Optional[int],
+        config_version: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Process a test set (internal helper)."""
+        """Process a test set (internal helper).
+
+        Enhancement 1:
+        - Step 1: Invoke TestSetResolverFunction (non-fatal if missing)
+        - Step 2: Invoke TestRunnerFunction with configVersion in payload
+        """
         import json
 
         import boto3
@@ -212,6 +243,44 @@ class BatchOperation:
             all_functions.extend(page["Functions"])
 
         stack_name = self._client._require_stack()
+
+        # Enhancement 1 — Step 1: Invoke TestSetResolverFunction for auto-detection.
+        # This is non-fatal: a missing resolver is logged as a warning and execution continues.
+        test_set_resolver_function = next(
+            (
+                f["FunctionName"]
+                for f in all_functions
+                if stack_name in f["FunctionName"]
+                and "TestSetResolverFunction" in f["FunctionName"]
+            ),
+            None,
+        )
+
+        if test_set_resolver_function:
+            try:
+                resolver_payload = {
+                    "info": {"fieldName": "getTestSets"},
+                    "arguments": {},
+                }
+                lambda_client.invoke(
+                    FunctionName=test_set_resolver_function,
+                    Payload=json.dumps(resolver_payload),
+                )
+                logger.debug(
+                    "TestSetResolverFunction invoked successfully: %s",
+                    test_set_resolver_function,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "TestSetResolverFunction invocation failed (non-fatal): %s", exc
+                )
+        else:
+            logger.warning(
+                "TestSetResolverFunction not found for stack %s — skipping resolver step",
+                stack_name,
+            )
+
+        # Locate TestRunnerFunction (required)
         test_runner_function = next(
             (
                 f["FunctionName"]
@@ -227,11 +296,14 @@ class BatchOperation:
                 f"TestRunnerFunction not found for stack {stack_name}"
             )
 
+        # Enhancement 1 — Step 2: Include configVersion in the TestRunnerFunction payload.
         payload = {"arguments": {"input": {"testSetId": test_set}}}
         if context:
             payload["arguments"]["input"]["context"] = context
         if number_of_files:
             payload["arguments"]["input"]["numberOfFiles"] = number_of_files
+        if config_version:
+            payload["arguments"]["input"]["configVersion"] = config_version
 
         response = lambda_client.invoke(
             FunctionName=test_runner_function, Payload=json.dumps(payload)
@@ -286,7 +358,7 @@ class BatchOperation:
         Returns:
             BatchReprocessResult with reprocess statistics
         """
-        from idp_sdk.core.rerun_processor import RerunProcessor
+        from idp_sdk._core.rerun_processor import RerunProcessor
 
         name = self._client._require_stack(stack_name)
         step_str = step.value if isinstance(step, RerunStep) else step
@@ -337,6 +409,48 @@ class BatchOperation:
             **kwargs,
         )
 
+    def get_document_ids(
+        self,
+        batch_id: str,
+        stack_name: Optional[str] = None,
+        **kwargs,
+    ) -> List[str]:
+        """Get all document IDs belonging to a batch.
+
+        Useful for pre-fetching a document count before a confirmation prompt
+        without triggering the full reprocess pipeline.
+
+        Args:
+            batch_id: Batch identifier
+            stack_name: Optional stack name override
+            **kwargs: Additional parameters
+
+        Returns:
+            List of document object keys (S3 keys) in the batch
+
+        Raises:
+            IDPResourceNotFoundError: If the batch does not exist
+            IDPProcessingError: On unexpected errors
+        """
+        from idp_sdk._core.batch_processor import BatchProcessor
+
+        name = self._client._require_stack(stack_name)
+
+        try:
+            processor = BatchProcessor(stack_name=name, region=self._client._region)
+            batch_info = processor.get_batch_info(batch_id)
+
+            if not batch_info:
+                raise IDPResourceNotFoundError(f"Batch not found: {batch_id}")
+
+            return batch_info.get("document_ids", [])
+        except IDPResourceNotFoundError:
+            raise
+        except Exception as e:
+            raise IDPProcessingError(
+                f"Failed to get document IDs for batch {batch_id}: {e}"
+            ) from e
+
     def get_status(
         self,
         batch_id: str,
@@ -353,8 +467,8 @@ class BatchOperation:
         Returns:
             BatchStatus with batch processing information
         """
-        from idp_sdk.core.batch_processor import BatchProcessor
-        from idp_sdk.core.progress_monitor import ProgressMonitor
+        from idp_sdk._core.batch_processor import BatchProcessor
+        from idp_sdk._core.progress_monitor import ProgressMonitor
 
         name = self._client._require_stack(stack_name)
         processor = BatchProcessor(stack_name=name, region=self._client._region)
@@ -423,7 +537,7 @@ class BatchOperation:
         Returns:
             BatchListResult with batches and optional next_token
         """
-        from idp_sdk.core.batch_processor import BatchProcessor
+        from idp_sdk._core.batch_processor import BatchProcessor
 
         name = self._client._require_stack(stack_name)
         processor = BatchProcessor(stack_name=name, region=self._client._region)
@@ -466,7 +580,7 @@ class BatchOperation:
         Returns:
             BatchDownloadResult with download statistics
         """
-        from idp_sdk.core.batch_processor import BatchProcessor
+        from idp_sdk._core.batch_processor import BatchProcessor
 
         name = self._client._require_stack(stack_name)
         processor = BatchProcessor(stack_name=name, region=self._client._region)
@@ -507,7 +621,7 @@ class BatchOperation:
 
         import boto3
 
-        from idp_sdk.core.batch_processor import BatchProcessor
+        from idp_sdk._core.batch_processor import BatchProcessor
 
         name = self._client._require_stack(stack_name)
         resources = self._client._get_stack_resources(name)
@@ -545,17 +659,21 @@ class BatchOperation:
 
     def delete_documents(
         self,
-        batch_id: str,
+        batch_id: Optional[str] = None,
+        pattern: Optional[str] = None,
         status_filter: Optional[str] = None,
         stack_name: Optional[str] = None,
         dry_run: bool = False,
         continue_on_error: bool = True,
         **kwargs,
     ) -> BatchDeletionResult:
-        """Permanently delete all documents in a batch and their associated data.
+        """Permanently delete documents and their associated data.
+
+        Specify either ``batch_id`` or ``pattern`` to select documents.
 
         Args:
-            batch_id: Batch identifier
+            batch_id: Batch identifier (selects all docs containing this string)
+            pattern: Wildcard pattern to match document keys (e.g. ``"batch-123/*.pdf"``)
             status_filter: Optional status filter (e.g., 'FAILED', 'COMPLETED')
             stack_name: Optional stack name override
             dry_run: If True, only simulate deletion without actually deleting
@@ -566,7 +684,16 @@ class BatchOperation:
             BatchDeletionResult with deletion statistics
         """
         import boto3
-        from idp_common.delete_documents import delete_documents, get_documents_by_batch
+        from idp_common.delete_documents import (
+            delete_documents,
+            get_documents_by_batch,
+            get_documents_by_pattern,
+        )
+
+        if not batch_id and not pattern:
+            raise IDPConfigurationError("Must specify either batch_id or pattern")
+        if batch_id and pattern:
+            raise IDPConfigurationError("Cannot specify both batch_id and pattern")
 
         name = self._client._require_stack(stack_name)
         resources = self._client._get_stack_resources(name)
@@ -585,11 +712,18 @@ class BatchOperation:
         s3_client = boto3.client("s3", region_name=self._client._region)
 
         try:
-            document_ids = get_documents_by_batch(
-                tracking_table=tracking_table,
-                batch_id=batch_id,
-                status_filter=status_filter,
-            )
+            if pattern:
+                document_ids = get_documents_by_pattern(
+                    tracking_table=tracking_table,
+                    pattern=pattern,
+                    status_filter=status_filter,
+                )
+            else:
+                document_ids = get_documents_by_batch(
+                    tracking_table=tracking_table,
+                    batch_id=batch_id,
+                    status_filter=status_filter,
+                )
 
             if not document_ids:
                 return BatchDeletionResult(
@@ -632,6 +766,289 @@ class BatchOperation:
         except Exception as e:
             raise IDPProcessingError(f"Batch deletion failed: {e}") from e
 
+    def get_results(
+        self,
+        batch_id: str,
+        section_id: int = 1,
+        limit: int = 10,
+        next_token: Optional[str] = None,
+        stack_name: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Get extracted metadata and fields for all documents in a batch.
+
+        Args:
+            batch_id: Batch identifier
+            section_id: Section number within documents (default: 1)
+            limit: Maximum documents to return per page (default: 10)
+            next_token: Pagination token from previous request
+            stack_name: Optional stack name override
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary with batch metadata and paginated documents
+        """
+        import base64
+        import json
+
+        from idp_sdk._core.batch_processor import BatchProcessor
+        from idp_sdk._core.progress_monitor import ProgressMonitor
+
+        name = self._client._require_stack(stack_name)
+        batch_processor = BatchProcessor(stack_name=name, region=self._client._region)
+        monitor = ProgressMonitor(
+            stack_name=name,
+            resources=batch_processor.resources,
+            region=self._client._region,
+        )
+
+        batch_info = batch_processor.get_batch_info(batch_id)
+        if not batch_info:
+            raise IDPResourceNotFoundError(f"Batch not found: {batch_id}")
+
+        document_ids = batch_info.get("document_ids", [])
+        total_in_batch = len(document_ids)
+
+        # Parse pagination token
+        offset = 0
+        if next_token:
+            try:
+                decoded = base64.b64decode(next_token).decode("utf-8")
+                offset = int(decoded)
+            except Exception:
+                offset = 0
+
+        # Get paginated document slice
+        page_docs = document_ids[offset : offset + limit]
+        has_more = offset + limit < total_in_batch
+
+        # Retrieve metadata for each document
+        import boto3
+
+        s3_client = boto3.client("s3", region_name=self._client._region)
+        output_bucket = batch_processor.resources.get("OutputBucket")
+
+        documents = []
+        for doc_id in page_docs:
+            try:
+                # Get status
+                status_data = monitor.get_batch_status([doc_id])
+                status = "UNKNOWN"
+                if status_data.get("completed"):
+                    status = "COMPLETED"
+                elif status_data.get("running"):
+                    status = "RUNNING"
+                elif status_data.get("queued"):
+                    status = "QUEUED"
+                elif status_data.get("failed"):
+                    status = "FAILED"
+
+                # Try to get results.json from S3
+                document_class = None
+                fields = None
+                confidence = None
+                page_count = None
+
+                if status == "COMPLETED":
+                    try:
+                        s3_key = f"{doc_id}/sections/{section_id}/result.json"
+                        response = s3_client.get_object(
+                            Bucket=output_bucket, Key=s3_key
+                        )
+                        result_data = json.loads(response["Body"].read())
+
+                        document_class = result_data.get("document_class", {}).get(
+                            "type"
+                        )
+                        inference = result_data.get("inference_result", {})
+                        fields = {
+                            k: v
+                            for k, v in inference.items()
+                            if k not in ["metadata", "explainability_info"]
+                        }
+
+                        # Extract confidence from explainability_info - nested structure
+                        explainability = result_data.get("explainability_info", [])
+                        if explainability:
+                            confidence = {}
+
+                            def extract_confidences(obj, target_dict):
+                                for key, val in obj.items():
+                                    if isinstance(val, dict):
+                                        if "confidence" in val:
+                                            target_dict[key] = val["confidence"]
+                                        else:
+                                            target_dict[key] = {}
+                                            extract_confidences(val, target_dict[key])
+
+                            for item in explainability:
+                                extract_confidences(item, confidence)
+
+                        page_count = len(
+                            result_data.get("split_document", {}).get(
+                                "page_indices", []
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not read results.json for {doc_id}: {e}")
+
+                documents.append(
+                    {
+                        "document_id": doc_id,
+                        "document_class": document_class,
+                        "fields": fields,
+                        "confidence": confidence,
+                        "page_count": page_count,
+                        "status": status,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Error retrieving metadata for {doc_id}: {e}")
+                documents.append(
+                    {
+                        "document_id": doc_id,
+                        "document_class": None,
+                        "fields": None,
+                        "confidence": None,
+                        "page_count": None,
+                        "status": "ERROR",
+                    }
+                )
+
+        result = {
+            "batch_id": batch_id,
+            "section_id": section_id,
+            "count": len(documents),
+            "total_in_batch": total_in_batch,
+            "documents": documents,
+        }
+
+        # Add pagination token if more results exist
+        if has_more:
+            next_offset = offset + limit
+            result["next_token"] = base64.b64encode(
+                str(next_offset).encode("utf-8")
+            ).decode("utf-8")
+
+        return result
+
+    def get_confidence(
+        self,
+        batch_id: str,
+        section_id: int = 1,
+        limit: int = 10,
+        next_token: Optional[str] = None,
+        stack_name: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Get confidence scores and quality metrics for all documents in a batch.
+
+        Args:
+            batch_id: Batch identifier
+            section_id: Section number (default: 1)
+            limit: Maximum documents to return (default: 10)
+            next_token: Pagination token from previous request
+            stack_name: Optional stack name override
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary with batch confidence data and paginated documents
+        """
+        import base64
+
+        from idp_sdk._core.assessment_analyzer import AssessmentAnalyzer
+        from idp_sdk._core.batch_processor import BatchProcessor
+        from idp_sdk._core.progress_monitor import ProgressMonitor
+
+        name = self._client._require_stack(stack_name)
+        batch_processor = BatchProcessor(stack_name=name, region=self._client._region)
+        analyzer = AssessmentAnalyzer(stack_name=name, region=self._client._region)
+        monitor = ProgressMonitor(
+            stack_name=name,
+            resources=batch_processor.resources,
+            region=self._client._region,
+        )
+
+        batch_info = batch_processor.get_batch_info(batch_id)
+        if not batch_info:
+            raise IDPResourceNotFoundError(f"Batch not found: {batch_id}")
+
+        document_ids = batch_info.get("document_ids", [])
+        total_in_batch = len(document_ids)
+
+        # Parse pagination token
+        offset = 0
+        if next_token:
+            try:
+                decoded = base64.b64decode(next_token).decode("utf-8")
+                offset = int(decoded)
+            except Exception:
+                offset = 0
+
+        # Get paginated document slice
+        page_docs = document_ids[offset : offset + limit]
+        has_more = offset + limit < total_in_batch
+
+        # Retrieve confidence scores for each document
+        documents = []
+
+        for doc_id in page_docs:
+            try:
+                confidence_data = analyzer.get_confidence(doc_id, section_id)
+                status_data = monitor.get_batch_status([doc_id])
+                status = "UNKNOWN"
+                if status_data.get("completed"):
+                    status = "COMPLETED"
+                elif status_data.get("running"):
+                    status = "RUNNING"
+                elif status_data.get("queued"):
+                    status = "QUEUED"
+                elif status_data.get("failed"):
+                    status = "FAILED"
+
+                attributes = confidence_data.get("attributes", {})
+                documents.append(
+                    {
+                        "document_id": doc_id,
+                        "attributes": attributes,
+                        "status": status,
+                    }
+                )
+            except FileNotFoundError:
+                documents.append(
+                    {
+                        "document_id": doc_id,
+                        "attributes": {},
+                        "status": "PROCESSING",
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Error retrieving confidence for {doc_id}: {e}")
+                documents.append(
+                    {
+                        "document_id": doc_id,
+                        "attributes": {},
+                        "status": "ERROR",
+                    }
+                )
+
+        result = {
+            "batch_id": batch_id,
+            "section_id": section_id,
+            "count": len(documents),
+            "total_in_batch": total_in_batch,
+            "documents": documents,
+        }
+
+        # Add pagination token if more results exist
+        if has_more:
+            next_offset = offset + limit
+            result["next_token"] = base64.b64encode(
+                str(next_offset).encode("utf-8")
+            ).decode("utf-8")
+
+        return result
+
     def stop_workflows(
         self,
         stack_name: Optional[str] = None,
@@ -650,14 +1067,30 @@ class BatchOperation:
         Returns:
             StopWorkflowsResult with stop statistics
         """
-        from idp_sdk.core.stop_workflows import WorkflowStopper
+        from idp_sdk._core.stop_workflows import WorkflowStopper
 
         name = self._client._require_stack(stack_name)
         stopper = WorkflowStopper(stack_name=name, region=self._client._region)
         results = stopper.stop_all(skip_purge=skip_purge, skip_stop=skip_stop)
 
+        # Enhancement 6: Map raw stopper dict into typed nested Pydantic models
+        exec_raw = results.get("executions_stopped") or {}
+        abort_raw = results.get("documents_aborted") or {}
+
         return StopWorkflowsResult(
-            executions_stopped=results.get("executions_stopped"),
-            documents_aborted=results.get("documents_aborted"),
+            executions_stopped=ExecutionsStoppedResult(
+                total_stopped=exec_raw.get("total_stopped", 0),
+                total_failed=exec_raw.get("total_failed", 0),
+                remaining=exec_raw.get("remaining", 0),
+                error=exec_raw.get("error"),
+            )
+            if exec_raw
+            else None,
+            documents_aborted=DocumentsAbortedResult(
+                documents_aborted=abort_raw.get("documents_aborted", 0),
+                error=abort_raw.get("error"),
+            )
+            if abort_raw
+            else None,
             queue_purged=not skip_purge,
         )

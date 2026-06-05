@@ -7,8 +7,7 @@ import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Editor } from '@monaco-editor/react';
 import MarkdownViewer from '../document-viewer/MarkdownViewer';
-import getFileContents from '../../graphql/queries/getFileContents';
-import uploadDocument from '../../graphql/queries/uploadDocument';
+import { getFileContents, uploadDocument } from '../../graphql/generated';
 
 const client = generateClient();
 const logger = new ConsoleLogger('PageTextEditorModal');
@@ -89,17 +88,20 @@ const PageTextEditorModal = ({
     try {
       // Fetch text content
       const textResponse = await client.graphql({
-        query: getFileContents as unknown as string,
-        variables: { s3Uri: textUri },
+        query: getFileContents,
+        variables: { s3Uri: textUri as string },
       });
 
-      const textResult = (textResponse as { data: Record<string, unknown> }).data.getFileContents as { isBinary: boolean; content: string };
+      const textResult = textResponse.data?.getFileContents;
+      if (!textResult) {
+        throw new Error('No response from getFileContents');
+      }
       if (textResult.isBinary) {
         throw new Error('Text file contains binary content');
       }
 
       // Extract plain text from JSON wrapper
-      const plainText = extractPlainText(textResult.content);
+      const plainText = extractPlainText(textResult.content ?? '');
       setTextContent(plainText);
       setOriginalTextContent(plainText);
 
@@ -107,17 +109,14 @@ const PageTextEditorModal = ({
       if (confidenceUri) {
         try {
           const confResponse = await client.graphql({
-            query: getFileContents as unknown as string,
+            query: getFileContents,
             variables: { s3Uri: confidenceUri },
           });
 
-          const confResult = (confResponse as { data: Record<string, unknown> }).data.getFileContents as {
-            isBinary: boolean;
-            content: string;
-          };
-          if (!confResult.isBinary) {
+          const confResult = confResponse.data?.getFileContents;
+          if (confResult && !confResult.isBinary) {
             // Extract markdown from JSON wrapper for confidence content
-            const confidenceMarkdown = extractPlainText(confResult.content);
+            const confidenceMarkdown = extractPlainText(confResult.content ?? '');
             setConfidenceContent(confidenceMarkdown);
             setOriginalConfidenceContent(confidenceMarkdown);
           }
@@ -153,7 +152,7 @@ const PageTextEditorModal = ({
 
       // Save text content if changed
       if (textContent !== originalTextContent) {
-        newTextUri = await saveToS3(textUri, wrapInJson(textContent), 'application/json');
+        newTextUri = await saveToS3(textUri!, wrapInJson(textContent), 'application/json');
         logger.info('Saved text content to:', newTextUri);
       }
 
@@ -190,12 +189,12 @@ const PageTextEditorModal = ({
     }
 
     const [, bucket, fullPath] = match;
-    const fileName = fullPath.split('/').pop();
+    const fileName = fullPath.split('/').pop() ?? fullPath;
     const prefix = fullPath.substring(0, fullPath.lastIndexOf('/'));
 
     // Get presigned URL
     const response = await client.graphql({
-      query: uploadDocument as unknown as string,
+      query: uploadDocument,
       variables: {
         fileName,
         contentType,
@@ -204,12 +203,10 @@ const PageTextEditorModal = ({
       },
     });
 
-    const { presignedUrl, usePostMethod } = (response as { data: Record<string, unknown> }).data.uploadDocument as {
-      presignedUrl: string;
-      usePostMethod: boolean;
-    };
+    const { presignedUrl, usePostMethod } = response.data.uploadDocument;
+    const usePost = usePostMethod?.toLowerCase() === 'true';
 
-    if (!usePostMethod) {
+    if (!usePost) {
       throw new Error('Server returned PUT method which is not supported');
     }
 

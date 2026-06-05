@@ -1,3 +1,7 @@
+---
+title: "Assessment Feature"
+---
+
 # Assessment Feature
 
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -318,9 +322,9 @@ For basic single-value extractions like dates, amounts, or names:
 
 **Configuration:**
 ```yaml
-attributes:
-  - name: "StatementDate"
-    attributeType: "simple"
+properties:
+  StatementDate:
+    type: string
     description: "The date of the bank statement"
 ```
 
@@ -360,14 +364,16 @@ For nested object structures with multiple related fields:
 
 **Configuration:**
 ```yaml
-attributes:
-  - name: "AccountDetails"
-    attributeType: "group"
+properties:
+  AccountDetails:
+    type: object
     description: "Bank account information"
-    groupAttributes:
-      - name: "AccountNumber"
+    properties:
+      AccountNumber:
+        type: string
         description: "The account number"
-      - name: "RoutingNumber"
+      RoutingNumber:
+        type: string
         description: "The bank routing number"
 ```
 
@@ -413,18 +419,22 @@ For arrays of items, such as transactions in a bank statement:
 
 **Configuration:**
 ```yaml
-attributes:
-  - name: "Transactions"
-    attributeType: "list"
+properties:
+  Transactions:
+    type: array
     description: "List of all transactions on the statement"
-    listItemTemplate:
-      itemDescription: "Individual transaction entry"
-      itemAttributes:
-        - name: "Date"
+    x-aws-idp-list-item-description: "Individual transaction entry"
+    items:
+      type: object
+      properties:
+        Date:
+          type: string
           description: "Transaction date"
-        - name: "Description"
+        Description:
+          type: string
           description: "Transaction description"
-        - name: "Amount"
+        Amount:
+          type: string
           description: "Transaction amount"
 ```
 
@@ -793,19 +803,31 @@ When neither confidence nor threshold data is available, no confidence indicator
 
 ### Interface Coverage
 
-**1. Form View (JSONViewer)**
-- Color-coded confidence display in the editable form interface
-- Supports nested data structures (arrays, objects)
-- Real-time visual feedback during data editing
-
-**2. Visual Editor Modal**
-- Same confidence indicators in the document image overlay editor
-- **Bounding Box Visualization**: When assessment includes geometry data, bounding boxes are automatically displayed on the document page image
+**1. Visual Editor Tab**
+- Split-pane layout with document image (left) and form-based field editing (right)
+- Color-coded confidence display (green=meets threshold, red=below threshold, black=no threshold)
+- **Bounding Box Visualization**: Assessment geometry data automatically displayed as overlays on document images
 - Visual connection between form fields and document bounding boxes with spatial localization
 - Interactive overlay showing precise field locations from assessment spatial data
-- Confidence display for deeply nested extraction results
+- Supports nested data structures (arrays, objects) with recursive confidence display
+- Inline editing with change tracking (✏️ Edited badges, blue/orange left borders)
 
-**3. Nested Data Support**
+**2. JSON Editor Tab**
+- Raw JSON editing for advanced users with full JSON validation
+- Section filtering with multiselect dropdown
+- Same confidence data available in JSON structure
+
+**3. Revision History Tab**
+- Complete audit trail showing all edits with timestamps
+- Reviewer identification and field-level diffs
+- Confidence scores preserved in edit history
+
+**4. Smart Filtering**
+- **Low Confidence Filter**: Toggle to show only fields with confidence below threshold
+- **Evaluation Mismatches Filter**: Show only fields where prediction doesn't match baseline
+- **Collapsible Tree Navigation**: Expand/Collapse All controls for nested structures
+
+**5. Nested Data Support**
 Confidence indicators work with complex document structures:
 ```
 FederalTaxes[0]:
@@ -979,27 +1001,34 @@ attributes:
 Processes complex nested structures as single units:
 ```yaml
 # Each group becomes one focused task
-attributes:
-  - name: "AccountDetails"
-    attributeType: "group"
-    groupAttributes:
-      - name: "AccountNumber"
-      - name: "RoutingNumber"
-      - name: "AccountType"
+properties:
+  AccountDetails:
+    type: object
+    properties:
+      AccountNumber:
+        type: string
+      RoutingNumber:
+        type: string
+      AccountType:
+        type: string
 ```
 
 #### List Item Tasks
 Assesses each list item individually for maximum accuracy:
 ```yaml
 # 100 transactions = 100 individual assessment tasks
-attributes:
-  - name: "Transactions"
-    attributeType: "list"
-    listItemTemplate:
-      itemAttributes:
-        - name: "Date"
-        - name: "Description"
-        - name: "Amount"
+properties:
+  Transactions:
+    type: array
+    items:
+      type: object
+      properties:
+        Date:
+          type: string
+        Description:
+          type: string
+        Amount:
+          type: string
 ```
 
 ### Performance Tuning
@@ -1207,6 +1236,27 @@ Key metrics to monitor:
 - `assessment_time_seconds`: Processing time per assessment
 - `assessment_parsing_succeeded`: Success rate of JSON parsing
 - Token consumption logs in CloudWatch
+
+## Skipping Assessment for Excluded Classes
+
+If a document class is marked with
+`x-aws-idp-exclude-from-processing: true` (see
+[Excluding Static Pages in the Classification docs](classification.md#excluding-static-pages-eg-instructions-legal-boilerplate)),
+both `AssessmentService.process_document_section` and
+`GranularAssessmentService.process_document_section` short-circuit for
+sections classified as that class:
+
+- **No LLM call is made** — no confidence scores are produced because no
+  extraction was performed for that section.
+- **No stub file is written** — the extraction stub (`result.json`
+  written by `ExtractionService`) is already authoritative; anything
+  inspecting "what happened to this section?" reads the extraction
+  stub. This avoids duplicating metadata and keeps the output surface
+  minimal for skipped sections.
+- The document is returned unchanged to the caller.
+
+The skip check uses the shared
+`idp_common.section_exclusion.is_section_excluded(section)` helper.
 
 ## Related Documentation
 

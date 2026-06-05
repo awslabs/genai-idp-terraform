@@ -27,6 +27,7 @@ from botocore.exceptions import (
 from urllib3.exceptions import ReadTimeoutError as Urllib3ReadTimeoutError
 
 from .model_utils import parse_model_id
+from .session import get_bedrock_session
 
 # Sentinel value for LambdaHook model selection
 LAMBDA_HOOK_MODEL_ID = "LambdaHook"
@@ -66,6 +67,51 @@ DEFAULT_INITIAL_BACKOFF = 2  # seconds
 DEFAULT_MAX_BACKOFF = 300  # 5 minutes
 
 
+# Claude 4.7+ model base names that don't support temperature/top_k/top_p parameters.
+# These parameters are deprecated for these models and cause runtime errors.
+# Add new model base names here as needed (e.g., sonnet-4-7, haiku-4-7).
+#
+# NOTE: This set is consulted by BOTH the traditional Bedrock invocation path
+# (this file's BedrockClient.invoke_model) AND the agentic extraction path
+# (idp_common/extraction/agentic_idp.py::_get_inference_params). When adding
+# a new Claude 4.7+ variant here, no other code changes are required.
+_CLAUDE_4_7_BASE_NAMES = {
+    "anthropic.claude-opus-4-7",
+}
+
+
+def is_claude_4_7_model(model_id: str) -> bool:
+    """Check if a model is a Claude 4.7+ variant that doesn't support temperature/top_k/top_p.
+
+    Handles region prefixes (us., eu., global.) and :1m suffix automatically.
+
+    Args:
+        model_id: Bedrock model ID (e.g., 'us.anthropic.claude-opus-4-7:1m')
+
+    Returns:
+        True if the model is a Claude 4.7+ variant
+    """
+    # Strip region prefix (us., eu., global.)
+    parts = model_id.split(".", 1)
+    if len(parts) == 2 and parts[0] in ("us", "eu", "global"):
+        base = parts[1]
+    else:
+        base = model_id
+    # Strip :1m suffix
+    if base.endswith(":1m"):
+        base = base[:-3]
+    return base in _CLAUDE_4_7_BASE_NAMES
+
+
+# Backwards-compatible alias for internal callers that still reference the
+# private name. New code should import `is_claude_4_7_model`.
+_is_claude_4_7_model = is_claude_4_7_model
+
+
+# Base model names that support cachePoint (without region prefix)
+# Used to check inference profiles by resolving their underlying foundation model
+_CACHEPOINT_BASE_MODELS = set()
+
 # Models that support cachePoint functionality
 CACHEPOINT_SUPPORTED_MODELS = [
     "us.anthropic.claude-3-5-haiku-20241022-v1:0",
@@ -74,12 +120,12 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "us.anthropic.claude-opus-4-5-20251101-v1:0",
     "us.anthropic.claude-opus-4-6-v1",
     "us.anthropic.claude-opus-4-6-v1:1m",
+    "us.anthropic.claude-opus-4-7",
+    "us.anthropic.claude-opus-4-7:1m",
     "us.anthropic.claude-opus-4-1-20250805-v1:0",
     "us.anthropic.claude-opus-4-20250514-v1:0",
     "us.anthropic.claude-sonnet-4-20250514-v1:0",
-    "us.anthropic.claude-sonnet-4-20250514-v1:0:1m",
     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
     "us.anthropic.claude-sonnet-4-6",
     "us.anthropic.claude-sonnet-4-6:1m",
     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -90,13 +136,14 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "eu.anthropic.claude-sonnet-4-20250514-v1:0",
     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
     "eu.anthropic.claude-sonnet-4-6",
     "eu.anthropic.claude-sonnet-4-6:1m",
     "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
     "eu.anthropic.claude-opus-4-5-20251101-v1:0",
     "eu.anthropic.claude-opus-4-6-v1",
     "eu.anthropic.claude-opus-4-6-v1:1m",
+    "eu.anthropic.claude-opus-4-7",
+    "eu.anthropic.claude-opus-4-7:1m",
     "eu.amazon.nova-lite-v1:0",
     "eu.amazon.nova-pro-v1:0",
     "eu.amazon.nova-2-lite-v1:0",
@@ -107,13 +154,29 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "global.amazon.nova-2-lite-v1:0:flex",
     "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
     "global.anthropic.claude-sonnet-4-6",
     "global.anthropic.claude-sonnet-4-6:1m",
     "global.anthropic.claude-opus-4-5-20251101-v1:0",
     "global.anthropic.claude-opus-4-6-v1",
     "global.anthropic.claude-opus-4-6-v1:1m",
+    "global.anthropic.claude-opus-4-7",
+    "global.anthropic.claude-opus-4-7:1m",
 ]
+
+# Build set of base model names (without region/tier prefixes) for inference profile resolution.
+# e.g., "us.anthropic.claude-sonnet-4-6" -> "anthropic.claude-sonnet-4-6"
+# and "eu.amazon.nova-2-lite-v1:0:priority" -> "amazon.nova-2-lite-v1:0"
+for _model_id in CACHEPOINT_SUPPORTED_MODELS:
+    _parts = _model_id.split(".", 1)
+    if len(_parts) == 2 and _parts[0] in ("us", "eu", "global"):
+        _base = _parts[1]
+        # Strip tier suffixes (:priority, :flex) but keep version suffixes (:0, :1m)
+        if _base.endswith(":priority") or _base.endswith(":flex"):
+            _base = _base.rsplit(":", 1)[0]
+        _CACHEPOINT_BASE_MODELS.add(_base)
+
+# Module-level cache for inference profile -> cachepoint support resolution
+_inference_profile_cachepoint_cache: Dict[str, bool] = {}
 
 
 class BedrockClient:
@@ -143,6 +206,7 @@ class BedrockClient:
         self.max_backoff = max_backoff
         self.metrics_enabled = metrics_enabled
         self._client = None
+        self._bedrock_control_client = None
         self._lambda_client = None
         self._s3_client = None
 
@@ -154,7 +218,7 @@ class BedrockClient:
             read_timeout=300,  # allow plenty of time for large extraction or assessment inferences
         )
         if self._client is None:
-            self._client = boto3.client(
+            self._client = get_bedrock_session(self.region).client(
                 "bedrock-runtime", region_name=self.region, config=config
             )
         return self._client
@@ -162,11 +226,22 @@ class BedrockClient:
     @property
     def lambda_client(self):
         """Lazy-loaded Lambda client for LambdaHook invocations."""
+        # Lambda invocations stay in the calling account, so this client
+        # uses default credentials regardless of BEDROCK_ASSUME_ROLE_ARN.
         if self._lambda_client is None:
             self._lambda_client = boto3.client(
                 "lambda", region_name=self.region
             )
         return self._lambda_client
+
+    @property
+    def bedrock_control_client(self):
+        """Lazy-loaded Bedrock control plane client for GetInferenceProfile etc."""
+        if self._bedrock_control_client is None:
+            self._bedrock_control_client = get_bedrock_session(self.region).client(
+                "bedrock", region_name=self.region
+            )
+        return self._bedrock_control_client
 
     @property
     def s3_client(self):
@@ -176,6 +251,93 @@ class BedrockClient:
                 "s3", region_name=self.region
             )
         return self._s3_client
+
+    def _is_model_cachepoint_supported(self, model_id: str) -> bool:
+        """
+        Check if a model supports cachePoint, including inference profile resolution.
+
+        For standard model IDs (e.g., "us.anthropic.claude-sonnet-4-6"), checks
+        the CACHEPOINT_SUPPORTED_MODELS list directly.
+
+        For inference profile ARNs (containing "inference-profile" or
+        "application-inference-profile"), resolves the underlying foundation
+        model via the GetInferenceProfile API and checks if that base model
+        supports cachePoint. Results are cached to avoid repeated API calls.
+
+        Args:
+            model_id: Bedrock model ID or inference profile ARN
+
+        Returns:
+            True if the model (or underlying model for inference profiles) supports cachePoint
+        """
+        # Fast path: direct match against the known list
+        if model_id in CACHEPOINT_SUPPORTED_MODELS:
+            return True
+
+        # Check if this is an inference profile ARN
+        if "inference-profile" not in model_id:
+            return False
+
+        # Check module-level cache
+        if model_id in _inference_profile_cachepoint_cache:
+            cached = _inference_profile_cachepoint_cache[model_id]
+            logger.debug(
+                f"Inference profile cachepoint support (cached): {model_id} -> {cached}"
+            )
+            return cached
+
+        # Resolve the inference profile to its underlying foundation model
+        try:
+            response = self.bedrock_control_client.get_inference_profile(
+                inferenceProfileIdentifier=model_id
+            )
+            models = response.get("models", [])
+            if not models:
+                logger.warning(
+                    f"Inference profile {model_id} has no models listed. "
+                    "Cannot determine cachePoint support."
+                )
+                _inference_profile_cachepoint_cache[model_id] = False
+                return False
+
+            # Extract the base model name from the first model's ARN.
+            # Model ARN format: arn:aws:bedrock:<region>::foundation-model/<base-model-name>
+            # e.g., "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6"
+            first_model_arn = models[0].get("modelArn", "")
+            if "foundation-model/" in first_model_arn:
+                base_model_name = first_model_arn.split("foundation-model/")[-1]
+            else:
+                logger.warning(
+                    f"Cannot parse foundation model from ARN: {first_model_arn}"
+                )
+                _inference_profile_cachepoint_cache[model_id] = False
+                return False
+
+            supported = base_model_name in _CACHEPOINT_BASE_MODELS
+            _inference_profile_cachepoint_cache[model_id] = supported
+
+            logger.info(
+                f"Resolved inference profile {model_id} -> "
+                f"foundation model '{base_model_name}' -> "
+                f"cachePoint {'supported' if supported else 'not supported'}"
+            )
+            return supported
+
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            logger.warning(
+                f"Failed to resolve inference profile {model_id} for cachePoint check "
+                f"({error_code}): {e}. Disabling cachePoint for this model."
+            )
+            _inference_profile_cachepoint_cache[model_id] = False
+            return False
+        except Exception as e:
+            logger.warning(
+                f"Unexpected error resolving inference profile {model_id} "
+                f"for cachePoint check: {e}. Disabling cachePoint for this model."
+            )
+            _inference_profile_cachepoint_cache[model_id] = False
+            return False
 
     def __call__(
         self,
@@ -379,7 +541,7 @@ class BedrockClient:
         )
 
         if has_cachepoint_tags:
-            if model_id in CACHEPOINT_SUPPORTED_MODELS:
+            if self._is_model_cachepoint_supported(model_id):
                 # Process content for cachePoint tags with supported model
                 processed_content = self._preprocess_content_for_cachepoint(content)
                 logger.info(
@@ -398,7 +560,9 @@ class BedrockClient:
                         clean_text = item["text"].replace("<<CACHEPOINT>>", "")
                         processed_content.append({"text": clean_text})
                         logger.warning(
-                            f"Removed <<CACHEPOINT>> tags for unsupported model: {model_id}. CachePoint is only supported for: {', '.join(CACHEPOINT_SUPPORTED_MODELS)}"
+                            f"Removed <<CACHEPOINT>> tags for unsupported model: {model_id}. "
+                            "CachePoint is supported for standard cross-region inference profiles "
+                            "and application inference profiles that wrap supported foundation models."
                         )
                     else:
                         # Pass through unchanged
@@ -421,33 +585,42 @@ class BedrockClient:
                 )
                 temperature = 0.0
 
-        # Initialize inference config with temperature
-        inference_config = {"temperature": temperature}
+        # Claude 4.7+ models don't support temperature, top_k, or top_p parameters
+        is_claude_4_7 = _is_claude_4_7_model(model_id)
+        if is_claude_4_7:
+            inference_config = {}
+            logger.info(
+                f"Skipping temperature/top_p for Claude 4.7+ model: {model_id} "
+                "(these parameters are deprecated for this model)"
+            )
+        else:
+            # Initialize inference config with temperature
+            inference_config = {"temperature": temperature}
 
-        # Handle top_p parameter - use top_p if it's positive, otherwise use temperature
-        # Some models don't allow both temperature and top_p to be specified
-        # This allows temperature=0.0 for deterministic output (recommended by Anthropic)
-        if top_p is not None:
-            # Convert top_p to float if it's a string
-            if isinstance(top_p, str):
-                try:
-                    top_p = float(top_p)
-                except ValueError:
-                    logger.warning(
-                        f"Failed to convert top_p value '{top_p}' to float. Not using top_p."
+            # Handle top_p parameter - use top_p if it's positive, otherwise use temperature
+            # Some models don't allow both temperature and top_p to be specified
+            # This allows temperature=0.0 for deterministic output (recommended by Anthropic)
+            if top_p is not None:
+                # Convert top_p to float if it's a string
+                if isinstance(top_p, str):
+                    try:
+                        top_p = float(top_p)
+                    except ValueError:
+                        logger.warning(
+                            f"Failed to convert top_p value '{top_p}' to float. Not using top_p."
+                        )
+                        top_p = None
+
+                # Only use top_p if it's positive (greater than 0)
+                if top_p is not None and top_p > 0:
+                    inference_config["topP"] = top_p
+                    # Remove temperature when using top_p to avoid conflicts
+                    del inference_config["temperature"]
+                    logger.debug(f"Using top_p={top_p} for inference (temperature ignored)")
+                else:
+                    logger.debug(
+                        f"Using temperature={temperature} for inference (top_p is 0 or None)"
                     )
-                    top_p = None
-
-            # Only use top_p if it's positive (greater than 0)
-            if top_p is not None and top_p > 0:
-                inference_config["topP"] = top_p
-                # Remove temperature when using top_p to avoid conflicts
-                del inference_config["temperature"]
-                logger.debug(f"Using top_p={top_p} for inference (temperature ignored)")
-            else:
-                logger.debug(
-                    f"Using temperature={temperature} for inference (top_p is 0 or None)"
-                )
 
         # Handle max_tokens parameter
         if max_tokens is not None:
@@ -483,8 +656,14 @@ class BedrockClient:
         # Handle model-specific parameters
         if "anthropic" in model_id.lower():
             # Add parameters to additionalModelRequestFields for Claude (snake_case)
-            if top_k is not None:
+            # Skip top_k for Claude 4.7+ models (deprecated parameter)
+            if top_k is not None and not is_claude_4_7:
                 additional_model_fields["top_k"] = int(top_k)
+            elif top_k is not None and is_claude_4_7:
+                logger.info(
+                    f"Skipping top_k for Claude 4.7+ model: {model_id} "
+                    "(this parameter is deprecated for this model)"
+                )
 
             if max_tokens is not None:
                 additional_model_fields["max_tokens"] = max_tokens
@@ -688,12 +867,30 @@ class BedrockClient:
                 "TooManyRequestsException",
                 "ServiceUnavailableException",
                 "ModelErrorException",
+                "InternalServerException",
+                "InternalServerError",
                 "RequestTimeout",
                 "RequestTimeoutException",
             ]
 
             if error_code in retryable_errors:
                 self._put_metric("BedrockThrottles", 1)
+
+                # Emit circuit-breaker specific metrics by error category.
+                # BedrockThrottling is a combined generation+embedding signal
+                # that feeds BedrockServiceOutageAlarm (the circuit breaker
+                # trigger). For per-path counts use BedrockThrottles
+                # (generation, above) or BedrockEmbeddingThrottles (embedding).
+                if error_code == "ServiceUnavailableException":
+                    self._put_metric("BedrockServiceUnavailable", 1)
+                elif error_code in (
+                    "ThrottlingException",
+                    "TooManyRequestsException",
+                    "RequestLimitExceeded",
+                ):
+                    self._put_metric("BedrockThrottling", 1)
+                elif error_code == "ServiceQuotaExceededException":
+                    self._put_metric("BedrockQuotaLimit", 1)
 
                 # Check if we've reached max retries
                 if retry_count >= max_retries:
@@ -816,22 +1013,32 @@ class BedrockClient:
 
     def generate_embedding(
         self,
-        text: str,
+        text: Optional[str] = None,
         model_id: str = "amazon.titan-embed-text-v1",
         max_retries: Optional[int] = None,
+        image_bytes: Optional[bytes] = None,
+        input_type: Optional[str] = "search_document",
     ) -> List[float]:
         """
-        Generate an embedding vector for the given text using Amazon Bedrock.
+        Generate an embedding vector for text and/or image using Amazon Bedrock.
+
+        Supports multiple embedding models:
+        - Amazon Titan Embed Text (text only)
+        - Amazon Titan Multimodal Embedding (text + image)
+        - Cohere Embed v3/v4 (text + image, multimodal)
 
         Args:
-            text: The text to generate embeddings for
+            text: The text to generate embeddings for (optional if image_bytes provided)
             model_id: The embedding model ID to use (default: amazon.titan-embed-text-v1)
             max_retries: Optional override for the instance's max_retries setting
+            image_bytes: Optional image bytes for multimodal embedding models
+            input_type: Input type for Cohere models (search_document, search_query,
+                       classification, clustering). Defaults to search_document.
 
         Returns:
             List of floats representing the embedding vector
         """
-        if not text or not isinstance(text, str):
+        if not text and image_bytes is None:
             # Return an empty vector for empty input
             return []
 
@@ -843,24 +1050,162 @@ class BedrockClient:
         # Track total embedding requests
         self._put_metric("BedrockEmbeddingRequestsTotal", 1)
 
-        # Normalize whitespace and prepare the input text
-        normalized_text = " ".join(text.split())
+        # Normalize whitespace if text provided
+        normalized_text = " ".join(text.split()) if text else None
 
         # Prepare the request body based on the model
-        if "amazon.titan-embed" in model_id:
-            request_body = json.dumps({"inputText": normalized_text})
-        else:
-            # Default format for other models
-            request_body = json.dumps({"text": normalized_text})
+        request_body = self._build_embedding_request_body(
+            model_id=model_id,
+            text=normalized_text,
+            image_bytes=image_bytes,
+            input_type=input_type,
+        )
 
         # Call the recursive embedding function
         return self._generate_embedding_with_retry(
             model_id=model_id,
             request_body=request_body,
-            normalized_text=normalized_text,
+            normalized_text=normalized_text or "(image-only)",
             retry_count=0,
             max_retries=effective_max_retries,
         )
+
+    def generate_embeddings_batch(
+        self,
+        items: List[Dict[str, Any]],
+        model_id: str = "amazon.titan-embed-text-v1",
+        max_retries: Optional[int] = None,
+        max_concurrent: int = 5,
+        input_type: Optional[str] = "search_document",
+        progress_callback: Optional[Any] = None,
+    ) -> List[Optional[List[float]]]:
+        """
+        Generate embeddings for a batch of items with concurrency control.
+
+        Each item in the batch can contain text, image_bytes, or both.
+
+        Args:
+            items: List of dicts with optional 'text' and 'image_bytes' keys
+            model_id: The embedding model ID to use
+            max_retries: Optional override for retry count
+            max_concurrent: Maximum concurrent embedding requests
+            input_type: Input type for Cohere models
+            progress_callback: Optional callable(completed, total) for progress updates
+
+        Returns:
+            List of embedding vectors (None for failed items)
+        """
+        import concurrent.futures
+
+        total = len(items)
+        results: List[Optional[List[float]]] = [None] * total
+        completed = 0
+
+        def _embed_single(index: int, item: Dict[str, Any]) -> tuple:
+            """Embed a single item and return (index, embedding)."""
+            try:
+                embedding = self.generate_embedding(
+                    text=item.get("text"),
+                    model_id=model_id,
+                    max_retries=max_retries,
+                    image_bytes=item.get("image_bytes"),
+                    input_type=input_type,
+                )
+                return (index, embedding)
+            except Exception as e:
+                logger.warning(f"Failed to generate embedding for item {index}: {e}")
+                return (index, None)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            futures = {
+                executor.submit(_embed_single, i, item): i
+                for i, item in enumerate(items)
+            }
+            for future in concurrent.futures.as_completed(futures):
+                idx, embedding = future.result()
+                results[idx] = embedding
+                completed += 1
+                if progress_callback:
+                    try:
+                        progress_callback(completed, total)
+                    except Exception:
+                        pass
+
+        return results
+
+    def _build_embedding_request_body(
+        self,
+        model_id: str,
+        text: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        input_type: Optional[str] = "search_document",
+    ) -> str:
+        """
+        Build the JSON request body for an embedding model.
+
+        Supports:
+        - Amazon Titan Embed Text v1/v2: text-only via inputText
+        - Amazon Titan Multimodal Embedding: text + image via inputText/inputImage
+        - Cohere Embed v3/v4: text + image via texts/images arrays
+
+        Args:
+            model_id: The embedding model ID
+            text: Optional text input
+            image_bytes: Optional image bytes
+            input_type: Input type for Cohere models
+
+        Returns:
+            JSON string for the request body
+        """
+        import base64
+
+        model_lower = model_id.lower()
+
+        if "cohere" in model_lower:
+            # Cohere Embed v3/v4 format
+            body: Dict[str, Any] = {
+                "input_type": input_type or "search_document",
+            }
+            # Detect v4 models (embed-v4) vs v3 (embed-english-v3, embed-multilingual-v3)
+            is_v4 = "embed-v4" in model_lower
+            if is_v4:
+                # Cohere v4 requires explicit embedding type and supports output_dimension
+                body["embedding_types"] = ["float"]
+                body["output_dimension"] = 1024
+            if text:
+                body["texts"] = [text]
+            if image_bytes is not None:
+                img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+                if is_v4:
+                    # Cohere v4 requires data URI format for images
+                    body["images"] = [f"data:image/png;base64,{img_b64}"]
+                else:
+                    # Cohere v3 uses raw base64
+                    body["images"] = [img_b64]
+            return json.dumps(body)
+
+        elif "titan-embed-image" in model_lower or (
+            "titan-embed" in model_lower and image_bytes is not None
+        ):
+            # Amazon Titan Multimodal Embedding G1 format
+            body = {}
+            if text:
+                body["inputText"] = text
+            if image_bytes is not None:
+                img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+                body["inputImage"] = img_b64
+            return json.dumps(body)
+
+        elif "titan-embed" in model_lower:
+            # Amazon Titan Embed Text v1/v2 (text-only)
+            return json.dumps({"inputText": text or ""})
+
+        else:
+            # Default format
+            body = {}
+            if text:
+                body["text"] = text
+            return json.dumps(body)
 
     def _generate_embedding_with_retry(
         self,
@@ -910,8 +1255,17 @@ class BedrockClient:
             # Handle different response formats based on the model
             if "amazon.titan-embed" in model_id:
                 embedding = response_body.get("embedding", [])
+            elif "cohere" in model_id.lower() and "embed-v4" in model_id.lower():
+                # Cohere Embed v4 returns {"embeddings": {"float": [[...]]}}
+                embeddings_obj = response_body.get("embeddings", {})
+                if isinstance(embeddings_obj, dict):
+                    float_embeddings = embeddings_obj.get("float", [])
+                    embedding = float_embeddings[0] if float_embeddings else []
+                else:
+                    # Fallback for unexpected format
+                    embedding = embeddings_obj[0] if embeddings_obj else []
             else:
-                # Default extraction format
+                # Default extraction format (Cohere v3 and others)
                 embedding = response_body.get("embedding", [])
 
             # Track successful requests and latency
@@ -933,6 +1287,8 @@ class BedrockClient:
                 "RequestLimitExceeded",
                 "TooManyRequestsException",
                 "ServiceUnavailableException",
+                "InternalServerException",
+                "InternalServerError",
                 "RequestTimeout",
                 "ReadTimeout",
                 "TimeoutError",
@@ -941,6 +1297,22 @@ class BedrockClient:
 
             if error_code in retryable_errors:
                 self._put_metric("BedrockEmbeddingThrottles", 1)
+
+                # Emit circuit-breaker specific metrics by error category.
+                # BedrockThrottling is a combined generation+embedding signal
+                # that feeds BedrockServiceOutageAlarm (the circuit breaker
+                # trigger). For per-path counts use BedrockEmbeddingThrottles
+                # (embedding, above) or BedrockThrottles (generation).
+                if error_code == "ServiceUnavailableException":
+                    self._put_metric("BedrockServiceUnavailable", 1)
+                elif error_code in (
+                    "ThrottlingException",
+                    "TooManyRequestsException",
+                    "RequestLimitExceeded",
+                ):
+                    self._put_metric("BedrockThrottling", 1)
+                elif error_code == "ServiceQuotaExceededException":
+                    self._put_metric("BedrockQuotaLimit", 1)
 
                 # Check if we've reached max retries
                 if retry_count >= max_retries:
@@ -998,7 +1370,15 @@ class BedrockClient:
             Extracted text content
         """
         response_obj = response.get("response", response)
-        return response_obj["output"]["message"]["content"][0].get("text", "")
+        content = response_obj["output"]["message"].get("content", [])
+        if not content or len(content) == 0:
+            logger = logging.getLogger(__name__)
+            logger.error(
+                "LLM returned empty content array",
+                extra={"response": response_obj},
+            )
+            return ""
+        return content[0].get("text", "")
 
     def format_prompt(
         self,
@@ -1480,7 +1860,7 @@ class BedrockClient:
         backoff_seconds = min(self.max_backoff, self.initial_backoff * (2**retry_count))
 
         # Add jitter (random value between 0 and 1 second)
-        jitter = random.random()
+        jitter = random.random()  # nosec B311 - retry jitter
 
         return backoff_seconds + jitter
 

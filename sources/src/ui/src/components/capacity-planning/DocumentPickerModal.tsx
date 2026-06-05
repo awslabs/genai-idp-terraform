@@ -69,21 +69,21 @@ const COLUMN_DEFINITIONS = (configuration: Record<string, unknown> | null | unde
   {
     id: 'ObjectKey',
     header: 'Document ID',
-    cell: (item) => item.ObjectKey,
+    cell: (item: DocumentItem) => item.ObjectKey,
     sortingField: 'ObjectKey',
     width: 250,
   },
   {
     id: 'InitialEventTime',
     header: 'Submitted Date/Time',
-    cell: (item) => item.InitialEventTime || '-',
+    cell: (item: DocumentItem) => item.InitialEventTime || '-',
     sortingField: 'InitialEventTime',
     width: 200,
   },
   {
     id: 'documentClass',
     header: 'Document Class',
-    cell: (item) => (
+    cell: (item: DocumentItem) => (
       <Box>
         {item.documentClass}
         {item.isMultiClass && (
@@ -99,45 +99,45 @@ const COLUMN_DEFINITIONS = (configuration: Record<string, unknown> | null | unde
   {
     id: 'ObjectStatus',
     header: 'Status',
-    cell: (item) => item.ObjectStatus,
+    cell: (item: DocumentItem) => item.ObjectStatus,
     sortingField: 'ObjectStatus',
     width: 250,
   },
   {
     id: 'avgPages',
     header: 'Pages',
-    cell: (item) => item.metering?.avgPages || '-',
+    cell: (item: DocumentItem) => (item.metering?.avgPages as string | number) || '-',
     sortingField: 'avgPages',
     width: 80,
   },
   {
     id: 'tokens',
     header: 'Token Usage',
-    cell: (item) => (
+    cell: (item: DocumentItem) => (
       <Box fontSize="body-s">
-        {(configuration as { ocr?: { backend?: string } } | null)?.ocr?.backend === 'bedrock' && item.metering?.ocrTokens !== undefined && (
+        {(configuration as { ocr?: { backend?: string } } | null)?.ocr?.backend === 'bedrock' && item.metering?.ocrTokens != null && (
           <span style={{ marginRight: '8px' }}>
-            <strong>OCR:</strong> {item.metering.ocrTokens.toLocaleString()}
+            <strong>OCR:</strong> {Number(item.metering.ocrTokens).toLocaleString()}
           </span>
         )}
-        {item.metering?.classificationTokens !== undefined && (
+        {item.metering?.classificationTokens != null && (
           <span style={{ marginRight: '8px' }}>
-            <strong>Classification:</strong> {item.metering.classificationTokens.toLocaleString()}
+            <strong>Classification:</strong> {Number(item.metering.classificationTokens).toLocaleString()}
           </span>
         )}
-        {item.metering?.extractionTokens !== undefined && (
+        {item.metering?.extractionTokens != null && (
           <span style={{ marginRight: '8px' }}>
-            <strong>Extraction:</strong> {item.metering.extractionTokens.toLocaleString()}
+            <strong>Extraction:</strong> {Number(item.metering.extractionTokens).toLocaleString()}
           </span>
         )}
-        {item.metering?.assessmentTokens !== undefined && (
+        {item.metering?.assessmentTokens != null && (
           <span style={{ marginRight: '8px' }}>
-            <strong>Assessment:</strong> {item.metering.assessmentTokens.toLocaleString()}
+            <strong>Assessment:</strong> {Number(item.metering.assessmentTokens).toLocaleString()}
           </span>
         )}
-        {item.metering?.summarizationTokens !== undefined && item.metering?.summarizationTokens > 0 && (
+        {item.metering?.summarizationTokens != null && Number(item.metering?.summarizationTokens) > 0 && (
           <span style={{ marginRight: '8px' }}>
-            <strong>Summarization:</strong> {item.metering.summarizationTokens.toLocaleString()}
+            <strong>Summarization:</strong> {Number(item.metering.summarizationTokens).toLocaleString()}
           </span>
         )}
       </Box>
@@ -174,7 +174,7 @@ const DocumentPickerModal = ({
   });
 
   // Handle time period dropdown changes
-  const handlePeriodChange = ({ detail }) => {
+  const handlePeriodChange = ({ detail }: { detail: { id: string } }) => {
     const { id } = detail;
     if (id === 'custom-range') {
       if (onCustomDateRange) {
@@ -193,7 +193,7 @@ const DocumentPickerModal = ({
     if (customDateRange) {
       const start = new Date(customDateRange.startDateTime);
       const end = new Date(customDateRange.endDateTime);
-      const formatDate = (d) =>
+      const formatDate = (d: Date) =>
         `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
       return `${formatDate(start)} → ${formatDate(end)}`;
     }
@@ -230,7 +230,7 @@ const DocumentPickerModal = ({
   });
 
   // Sync selection with parent state
-  const handleSelectionChange = ({ detail }) => {
+  const handleSelectionChange = ({ detail }: { detail: { selectedItems: DocumentItem[] } }) => {
     setSelectedDocuments(detail.selectedItems);
   };
 

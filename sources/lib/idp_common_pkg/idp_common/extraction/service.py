@@ -23,15 +23,25 @@ from idp_common.config.schema_constants import (
     ID_FIELD,
     SCHEMA_PROPERTIES,
     X_AWS_IDP_DOCUMENT_TYPE,
+    X_AWS_IDP_EXTRACTION_MODEL,
+    X_AWS_IDP_SOURCE_PAGE_TYPES,
+)
+from idp_common.extraction.page_type_resolver import (
+    PageTypePresence,
+    resolve_page_types,
 )
 from idp_common.models import Document
 from idp_common.utils.few_shot_example_builder import (
     build_few_shot_extraction_examples_content,
 )
 
-# Conditional import for agentic extraction (requires Python 3.10+ dependencies)
+# Conditional import for agentic extraction (requires Python 3.12+ dependencies)
 try:
-    from idp_common.extraction.agentic_idp import structured_output
+    from idp_common.extraction.agentic_idp import (
+        concurrent_structured_output_async,
+        set_confidence_data,
+        structured_output,
+    )
     from idp_common.schema import create_pydantic_model_from_json_schema
 
     AGENTIC_AVAILABLE = True
@@ -48,6 +58,8 @@ logger = logging.getLogger(__name__)
 class SectionInfo(BaseModel):
     """Metadata about a document section being processed."""
 
+    model_config = {"arbitrary_types_allowed": True}
+
     class_label: str
     sorted_page_ids: list[str]
     page_indices: list[int]
@@ -56,6 +68,7 @@ class SectionInfo(BaseModel):
     output_uri: str
     start_page: int
     end_page: int
+    page_type_presence: PageTypePresence | None = None
 
 
 class ExtractionConfig(BaseModel):
@@ -79,6 +92,8 @@ class ExtractionResult(BaseModel):
     output_truncated: bool = False
     output_repaired: bool = False
     repair_method: str | None = None
+    schema_analysis: dict[str, Any] | None = None
+    ocr_analysis: dict[str, Any] | None = None
 
 
 class ExtractionService:
@@ -116,6 +131,10 @@ class ExtractionService:
         self._class_schema: dict[str, Any] = {}
         self._page_images: list[bytes] = []
         self._image_uris: list[str] = []
+        # Optional checkpoint callback for incremental saves during agentic extraction.
+        # When set, called after each successful extraction_tool or apply_json_patches
+        # invocation with the current extraction dict, enabling resume on Lambda timeout.
+        self._checkpoint_callback: Any | None = None
 
         # Get model_id from config for logging (type-safe access with fallback)
         model_id = (
@@ -621,39 +640,100 @@ class ExtractionService:
             end_page=end_page,
         )
 
-    def _load_document_text(
+    def _load_page_texts(
         self, document: Document, sorted_page_ids: list[str]
-    ) -> str:
-        """
-        Load and concatenate text from all pages.
+    ) -> dict[str, str]:
+        """Load OCR text for each page in the section, preserving page IDs.
 
-        Args:
-            document: Document containing pages
-            sorted_page_ids: Sorted list of page IDs
-
-        Returns:
-            Concatenated document text
+        Pages missing from ``document.pages`` are recorded as errors and
+        omitted from the result.
         """
         t0 = time.time()
-        document_texts = []
-
+        page_id_to_text: dict[str, str] = {}
         for page_id in sorted_page_ids:
             if page_id not in document.pages:
                 error_msg = f"Page {page_id} not found in document"
                 logger.error(error_msg)
                 document.errors.append(error_msg)
                 continue
-
             page = document.pages[page_id]
             text_path = page.parsed_text_uri
-            page_text = s3.get_text_content(text_path)
-            document_texts.append(page_text)
+            page_id_to_text[page_id] = s3.get_text_content(text_path)
+        logger.info(f"Time taken to read text content: {time.time() - t0:.2f} seconds")
+        return page_id_to_text
 
-        document_text = "\n".join(document_texts)
-        t1 = time.time()
-        logger.info(f"Time taken to read text content: {t1 - t0:.2f} seconds")
+    def _format_document_text(
+        self,
+        sorted_page_ids: list[str],
+        page_id_to_text: dict[str, str],
+        page_type_presence: PageTypePresence | None = None,
+    ) -> str:
+        """Concatenate per-page text with sequential page markers.
 
-        return document_text
+        When ``page_type_presence`` resolves a page type for a page, the
+        marker is annotated as ``--- PAGE N [PageType] ---`` so the LLM
+        gets a soft hint about the page's role.
+        """
+        page_id_to_type: dict[str, str] = (
+            page_type_presence.page_id_to_page_type if page_type_presence else {}
+        )
+        parts: list[str] = []
+        for idx, page_id in enumerate(
+            pid for pid in sorted_page_ids if pid in page_id_to_text
+        ):
+            page_num = idx + 1
+            page_type = page_id_to_type.get(page_id)
+            marker = (
+                f"--- PAGE {page_num} [{page_type}] ---"
+                if page_type
+                else f"--- PAGE {page_num} ---"
+            )
+            parts.append(f"{marker}\n{page_id_to_text[page_id]}")
+        return "\n".join(parts)
+
+    def _load_document_text(
+        self, document: Document, sorted_page_ids: list[str]
+    ) -> str:
+        """Backwards-compatible loader that returns the concatenated text only.
+
+        Prefer :meth:`_load_page_texts` + :meth:`_format_document_text` when
+        per-page text is also needed (e.g., for page-type resolution).
+        """
+        page_id_to_text = self._load_page_texts(document, sorted_page_ids)
+        return self._format_document_text(sorted_page_ids, page_id_to_text)
+
+    def _load_confidence_data(
+        self, document: Document, sorted_page_ids: list[str]
+    ) -> dict[str, str]:
+        """
+        Load OCR confidence data for pages in a section.
+
+        Reads text_confidence_uri from each page to provide confidence scores
+        to the table parsing tool.
+
+        Args:
+            document: Document containing pages
+            sorted_page_ids: Sorted list of page IDs
+
+        Returns:
+            Dict mapping page IDs to confidence data strings
+        """
+        confidence_data: dict[str, str] = {}
+        for page_id in sorted_page_ids:
+            if page_id not in document.pages:
+                continue
+            page = document.pages[page_id]
+            confidence_uri = getattr(page, "text_confidence_uri", None)
+            if confidence_uri:
+                try:
+                    conf_text = s3.get_text_content(confidence_uri)
+                    if conf_text:
+                        confidence_data[page_id] = conf_text
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load confidence data for page {page_id}: {e}"
+                    )
+        return confidence_data
 
     def _load_document_images(
         self, document: Document, sorted_page_ids: list[str]
@@ -881,11 +961,441 @@ class ExtractionService:
 
         return content, system_prompt
 
+    def _analyze_schema_for_table_requirements(
+        self, schema: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Analyze schema to detect large array fields that require table parsing.
+
+        NOTE: This is OPTIONAL - minItems is not required for tool usage.
+        OCR analysis is the primary adaptive trigger. Schema analysis only
+        provides additional signal when minItems is explicitly set.
+
+        Returns:
+            Dict with analysis results including whether tool usage is recommended
+        """
+        large_arrays = []
+        max_min_items = 0
+
+        properties = schema.get(SCHEMA_PROPERTIES, {})
+        for field_name, field_def in properties.items():
+            if field_def.get("type") == "array":
+                min_items = field_def.get("minItems", 0)
+                if min_items > 50:  # Match OCR threshold for consistency
+                    large_arrays.append(
+                        {
+                            "field": field_name,
+                            "min_items": min_items,
+                            "description": field_def.get("description", ""),
+                        }
+                    )
+                    max_min_items = max(max_min_items, min_items)
+
+        recommendation = len(large_arrays) > 0
+
+        return {
+            "large_array_fields": [arr["field"] for arr in large_arrays],
+            "max_min_items": max_min_items,
+            "field_details": large_arrays,
+            "tool_usage_recommended": recommendation,
+            "recommendation_reason": (
+                f"Schema has {len(large_arrays)} array field(s) with minItems > 50"
+                if recommendation
+                else "No large array constraints detected"
+            ),
+            "recommendation_strength": (
+                "MANDATORY"
+                if max_min_items >= 500  # Match OCR threshold
+                else "STRONGLY_RECOMMENDED"
+                if max_min_items >= 100  # Medium-large
+                else "RECOMMENDED"
+                if max_min_items >= 50  # Medium
+                else "OPTIONAL"
+            ),
+        }
+
+    def _analyze_ocr_for_tables(self, ocr_text: str) -> dict[str, Any]:
+        """
+        Analyze OCR text to detect large Markdown tables.
+
+        This is the PRIMARY trigger for table parsing tool guidance, adapting
+        automatically to documents of any size without requiring specific minItems.
+
+        Returns:
+            Dict with table detection results
+        """
+        import re
+
+        # Detect Markdown table rows (lines with | delimiters)
+        table_rows = []
+        lines = ocr_text.split("\n")
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            # Skip separator rows (e.g., |---|---|)
+            if "|" in stripped and not re.match(r"^[\s|:-]+$", stripped):
+                table_rows.append(i)
+
+        # Estimate table count by gaps
+        tables_detected = 0
+        estimated_total_rows = 0
+        if table_rows:
+            tables_detected = 1
+            gap_threshold = 5
+            for i in range(1, len(table_rows)):
+                if table_rows[i] - table_rows[i - 1] > gap_threshold:
+                    tables_detected += 1
+            estimated_total_rows = len(table_rows)
+
+        # Adaptive thresholds - lower for better real-world coverage
+        # These are optimized for automatic detection without minItems requirement
+        recommendation = estimated_total_rows > 30
+
+        return {
+            "tables_detected": tables_detected,
+            "estimated_row_count": estimated_total_rows,
+            "tool_usage_recommended": recommendation,
+            "recommendation_reason": (
+                f"Detected {tables_detected} table(s) with ~{estimated_total_rows} total rows"
+                if recommendation
+                else "No large tables detected in OCR text"
+            ),
+            "recommendation_strength": (
+                "MANDATORY"
+                if estimated_total_rows >= 500  # Large documents
+                else "STRONGLY_RECOMMENDED"
+                if estimated_total_rows >= 100  # Medium-large tables
+                else "RECOMMENDED"
+                if estimated_total_rows >= 50  # Medium tables
+                else "OPTIONAL"
+            ),
+        }
+
+    def _build_table_parsing_guidance(
+        self, schema_analysis: dict[str, Any], ocr_analysis: dict[str, Any]
+    ) -> str:
+        """Build custom table parsing guidance based on pre-flight analysis."""
+
+        # Determine overall recommendation strength
+        strengths = [
+            schema_analysis.get("recommendation_strength", "OPTIONAL"),
+            ocr_analysis.get("recommendation_strength", "OPTIONAL"),
+        ]
+
+        # Get the strongest recommendation
+        strength_order = [
+            "OPTIONAL",
+            "RECOMMENDED",
+            "STRONGLY_RECOMMENDED",
+            "MANDATORY",
+        ]
+        max_strength = max(
+            strengths,
+            key=lambda x: strength_order.index(x) if x in strength_order else 0,
+        )
+
+        if max_strength == "MANDATORY":
+            # For very large tables (500+ rows detected by OCR)
+            guidance = """
+**CRITICAL - MANDATORY TABLE PARSING TOOL USAGE**:
+This document contains a large table with {row_count}+ rows detected by OCR analysis.
+You MUST use the parse_table tool for complete and accurate extraction:
+
+1. IMMEDIATELY call parse_table with the full document text or table section
+2. DO NOT attempt manual row-by-row LLM extraction for large tables
+3. Verify parse_table returned ALL expected rows (check row_count in response)
+4. If parse_table returns fewer rows than expected, investigate warnings and ensure all
+   table fragments are parsed (tables may be split across pages)
+
+FAILURE TO USE parse_table will result in:
+- Incomplete extraction (missing rows) - you will miss hundreds of data points
+- Schema validation failures
+- Excessive token usage (may hit context limits)
+- Poor extraction performance
+
+This is not optional - use the tool immediately for any tabular data.
+"""
+            return guidance.format(
+                row_count=ocr_analysis.get("estimated_row_count", "500"),
+            )
+
+        elif max_strength == "STRONGLY_RECOMMENDED":
+            # For medium-large tables (100-499 rows) - still use explicit instructions
+            guidance = """
+**IMPORTANT - USE TABLE PARSING TOOL**:
+This document contains tabular data with {row_count}+ rows detected.
+You MUST use the parse_table tool for accurate and complete extraction:
+
+1. Call parse_table with the document text containing the table
+2. The tool handles OCR artifacts (empty lines, page breaks) automatically
+3. Verify the row_count matches your expectation
+4. Review any warnings about table fragmentation
+5. Map the parsed columns to the required schema fields
+
+Using the tool ensures:
+- Complete data extraction (no missing rows)
+- Faster processing (10x more efficient than manual)
+- Better accuracy (deterministic parsing of well-structured tables)
+
+Do NOT attempt manual row-by-row extraction for tables with 100+ rows.
+"""
+            return guidance.format(
+                row_count=ocr_analysis.get("estimated_row_count", "100"),
+            )
+
+        elif max_strength == "RECOMMENDED":
+            # For medium tables (50-99 rows) - gentler guidance
+            guidance = """
+**RECOMMENDED - TABLE PARSING TOOL**:
+Detected a table with {row_count}+ rows. Consider using the parse_table tool:
+
+1. Call parse_table to extract the table data efficiently
+2. Review the quality metrics and warnings
+3. Fall back to LLM extraction if parse quality is poor
+
+Benefits: Faster, more accurate, handles OCR artifacts automatically.
+"""
+            return guidance.format(
+                row_count=ocr_analysis.get("estimated_row_count", "50"),
+            )
+
+        # Return empty for optional cases (standard TABLE_PARSING_PROMPT_ADDENDUM will be used)
+        return ""
+
+    def _explain_tool_usage_decision(
+        self,
+        expected: bool,
+        actual: bool,
+        schema_analysis: dict[str, Any] | None,
+        ocr_analysis: dict[str, Any] | None,
+    ) -> str:
+        """Generate human-readable explanation of tool usage."""
+
+        if expected and actual:
+            return "Tool was recommended and used as expected"
+        elif expected and not actual:
+            reasons = []
+            if schema_analysis and schema_analysis.get("tool_usage_recommended"):
+                reasons.append(schema_analysis.get("recommendation_reason", ""))
+            if ocr_analysis and ocr_analysis.get("tool_usage_recommended"):
+                reasons.append(ocr_analysis.get("recommendation_reason", ""))
+            return (
+                f"Tool was recommended but NOT used. Reasons: {'; '.join(reasons)}. "
+                f"This may indicate incomplete extraction."
+            )
+        elif not expected and actual:
+            return "Tool was used even though not required (agent chose to use it)"
+        else:
+            return "Tool usage was not required and was not used"
+
+    def _check_completeness_detailed(
+        self,
+        extracted_fields: dict[str, Any],
+        schema: dict[str, Any],
+        tool_used: bool,
+    ) -> dict[str, Any]:
+        """Detailed completeness check with violations."""
+
+        violations = []
+        properties = schema.get(SCHEMA_PROPERTIES, {})
+
+        for field_name, field_def in properties.items():
+            if field_def.get("type") == "array":
+                min_items = field_def.get("minItems", 0)
+                actual_items = len(extracted_fields.get(field_name) or [])
+
+                if min_items > 0 and actual_items < min_items:
+                    violations.append(
+                        {
+                            "field": field_name,
+                            "constraint": f"minItems: {min_items}",
+                            "actual": actual_items,
+                            "shortfall": min_items - actual_items,
+                            "completeness_pct": round(
+                                100 * actual_items / min_items, 1
+                            ),
+                            "message": (
+                                f"Extracted {actual_items} items but schema requires "
+                                f"minimum {min_items} ({100 * actual_items / min_items:.1f}% complete)"
+                            ),
+                            "possible_cause": (
+                                "Agent did not use table parsing tool"
+                                if not tool_used
+                                else "Table parsing may have stopped early"
+                            ),
+                        }
+                    )
+
+        return {
+            "schema_constraints_met": len(violations) == 0,
+            "violations": violations,
+            "summary": (
+                "All schema constraints satisfied"
+                if not violations
+                else f"{len(violations)} constraint violation(s) detected - extraction may be incomplete"
+            ),
+        }
+
+    def _generate_processing_report(self, metadata: dict[str, Any]) -> str:
+        """Generate user-friendly processing report."""
+
+        report_lines = [
+            "=== EXTRACTION PROCESSING REPORT ===",
+            "",
+            f"Extraction Method: {metadata.get('extraction_method', 'N/A').upper()}",
+            f"Processing Time: {metadata.get('extraction_time_seconds', 0):.1f} seconds",
+            f"Status: {'SUCCESS' if metadata.get('parsing_succeeded') else 'FAILED'}",
+            "",
+        ]
+
+        # Schema analysis
+        if "schema_analysis" in metadata:
+            schema_info = metadata["schema_analysis"]
+            report_lines.extend(
+                [
+                    "Schema Analysis:",
+                    f"  - Large array fields detected: {len(schema_info.get('large_array_fields', []))}",
+                    f"  - Maximum minItems constraint: {schema_info.get('max_min_items', 0)}",
+                    f"  - Tool usage recommendation: {schema_info.get('recommendation_strength', 'N/A')}",
+                    "",
+                ]
+            )
+
+        # OCR analysis
+        if "ocr_analysis" in metadata:
+            ocr_info = metadata["ocr_analysis"]
+            report_lines.extend(
+                [
+                    "OCR Table Detection:",
+                    f"  - Tables detected: {ocr_info.get('tables_detected', 0)}",
+                    f"  - Estimated total rows: {ocr_info.get('estimated_row_count', 0)}",
+                    f"  - Tool usage recommendation: {ocr_info.get('recommendation_strength', 'N/A')}",
+                    "",
+                ]
+            )
+
+        # Tool usage decision
+        if "tool_usage_decision" in metadata:
+            decision = metadata["tool_usage_decision"]
+            status_icon = "✓" if not decision.get("mismatch") else "⚠"
+            report_lines.extend(
+                [
+                    f"{status_icon} Table Parsing Tool Decision:",
+                    f"  - Expected usage: {'YES' if decision.get('expected') else 'NO'}",
+                    f"  - Actual usage: {'YES' if decision.get('actual') else 'NO'}",
+                    f"  - Explanation: {decision.get('explanation', 'N/A')}",
+                    "",
+                ]
+            )
+
+        # Completeness check
+        if "completeness_check" in metadata:
+            check = metadata["completeness_check"]
+            status_icon = "✓" if check.get("schema_constraints_met") else "✗"
+            report_lines.extend(
+                [
+                    f"{status_icon} Completeness Validation:",
+                    f"  - {check.get('summary', 'N/A')}",
+                    "",
+                ]
+            )
+
+            if check.get("violations"):
+                report_lines.append("  Detected Issues:")
+                for v in check["violations"]:
+                    report_lines.append(f"    • Field '{v['field']}': {v['message']}")
+                    report_lines.append(f"      Possible cause: {v['possible_cause']}")
+                report_lines.append("")
+
+        # Table parsing stats (if used)
+        if (
+            metadata.get("table_parsing_tool_used")
+            and "table_parsing_stats" in metadata
+        ):
+            stats = metadata["table_parsing_stats"]
+            report_lines.extend(
+                [
+                    "✓ Table Parsing Tool Results:",
+                    f"  - Tables parsed: {stats.get('tables_parsed', 0)}",
+                    f"  - Total rows extracted: {stats.get('rows_parsed', 0)}",
+                    f"  - Parse success rate: {stats.get('parse_success_rate') or 0:.1%}",
+                    f"  - Avg OCR confidence: {stats.get('avg_confidence') or 0:.1f}%",
+                    "",
+                ]
+            )
+
+            if stats.get("warnings"):
+                report_lines.append("  Warnings:")
+                for w in stats["warnings"]:
+                    report_lines.append(f"    {w}")
+                report_lines.append("")
+
+        report_lines.append("=" * 40)
+
+        return "\n".join(report_lines)
+
+    def _check_extraction_completeness(
+        self,
+        extracted_data: Any,
+        data_model: Any,
+        section_label: str,
+    ) -> None:
+        """
+        Check if extraction meets schema constraints (e.g., min_length for arrays).
+
+        Logs warnings if extracted data appears incomplete based on schema constraints.
+        This helps catch cases where table parsing or extraction stopped early.
+
+        Args:
+            extracted_data: The extracted data instance (Pydantic model)
+            data_model: The Pydantic model class with constraints
+            section_label: Section label for logging context
+        """
+        if not hasattr(data_model, "model_fields"):
+            return
+
+        for field_name, field_info in data_model.model_fields.items():
+            field_value = getattr(extracted_data, field_name, None)
+
+            # Check array min_length constraints
+            if isinstance(field_value, list) and hasattr(field_info, "metadata"):
+                for constraint in field_info.metadata:
+                    if hasattr(constraint, "min_length"):
+                        expected_min = constraint.min_length
+                        actual_count = len(field_value)
+
+                        if actual_count < expected_min:
+                            logger.warning(
+                                f"Extraction may be INCOMPLETE for {section_label}: "
+                                f"field '{field_name}' has {actual_count} items, "
+                                f"but schema expects at least {expected_min}. "
+                                f"Verify all table rows were extracted.",
+                                extra={
+                                    "field": field_name,
+                                    "actual_count": actual_count,
+                                    "expected_min": expected_min,
+                                    "completeness_ratio": f"{actual_count}/{expected_min}",
+                                },
+                            )
+                        elif actual_count == expected_min:
+                            logger.info(
+                                f"Extraction meets minimum constraint for {section_label}: "
+                                f"field '{field_name}' has exactly {actual_count} items "
+                                f"(minimum: {expected_min})"
+                            )
+                        else:
+                            logger.debug(
+                                f"Extraction exceeds minimum constraint for {section_label}: "
+                                f"field '{field_name}' has {actual_count} items "
+                                f"(minimum: {expected_min})"
+                            )
+
     def _invoke_extraction_model(
         self,
         content: list[dict[str, Any]],
         system_prompt: str,
         section_info: SectionInfo,
+        checkpoint_data: dict[str, Any] | None = None,
     ) -> ExtractionResult:
         """
         Invoke Bedrock model (agentic or standard) and parse response.
@@ -902,8 +1412,15 @@ class ExtractionService:
             f"Extracting fields for {section_info.class_label} document, section"
         )
 
-        # Get extraction config
-        model_id = self.config.extraction.model
+        # Get extraction config — use per-class model override if specified,
+        # otherwise fall back to the global extraction model.
+        class_model_override = self._class_schema.get(X_AWS_IDP_EXTRACTION_MODEL)
+        model_id = class_model_override or self.config.extraction.model
+        if class_model_override:
+            logger.info(
+                f"Using per-class extraction model override for "
+                f"'{section_info.class_label}': {model_id}"
+            )
         temperature = self.config.extraction.temperature
         top_k = self.config.extraction.top_k
         top_p = self.config.extraction.top_p
@@ -921,12 +1438,34 @@ class ExtractionService:
         output_repaired = False
         repair_method = None
 
+        # Initialize analysis tracking
+        schema_analysis: dict[str, Any] | None = None
+        ocr_analysis: dict[str, Any] | None = None
+
         if self.config.extraction.agentic.enabled:
             if not AGENTIC_AVAILABLE:
                 raise ImportError(
-                    "Agentic extraction requires Python 3.10+ and strands-agents dependencies. "
+                    "Agentic extraction requires Python 3.12+ and strands-agents dependencies. "
                     "Install with: pip install 'idp_common[agents]' or use agentic=False"
                 )
+
+            # Pre-flight analysis: Detect large tables and assess tool requirements
+            schema_analysis = self._analyze_schema_for_table_requirements(
+                self._class_schema
+            )
+            ocr_analysis = self._analyze_ocr_for_tables(self._document_text)
+
+            logger.info(
+                "Pre-flight analysis complete",
+                extra={
+                    "schema_recommendation": schema_analysis.get(
+                        "recommendation_strength"
+                    ),
+                    "ocr_recommendation": ocr_analysis.get("recommendation_strength"),
+                    "schema_max_min_items": schema_analysis.get("max_min_items"),
+                    "ocr_estimated_rows": ocr_analysis.get("estimated_row_count"),
+                },
+            )
 
             # Create dynamic Pydantic model from JSON Schema
             dynamic_model = create_pydantic_model_from_json_schema(
@@ -949,18 +1488,180 @@ class ExtractionService:
             logger.info("Using Agentic extraction")
             logger.debug(f"Using input: {str(message_prompt)}")
 
-            structured_data, response_with_metering = structured_output(
-                model_id=model_id,
-                data_format=dynamic_model,
-                prompt=message_prompt,
-                page_images=self._page_images,
-                config=self.config,
-                context="Extraction",
-            )
+            # Convert checkpoint data for resume-on-timeout
+            existing_data_model = None
+            checkpoint_buffer = None
+            if checkpoint_data:
+                # Check if this is a buffer checkpoint (from intermediate_extraction)
+                checkpoint_source = checkpoint_data.pop(
+                    "_checkpoint_source", "current_extraction"
+                )
+                if checkpoint_source == "intermediate_extraction":
+                    # Buffer checkpoint — load into agent's intermediate_extraction state
+                    checkpoint_buffer = checkpoint_data
+                    logger.info(
+                        "Resuming agentic extraction from buffer checkpoint "
+                        "(intermediate_extraction)"
+                    )
+                else:
+                    # Validated extraction checkpoint — load as existing_data
+                    try:
+                        existing_data_model = dynamic_model(**checkpoint_data)
+                        logger.info("Resuming agentic extraction from checkpoint data")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to validate checkpoint data, starting fresh: {e}"
+                        )
+                        existing_data_model = None
+
+            # Build dynamic custom instruction based on pre-flight analysis
+            custom_instruction = None
+            if schema_analysis and ocr_analysis:
+                dynamic_guidance = self._build_table_parsing_guidance(
+                    schema_analysis=schema_analysis, ocr_analysis=ocr_analysis
+                )
+                if dynamic_guidance:
+                    custom_instruction = dynamic_guidance
+                    logger.info(
+                        "Injecting dynamic table parsing guidance into agent instructions",
+                        extra={
+                            "schema_strength": schema_analysis.get(
+                                "recommendation_strength"
+                            ),
+                            "ocr_strength": ocr_analysis.get("recommendation_strength"),
+                        },
+                    )
+
+            # Pre-flight table parsing: parse all tables BEFORE LLM to avoid
+            # the LLM having to call parse_table and then generate JSON row-by-row.
+            # The LLM only needs to provide a column-to-field mapping, and the
+            # map_table_to_schema tool does the bulk transformation instantly.
+            preflight_parse_result = None
+            if (
+                self.config.extraction.agentic.table_parsing.enabled
+                and ocr_analysis.get("estimated_row_count", 0) >= 50
+            ):
+                from idp_common.extraction.tools.table_parser import (
+                    parse_markdown_tables,
+                )
+
+                tp_config = self.config.extraction.agentic.table_parsing
+                preflight_parse_result = parse_markdown_tables(
+                    text=self._document_text,
+                    max_empty_line_gap=tp_config.max_empty_line_gap,
+                    auto_merge_adjacent_tables=tp_config.auto_merge_adjacent_tables,
+                )
+
+                if preflight_parse_result.get("status") == "success":
+                    total_rows = sum(
+                        t.get("row_count", 0)
+                        for t in preflight_parse_result.get("tables", [])
+                    )
+                    columns = preflight_parse_result.get("columns", [])
+                    table_count = preflight_parse_result.get("table_count", 0)
+
+                    logger.info(
+                        "Pre-flight table parsing complete",
+                        extra={
+                            "total_rows": total_rows,
+                            "table_count": table_count,
+                            "columns": columns,
+                        },
+                    )
+
+                    # Build efficient extraction guidance with pre-parsed summary
+                    preflight_guidance = (
+                        f"\n\n**PRE-PARSED TABLE DATA AVAILABLE**:\n"
+                        f"Found {table_count} table(s) with {total_rows} total rows.\n"
+                        f"Table columns: {columns}\n\n"
+                        f"PAGE MARKERS: The document text contains '--- PAGE N ---' "
+                        f"markers between pages. When you are assigned a page range, "
+                        f"extract ONLY text between markers for your pages before "
+                        f"calling parse_table.\n\n"
+                        f"EFFICIENT EXTRACTION WORKFLOW:\n"
+                        f"1. Extract scalar fields from your pages' text\n"
+                        f"2. Call parse_table with your pages' text\n"
+                        f"3. Call map_table_to_schema with column_mapping + static_fields\n"
+                        f"   (merged rows are auto-split — no manual handling needed)\n"
+                        f"4. Call finalize_table_extraction with table_array_field + "
+                        f"scalar_fields\n\n"
+                        f"finalize reads mapped rows from state — no JSON generation needed."
+                    )
+
+                    if custom_instruction:
+                        custom_instruction += preflight_guidance
+                    else:
+                        custom_instruction = preflight_guidance
+
+            # Determine if images should be sent to the agentic model.
+            # If the task prompt does not reference {DOCUMENT_IMAGE}, sending
+            # page images is wasteful and can cause context-window overflow
+            # on large documents.
+            prompt_template = self.config.extraction.task_prompt or ""
+            send_images = "{DOCUMENT_IMAGE}" in prompt_template
+            agentic_images = self._page_images if send_images else []
+            num_pages = len(self._page_images) or len(section_info.sorted_page_ids)
+
+            if not send_images and self._page_images:
+                logger.info(
+                    "Skipping image attachment for agentic extraction "
+                    "(task prompt does not reference {DOCUMENT_IMAGE})",
+                    extra={"page_count": num_pages},
+                )
+
+            # Use concurrent batch extraction if configured and enough pages
+            num_batches = self.config.extraction.agentic.max_concurrent_batches
+
+            if (
+                num_batches > 1
+                and num_pages >= num_batches
+                and not existing_data_model  # Don't use concurrent mode for resume
+                and not checkpoint_buffer
+            ):
+                import asyncio as _asyncio
+
+                logger.info(
+                    f"Using concurrent batch extraction with {num_batches} batches "
+                    f"for {num_pages} pages"
+                )
+                structured_data, response_with_metering = _asyncio.run(
+                    concurrent_structured_output_async(
+                        model_id=model_id,
+                        data_format=dynamic_model,
+                        prompt=message_prompt,
+                        page_images=agentic_images,
+                        num_batches=num_batches,
+                        config=self.config,
+                        context="Extraction",
+                        checkpoint_callback=self._checkpoint_callback,
+                        custom_instruction=custom_instruction,
+                        total_pages=num_pages,
+                    )
+                )
+            else:
+                structured_data, response_with_metering = structured_output(
+                    model_id=model_id,
+                    data_format=dynamic_model,
+                    prompt=message_prompt,
+                    existing_data=existing_data_model,
+                    page_images=agentic_images,
+                    config=self.config,
+                    context="Extraction",
+                    checkpoint_callback=self._checkpoint_callback,
+                    checkpoint_buffer_data=checkpoint_buffer,
+                    custom_instruction=custom_instruction,
+                )
 
             extracted_fields = structured_data.model_dump(mode="json")
             metering = response_with_metering["metering"]
             parsing_succeeded = True
+
+            # Check extraction completeness (warns if schema constraints not met)
+            self._check_extraction_completeness(
+                extracted_data=structured_data,
+                data_model=dynamic_model,
+                section_label=section_info.class_label,
+            )
         else:
             # Standard Bedrock invocation
             response_with_metering = bedrock.invoke_model(
@@ -989,6 +1690,36 @@ class ExtractionService:
 
             try:
                 extracted_fields = json.loads(extract_json_from_text(extracted_text))
+
+                # Handle case where LLM returns a single-element array instead of dict
+                # This happens when models mistakenly wrap the extraction in an array
+                if isinstance(extracted_fields, list):
+                    if len(extracted_fields) == 1:
+                        logger.warning(
+                            "LLM returned single-element array instead of object, unwrapping",
+                            extra={"original_type": "list", "element_count": 1},
+                        )
+                        extracted_fields = extracted_fields[0]
+                    elif len(extracted_fields) == 0:
+                        logger.error(
+                            "LLM returned empty array when single object expected",
+                            extra={"element_count": 0},
+                        )
+                        extracted_fields = {
+                            "error": "Received empty array instead of single object",
+                        }
+                        parsing_succeeded = False
+                    else:  # len > 1
+                        logger.error(
+                            "LLM returned multi-element array when single object expected",
+                            extra={"element_count": len(extracted_fields)},
+                        )
+                        extracted_fields = {
+                            "error": f"Received array with {len(extracted_fields)} elements instead of single object",
+                            "raw_array": extracted_fields,
+                        }
+                        parsing_succeeded = False
+
             except Exception as e:
                 logger.warning(
                     f"Error parsing LLM output - attempting JSON repair: {e}"
@@ -1001,13 +1732,42 @@ class ExtractionService:
                 if repaired_data:
                     # Repair succeeded
                     extracted_fields = repaired_data
+
+                    # Handle case where repaired data is also a single-element array
+                    if isinstance(extracted_fields, list):
+                        if len(extracted_fields) == 1:
+                            logger.warning(
+                                "Repaired JSON is single-element array, unwrapping",
+                                extra={"original_type": "list", "element_count": 1},
+                            )
+                            extracted_fields = extracted_fields[0]
+                        elif len(extracted_fields) == 0:
+                            logger.error(
+                                "Repaired JSON is empty array when single object expected",
+                                extra={"element_count": 0},
+                            )
+                            extracted_fields = {
+                                "error": "Repaired empty array instead of single object",
+                            }
+                            parsing_succeeded = False
+                        else:  # len > 1
+                            logger.error(
+                                "Repaired JSON is multi-element array when single object expected",
+                                extra={"element_count": len(extracted_fields)},
+                            )
+                            extracted_fields = {
+                                "error": f"Repaired array with {len(extracted_fields)} elements instead of single object",
+                                "raw_array": extracted_fields,
+                            }
+                            parsing_succeeded = False
+
                     output_repaired = True
                     repair_method = repair_info.get("repair_method")
-                    parsing_succeeded = True
-                    logger.info(
-                        f"JSON repair successful using '{repair_method}': "
-                        f"recovered {repair_info.get('fields_recovered', 0)} fields"
-                    )
+                    if parsing_succeeded:
+                        logger.info(
+                            f"JSON repair successful using '{repair_method}': "
+                            f"recovered {repair_info.get('fields_recovered', 0)} fields"
+                        )
                 else:
                     # Repair failed - store raw output
                     logger.error(
@@ -1028,7 +1788,69 @@ class ExtractionService:
             output_truncated=output_truncated,
             output_repaired=output_repaired,
             repair_method=repair_method,
+            schema_analysis=schema_analysis,
+            ocr_analysis=ocr_analysis,
         )
+
+    def _apply_missing_field_handling(
+        self,
+        extracted_fields: dict[str, Any],
+        class_schema: dict[str, Any],
+        section_info: SectionInfo,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Mark or remove fields whose source pages were not present.
+
+        Returns the (possibly mutated) extracted_fields and a report listing
+        the fields treated as MISSING. When the feature is disabled, the
+        config doesn't declare page-types, or no top-level property has
+        ``x-aws-idp-source-page-types``, the input is returned unchanged
+        with an empty report.
+        """
+        cfg = self.config.extraction.missing_field_handling
+        presence = section_info.page_type_presence
+        if not cfg.enabled or presence is None or not presence.declared:
+            return extracted_fields, []
+
+        properties = class_schema.get(SCHEMA_PROPERTIES) or {}
+        if not properties:
+            return extracted_fields, []
+
+        present = presence.present_page_types
+        report: list[dict[str, Any]] = []
+        # Operate on a copy so we don't mutate the agent's result in place.
+        fields_out = dict(extracted_fields)
+
+        for prop_name, prop_schema in properties.items():
+            if not isinstance(prop_schema, dict):
+                continue
+            declared_pages = prop_schema.get(X_AWS_IDP_SOURCE_PAGE_TYPES)
+            if not declared_pages:
+                continue
+            if not isinstance(declared_pages, list):
+                logger.warning(
+                    "Property %s declares %s as %s; expected list — ignoring",
+                    prop_name,
+                    X_AWS_IDP_SOURCE_PAGE_TYPES,
+                    type(declared_pages).__name__,
+                )
+                continue
+            if any(p in present for p in declared_pages):
+                # At least one source page-type is present → field is BLANK
+                # if empty, not MISSING. Leave it alone.
+                continue
+            report.append(
+                {
+                    "field": prop_name,
+                    "reason": "page types not present",
+                    "expected_page_types": list(declared_pages),
+                }
+            )
+            if cfg.representation == "omit":
+                fields_out.pop(prop_name, None)
+            else:  # null_with_metadata
+                fields_out[prop_name] = None
+
+        return fields_out, report
 
     def _save_results(
         self,
@@ -1050,11 +1872,74 @@ class ExtractionService:
             section_id: Section ID
             t0: Start time
         """
-        # Build metadata - include truncation/repair info if applicable
-        metadata = {
+        # Determine extraction method
+        extraction_method = (
+            "agentic" if self.config.extraction.agentic.enabled else "traditional"
+        )
+
+        # Check if table parsing tool was used (extract from metering before building metadata)
+        tool_used = False
+        table_stats = None
+        if extraction_method == "agentic" and result.metering:
+            table_stats = result.metering.pop("_table_parsing_stats", None)
+            tool_used = table_stats is not None
+
+        # Build base metadata
+        metadata: dict[str, Any] = {
             "parsing_succeeded": result.parsing_succeeded,
             "extraction_time_seconds": result.total_duration,
+            "extraction_method": extraction_method,
         }
+
+        # Add pre-flight analysis results (if agentic)
+        if extraction_method == "agentic":
+            if result.schema_analysis:
+                metadata["schema_analysis"] = result.schema_analysis
+            if result.ocr_analysis:
+                metadata["ocr_analysis"] = result.ocr_analysis
+
+            # Track tool usage decision
+            tool_expected = False
+            if result.schema_analysis or result.ocr_analysis:
+                tool_expected = (
+                    result.schema_analysis.get("tool_usage_recommended", False)
+                    if result.schema_analysis
+                    else False
+                ) or (
+                    result.ocr_analysis.get("tool_usage_recommended", False)
+                    if result.ocr_analysis
+                    else False
+                )
+
+                metadata["tool_usage_decision"] = {
+                    "expected": tool_expected,
+                    "actual": tool_used,
+                    "mismatch": tool_expected != tool_used,
+                    "explanation": self._explain_tool_usage_decision(
+                        expected=tool_expected,
+                        actual=tool_used,
+                        schema_analysis=result.schema_analysis,
+                        ocr_analysis=result.ocr_analysis,
+                    ),
+                }
+
+            # Validate completeness
+            if result.schema_analysis or result.ocr_analysis:
+                metadata["completeness_check"] = self._check_completeness_detailed(
+                    extracted_fields=result.extracted_fields,
+                    schema=self._class_schema,
+                    tool_used=tool_used,
+                )
+
+        # Add table parsing stats if tool was used
+        if tool_used and table_stats:
+            metadata["table_parsing_tool_used"] = True
+            metadata["table_parsing_stats"] = table_stats
+        elif (
+            extraction_method == "agentic"
+            and self.config.extraction.agentic.table_parsing.enabled
+        ):
+            metadata["table_parsing_tool_used"] = False
 
         # Add truncation/repair metadata when relevant
         if result.output_truncated:
@@ -1063,13 +1948,38 @@ class ExtractionService:
             metadata["output_repaired"] = True
             metadata["repair_method"] = result.repair_method
 
-        # Write to S3
-        output = {
+        # Apply BLANK vs MISSING field handling (no-op unless configured + declared).
+        fields_for_output, missing_fields_report = self._apply_missing_field_handling(
+            result.extracted_fields,
+            self._class_schema,
+            section_info,
+        )
+
+        # Generate user-friendly processing report
+        processing_report = self._generate_processing_report(metadata)
+        logger.info(f"Processing Report:\n{processing_report}")
+
+        # Write to S3 with processing report
+        output: dict[str, Any] = {
             "document_class": {"type": section_info.class_label},
             "split_document": {"page_indices": section_info.page_indices},
-            "inference_result": result.extracted_fields,
+            "inference_result": fields_for_output,
             "metadata": metadata,
+            "processing_report": processing_report,
         }
+        # Surface page-type resolution and the missing-field report when the
+        # feature is in use, so downstream consumers can act on the signal.
+        presence = section_info.page_type_presence
+        if presence is not None and presence.declared:
+            output["page_type_resolution"] = presence.to_output_dict()
+        if missing_fields_report:
+            output["missing_fields_report"] = missing_fields_report
+            if self.config.extraction.missing_field_handling.representation == (
+                "null_with_metadata"
+            ):
+                output["missing_fields"] = [
+                    entry["field"] for entry in missing_fields_report
+                ]
         s3.write_content(
             output,
             section_info.output_bucket,
@@ -1088,13 +1998,21 @@ class ExtractionService:
             f"Total extraction time for section {section_id}: {t3 - t0:.2f} seconds"
         )
 
-    def process_document_section(self, document: Document, section_id: str) -> Document:
+    def process_document_section(
+        self,
+        document: Document,
+        section_id: str,
+        checkpoint_data: dict[str, Any] | None = None,
+    ) -> Document:
         """
         Process a single section from a Document object.
 
         Args:
             document: Document object containing section to process
             section_id: ID of the section to process
+            checkpoint_data: Optional partial extraction data from a previous
+                timed-out invocation.  When provided the agentic agent will
+                resume from this state instead of starting from scratch.
 
         Returns:
             Document: Updated Document object with extraction results for the section
@@ -1107,6 +2025,39 @@ class ExtractionService:
         if not section:
             return document
 
+        # Short-circuit: skip sections whose class is marked
+        # x-aws-idp-exclude-from-processing=true (e.g., static instruction
+        # pages). A stub result.json is written so reporting / UI can show
+        # a meaningful message.
+        from idp_common.section_exclusion import (
+            is_section_excluded,
+            write_skipped_stub,
+        )
+
+        if is_section_excluded(section):
+            output_bucket = document.output_bucket
+            output_key = (
+                f"{document.input_key}/sections/{section.section_id}/result.json"
+                if document.input_key
+                else None
+            )
+            stub_uri = write_skipped_stub(
+                document,
+                section,
+                stage="extraction",
+                output_bucket=output_bucket,
+                output_key=output_key,
+            )
+            if stub_uri:
+                section.extraction_result_uri = stub_uri
+            logger.info(
+                "Extraction skipped for excluded section %s (class=%s, reason=%s)",
+                section.section_id,
+                section.classification,
+                section.exclusion_reason or "excluded",
+            )
+            return document
+
         # Prepare section metadata
         try:
             section_info = self._prepare_section_info(document, section)
@@ -1116,9 +2067,26 @@ class ExtractionService:
         try:
             t0 = time.time()
 
-            # Load document content
-            document_text = self._load_document_text(
+            # Load per-page text first so the page-type resolver and the
+            # prompt-formatter can both consume it without re-reading S3.
+            page_id_to_text = self._load_page_texts(
                 document, section_info.sorted_page_ids
+            )
+            class_schema_for_resolver = self._get_class_schema(section_info.class_label)
+            section_info.page_type_presence = resolve_page_types(
+                class_schema_for_resolver, page_id_to_text
+            )
+            if section_info.page_type_presence.declared:
+                logger.info(
+                    "Page-type resolution for section %s: present=%s missing=%s",
+                    section.section_id,
+                    sorted(section_info.page_type_presence.present_page_types),
+                    sorted(section_info.page_type_presence.missing_page_types),
+                )
+            document_text = self._format_document_text(
+                section_info.sorted_page_ids,
+                page_id_to_text,
+                section_info.page_type_presence,
             )
             page_images = self._load_document_images(
                 document, section_info.sorted_page_ids
@@ -1147,8 +2115,40 @@ class ExtractionService:
                 document, page_images
             )
 
-            # Invoke model
-            result = self._invoke_extraction_model(content, system_prompt, section_info)
+            # Load OCR confidence data for table parsing tool (if enabled)
+            # Confidence data is only available from Textract OCR backend.
+            # For Bedrock OCR or other backends, skip loading — the tool
+            # handles missing confidence gracefully (confidence_available=false).
+            if (
+                AGENTIC_AVAILABLE
+                and self.config.extraction.agentic.enabled
+                and self.config.extraction.agentic.table_parsing.enabled
+                and self.config.extraction.agentic.table_parsing.use_confidence_data
+                and self.config.ocr.backend == "textract"
+            ):
+                confidence_data_by_page = self._load_confidence_data(
+                    document, section_info.sorted_page_ids
+                )
+                set_confidence_data(confidence_data_by_page)
+                logger.info(
+                    f"Loaded OCR confidence data for table parsing tool: "
+                    f"{len(confidence_data_by_page)} pages"
+                )
+            elif AGENTIC_AVAILABLE and self.config.extraction.agentic.enabled:
+                set_confidence_data(None)
+                if (
+                    self.config.extraction.agentic.table_parsing.enabled
+                    and self.config.ocr.backend != "textract"
+                ):
+                    logger.info(
+                        "Table parsing tool enabled without confidence data "
+                        f"(OCR backend: {self.config.ocr.backend})"
+                    )
+
+            # Invoke model (pass checkpoint_data for agentic resume-on-timeout)
+            result = self._invoke_extraction_model(
+                content, system_prompt, section_info, checkpoint_data=checkpoint_data
+            )
 
             # Save results
             self._save_results(document, section, result, section_info, section_id, t0)

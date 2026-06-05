@@ -21,7 +21,7 @@ import useSettingsContext from '../../contexts/settings';
 import useUserRole from '../../hooks/use-user-role';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import PageTextEditorModal from './PageTextEditorModal';
-import processChanges from '../../graphql/queries/processChanges';
+import { processChanges } from '../../graphql/generated';
 
 const client = generateClient();
 const logger = new ConsoleLogger('PagesPanel');
@@ -114,7 +114,7 @@ const createViewColumnDefinitions = (thumbnailUrls: Record<string, string | null
   {
     id: 'id',
     header: 'Page ID',
-    cell: (item) => <IdCell item={item} />,
+    cell: (item: PageItem) => <IdCell item={item} />,
     sortingField: 'Id',
     minWidth: 160,
     width: 160,
@@ -123,7 +123,7 @@ const createViewColumnDefinitions = (thumbnailUrls: Record<string, string | null
   {
     id: 'class',
     header: 'Class/Type',
-    cell: (item) => <ClassCell item={item} />,
+    cell: (item: PageItem) => <ClassCell item={item} />,
     sortingField: 'Class',
     minWidth: 200,
     width: 200,
@@ -132,7 +132,7 @@ const createViewColumnDefinitions = (thumbnailUrls: Record<string, string | null
   {
     id: 'thumbnail',
     header: 'Thumbnail',
-    cell: (item) => <ThumbnailCell imageUrl={thumbnailUrls[item.Id]} />,
+    cell: (item: PageItem) => <ThumbnailCell imageUrl={thumbnailUrls[item.Id]} />,
     minWidth: 240,
     width: 240,
     isResizable: true,
@@ -140,7 +140,7 @@ const createViewColumnDefinitions = (thumbnailUrls: Record<string, string | null
   {
     id: 'actions',
     header: 'Actions',
-    cell: (item) => <ActionsCell item={item} isEditMode={false} onViewEditClick={onViewEditClick} />,
+    cell: (item: PageItem) => <ActionsCell item={item} isEditMode={false} onViewEditClick={onViewEditClick} />,
     minWidth: 200,
     width: 200,
     isResizable: true,
@@ -156,7 +156,7 @@ const createEditColumnDefinitions = (
   {
     id: 'id',
     header: 'Page ID',
-    cell: (item) => <IdCell item={item} />,
+    cell: (item: PageItem) => <IdCell item={item} />,
     sortingField: 'Id',
     minWidth: 160,
     width: 160,
@@ -165,7 +165,7 @@ const createEditColumnDefinitions = (
   {
     id: 'class',
     header: 'Class/Type',
-    cell: (item) => <EditableClassCell item={item} onResetClass={onResetClass} />,
+    cell: (item: PageItem) => <EditableClassCell item={item} onResetClass={onResetClass} />,
     minWidth: 250,
     width: 250,
     isResizable: true,
@@ -173,7 +173,7 @@ const createEditColumnDefinitions = (
   {
     id: 'thumbnail',
     header: 'Thumbnail',
-    cell: (item) => <ThumbnailCell imageUrl={thumbnailUrls[item.Id]} />,
+    cell: (item: PageItem) => <ThumbnailCell imageUrl={thumbnailUrls[item.Id]} />,
     minWidth: 240,
     width: 240,
     isResizable: true,
@@ -181,7 +181,7 @@ const createEditColumnDefinitions = (
   {
     id: 'actions',
     header: 'Actions',
-    cell: (item) => <ActionsCell item={item} isEditMode={true} onViewEditClick={onViewEditClick} />,
+    cell: (item: PageItem) => <ActionsCell item={item} isEditMode={true} onViewEditClick={onViewEditClick} />,
     minWidth: 200,
     width: 200,
     isResizable: true,
@@ -201,8 +201,7 @@ const PagesPanel = ({ pages, documentItem }: PagesPanelProps): React.JSX.Element
 
   const { currentCredentials } = useAppContext();
   const { settings } = useSettingsContext();
-  const { isReviewer, isAdmin } = useUserRole();
-  const isReviewerOnly = isReviewer && !isAdmin;
+  const { isReviewerOnly, canWrite, canReview } = useUserRole();
 
   // Edit Mode should be disabled for reviewers until they click Start Review (claim the document)
   const hasReviewOwner = !!(documentItem?.hitlReviewOwner || documentItem?.hitlReviewOwnerEmail);
@@ -218,18 +217,16 @@ const PagesPanel = ({ pages, documentItem }: PagesPanelProps): React.JSX.Element
   const docStatus = documentItem?.objectStatus?.toLowerCase() || '';
   const isDocumentProcessing = processingStatuses.includes(docStatus);
 
-  // Disable edit mode for REVIEWERS only if:
-  // - HITL is triggered AND reviewer hasn't claimed review, OR
-  // - Document is processing, OR
-  // - HITL already completed/skipped
-  // Admins can always edit
+  // Disable edit mode if:
+  // - User has no write or review permissions (Viewer role), OR
+  // - REVIEWER only: HITL triggered but not claimed, document processing, or HITL completed/skipped
+  // Admins and Authors can always edit
   const isEditModeDisabled =
-    isReviewerOnly && ((hitlTriggered && !hasReviewOwner) || isDocumentProcessing || isHitlCompleted || isHitlSkipped);
+    (!canWrite && !canReview) ||
+    (isReviewerOnly && ((hitlTriggered && !hasReviewOwner) || isDocumentProcessing || isHitlCompleted || isHitlSkipped));
 
   // Log for debugging
   console.log('PagesPanel Edit Mode Check:', {
-    isReviewer,
-    isAdmin,
     isReviewerOnly,
     hitlTriggered,
     hasReviewOwner,
@@ -251,7 +248,7 @@ const PagesPanel = ({ pages, documentItem }: PagesPanelProps): React.JSX.Element
   const loadThumbnails = async () => {
     if (!pages) return;
 
-    const urls = {};
+    const urls: Record<string, string | null> = {};
     await Promise.all(
       pages.map(async (page) => {
         if (page.ImageUri) {
@@ -271,12 +268,12 @@ const PagesPanel = ({ pages, documentItem }: PagesPanelProps): React.JSX.Element
   // Initialize edited pages when entering edit mode
   useEffect(() => {
     if (isEditMode && pages) {
-      const pagesWithEditableFormat = pages.map((page) => ({
+      const pagesWithEditableFormat: PageItem[] = pages.map((page) => ({
         ...page,
         classReset: false,
         textModified: false,
-        newTextUri: null,
-        newConfidenceUri: null,
+        newTextUri: null as string | null,
+        newConfidenceUri: null as string | null,
       }));
       setEditedPages(pagesWithEditableFormat);
       setModifiedPageIds(new Set());
@@ -405,12 +402,12 @@ const PagesPanel = ({ pages, documentItem }: PagesPanelProps): React.JSX.Element
 
         return result;
       })
-      .filter((p) => {
-        const include = p && (p.textModified || p.classReset);
-        if (p && !include) {
+      .filter((p): p is NonNullable<typeof p> => {
+        const include = p != null && (p.textModified || p.classReset);
+        if (p != null && !include) {
           logger.warn(`Filtering out page ${p.pageId} - no modifications detected`);
         }
-        return include;
+        return !!include;
       });
 
     logger.info(`Final payload (${payload.length} pages):`, payload);
@@ -449,7 +446,7 @@ const PagesPanel = ({ pages, documentItem }: PagesPanelProps): React.JSX.Element
       }
 
       const result = await client.graphql({
-        query: processChanges as unknown as string,
+        query: processChanges,
         variables: {
           objectKey,
           modifiedSections: [], // Empty for page-only changes

@@ -164,7 +164,7 @@ class ManifestOperation:
         Returns:
             ManifestValidationResult with validation status
         """
-        from idp_sdk.core.manifest_parser import parse_manifest, validate_manifest
+        from idp_sdk._core.manifest_parser import parse_manifest, validate_manifest
 
         is_valid, error = validate_manifest(manifest_path)
 

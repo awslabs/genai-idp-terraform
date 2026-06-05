@@ -9,8 +9,8 @@ import sys
 import json
 
 # Set HuggingFace cache to /tmp for consistency with Lambda
-os.environ['HF_HOME'] = '/tmp/huggingface'
-os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface/hub'
+os.environ['HF_HOME'] = '/tmp/huggingface'  # nosec B108 - local test mirroring Lambda environment
+os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface/hub'  # nosec B108
 
 from huggingface_hub import hf_hub_download, list_repo_files
 
@@ -56,11 +56,11 @@ def test_download_metadata():
     """Test downloading metadata.jsonl from HuggingFace."""
     print("\n=== Testing Metadata Download ===")
     
-    cache_dir = '/tmp/huggingface/hub'
+    cache_dir = '/tmp/huggingface/hub'  # nosec B108
     os.makedirs(cache_dir, exist_ok=True)
     
     print(f"  Downloading metadata from {HF_REPO_ID}...")
-    metadata_path = hf_hub_download(
+    metadata_path = hf_hub_download(  # nosec B615 - trusted HuggingFace dataset
         repo_id=HF_REPO_ID,
         filename="test/metadata.jsonl",
         repo_type="dataset",
@@ -93,7 +93,7 @@ def test_image_filename_mapping():
     """Test building the image ID to filename mapping."""
     print("\n=== Testing Image Filename Mapping ===")
     
-    cache_dir = '/tmp/huggingface/hub'
+    cache_dir = '/tmp/huggingface/hub'  # nosec B108
     id_to_filename = build_image_id_mapping(cache_dir)
     
     print(f"  ✓ Found {len(id_to_filename)} image files in repo")
@@ -133,7 +133,7 @@ def test_sample_image_download(id_to_filename):
     
     print(f"  Downloading {doc_format}/{image_id} ({filename})...")
     
-    cache_dir = '/tmp/huggingface/hub'
+    cache_dir = '/tmp/huggingface/hub'  # nosec B108
     image_bytes = download_and_convert_image(image_id, filename, cache_dir)
     
     print(f"  ✓ Downloaded and converted to PNG: {len(image_bytes)} bytes")

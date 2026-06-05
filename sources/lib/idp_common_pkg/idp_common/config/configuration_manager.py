@@ -38,7 +38,8 @@ _COMPRESSED_STORAGE_VALUE = "compressed"
 _COMPRESSED_DATA_FIELD = "_compressed_config"
 
 # DynamoDB metadata fields that are stored as top-level attributes (not compressed)
-_DYNAMODB_METADATA_FIELDS = {"Configuration", "CreatedAt", "UpdatedAt", "IsActive", "Description"}
+_DYNAMODB_METADATA_FIELDS = {"Configuration", "CreatedAt", "UpdatedAt", "IsActive", "Description",
+                              "BdaProjectArn", "BdaSyncStatus", "BdaLastSyncedAt", "Managed"}
 
 # DynamoDB item size limit (400KB) with safety margin
 _DYNAMODB_ITEM_SIZE_LIMIT = 400 * 1024
@@ -412,13 +413,14 @@ class ConfigurationManager:
         List all configuration versions.
 
         Returns:
-            List of version info dicts with versionName, isActive, createdAt, updatedAt, description
+            List of version info dicts with versionName, isActive, createdAt, updatedAt,
+            description, bdaProjectArn, bdaSyncStatus, bdaLastSyncedAt
         """
         try:
             response = self.table.scan(
                 FilterExpression="begins_with(Configuration, :config_prefix)",
                 ExpressionAttributeValues={":config_prefix": f"{CONFIG_TYPE_CONFIG}#"},
-                ProjectionExpression="Configuration, IsActive, CreatedAt, UpdatedAt, Description"
+                ProjectionExpression="Configuration, IsActive, CreatedAt, UpdatedAt, Description, BdaProjectArn, BdaSyncStatus, BdaLastSyncedAt, Managed"
             )
 
             versions = []
@@ -431,7 +433,11 @@ class ConfigurationManager:
                         "isActive": item.get('IsActive'),
                         "createdAt": item.get('CreatedAt'),
                         "updatedAt": item.get('UpdatedAt'),
-                        "description": item.get('Description', "")
+                        "description": item.get('Description', ""),
+                        "bdaProjectArn": item.get('BdaProjectArn'),
+                        "bdaSyncStatus": item.get('BdaSyncStatus'),
+                        "bdaLastSyncedAt": item.get('BdaLastSyncedAt'),
+                        "managed": item.get('Managed', False),
                     })
 
             return versions
@@ -439,6 +445,97 @@ class ConfigurationManager:
         except ClientError as e:
             logger.error(f"Error listing config versions: {e}")
             return []
+
+    # ===== BDA Project Tracking Methods =====
+
+    def get_bda_project_arn(self, version: str) -> Optional[str]:
+        """
+        Get the BDA project ARN linked to a config version.
+
+        Args:
+            version: Config version name
+
+        Returns:
+            BDA project ARN string, or None if no project is linked
+        """
+        try:
+            key = {"Configuration": f"{CONFIG_TYPE_CONFIG}#{version}"}
+            response = self.table.get_item(
+                Key=key,
+                ProjectionExpression="BdaProjectArn"
+            )
+            item = response.get("Item")
+            if item:
+                return item.get("BdaProjectArn")
+            return None
+        except ClientError as e:
+            logger.error(f"Error getting BDA project ARN for version {version}: {e}")
+            return None
+
+    def set_bda_project_arn(self, version: str, arn: str, sync_status: str = "synced") -> None:
+        """
+        Set or update the BDA project ARN and sync status for a config version.
+
+        Args:
+            version: Config version name
+            arn: BDA project ARN to link
+            sync_status: Sync status ("synced", "out-of-sync", "creating")
+        """
+        import datetime
+        try:
+            key = {"Configuration": f"{CONFIG_TYPE_CONFIG}#{version}"}
+            timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+            self.table.update_item(
+                Key=key,
+                UpdateExpression="SET BdaProjectArn = :arn, BdaSyncStatus = :status, BdaLastSyncedAt = :ts",
+                ExpressionAttributeValues={
+                    ":arn": arn,
+                    ":status": sync_status,
+                    ":ts": timestamp,
+                }
+            )
+            logger.info(f"Set BDA project ARN for version {version}: {arn} (status: {sync_status})")
+        except ClientError as e:
+            logger.error(f"Error setting BDA project ARN for version {version}: {e}")
+            raise
+
+    def clear_bda_project_arn(self, version: str) -> None:
+        """
+        Remove BDA project tracking for a config version (unlink).
+
+        Args:
+            version: Config version name
+        """
+        try:
+            key = {"Configuration": f"{CONFIG_TYPE_CONFIG}#{version}"}
+            self.table.update_item(
+                Key=key,
+                UpdateExpression="REMOVE BdaProjectArn, BdaSyncStatus, BdaLastSyncedAt",
+            )
+            logger.info(f"Cleared BDA project ARN for version {version}")
+        except ClientError as e:
+            logger.error(f"Error clearing BDA project ARN for version {version}: {e}")
+            raise
+
+    def set_bda_sync_status(self, version: str, status: str) -> None:
+        """
+        Update just the BDA sync status for a config version.
+
+        Args:
+            version: Config version name
+            status: New sync status ("synced", "out-of-sync", "creating")
+        """
+        try:
+            key = {"Configuration": f"{CONFIG_TYPE_CONFIG}#{version}"}
+            self.table.update_item(
+                Key=key,
+                UpdateExpression="SET BdaSyncStatus = :status",
+                ExpressionAttributeValues={":status": status}
+            )
+            logger.info(f"Updated BDA sync status for version {version}: {status}")
+        except ClientError as e:
+            logger.error(f"Error updating BDA sync status for version {version}: {e}")
+            raise
 
     def delete_configuration(self, config_type: str, version: Optional[str] = None) -> None:
         """
@@ -802,6 +899,22 @@ class ConfigurationManager:
         # Add full config format marker for Config type versions
         if record.configuration_type == CONFIG_TYPE_CONFIG:
             item[_FULL_CONFIG_MARKER] = _FULL_CONFIG_VALUE
+
+        # Preserve BDA metadata fields from existing record (put_item replaces the
+        # entire item, so fields set by set_bda_project_arn() would be lost)
+        _BDA_FIELDS = ("BdaProjectArn", "BdaSyncStatus", "BdaLastSyncedAt")
+        config_key = item.get("Configuration")
+        if config_key and any(f not in item for f in _BDA_FIELDS):
+            try:
+                existing = self.table.get_item(
+                    Key={"Configuration": config_key},
+                    ProjectionExpression=", ".join(_BDA_FIELDS),
+                ).get("Item", {})
+                for field in _BDA_FIELDS:
+                    if field in existing and field not in item:
+                        item[field] = existing[field]
+            except Exception as e:
+                logger.warning(f"Failed to preserve BDA metadata: {e}")
 
         # Compress config data to avoid DynamoDB 400KB item limit
         compressed_item = self._compress_item(item)

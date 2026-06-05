@@ -14,16 +14,16 @@ from typing import Any, Dict, List, Optional
 import boto3
 from strands import tool
 
-from idp_common.config import get_config
-
 from ..config import (
     create_error_response,
+    get_ea_param,
 )
 
 logger = logging.getLogger(__name__)
 
-# X-Ray service graph limit
-MAX_XRAY_SERVICE_GRAPH_HOURS = 1
+# Default X-Ray service graph look-back window (hours).
+# Overridden at runtime by ErrorAnalyzerParameters.xray_analysis_hours (max 6).
+_DEFAULT_XRAY_ANALYSIS_HOURS = 3
 
 
 @tool
@@ -480,10 +480,7 @@ def _analyze_trace_segments(segments: List[Dict[str, Any]]) -> Dict[str, Any]:
     error_segments = []
     slow_segments = []
 
-    config = get_config(as_model=True)
-    slow_threshold = (
-        config.agents.error_analyzer.parameters.xray_slow_segment_threshold_ms
-    )
+    slow_threshold = get_ea_param("xray_slow_segment_threshold_ms", 5000)
 
     for segment in segments:
         segment_doc = _parse_segment_document(segment.get("Document", {}))
@@ -610,12 +607,19 @@ def _analyze_service_performance(
     Analyze X-Ray service map for performance issues.
     """
     try:
-        # Check X-Ray service graph limit
+        # Resolve configurable X-Ray analysis hours from IDPConfig (cap at 6)
+        xray_hours = min(
+            get_ea_param("xray_analysis_hours", _DEFAULT_XRAY_ANALYSIS_HOURS),
+            6,  # hard cap per X-Ray API constraint
+        )
+
+        # Clamp the time window to the configured maximum
         time_diff = end_time - start_time
-        if time_diff > timedelta(hours=MAX_XRAY_SERVICE_GRAPH_HOURS):
-            start_time = end_time - timedelta(hours=MAX_XRAY_SERVICE_GRAPH_HOURS)
+        if time_diff > timedelta(hours=xray_hours):
+            start_time = end_time - timedelta(hours=xray_hours)
             logger.info(
-                f"Time range limited to {MAX_XRAY_SERVICE_GRAPH_HOURS} hours for X-Ray service graph analysis"
+                "Time range limited to %d hours for X-Ray service graph analysis",
+                xray_hours,
             )
 
         response = xray_client.get_service_graph(StartTime=start_time, EndTime=end_time)
@@ -624,13 +628,8 @@ def _analyze_service_performance(
         if not services:
             return {"services_found": 0, "message": "No service map data available"}
 
-        config = get_config(as_model=True)
-        error_rate_threshold = (
-            config.agents.error_analyzer.parameters.xray_error_rate_threshold
-        )
-        response_time_threshold = (
-            config.agents.error_analyzer.parameters.xray_response_time_threshold_ms
-        )
+        error_rate_threshold = get_ea_param("xray_error_rate_threshold", 0.05)
+        response_time_threshold = get_ea_param("xray_response_time_threshold_ms", 10000)
 
         service_analysis = []
         high_error_services = []

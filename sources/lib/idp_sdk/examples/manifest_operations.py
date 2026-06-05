@@ -70,7 +70,13 @@ def main():
         return 0 if result.valid else 1
 
     # Generate manifest from directory
-    output_path = args.output or tempfile.mktemp(suffix=".csv")
+    if args.output:
+        output_path = args.output
+    else:
+        # Use secure temp file creation
+        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False)
+        output_path = temp_file.name
+        temp_file.close()
 
     print(f"Generating manifest from: {args.directory}")
     print(f"  File pattern: {args.file_pattern}")

@@ -97,7 +97,7 @@ class TestErrorAnalyzerAgent:
         system_prompt = call_args.kwargs["system_prompt"]
         assert "Root Cause" in system_prompt
         assert "Recommendations" in system_prompt
-        assert "Do not include" in system_prompt
+        assert "Do NOT include" in system_prompt
 
     def test_specific_tools_import(self):
         """Test that specific tools can be imported correctly."""

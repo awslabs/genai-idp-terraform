@@ -7,11 +7,17 @@ import os
 import random
 import tempfile
 import time
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import boto3
+import yaml
 
 from idp_common.model_finetuning.models import (
+    AvailableModelsResult,
+    CustomModel,
+    CustomModelDeploymentConfig,
+    CustomModelDeploymentResult,
+    FinetuningBaseModel,
     FinetuningJobConfig,
     FinetuningJobResult,
     JobStatus,
@@ -20,6 +26,88 @@ from idp_common.model_finetuning.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Default supported Nova models for fine-tuning (fallback if config not loaded)
+# Nova 2.x models are recommended; v1 models are kept for backward compatibility.
+DEFAULT_SUPPORTED_MODELS = [
+    {"id": "us.amazon.nova-2-lite-v1:0", "name": "Nova 2 Lite", "provider": "Amazon"},
+    {"id": "us.amazon.nova-2-pro-v1:0", "name": "Nova 2 Pro", "provider": "Amazon"},
+]
+
+# Nova 2.x models do NOT support validation datasets during fine-tuning.
+# Passing a validation set to the Bedrock API for these models results in:
+# "Invalid input error: Nova 2.0 doesn't support validation set"
+_NOVA_2_MODEL_PREFIXES = ("amazon.nova-2-",)
+
+# Module-level cache for supported models
+_supported_models_cache: Optional[List[Dict[str, str]]] = None
+
+
+def load_supported_models_from_config(
+    s3_client: Any = None,
+    bucket: str = None,
+    config_key: str = "config/finetuning_models.yaml",
+) -> List[Dict[str, str]]:
+    """
+    Load supported models from configuration file in S3.
+
+    Args:
+        s3_client: Boto3 S3 client (optional, will create one if not provided)
+        bucket: S3 bucket containing the config file
+        config_key: S3 key for the config file
+
+    Returns:
+        List of supported model dictionaries with id, name, and provider
+    """
+    global _supported_models_cache
+
+    if _supported_models_cache is not None:
+        return _supported_models_cache
+
+    if not bucket:
+        bucket = os.environ.get("FINETUNING_DATA_BUCKET", "")
+
+    if not bucket:
+        logger.info("No bucket configured, using default supported models")
+        _supported_models_cache = DEFAULT_SUPPORTED_MODELS
+        return _supported_models_cache
+
+    if s3_client is None:
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        s3_client = boto3.client("s3", region_name=region)
+
+    try:
+        logger.info(f"Loading supported models from s3://{bucket}/{config_key}")
+        response = s3_client.get_object(Bucket=bucket, Key=config_key)
+        config_content = response["Body"].read().decode("utf-8")
+        config = yaml.safe_load(config_content)
+
+        supported_models = config.get("supported_models", DEFAULT_SUPPORTED_MODELS)
+        logger.info(f"Loaded {len(supported_models)} supported models from config")
+        _supported_models_cache = supported_models
+        return supported_models
+
+    except Exception as e:
+        logger.warning(f"Failed to load config from S3: {e}, using defaults")
+        _supported_models_cache = DEFAULT_SUPPORTED_MODELS
+        return _supported_models_cache
+
+
+def get_supported_models() -> List[Dict[str, str]]:
+    """
+    Get the list of supported models for fine-tuning.
+
+    This function returns cached models if available, otherwise loads from config.
+
+    Returns:
+        List of supported model dictionaries
+    """
+    global _supported_models_cache
+
+    if _supported_models_cache is not None:
+        return _supported_models_cache
+
+    return load_supported_models_from_config()
 
 
 class ModelFinetuningService:
@@ -171,7 +259,7 @@ class ModelFinetuningService:
 
             # Shuffle lines with a fixed seed for reproducibility
             random.seed(42)
-            random.shuffle(lines)
+            random.shuffle(lines)  # nosec B311 - training data shuffle
 
             # Split data
             split_idx = int(len(lines) * (1 - validation_split))
@@ -272,6 +360,29 @@ class ModelFinetuningService:
 
         return result
 
+    @staticmethod
+    def _is_nova_2_model(model_id: str) -> bool:
+        """
+        Check if a model identifier refers to a Nova 2.x model.
+
+        Nova 2.x models have specific restrictions, such as not supporting
+        validation datasets during fine-tuning.
+
+        Args:
+            model_id: Model identifier (may include cross-region prefix or context window suffix)
+
+        Returns:
+            True if the model is a Nova 2.x model
+        """
+        # Strip cross-region prefix (e.g., "us.amazon.nova-2-lite-v1:0" -> "amazon.nova-2-lite-v1:0")
+        normalized = model_id
+        if "." in normalized and not normalized.startswith("arn:"):
+            parts = normalized.split(".", 1)
+            if len(parts[0]) <= 3 and parts[0].isalpha():
+                normalized = parts[1]
+
+        return any(normalized.startswith(prefix) for prefix in _NOVA_2_MODEL_PREFIXES)
+
     def _create_nova_job_params(
         self, config: FinetuningJobConfig, data_uris: Dict[str, str]
     ) -> Dict[str, Any]:
@@ -306,10 +417,19 @@ class ModelFinetuningService:
         if config.output_uri:
             job_params["outputDataConfig"] = {"s3Uri": config.output_uri}
 
+        # Add validation data only if the model supports it.
+        # Nova 2.x models do NOT support validation sets — passing one causes:
+        # "Invalid input error: Nova 2.0 doesn't support validation set"
         if "validation_data_uri" in data_uris:
-            job_params["validationDataConfig"] = {
-                "validators": [{"s3Uri": data_uris["validation_data_uri"]}]
-            }
+            if self._is_nova_2_model(config.base_model):
+                logger.info(
+                    f"Skipping validation data for Nova 2.x model '{config.base_model}' "
+                    "— model does not support validation sets"
+                )
+            else:
+                job_params["validationDataConfig"] = {
+                    "validators": [{"s3Uri": data_uris["validation_data_uri"]}]
+                }
 
         if config.client_request_token:
             job_params["clientRequestToken"] = config.client_request_token
@@ -355,10 +475,10 @@ class ModelFinetuningService:
                 job_arn=response.get("jobArn", ""),
                 job_name=response.get("jobName", ""),
                 status=status,
-                model_id=response.get("outputModelId", ""),
+                model_id=response.get("outputModelArn", ""),
                 creation_time=response.get("creationTime", ""),
                 end_time=response.get("endTime", ""),
-                failure_reason=response.get("failureReason", ""),
+                failure_reason=response.get("failureMessage", ""),
                 model_type=model_type,
             )
 
@@ -415,6 +535,277 @@ class ModelFinetuningService:
             time.sleep(polling_interval)
 
         return result
+
+    # =========================================================================
+    # Custom Model Deployment Methods (On-Demand Endpoints)
+    # =========================================================================
+
+    def create_custom_model_deployment(
+        self, config: Union[CustomModelDeploymentConfig, Dict[str, Any]]
+    ) -> CustomModelDeploymentResult:
+        """
+        Create a custom model deployment (on-demand endpoint) for a fine-tuned model.
+
+        Args:
+            config: Custom model deployment configuration
+
+        Returns:
+            Custom model deployment result
+        """
+        # Convert dict to CustomModelDeploymentConfig if needed
+        if isinstance(config, dict):
+            config = CustomModelDeploymentConfig(**config)
+
+        # Validate required parameters
+        if not config.model_arn:
+            raise ValueError("model_arn is required")
+        if not config.deployment_name:
+            raise ValueError("deployment_name is required")
+
+        # Create deployment parameters
+        deployment_params: Dict[str, Any] = {
+            "modelArn": config.model_arn,
+            "modelDeploymentName": config.deployment_name,
+        }
+
+        # Add optional parameters
+        if config.description:
+            deployment_params["description"] = config.description
+
+        if config.client_request_token:
+            deployment_params["clientRequestToken"] = config.client_request_token
+
+        if config.tags:
+            deployment_params["tags"] = config.tags
+
+        # Create custom model deployment
+        logger.info(
+            f"Creating custom model deployment with parameters: {deployment_params}"
+        )
+        response = self.bedrock_client.create_custom_model_deployment(
+            **deployment_params
+        )
+
+        # Create result object
+        result = CustomModelDeploymentResult(
+            deployment_arn=response.get("customModelDeploymentArn", ""),
+            deployment_name=config.deployment_name,
+            model_arn=config.model_arn,
+            status="Creating",
+        )
+
+        logger.info(f"Created custom model deployment: {result.deployment_arn}")
+
+        return result
+
+    def get_custom_model_deployment(
+        self, deployment_identifier: str
+    ) -> CustomModelDeploymentResult:
+        """
+        Get status of a custom model deployment.
+
+        Args:
+            deployment_identifier: Deployment ARN or name
+
+        Returns:
+            Custom model deployment result with updated status
+        """
+        logger.info(
+            f"Getting status for custom model deployment: {deployment_identifier}"
+        )
+
+        response = self.bedrock_client.get_custom_model_deployment(
+            customModelDeploymentIdentifier=deployment_identifier
+        )
+
+        # Create result object
+        result = CustomModelDeploymentResult(
+            deployment_arn=response.get("customModelDeploymentArn", ""),
+            deployment_name=response.get("modelDeploymentName", ""),
+            model_arn=response.get("modelArn", ""),
+            status=response.get("status", ""),
+            creation_time=response.get("creationTime", ""),
+            last_modified_time=response.get("lastModifiedTime", ""),
+            failure_reason=response.get("failureMessage", ""),
+        )
+
+        return result
+
+    def list_custom_model_deployments(self) -> List[CustomModelDeploymentResult]:
+        """
+        List all custom model deployments.
+
+        Returns:
+            List of custom model deployment results
+        """
+        logger.info("Listing custom model deployments")
+
+        deployments = []
+        paginator = self.bedrock_client.get_paginator("list_custom_model_deployments")
+
+        for page in paginator.paginate():
+            for deployment in page.get("customModelDeploymentSummaries", []):
+                deployments.append(
+                    CustomModelDeploymentResult(
+                        deployment_arn=deployment.get("customModelDeploymentArn", ""),
+                        deployment_name=deployment.get("modelDeploymentName", ""),
+                        model_arn=deployment.get("modelArn", ""),
+                        status=deployment.get("status", ""),
+                        creation_time=deployment.get("creationTime", ""),
+                        last_modified_time=deployment.get("lastModifiedTime", ""),
+                    )
+                )
+
+        logger.info(f"Found {len(deployments)} custom model deployments")
+        return deployments
+
+    def delete_custom_model_deployment(
+        self, deployment_identifier: str
+    ) -> Dict[str, Any]:
+        """
+        Delete a custom model deployment.
+
+        Args:
+            deployment_identifier: Deployment ARN or name
+
+        Returns:
+            Response from delete operation
+        """
+        logger.info(f"Deleting custom model deployment: {deployment_identifier}")
+
+        response = self.bedrock_client.delete_custom_model_deployment(
+            customModelDeploymentIdentifier=deployment_identifier
+        )
+
+        logger.info(f"Deleted custom model deployment: {deployment_identifier}")
+        return response
+
+    def wait_for_deployment_completion(
+        self,
+        deployment_identifier: str,
+        polling_interval: int = 60,
+        max_wait_time: Optional[int] = None,
+    ) -> CustomModelDeploymentResult:
+        """
+        Wait for custom model deployment to be ready.
+
+        Args:
+            deployment_identifier: Deployment ARN or name
+            polling_interval: Time in seconds between status checks
+            max_wait_time: Maximum time to wait in seconds
+
+        Returns:
+            Final deployment status
+        """
+        logger.info(f"Waiting for deployment completion: {deployment_identifier}")
+
+        start_time = time.time()
+        while True:
+            # Check if max wait time exceeded
+            if max_wait_time and (time.time() - start_time) > max_wait_time:
+                logger.warning(
+                    f"Max wait time exceeded for deployment: {deployment_identifier}"
+                )
+                break
+
+            # Get deployment status
+            result = self.get_custom_model_deployment(deployment_identifier)
+
+            # Check if deployment completed or failed
+            if result.status in ["Active", "Failed"]:
+                logger.info(
+                    f"Deployment {deployment_identifier} finished with status: {result.status}"
+                )
+                break
+
+            # Wait for next check
+            logger.info(
+                f"Deployment {deployment_identifier} status: {result.status}, waiting {polling_interval} seconds..."
+            )
+            time.sleep(polling_interval)
+
+        return result
+
+    # =========================================================================
+    # Available Models Methods
+    # =========================================================================
+
+    def list_available_models(self) -> AvailableModelsResult:
+        """
+        List all available models (base models + custom model deployments).
+
+        Returns:
+            AvailableModelsResult with base and custom models
+        """
+        logger.info("Listing available models")
+
+        # Get base models from configuration (or defaults)
+        supported_models = get_supported_models()
+        base_models = [
+            FinetuningBaseModel(id=m["id"], name=m["name"], provider=m["provider"])
+            for m in supported_models
+        ]
+
+        # Get custom model deployments
+        custom_models = []
+        try:
+            deployments = self.list_custom_model_deployments()
+            for deployment in deployments:
+                if deployment.status == "Active":
+                    # Extract base model name from model ARN
+                    base_model_name = self._extract_base_model_name(
+                        deployment.model_arn
+                    )
+                    custom_models.append(
+                        CustomModel(
+                            id=deployment.deployment_arn,
+                            name=deployment.deployment_name,
+                            base_model=base_model_name,
+                            status=deployment.status,
+                        )
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to list custom model deployments: {e}")
+
+        result = AvailableModelsResult(
+            base_models=base_models,
+            custom_models=custom_models,
+        )
+
+        logger.info(
+            f"Found {len(base_models)} base models and {len(custom_models)} custom models"
+        )
+        return result
+
+    def _extract_base_model_name(self, model_arn: str) -> str:
+        """
+        Extract base model name from a custom model ARN.
+
+        Args:
+            model_arn: Custom model ARN
+
+        Returns:
+            Base model name (e.g., "Nova Pro")
+        """
+        # Try to get the custom model details to find the base model
+        try:
+            response = self.bedrock_client.get_custom_model(modelIdentifier=model_arn)
+            base_model_arn = response.get("baseModelArn", "")
+
+            # Map base model ARN to friendly name
+            supported_models = get_supported_models()
+            for model in supported_models:
+                if model["id"] in base_model_arn:
+                    return model["name"]
+
+            return "Unknown"
+        except Exception as e:
+            logger.warning(f"Failed to get base model for {model_arn}: {e}")
+            return "Unknown"
+
+    # =========================================================================
+    # Provisioned Throughput Methods
+    # =========================================================================
 
     def create_provisioned_throughput(
         self, config: Union[ProvisionedThroughputConfig, Dict[str, Any]]

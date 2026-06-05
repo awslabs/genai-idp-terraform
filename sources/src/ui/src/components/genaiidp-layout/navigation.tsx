@@ -3,9 +3,10 @@
 import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { SideNavigationProps } from '@cloudscape-design/components';
-import { SideNavigation } from '@cloudscape-design/components';
+import { Badge, Box, Link, Popover, SideNavigation, SpaceBetween } from '@cloudscape-design/components';
 import useSettingsContext from '../../contexts/settings';
 import useUserRole from '../../hooks/use-user-role';
+import useLatestVersion from '../../hooks/use-latest-version';
 
 import {
   DOCUMENTS_PATH,
@@ -19,25 +20,27 @@ import {
   USER_MANAGEMENT_PATH,
   AGENT_CHAT_PATH,
   CAPACITY_PLANNING_PATH,
+  CUSTOM_MODELS_PATH,
 } from '../../routes/constants';
 
 export const documentsNavHeader = { text: 'Tools', href: `#${DEFAULT_PATH}` };
 
-// Full navigation items for Admin users
+// Full navigation items for Admin users (all features)
 export const adminNavItems = [
   { type: 'link', text: 'Document List', href: `#${DOCUMENTS_PATH}` },
-  { type: 'link', text: 'Document KB', href: `#${DOCUMENTS_KB_QUERY_PATH}` },
   { type: 'link', text: 'Upload Document(s)', href: `#${UPLOAD_DOCUMENT_PATH}` },
+  { type: 'link', text: 'Document KB', href: `#${DOCUMENTS_KB_QUERY_PATH}` },
   { type: 'link', text: 'Agent Companion Chat', href: `#${AGENT_CHAT_PATH}` },
   {
     type: 'section',
     text: 'Configuration',
     items: [
-      { type: 'link', text: 'Discovery', href: `#${DISCOVERY_PATH}` },
-      { type: 'link', text: 'Capacity Planning', href: `#${CAPACITY_PLANNING_PATH}` },
       { type: 'link', text: 'View/Edit Configuration', href: `#${CONFIGURATION_PATH}` },
-      { type: 'link', text: 'View/Edit Pricing', href: `#${PRICING_PATH}` },
+      { type: 'link', text: 'Discovery', href: `#${DISCOVERY_PATH}` },
+      { type: 'link', text: 'Custom Models', href: `#${CUSTOM_MODELS_PATH}` },
+      { type: 'link', text: 'Capacity Planning', href: `#${CAPACITY_PLANNING_PATH}` },
       { type: 'link', text: 'User Management', href: `#${USER_MANAGEMENT_PATH}` },
+      { type: 'link', text: 'View / Edit Pricing', href: `#${PRICING_PATH}` },
     ],
   },
   {
@@ -54,6 +57,12 @@ export const adminNavItems = [
     items: [
       {
         type: 'link',
+        text: 'Documentation',
+        href: 'https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/',
+        external: true,
+      },
+      {
+        type: 'link',
         text: 'README',
         href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md',
         external: true,
@@ -68,14 +77,112 @@ export const adminNavItems = [
   },
 ];
 
-// Limited navigation items for Reviewer users
+// Author navigation: same as admin but without User Management, Document KB, or Agent Chat (not yet config-version scoped)
+export const authorNavItems = [
+  { type: 'link', text: 'Document List', href: `#${DOCUMENTS_PATH}` },
+  { type: 'link', text: 'Upload Document(s)', href: `#${UPLOAD_DOCUMENT_PATH}` },
+  {
+    type: 'section',
+    text: 'Configuration',
+    items: [
+      { type: 'link', text: 'View/Edit Configuration', href: `#${CONFIGURATION_PATH}` },
+      { type: 'link', text: 'Discovery', href: `#${DISCOVERY_PATH}` },
+      { type: 'link', text: 'Custom Models', href: `#${CUSTOM_MODELS_PATH}` },
+      { type: 'link', text: 'Capacity Planning', href: `#${CAPACITY_PLANNING_PATH}` },
+      { type: 'link', text: 'View Pricing', href: `#${PRICING_PATH}` },
+    ],
+  },
+  {
+    type: 'section',
+    text: 'Test Studio',
+    items: [
+      { type: 'link', text: 'Test Sets', href: `#${TEST_STUDIO_PATH}?tab=sets` },
+      { type: 'link', text: 'Test Executions', href: `#${TEST_STUDIO_PATH}?tab=executions` },
+    ],
+  },
+  {
+    type: 'section',
+    text: 'Resources',
+    items: [
+      {
+        type: 'link',
+        text: 'Documentation',
+        href: 'https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/',
+        external: true,
+      },
+      {
+        type: 'link',
+        text: 'README',
+        href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md',
+        external: true,
+      },
+      {
+        type: 'link',
+        text: 'Source Code',
+        href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws',
+        external: true,
+      },
+    ],
+  },
+];
+
+// Viewer navigation: read-only access to documents, config, capacity planning (no KB or Agent Chat — not yet config-version scoped)
+export const viewerNavItems = [
+  { type: 'link', text: 'Document List', href: `#${DOCUMENTS_PATH}` },
+  {
+    type: 'section',
+    text: 'Configuration',
+    items: [
+      { type: 'link', text: 'View Configuration', href: `#${CONFIGURATION_PATH}` },
+      { type: 'link', text: 'Capacity Planning', href: `#${CAPACITY_PLANNING_PATH}` },
+      { type: 'link', text: 'View Pricing', href: `#${PRICING_PATH}` },
+    ],
+  },
+  {
+    type: 'section',
+    text: 'Resources',
+    items: [
+      {
+        type: 'link',
+        text: 'Documentation',
+        href: 'https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/',
+        external: true,
+      },
+      {
+        type: 'link',
+        text: 'README',
+        href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md',
+        external: true,
+      },
+      {
+        type: 'link',
+        text: 'Source Code',
+        href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws',
+        external: true,
+      },
+    ],
+  },
+];
+
+// Limited navigation items for Reviewer-only users (HITL review only)
 export const reviewerNavItems = [{ type: 'link', text: 'Document List', href: `#${DOCUMENTS_PATH}` }];
 
 // Keep for backward compatibility
 export const documentsNavItems = adminNavItems;
 
 const defaultOnFollowHandler = (ev: CustomEvent<SideNavigationProps.FollowDetail>): void => {
-  if (ev.detail.href === '#deployment-info') {
+  // Prevent navigation for non-navigable items (deployment info, region-restricted features)
+  const nonNavigableHrefs = [
+    '#deployment-info',
+    '#custom-models-unavailable',
+    '#stackname',
+    '#version',
+    '#builddatetime',
+    '#idppattern',
+    '#region',
+    '#update-available',
+  ];
+  if (nonNavigableHrefs.includes(ev.detail.href)) {
     ev.preventDefault();
     return;
   }
@@ -88,6 +195,25 @@ interface NavigationProps {
   onFollowHandler?: (ev: CustomEvent<SideNavigationProps.FollowDetail>) => void;
 }
 
+/**
+ * Build the AWS CloudFormation "Update stack" deep-link for the current
+ * deployment. The console pre-selects the stack and template URL so the
+ * user lands on the parameters review page.
+ *
+ * Returns null if either piece of info is missing (e.g. headless deployments
+ * where StackName isn't published into Settings).
+ */
+const buildCfnUpdateStackUrl = (region: string | undefined, stackName: string | undefined, templateUrl: string | null): string | null => {
+  if (!region || !stackName || !templateUrl) return null;
+  const encodedTemplate = encodeURIComponent(templateUrl);
+  const encodedStack = encodeURIComponent(stackName);
+  return (
+    `https://${region}.console.aws.amazon.com/cloudformation/home` +
+    `?region=${region}#/stacks/update/template` +
+    `?stackId=${encodedStack}&templateURL=${encodedTemplate}`
+  );
+};
+
 const Navigation = ({
   header = documentsNavHeader,
   items,
@@ -96,51 +222,88 @@ const Navigation = ({
   const location = useLocation();
   const path = location.pathname;
   let activeHref = `#${DEFAULT_PATH}`;
-  const { settings: rawSettings } = useSettingsContext() || {};
-  const settings = rawSettings as Record<string, unknown> | undefined;
-  const { isReviewer, isAdmin } = useUserRole();
+  const { settings } = useSettingsContext();
+  const { isAdmin, isAuthor, isReviewerOnly, isViewerOnly } = useUserRole();
 
-  // Select navigation items based on user role
+  // Version-check for the "Update available" indicator. Returns
+  // isUpdateAvailable=false until settings.Version is loaded.
+  const currentVersion = settings?.Version as string | undefined;
+  const { latestVersion, templateUrl, isUpdateAvailable } = useLatestVersion(currentVersion);
+
+  // Select navigation items based on user role (highest privilege wins)
   const baseItems = useMemo(() => {
     if (items) return items;
-    return isReviewer && !isAdmin ? reviewerNavItems : adminNavItems;
-  }, [items, isReviewer, isAdmin]);
+    if (isAdmin) return adminNavItems;
+    if (isAuthor) return authorNavItems;
+    if (isViewerOnly) return viewerNavItems;
+    if (isReviewerOnly) return reviewerNavItems;
+    // Default: if user has Viewer + Reviewer, show viewer nav (union)
+    return viewerNavItems;
+  }, [items, isAdmin, isAuthor, isViewerOnly, isReviewerOnly]);
 
-  // Filter out Capacity Planning link if pattern is not Pattern-2
+  // Filter out navigation items based on deployment context:
+  // - Capacity Planning: hidden if pattern is not Pattern-2 or Unified
+  // - Custom Models: hidden if deployed region is not us-east-1
   const filteredItems = useMemo(() => {
     const pattern = (settings?.IDPPattern as string | undefined)?.toLowerCase();
 
-    // Check for Pattern-2 in various formats: "Pattern-2", "Pattern 2", "PATTERN_2", "Pattern2"
-    const isPattern2 =
+    // Check for Pattern-2 or Unified in various formats
+    const isCapacityPlanningSupported =
       !pattern || // Show if pattern not loaded yet (fail-safe)
       pattern.includes('pattern-2') ||
       pattern.includes('pattern 2') ||
       pattern.includes('pattern_2') ||
       pattern.includes('pattern2') ||
+      pattern.includes('unified') ||
       /pattern[\s\-_]?2/.test(pattern); // Regex: "pattern" followed by optional separator, then "2"
 
-    // Debug logging (remove after testing)
-    if (pattern) {
-      console.log('[Navigation] IDPPattern detected:', settings.IDPPattern, '| Is Pattern-2:', isPattern2);
+    // Custom Models is only available in us-east-1 (Nova fine-tuning region requirement)
+    const deployedRegion = import.meta.env.VITE_AWS_REGION as string | undefined;
+    const isCustomModelsSupported = deployedRegion === 'us-east-1';
+
+    // Build list of items to hide from the Configuration section
+    const hiddenConfigItems = new Set<string>();
+    if (!isCapacityPlanningSupported) {
+      hiddenConfigItems.add('Capacity Planning');
     }
 
-    if (isPattern2) {
-      // Show Capacity Planning for Pattern-2 or if pattern is unknown
-      return baseItems;
-    }
-
-    // Filter out Capacity Planning for Pattern 1 and Pattern 3
+    // Transform navigation items: hide unsupported items, grey out region-restricted items
     return baseItems
       .map((item) => {
         if (item.type === 'section' && item.text === 'Configuration') {
+          const section = item as SideNavigationProps.Section;
           return {
             ...item,
-            items: item.items.filter((subItem) => subItem.text !== 'Capacity Planning'),
+            items: section.items
+              .filter((subItem) => !hiddenConfigItems.has((subItem as { text?: string }).text ?? ''))
+              .map((subItem) => {
+                const link = subItem as SideNavigationProps.Link;
+                // Grey out Custom Models with region badge when not in us-east-1
+                if (link.text === 'Custom Models' && !isCustomModelsSupported) {
+                  return {
+                    ...link,
+                    href: '#custom-models-unavailable',
+                    info: React.createElement(
+                      Popover,
+                      {
+                        dismissButton: false,
+                        position: 'right',
+                        size: 'medium',
+                        triggerType: 'custom',
+                        content:
+                          'Custom Models requires Amazon Nova fine-tuning, which is currently available in us-east-1 only. Deploy your stack in us-east-1 to use this feature.',
+                      },
+                      React.createElement(Badge, { color: 'grey' }, 'us-east-1 only'),
+                    ),
+                  };
+                }
+                return subItem;
+              }),
           };
         }
         return item;
       })
-      .filter((item) => item.text !== 'Capacity Planning'); // Also filter top-level if it exists
+      .filter((item) => !hiddenConfigItems.has((item as { text?: string }).text ?? ''));
   }, [baseItems, settings?.IDPPattern]);
 
   // Determine active link based on current path
@@ -160,6 +323,8 @@ const Navigation = ({
     activeHref = `#${DISCOVERY_PATH}`;
   } else if (path.includes(USER_MANAGEMENT_PATH)) {
     activeHref = `#${USER_MANAGEMENT_PATH}`;
+  } else if (path.includes(CUSTOM_MODELS_PATH)) {
+    activeHref = `#${CUSTOM_MODELS_PATH}`;
   } else if (path.includes(CAPACITY_PLANNING_PATH)) {
     activeHref = `#${CAPACITY_PLANNING_PATH}`;
   } else if (path.includes(DOCUMENTS_PATH)) {
@@ -171,14 +336,75 @@ const Navigation = ({
   // Create navigation items with deployment info
   const navigationItems: SideNavigationProps.Item[] = [...filteredItems] as SideNavigationProps.Item[];
 
-  if (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern) {
+  const deployedRegion = import.meta.env.VITE_AWS_REGION as string | undefined;
+  const stackName = settings?.StackName as string | undefined;
+
+  // Build the "Update available" popover content. Admin users get a clickable
+  // CFN console deep-link; non-admins see a non-actionable hint pointing them
+  // at their administrator. Both see the version diff.
+  const cfnUpdateStackUrl = buildCfnUpdateStackUrl(deployedRegion, stackName, templateUrl);
+  const updatePopoverContent =
+    isAdmin && cfnUpdateStackUrl ? (
+      <SpaceBetween size="xs">
+        <Box>
+          Latest published version: <strong>v{latestVersion}</strong>
+          <br />
+          Currently deployed: <strong>v{currentVersion}</strong>
+        </Box>
+        <Link external href={cfnUpdateStackUrl}>
+          Update stack in CloudFormation →
+        </Link>
+        <Box variant="small" color="text-body-secondary">
+          Opens the AWS CloudFormation console with the new template URL pre-filled. Review parameters before applying.
+        </Box>
+      </SpaceBetween>
+    ) : (
+      <SpaceBetween size="xs">
+        <Box>
+          Latest published version: <strong>v{latestVersion}</strong>
+          <br />
+          Currently deployed: <strong>v{currentVersion}</strong>
+        </Box>
+        <Box variant="small" color="text-body-secondary">
+          Contact your administrator to update this deployment to the latest version.
+        </Box>
+      </SpaceBetween>
+    );
+
+  if (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern || deployedRegion) {
     const deploymentInfoItems: SideNavigationProps.Item[] = [];
 
     if (settings?.StackName) {
       deploymentInfoItems.push({ type: 'link', text: `Stack Name: ${settings.StackName}`, href: '#stackname' });
     }
     if (settings?.Version) {
-      deploymentInfoItems.push({ type: 'link', text: `Version: ${settings.Version}`, href: '#version' });
+      // Attach an "Update" badge + popover when the version-check resolver
+      // has reported a newer published version. The badge itself is shown
+      // to all roles; the popover content (Admin gets the actionable link)
+      // is built above.
+      const versionItem: SideNavigationProps.Link = {
+        type: 'link',
+        text: `Version: ${settings.Version}`,
+        href: '#version',
+      };
+      if (isUpdateAvailable && latestVersion) {
+        // info appears as a small adornment to the right of the link text.
+        // Using a Popover with triggerType="custom" wrapping a Badge keeps
+        // the styling consistent with the existing "us-east-1 only" badge.
+        (versionItem as SideNavigationProps.Link & { info?: React.ReactNode }).info = (
+          <Popover
+            header="Update available"
+            dismissButton={false}
+            position="right"
+            size="medium"
+            triggerType="custom"
+            content={updatePopoverContent}
+          >
+            <Badge color="blue">Update</Badge>
+          </Popover>
+        );
+      }
+      deploymentInfoItems.push(versionItem);
     }
     if (settings?.BuildDateTime) {
       deploymentInfoItems.push({ type: 'link', text: `Build: ${settings.BuildDateTime}`, href: '#builddatetime' });
@@ -186,6 +412,9 @@ const Navigation = ({
     if (settings?.IDPPattern) {
       const pattern = (settings.IDPPattern as string).split(' ')[0];
       deploymentInfoItems.push({ type: 'link', text: `Pattern: ${pattern}`, href: '#idppattern' });
+    }
+    if (deployedRegion) {
+      deploymentInfoItems.push({ type: 'link', text: `Region: ${deployedRegion}`, href: '#region' });
     }
 
     navigationItems.push({

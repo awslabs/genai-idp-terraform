@@ -1,0 +1,20 @@
+query GetConfigVersions {
+  getConfigVersions {
+    success
+    versions {
+      versionName
+      isActive
+      createdAt
+      updatedAt
+      description
+      managed
+      bdaProjectArn
+      bdaSyncStatus
+      bdaLastSyncedAt
+    }
+    error {
+      type
+      message
+    }
+  }
+}

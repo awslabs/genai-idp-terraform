@@ -1,3 +1,7 @@
+---
+title: "Development Environment Setup Guide on MacOS"
+---
+
 # Development Environment Setup Guide on MacOS
 # Introduction
 This guide configures a comprehensive local development environment on macOS systems for the GenAI IDP accelerator.  
@@ -142,7 +146,7 @@ sam --version
 ```
 
 
-## 7) Node.js via nvm (Node 18 LTS)
+## 7) Node.js via nvm (Node 22 LTS)
 
 Use nvm to manage Node versions. This mirrors your Linux section but uses zsh-friendly profile updates.
 
@@ -156,9 +160,9 @@ fi
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Install Node 18 LTS
-nvm install 18
-nvm alias default 18
+# Install Node 22 LTS
+nvm install 22
+nvm alias default 22
 
 # Test
 node -v
@@ -242,36 +246,41 @@ EOF
 - SAM CLI: run `sam --version`.
 - Docker: launch Docker.app, then run `docker version` in Terminal.
 
-## **12) Install Python Dependencies for publish.py**
+## **12) Install the IDP CLI**
 
-Install the required Python packages for the publish.py script:
+Install the IDP CLI and all required dependencies:
 
 ```bash
-pip install boto3 typer rich botocore
+make setup-venv
+source .venv/bin/activate
 ```
+
+> **Note**: This installs the `idp-cli` command along with all required Python dependencies.
 
 ## **13) Configure AWS CLI**
 ### Refer this link for AWS configure
 https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html  
 
-## **14) Run Publish Script**
+## **14) Test the Build**
 
-### Using publish.py (Recommended)
+### Using `idp-cli publish`
 
-Test publish script help:
+Test CLI help:
 ```bash
-python3 publish.py --help
+idp-cli publish --help
 ```
 
-Test build using publish.py:
+Test standard build and publish:
 ```bash
-python3 publish.py bucket_name build-test us-east-1
+idp-cli publish --source-dir . --region us-east-1
 ```
+
+Pattern-2 container images are built and pushed automatically when Pattern-2 changes are detected. Ensure Docker is running and you have ECR permissions.
 
 **Troubleshooting Build Issues:**
 If the build fails, use the `--verbose` flag to see detailed error messages:
 ```bash
-python3 publish.py bucket_name build-test us-east-1 --verbose
+idp-cli publish --source-dir . --region us-east-1 --verbose
 ```
 
 The verbose flag will show:
@@ -280,17 +289,7 @@ The verbose flag will show:
 - Python version compatibility issues
 - Missing dependencies or configuration problems
 
-### Using publish.sh (Legacy)
-
-Test publish script help:
-```bash
-./publish.sh --help
-```
-
-Test build using publish.sh:
-```bash
-./publish.sh bucket_name build-test us-east-1
-```
+> **Note**: The legacy `publish.py` script is deprecated. Use `idp-cli publish` for all new builds.
 
 - If `brew` is not found, add it to PATH: 
 ```bash

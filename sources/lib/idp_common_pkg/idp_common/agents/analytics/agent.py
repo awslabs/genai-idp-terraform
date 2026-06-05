@@ -7,6 +7,7 @@ Analytics Agent implementation using Strands framework.
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import boto3
@@ -55,13 +56,19 @@ def create_analytics_agent(
     # Load database overview once during agent creation for embedding in system prompt
     database_overview = _get_database_overview()
 
+    # Current date and time to inform the agent in case it needs relative-time queries
+    # This string looks like "3:14 PM (UTC) on April 9, 2026"
+    current_date_string = datetime.now(timezone.utc).strftime(
+        "%-I:%M %p (UTC) on %B %-d, %Y"
+    )
+
     # Define the system prompt for the analytics agent
-    system_prompt = f"""
+    system_prompt = f"""  # nosec B608 - AI agent prompt template, not SQL execution
     You are an AI agent that converts natural language questions into Athena queries, executes those queries, and writes python code to convert the query results into json representing either a plot, a table, or a string.
     
     # Task
     Your task is to:
-    1. Understand the user's question
+    1. Understand the user's question (if necessary referring to the date and time when the question was asked, which is {current_date_string})
     2. **EFFICIENT APPROACH**: Review the database overview below to see available tables and their purposes
     3. Apply the Question-to-Table mapping rules below to select the correct tables for your query
     4. Use get_table_info(['table1', 'table2']) to get detailed schemas ONLY for the tables you need

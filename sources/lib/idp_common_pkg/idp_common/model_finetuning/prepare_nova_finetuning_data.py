@@ -168,7 +168,7 @@ class NovaDataPreparationService:
             # nosec B615 - Sample training script for model fine-tuning preparation
             # This code is not used in production and loads from trusted Hugging Face datasets
             # For production use, implement revision pinning via model_versions.py
-            ds = load_dataset(dataset_name, split=split)
+            ds = load_dataset(dataset_name, split=split)  # nosec B615
         elif local_path:
             logger.info(f"Loading local dataset from {local_path}")
             ds = Dataset.load_from_disk(local_path)
@@ -434,7 +434,7 @@ class NovaDataPreparationService:
             Tuple of (train_count, validation_count)
         """
         # Shuffle data
-        random.shuffle(jsonl_records)
+        random.shuffle(jsonl_records)  # nosec B311 - training data shuffle
 
         # Split data
         split_idx = int(len(jsonl_records) * (1 - validation_split))

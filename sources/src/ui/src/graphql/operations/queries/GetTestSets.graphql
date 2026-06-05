@@ -1,0 +1,13 @@
+query GetTestSets {
+  getTestSets {
+    id
+    name
+    description
+    filePattern
+    fileCount
+    status
+    createdAt
+    error
+    lastAddResult
+  }
+}

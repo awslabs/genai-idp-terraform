@@ -57,7 +57,8 @@ const SchemaBuilder = ({
   onChange = null,
   onValidate = null,
   isRuleSchema = false,
-}: SchemaBuilderProps): React.JSX.Element => {
+  highlightClassName = null,
+}: SchemaBuilderProps & { highlightClassName?: string | null }): React.JSX.Element => {
   const {
     classes,
     selectedClassId,
@@ -66,6 +67,7 @@ const SchemaBuilder = ({
     setSelectedAttributeId,
     isDirty,
     addClass,
+    addStandardClasses: _addStandardClasses,
     updateClass,
     removeClass,
     addAttribute,
@@ -83,6 +85,7 @@ const SchemaBuilder = ({
 
   const [showPreview, setShowPreview] = useState(false);
   const [showAddClassModal, setShowAddClassModal] = useState(false);
+  const [addClassMode, setAddClassMode] = useState<'choose' | 'custom' | 'standard'>('choose');
   const [showAddAttributeModal, setShowAddAttributeModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newClassDescription, setNewClassDescription] = useState('');
@@ -96,6 +99,14 @@ const SchemaBuilder = ({
   const [classToDelete, setClassToDelete] = useState<SchemaClass | null>(null);
   const [showWipeAllModal, setShowWipeAllModal] = useState(false);
   const [aggregatedValidationErrors, setAggregatedValidationErrors] = useState<ValidationError[]>([]);
+
+  const CLASS_NAME_PATTERN = /^[a-zA-Z0-9\-_]+$/;
+  const isClassNameValid = (name: string): boolean => name.trim().length > 0 && CLASS_NAME_PATTERN.test(name.trim());
+  const classNameErrorText =
+    newClassName.trim() && !CLASS_NAME_PATTERN.test(newClassName.trim())
+      ? 'Class name can only contain letters, numbers, hyphens, and underscores'
+      : '';
+
   const lastExportedSchemaRef = useRef<string | null>(null);
   const lastValidationResultRef = useRef<string | null>(null);
 
@@ -114,6 +125,26 @@ const SchemaBuilder = ({
       }
     }
   }, [currentSchema, isDirty, onChange]);
+
+  // When the caller passes a highlightClassName (e.g. from the Policy Discovery
+  // job's "View in Configuration" link), auto-select the matching class and
+  // scroll its card into view so the user lands on the newly extracted rules.
+  const highlightAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightClassName || classes.length === 0) return;
+    if (highlightAppliedRef.current === highlightClassName) return;
+    const match = classes.find((c) => c.name === highlightClassName);
+    if (!match) return;
+    setSelectedClassId(match.id);
+    highlightAppliedRef.current = highlightClassName;
+    // Defer scroll until after DOM paints the selection outline
+    setTimeout(() => {
+      const el = document.querySelector(`[data-schema-class-id="${match.id}"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  }, [highlightClassName, classes, setSelectedClassId]);
 
   useEffect(() => {
     if (onValidate && debouncedClasses.length > 0) {
@@ -144,6 +175,7 @@ const SchemaBuilder = ({
   }, [debouncedClasses, onValidate, validateSchema]);
 
   const handleAddClass = (): void => {
+    setAddClassMode(isRuleSchema ? 'custom' : 'choose');
     setShowAddClassModal(true);
   };
 
@@ -165,7 +197,7 @@ const SchemaBuilder = ({
   };
 
   const handleConfirmAddAttribute = (): void => {
-    if (newAttributeName.trim() && newAttributeType.value) {
+    if (newAttributeName.trim() && newAttributeType.value && selectedClassId) {
       const attrName = newAttributeName.trim();
       addAttribute(selectedClassId, attrName, newAttributeType.value);
 
@@ -187,7 +219,7 @@ const SchemaBuilder = ({
         }
       }
 
-      if (Object.keys(updates).length > 0) {
+      if (Object.keys(updates).length > 0 && selectedClassId) {
         updateAttribute(selectedClassId, attrName, updates);
       }
 
@@ -234,13 +266,16 @@ const SchemaBuilder = ({
   const docTypeCount = classes.filter((c) => c[X_AWS_IDP_DOCUMENT_TYPE]).length;
   const _sharedCount = classes.filter((c) => !c[X_AWS_IDP_DOCUMENT_TYPE]).length;
 
-  // Dynamic labels based on schema type
-  const typeLabel = isRuleSchema ? 'rule' : 'document';
+  // Dynamic labels based on schema type. Underscore-prefixed entries are part
+  // of the full naming set but not yet referenced in this component; kept here
+  // (opted out of the unused-vars lint rule) so the label vocabulary stays
+  // colocated and ready for use.
+  const typeLabel = isRuleSchema ? 'policy' : 'document';
   const _typeLabelPlural = isRuleSchema ? 'rules' : 'documents';
   const TypeLabel = isRuleSchema ? 'Rule' : 'Document';
   const TypesLabel = isRuleSchema ? 'Rules' : 'Documents';
-  const _classLabel = isRuleSchema ? 'Rule Class' : 'Class';
-  const classesLabel = isRuleSchema ? 'Rule Classes' : 'Classes';
+  const _classLabel = isRuleSchema ? 'Policy Class' : 'Class';
+  const classesLabel = isRuleSchema ? 'Policy Classes' : 'Classes';
   const _attributeLabel = isRuleSchema ? 'Rule' : 'Attribute';
   const attributesLabel = isRuleSchema ? 'Rules' : 'Attributes';
   const sharedLabel = isRuleSchema ? 'Recommendation Options' : 'Shared Classes';
@@ -321,7 +356,7 @@ const SchemaBuilder = ({
                   <Box>
                     <SpaceBetween direction="horizontal" size="xs">
                       <Button onClick={handleAddClass} iconName="add-plus">
-                        {isRuleSchema ? 'Add Rule Class' : 'Add Class'}
+                        {isRuleSchema ? 'Add Policy Class' : 'Add Class'}
                       </Button>
                       <Button onClick={handleAddAttribute} disabled={!selectedClassId} iconName="add-plus">
                         {isRuleSchema ? 'Add Rule' : 'Add Attribute'}
@@ -384,6 +419,7 @@ const SchemaBuilder = ({
                         .map((cls) => (
                           <Container key={cls.id} disableContentPaddings={false}>
                             <div
+                              data-schema-class-id={cls.id}
                               role="button"
                               tabIndex={0}
                               onClick={() => setSelectedClassId(cls.id)}
@@ -461,6 +497,7 @@ const SchemaBuilder = ({
                           .map((cls) => (
                             <Container key={cls.id} disableContentPaddings={false}>
                               <div
+                                data-schema-class-id={cls.id}
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => setSelectedClassId(cls.id)}
@@ -531,9 +568,15 @@ const SchemaBuilder = ({
                     selectedClass={getSelectedClass()}
                     selectedAttributeId={selectedAttributeId}
                     onSelectAttribute={setSelectedAttributeId}
-                    onUpdateAttribute={(name, updates) => updateAttribute(selectedClassId, name, updates)}
-                    onRemoveAttribute={(name) => removeAttribute(selectedClassId, name)}
-                    onReorder={(oldIndex, newIndex) => reorderAttributes(selectedClassId, oldIndex, newIndex)}
+                    onUpdateAttribute={(name, updates) => {
+                      if (selectedClassId) updateAttribute(selectedClassId, name, updates);
+                    }}
+                    onRemoveAttribute={(name) => {
+                      if (selectedClassId) removeAttribute(selectedClassId, name);
+                    }}
+                    onReorder={(oldIndex, newIndex) => {
+                      if (selectedClassId) reorderAttributes(selectedClassId, oldIndex, newIndex);
+                    }}
                     onNavigateToClass={(classId) => {
                       setSelectedClassId(classId);
                       setSelectedAttributeId(null);
@@ -550,11 +593,20 @@ const SchemaBuilder = ({
                     selectedClass={getSelectedClass()}
                     selectedAttribute={getSelectedAttribute()}
                     selectedAttributeName={selectedAttributeId}
-                    onUpdate={(updates) => updateAttribute(selectedClassId, selectedAttributeId, updates)}
-                    onUpdateClass={(updates) => updateClass(selectedClassId, updates)}
-                    onRenameAttribute={(newName) => renameAttribute(selectedClassId, selectedAttributeId, newName)}
+                    onUpdate={(updates) => {
+                      if (selectedClassId && selectedAttributeId) updateAttribute(selectedClassId, selectedAttributeId, updates);
+                    }}
+                    onUpdateClass={(updates) => {
+                      if (selectedClassId) updateClass(selectedClassId, updates);
+                    }}
+                    onRenameAttribute={(newName) => {
+                      if (selectedClassId && selectedAttributeId) return renameAttribute(selectedClassId, selectedAttributeId, newName);
+                      return false;
+                    }}
                     availableClasses={classes}
-                    isRequired={getSelectedClass()?.attributes?.required?.includes(selectedAttributeId) || false}
+                    isRequired={
+                      (selectedAttributeId ? getSelectedClass()?.attributes?.required?.includes(selectedAttributeId) : false) || false
+                    }
                     isRuleSchema={isRuleSchema}
                     onToggleRequired={(checked) => {
                       const selectedClass = getSelectedClass();
@@ -563,6 +615,7 @@ const SchemaBuilder = ({
                       const currentRequired = selectedClass.attributes.required || [];
                       let newRequired: string[];
 
+                      if (!selectedAttributeId || !selectedClassId) return;
                       if (checked) {
                         if (!currentRequired.includes(selectedAttributeId)) {
                           newRequired = [...currentRequired, selectedAttributeId];
@@ -602,10 +655,20 @@ const SchemaBuilder = ({
           visible={showAddClassModal}
           onDismiss={() => {
             setShowAddClassModal(false);
+            setAddClassMode('choose');
             setNewClassName('');
             setNewClassDescription('');
           }}
-          header={isRuleSchema ? 'Add Rule Class' : 'Add Class'}
+          size={addClassMode === 'standard' ? 'large' : 'medium'}
+          header={
+            addClassMode === 'choose'
+              ? 'Add Class'
+              : addClassMode === 'standard'
+                ? 'Import Standard Class'
+                : isRuleSchema
+                  ? 'Add Policy Class'
+                  : 'Add Custom Class'
+          }
           footer={
             <Box float="right">
               <SpaceBetween direction="horizontal" size="xs">
@@ -620,7 +683,7 @@ const SchemaBuilder = ({
                   Cancel
                 </Button>
                 <Button variant="primary" onClick={handleConfirmAddClass} disabled={!newClassName.trim()}>
-                  {isRuleSchema ? 'Add Rule Class' : 'Add Class'}
+                  {isRuleSchema ? 'Add Policy Class' : 'Add Class'}
                 </Button>
               </SpaceBetween>
             </Box>
@@ -628,7 +691,7 @@ const SchemaBuilder = ({
         >
           <SpaceBetween size="m">
             <FormField
-              label={isRuleSchema ? 'Rule Class Name' : 'Class Name'}
+              label={isRuleSchema ? 'Policy Class Name' : 'Class Name'}
               description={`A unique name for this ${isRuleSchema ? 'rule' : 'extraction'} class`}
             >
               <Input
@@ -777,7 +840,7 @@ const SchemaBuilder = ({
                 >
                   Cancel
                 </Button>
-                <Button variant="primary" onClick={handleConfirmEditClass} disabled={!newClassName.trim()}>
+                <Button variant="primary" onClick={handleConfirmEditClass} disabled={!isClassNameValid(newClassName)}>
                   Save Changes
                 </Button>
               </SpaceBetween>
@@ -785,7 +848,7 @@ const SchemaBuilder = ({
           }
         >
           <SpaceBetween size="m">
-            <FormField label="Class Name" description="A unique name for this extraction class">
+            <FormField label="Class Name" description="A unique name for this extraction class" errorText={classNameErrorText}>
               <Input
                 value={newClassName}
                 onChange={({ detail }) => setNewClassName(detail.value)}

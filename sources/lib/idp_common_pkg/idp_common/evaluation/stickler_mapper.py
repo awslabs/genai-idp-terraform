@@ -224,15 +224,53 @@ class SticklerConfigMapper:
         return {}
 
     @classmethod
+    def _is_unevaluable_object(cls, schema: Dict[str, Any]) -> bool:
+        """
+        Check if an object schema cannot be evaluated by Stickler.
+
+        Stickler requires object types to have a 'properties' key with at least
+        one field. Objects that are free-form (using additionalProperties without
+        defined properties) or have empty properties cannot be evaluated.
+
+        Args:
+            schema: JSON Schema dict to check
+
+        Returns:
+            True if the object schema cannot be evaluated by Stickler
+        """
+        if not isinstance(schema, dict):
+            return False
+        if schema.get(SCHEMA_TYPE) != TYPE_OBJECT:
+            return False
+
+        prop_properties = schema.get(SCHEMA_PROPERTIES)
+
+        # Case 1: No 'properties' key at all (free-form object, e.g. additionalProperties: true)
+        if prop_properties is None:
+            return True
+
+        # Case 2: Empty properties dict
+        if isinstance(prop_properties, dict) and len(prop_properties) == 0:
+            return True
+
+        return False
+
+    @classmethod
     def _remove_empty_object_properties(
         cls, schema: Dict[str, Any], field_path: str = ""
     ) -> List[str]:
         """
-        Recursively remove properties that are objects with empty properties.
+        Recursively remove properties that are objects without evaluable properties.
 
         Stickler's ModelFactory requires at least one field to create a Pydantic model.
-        Empty object properties (e.g., "AccidentInformation": {"type": "object", "properties": {}})
-        cause validation errors and provide no evaluation value anyway.
+        This method removes:
+        - Object properties with empty properties (e.g., {"type": "object", "properties": {}})
+        - Object properties with NO properties key (free-form objects, e.g.,
+          {"type": "object", "additionalProperties": true})
+        - Array properties whose items are unevaluable objects (e.g.,
+          {"type": "array", "items": {"type": "object", "additionalProperties": true}})
+
+        These cause validation errors in Stickler and provide no evaluation value.
 
         Args:
             schema: Schema to process (modified in-place)
@@ -255,18 +293,19 @@ class SticklerConfigMapper:
                 if not isinstance(prop_schema, dict):
                     continue
 
-                # Check if this is an empty object (type=object with empty or missing properties)
                 prop_type = prop_schema.get(SCHEMA_TYPE)
                 prop_properties = prop_schema.get(SCHEMA_PROPERTIES)
 
                 if prop_type == TYPE_OBJECT:
-                    # Empty if properties is {} or missing entirely for a plain object
-                    if isinstance(prop_properties, dict) and len(prop_properties) == 0:
+                    if cls._is_unevaluable_object(prop_schema):
+                        # Object with no properties or empty properties - remove it
                         props_to_remove.append(prop_name)
                         removed.append(prop_path)
+                        has_additional = "additionalProperties" in prop_schema
                         logger.info(
-                            f"Removing empty object property '{prop_path}' - "
+                            f"Removing unevaluable object property '{prop_path}' - "
                             f"Stickler requires at least one field in nested objects"
+                            f"{' (has additionalProperties but no defined properties)' if has_additional else ''}"
                         )
                     elif prop_properties is not None:
                         # Recurse into non-empty objects
@@ -274,15 +313,26 @@ class SticklerConfigMapper:
                             cls._remove_empty_object_properties(prop_schema, prop_path)
                         )
 
-                # Also recurse into arrays
+                # Check arrays - remove if items are unevaluable objects
                 elif prop_type == TYPE_ARRAY and SCHEMA_ITEMS in prop_schema:
-                    removed.extend(
-                        cls._remove_empty_object_properties(
-                            prop_schema[SCHEMA_ITEMS], f"{prop_path}[]"
+                    items_schema = prop_schema[SCHEMA_ITEMS]
+                    if cls._is_unevaluable_object(items_schema):
+                        # Array of free-form objects - can't be evaluated
+                        props_to_remove.append(prop_name)
+                        removed.append(prop_path)
+                        logger.info(
+                            f"Removing array property '{prop_path}' - "
+                            f"array items are free-form objects without defined properties, "
+                            f"which Stickler cannot evaluate"
                         )
-                    )
+                    else:
+                        removed.extend(
+                            cls._remove_empty_object_properties(
+                                items_schema, f"{prop_path}[]"
+                            )
+                        )
 
-            # Remove empty object properties
+            # Remove unevaluable properties
             for prop_name in props_to_remove:
                 del schema[SCHEMA_PROPERTIES][prop_name]
 
@@ -297,16 +347,15 @@ class SticklerConfigMapper:
         # Process $defs as well
         if "$defs" in schema:
             for def_name, def_schema in list(schema["$defs"].items()):
-                # Check if the definition itself is an empty object
-                if (
-                    isinstance(def_schema, dict)
-                    and def_schema.get(SCHEMA_TYPE) == TYPE_OBJECT
-                    and isinstance(def_schema.get(SCHEMA_PROPERTIES), dict)
-                    and len(def_schema.get(SCHEMA_PROPERTIES, {})) == 0
+                # Check if the definition itself is an unevaluable object
+                if isinstance(def_schema, dict) and cls._is_unevaluable_object(
+                    def_schema
                 ):
+                    has_additional = "additionalProperties" in def_schema
                     logger.info(
-                        f"Removing empty $defs entry '{def_name}' - "
+                        f"Removing unevaluable $defs entry '{def_name}' - "
                         f"Stickler requires at least one field in nested objects"
+                        f"{' (has additionalProperties but no defined properties)' if has_additional else ''}"
                     )
                     del schema["$defs"][def_name]
                     removed.append(f"$defs.{def_name}")

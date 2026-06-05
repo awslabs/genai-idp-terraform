@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "idp-mcp-server": {
+      "notes": "Set command to the full path of the Python interpreter where idp_mcp_connector is installed",
+      "command": "python3",
+      "args": ["-m", "idp_mcp_connector"],
+      "env": {
+        "IDP_MCP_ENDPOINT": "<MCPServerEndpoint from CloudFormation outputs>",
+        "IDP_MCP_TOKEN_URL": "<MCPTokenURL from CloudFormation outputs>",
+        "IDP_MCP_CLIENT_ID": "<MCPConnectorClientId from CloudFormation outputs>",
+        "IDP_MCP_CLIENT_SECRET": "<MCPConnectorClientSecret from CloudFormation outputs>"
+      },
+      "alwaysAllow": [],
+      "disabled": false
+    }
+  }
+}

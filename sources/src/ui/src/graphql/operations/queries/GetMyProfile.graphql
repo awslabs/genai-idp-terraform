@@ -1,0 +1,10 @@
+query GetMyProfile {
+  getMyProfile {
+    userId
+    email
+    persona
+    status
+    createdAt
+    allowedConfigVersions
+  }
+}

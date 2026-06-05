@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Test VPC for IDP ALB Hosting - Simulates a customer's private network with
+  2 private subnets for the ALB (different AZs), 1 additional Lambda subnet
+  (for testing private AppSync VPC config), and a standalone KMS CMK for
+  artifact bucket encryption.
+  The KMS key has DeletionPolicy=Retain so it survives stack deletion.
+
+  NOTE: This template does NOT create an ACM certificate. Use
+  scripts/generate_self_signed_cert.sh after deploying the IDP stack to
+  generate a cert that covers the actual ALB DNS hostname. See
+  docs/deployment-private-network.md for the 2-step cert process.
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: '10.1.0.0/16'
+    Description: CIDR block for the VPC
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: '10.1.1.0/24'
+    Description: CIDR block for private subnet 1
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: '10.1.2.0/24'
+    Description: CIDR block for private subnet 2
+
+  LambdaSubnetCidr:
+    Type: String
+    Default: '10.1.3.0/24'
+    Description: CIDR block for the Lambda subnet (separate from ALB subnets)
+
+Resources:
+  #############################################
+  # VPC
+  #############################################
+  VPC:
+    Type: AWS::EC2::VPC
+    # checkov:skip=CKV_AWS_178: "VPC flow logs are not required for this test-only template. Enable flow logs in production VPCs."
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: IDP-ALB-TestVPC
+
+  #############################################
+  # Private Subnets for ALB (2 AZs required by ALB)
+  #############################################
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: IDP-ALB-PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: IDP-ALB-PrivateSubnet2
+
+  #############################################
+  # Lambda Subnet (separate from ALB subnets —
+  # used to test IDP Lambdas in a different subnet,
+  # e.g. for private AppSync VPC config testing)
+  #############################################
+  LambdaSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref LambdaSubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: IDP-ALB-LambdaSubnet
+
+  #############################################
+  # Route Table for Private Subnets
+  #############################################
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: IDP-ALB-PrivateRouteTable
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  LambdaSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref LambdaSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  #############################################
+  # KMS CMK for artifact bucket encryption
+  # Managed by THIS stack (not the IDP stack) so that
+  # deleting the IDP stack never schedules this key for deletion.
+  #############################################
+  ArtifactBucketKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W79
+            reason: "KMS key policy grants kms:* to the account root principal — standard administrative access pattern for CMKs. This test key is intentionally managed outside the IDP stack so deleting the IDP stack does not schedule key deletion."
+    # checkov:skip=CKV_AWS_7: "Key rotation is already enabled via EnableKeyRotation: true"
+    Properties:
+      Description: !Sub 'CMK for IDP artifact bucket encryption — managed by ${AWS::StackName}'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAccountRootFullControl
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowS3ServiceUse
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ArtifactBucketKey'
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  ArtifactBucketKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-artifact-bucket-key'
+      TargetKeyId: !Ref ArtifactBucketKey
+
+Outputs:
+  VpcId:
+    Description: VPC ID for IDP ALB deployment
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcId'
+
+  SubnetIds:
+    Description: Comma-separated ALB subnet IDs for IDP ALB deployment
+    Value: !Sub '${PrivateSubnet1},${PrivateSubnet2}'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIds'
+
+  PrivateSubnet1Id:
+    Description: Private Subnet 1 ID (ALB)
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnet2Id:
+    Description: Private Subnet 2 ID (ALB)
+    Value: !Ref PrivateSubnet2
+
+  LambdaSubnetId:
+    Description: >
+      Lambda subnet ID — use as LambdaSubnetIds when deploying with
+      AppSyncVisibility=PRIVATE. Kept separate from ALB subnets so Lambda
+      VpcConfig and ALB listeners use different subnets.
+    Value: !Ref LambdaSubnet
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaSubnetId'
+
+  ArtifactBucketKeyArn:
+    Description: >
+      KMS CMK ARN for artifact bucket encryption — pass as --kms-key-arn
+      to publish.py. This key is managed by this stack (NOT the IDP stack),
+      so deleting the IDP stack will NOT delete this key.
+    Value: !GetAtt ArtifactBucketKey.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactBucketKeyArn'
+
+  ArtifactBucketKeyAlias:
+    Description: KMS CMK alias for artifact bucket encryption
+    Value: !Sub 'alias/${AWS::StackName}-artifact-bucket-key'
+
+  CertInstructions:
+    Description: Use scripts/generate_self_signed_cert.sh to create the ACM certificate. See docs/deployment-private-network.md for the 2-step process (create placeholder cert before deploy, then reimport with the actual ALB DNS hostname after deploy).
+    Value: "Run: CERT_ARN=$(./scripts/generate_self_signed_cert.sh --region <region> --domain idp-alb.internal) then after IDP deploy reimport with --cert-arn and --domain set to the ALB DNS hostname"

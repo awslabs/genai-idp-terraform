@@ -1,7 +1,15 @@
+---
+title: "Pattern 1: Bedrock Data Automation (BDA) Workflow"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
 # Pattern 1: Bedrock Data Automation (BDA) Workflow
+
+> **⚠️ DEPRECATED**: Pattern 1 has been superseded by the **Unified Pattern**, which combines both BDA and pipeline processing modes into a single deployment. The `use_bda` configuration flag (set via the UI) controls whether documents are processed via BDA or the step-by-step pipeline. See [architecture.md](./architecture.md) for details on the unified architecture.
+>
+> This document is retained as a reference for BDA-specific concepts and behavior that still apply when `use_bda: true` is set in the unified pattern.
 
 This pattern implements an intelligent document processing workflow using Amazon Bedrock Data Automation (BDA) for orchestrating ML-powered document processing tasks. It leverages BDA's ability to extract insights from documents using pre-configured templates and workflows.
 
@@ -37,6 +45,12 @@ This pattern implements an intelligent document processing workflow using Amazon
 3. BDA Completion Lambda processes job completion events from EventBridge
 4. Completion Lambda sends task success/failure to Step Functions using the stored token
 5. Process Results Lambda copies output files to designated location
+
+
+
+https://github.com/user-attachments/assets/24547356-6d68-4935-b0fd-ddeed9c25ba8
+
+
 
 ### Components
 - **Main Functions**:
@@ -201,6 +215,40 @@ Pattern-1 supports Human-in-the-Loop (HITL) review capabilities using Amazon Sag
 - `Pattern1 - Existing Private Workforce ARN`: Optional parameter to use existing private workforce
 
 For comprehensive HITL documentation including workflow details, configuration steps, best practices, and troubleshooting, see the [Human-in-the-Loop Review Guide](./human-review.md). 
+
+## Edit Mode (Data-Only)
+
+Pattern-1 supports a data-only Edit Mode through the Web UI, allowing users to edit extraction data (predictions and ground truth) without re-invoking Bedrock Data Automation.
+
+### Capabilities
+
+- **Edit Extraction Data**: Click "Edit Mode" then use "Edit Data" buttons on each section to open the Visual Editor
+- **Modify Predictions**: Update predicted field values and review confidence scores
+- **Edit Ground Truth**: Modify baseline/ground truth data for evaluation comparison
+- **Reprocess**: "Save and Reprocess" triggers evaluation and summarization without BDA re-invocation
+
+### Limitations
+
+Since Pattern-1 uses BDA for document splitting and classification:
+
+- **Section Structure**: Read-only - cannot add, delete, or modify sections
+- **Page Assignments**: Read-only - BDA controls which pages belong to which sections
+- **Classification**: Read-only - document classes are determined by BDA blueprints
+
+### How It Works
+
+When you click "Save and Reprocess" with existing pages and sections data:
+
+1. The workflow detects existing document data (pages > 0 and sections present)
+2. BDA invocation step is automatically skipped
+3. Process proceeds directly to evaluation and summarization
+4. Document status updates to COMPLETED when finished
+
+This is useful for:
+- Correcting extraction errors in the Visual Editor
+- Adding baseline data for evaluation comparison
+- Re-running evaluation after data corrections
+- Updating document summaries after data modifications
 
 ## Best Practices
 1. **BDA Project Configuration**:

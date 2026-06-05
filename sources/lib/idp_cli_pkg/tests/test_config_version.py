@@ -5,14 +5,14 @@ Test config-version parameter flow in batch processor
 from unittest.mock import Mock, patch
 
 import pytest
-from idp_sdk.core.batch_processor import BatchProcessor
+from idp_sdk._core.batch_processor import BatchProcessor
 
 
 @pytest.mark.unit
 def test_copy_s3_file_with_config_version():
     """Test that _copy_s3_file applies config-version metadata"""
 
-    with patch("idp_sdk.core.batch_processor.StackInfo") as mock_stack_info:
+    with patch("idp_sdk._core.batch_processor.StackInfo") as mock_stack_info:
         # Mock stack validation
         mock_stack_info.return_value.validate_stack.return_value = True
         mock_stack_info.return_value.get_resources.return_value = {
@@ -20,9 +20,13 @@ def test_copy_s3_file_with_config_version():
             "TestSetBucket": "test-set-bucket",
         }
 
-        with patch("boto3.client") as mock_boto3:
+        with (
+            patch("boto3.client") as mock_boto3_client,
+            patch("boto3.resource") as mock_boto3_resource,
+        ):
             mock_s3 = Mock()
-            mock_boto3.return_value = mock_s3
+            mock_boto3_client.return_value = mock_s3
+            mock_boto3_resource.return_value = Mock()  # Mock DynamoDB resource
 
             processor = BatchProcessor("test-stack", "us-east-1")
 
@@ -49,16 +53,20 @@ def test_copy_s3_file_with_config_version():
 def test_copy_s3_file_without_config_version():
     """Test that _copy_s3_file works without config-version"""
 
-    with patch("idp_sdk.core.batch_processor.StackInfo") as mock_stack_info:
+    with patch("idp_sdk._core.batch_processor.StackInfo") as mock_stack_info:
         mock_stack_info.return_value.validate_stack.return_value = True
         mock_stack_info.return_value.get_resources.return_value = {
             "InputBucket": "test-input-bucket",
             "TestSetBucket": "test-set-bucket",
         }
 
-        with patch("boto3.client") as mock_boto3:
+        with (
+            patch("boto3.client") as mock_boto3_client,
+            patch("boto3.resource") as mock_boto3_resource,
+        ):
             mock_s3 = Mock()
-            mock_boto3.return_value = mock_s3
+            mock_boto3_client.return_value = mock_s3
+            mock_boto3_resource.return_value = Mock()  # Mock DynamoDB resource
 
             processor = BatchProcessor("test-stack", "us-east-1")
 

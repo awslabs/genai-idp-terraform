@@ -14,8 +14,21 @@ const ToolsPanel = (): React.JSX.Element => {
           </h3>
           <ul>
             <li>
-              <a href="https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md">
-                GenAI IDP Accelerator Documentation
+              <a
+                href="https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/agent-analysis/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Agent Analysis
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/reporting-database/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Reporting Database
               </a>
             </li>
           </ul>

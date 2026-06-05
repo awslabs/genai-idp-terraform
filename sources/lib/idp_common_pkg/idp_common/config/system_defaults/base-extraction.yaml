@@ -6,16 +6,24 @@
 # =============================================================================
 
 extraction:
+  # Agentic extraction with table parsing - NEW DEFAULT for robust extraction
   agentic:
     enabled: false
-    review_agent: false
+    table_parsing:
+      enabled: true                         # Enable deterministic table parser tool
+      max_empty_line_gap: 3                 # Tolerate page breaks and OCR noise
+      auto_merge_adjacent_tables: true      # Auto-merge table fragments
+      min_confidence_threshold: "95.0"      # OCR confidence target (Textract)
+      min_parse_success_rate: "0.90"        # Parse quality threshold
+      use_confidence_data: true             # Use Textract confidence data
   image:
     target_width: ""
     target_height: ""
-  model: us.amazon.nova-2-lite-v1:0
+  # Claude Sonnet 4 for best agentic performance (was: Nova Lite)
+  model: us.anthropic.claude-sonnet-4-6
   temperature: "0.0"
   top_p: "0.0"
-  max_tokens: "65535"
+  max_tokens: "64000"                       # Claude 4 maximum
   top_k: "5"
   system_prompt: >-
     You are a document assistant. Respond only with JSON. Never make up data, only provide data found in the document being provided.

@@ -37,7 +37,7 @@ class SearchOperation:
         Returns:
             SearchResult with answer, confidence, and citations
         """
-        from idp_sdk.core.search_processor import SearchProcessor
+        from idp_sdk._core.search_processor import SearchProcessor
 
         name = self._client._require_stack(stack_name)
 

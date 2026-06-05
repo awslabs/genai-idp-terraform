@@ -394,7 +394,10 @@ def format_status_json(status_data: Dict, stats: Dict) -> str:
                 "CLASSIFYING",
                 "EXTRACTING",
                 "ASSESSING",
+                "RULE_VALIDATION",
+                "RULE_VALIDATION_ORCHESTRATOR",
                 "SUMMARIZING",
+                "HITL_IN_PROGRESS",
                 "EVALUATING",
             ]:
                 result["current_step"] = doc.get("current_step", doc.get("status"))

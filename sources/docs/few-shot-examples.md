@@ -1,3 +1,7 @@
+---
+title: "Few-Shot Examples in Pattern-2: Classification and Extraction"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -32,60 +36,65 @@ Consider using few-shot examples when:
 
 ## Configuration Structure
 
-Few-shot examples are configured within document class definitions in your Pattern-2 configuration:
+Few-shot examples are configured within document class definitions using JSON Schema format in your Pattern-2 configuration:
 
 ```yaml
 classes:
-  - name: letter
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Letter
+    x-aws-idp-document-type: Letter
+    type: object
     description: "A formal written correspondence..."
-    attributes:
-      - name: sender_name
+    properties:
+      SenderName:
+        type: string
         description: "The name of the person who wrote the letter..."
-      - name: sender_address
+      SenderAddress:
+        type: string
         description: "The physical address of the sender..."
-    examples:
-      - classPrompt: "This is an example of the class 'letter'"
+    x-aws-idp-examples:
+      - x-aws-idp-class-prompt: "This is an example of the class 'Letter'"
         name: "Letter1"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           expected attributes are:
-              "sender_name": "Will E. Clark",
-              "sender_address": "206 Maple Street P.O. Box 1056 Murray Kentucky 42071-1056",
-              "recipient_name": "The Honorable Wendell H. Ford",
-              "date": "10/31/1995",
-              "subject": null
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
-      - classPrompt: "This is an example of the class 'letter'"
+              "SenderName": "Will E. Clark",
+              "SenderAddress": "206 Maple Street P.O. Box 1056 Murray Kentucky 42071-1056",
+              "RecipientName": "The Honorable Wendell H. Ford",
+              "Date": "10/31/1995",
+              "Subject": null
+        x-aws-idp-image-path: "config_library/unified/few_shot_example/example-images/letter1.jpg"
+      - x-aws-idp-class-prompt: "This is an example of the class 'Letter'"
         name: "Letter2"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           expected attributes are:
-              "sender_name": "William H. W. Anderson",
-              "sender_address": "P O. BOX 12046 CAMERON VILLAGE STATION RALEIGH N. c 27605",
-              "recipient_name": "Mr. Addison Y. Yeaman",
-              "date": "10/14/1970",
-              "subject": "Invitation to the Twelfth Annual Meeting of the TGIC"
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter2.png"
+              "SenderName": "William H. W. Anderson",
+              "SenderAddress": "P O. BOX 12046 CAMERON VILLAGE STATION RALEIGH N. c 27605",
+              "RecipientName": "Mr. Addison Y. Yeaman",
+              "Date": "10/14/1970",
+              "Subject": "Invitation to the Twelfth Annual Meeting of the TGIC"
+        x-aws-idp-image-path: "config_library/unified/few_shot_example/example-images/letter2.png"
 ```
 
 ### Example Fields Explained
 
 Each example includes four key components:
 
-- **`classPrompt`**: A brief description identifying this as an example of the document class (used for classification). Can include sample OCR text output to show the model what text content looks like for this class.
+- **`x-aws-idp-class-prompt`**: A brief description identifying this as an example of the document class (used for classification). Can include sample OCR text output to show the model what text content looks like for this class.
 - **`name`**: A unique identifier for the example (for reference and debugging)
-- **`attributesPrompt`**: The expected attribute extraction results in exact JSON format (used for extraction). Can include sample OCR text output to demonstrate the text from which attributes should be extracted.
-- **`imagePath`**: Path to example document image(s) - supports single files, local directories, or S3 prefixes (optional but recommended for better visual understanding)
+- **`x-aws-idp-attributes-prompt`**: The expected attribute extraction results in exact JSON format (used for extraction). Can include sample OCR text output to demonstrate the text from which attributes should be extracted.
+- **`x-aws-idp-image-path`**: Path to example document image(s) - supports single files, local directories, or S3 prefixes (optional but recommended for better visual understanding)
 
 ### Example Processing Rules
 
 **Important**: Examples are only processed if they contain the required prompt field for the specific task:
 
-- **For Classification**: Examples are only included if they have a non-empty `classPrompt` field
-  - Examples with only `attributesPrompt` or `imagePath` (but no `classPrompt`) are automatically skipped
-  - Images from `imagePath` are still included if the example has a valid `classPrompt`
+- **For Classification**: Examples are only included if they have a non-empty `x-aws-idp-class-prompt` field
+  - Examples with only `x-aws-idp-attributes-prompt` or `x-aws-idp-image-path` (but no `x-aws-idp-class-prompt`) are automatically skipped
+  - Images from `x-aws-idp-image-path` are still included if the example has a valid `x-aws-idp-class-prompt`
 
-- **For Extraction**: Examples are only included if they have a non-empty `attributesPrompt` field
-  - Examples with only `classPrompt` or `imagePath` (but no `attributesPrompt`) are automatically skipped
-  - Images from `imagePath` are still included if the example has a valid `attributesPrompt`
+- **For Extraction**: Examples are only included if they have a non-empty `x-aws-idp-attributes-prompt` field
+  - Examples with only `x-aws-idp-class-prompt` or `x-aws-idp-image-path` (but no `x-aws-idp-attributes-prompt`) are automatically skipped
+  - Images from `x-aws-idp-image-path` are still included if the example has a valid `x-aws-idp-attributes-prompt`
 
 This ensures that examples are only used when they have the appropriate content for their respective tasks, maintaining consistency and preventing irrelevant examples from being included in the prompts.
 
@@ -93,52 +102,52 @@ This ensures that examples are only used when they have the appropriate content 
 
 ```yaml
 # Valid for both classification and extraction
-- classPrompt: "This is an example of the class 'invoice'"
-  attributesPrompt: |
+- x-aws-idp-class-prompt: "This is an example of the class 'Invoice'"
+  x-aws-idp-attributes-prompt: |
     expected attributes are:
-        "invoice_number": "INV-001"
-  imagePath: "invoice1.jpg"
+        "InvoiceNumber": "INV-001"
+  x-aws-idp-image-path: "invoice1.jpg"
 
 # Valid only for classification (skipped during extraction)
-- classPrompt: "This is an example of the class 'invoice'"
-  # No attributesPrompt - will be skipped during extraction
-  imagePath: "invoice2.jpg"
+- x-aws-idp-class-prompt: "This is an example of the class 'Invoice'"
+  # No x-aws-idp-attributes-prompt - will be skipped during extraction
+  x-aws-idp-image-path: "invoice2.jpg"
 
 # Valid only for extraction (skipped during classification)
-- attributesPrompt: |
+- x-aws-idp-attributes-prompt: |
     expected attributes are:
-        "invoice_number": "INV-002"
-  # No classPrompt - will be skipped during classification
-  imagePath: "invoice3.jpg"
+        "InvoiceNumber": "INV-002"
+  # No x-aws-idp-class-prompt - will be skipped during classification
+  x-aws-idp-image-path: "invoice3.jpg"
 
 # Invalid for both (will be skipped entirely)
 - name: "InvalidExample"
-  # No classPrompt or attributesPrompt - will be skipped for both tasks
-  imagePath: "invoice4.jpg"
+  # No x-aws-idp-class-prompt or x-aws-idp-attributes-prompt - will be skipped for both tasks
+  x-aws-idp-image-path: "invoice4.jpg"
 ```
 
 #### Enhanced Image Path Support
 
-The `imagePath` field now supports multiple formats for maximum flexibility:
+The `x-aws-idp-image-path` field supports multiple formats for maximum flexibility:
 
 **Single Image File (Original functionality)**:
 ```yaml
-imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
+x-aws-idp-image-path: "config_library/unified/few_shot_example/example-images/letter1.jpg"
 ```
 
 **Local Directory with Multiple Images (New)**:
 ```yaml
-imagePath: "config_library/pattern-2/few_shot_example/example-images/"
+x-aws-idp-image-path: "config_library/unified/few_shot_example/example-images/"
 ```
 
 **S3 Prefix with Multiple Images (New)**:
 ```yaml
-imagePath: "s3://my-config-bucket/few-shot-examples/letter/"
+x-aws-idp-image-path: "s3://my-config-bucket/few-shot-examples/letter/"
 ```
 
 **Direct S3 Image URI**:
 ```yaml
-imagePath: "s3://my-config-bucket/few-shot-examples/letter/example1.jpg"
+x-aws-idp-image-path: "s3://my-config-bucket/few-shot-examples/letter/example1.jpg"
 ```
 
 When pointing to a directory or S3 prefix, the system automatically:
@@ -198,7 +207,7 @@ examples:
           "total_amount": "$1,250.00",
           "due_date": "February 15, 2024"
     # imagePath is optional - can be omitted for text-only examples
-    imagePath: "config_library/pattern-2/your_config/example-images/invoice1.pdf"
+    imagePath: "config_library/unified/your_config/example-images/invoice1.pdf"
 ```
 
 ## How Few-Shot Examples Work in Pattern-2
@@ -245,7 +254,7 @@ When extracting attributes from documents:
 If using images, store your example document images in an accessible location:
 
 ```
-config_library/pattern-2/your_config/example-images/
+config_library/unified/your_config/example-images/
 ├── letter1.jpg
 ├── letter2.png
 ├── email1.jpg
@@ -255,7 +264,7 @@ config_library/pattern-2/your_config/example-images/
 For multiple images per example, you can organize them in directories:
 
 ```
-config_library/pattern-2/your_config/example-images/
+config_library/unified/your_config/example-images/
 ├── letters/
 │   ├── 001_formal_letter.jpg
 │   ├── 002_informal_letter.png
@@ -271,21 +280,26 @@ config_library/pattern-2/your_config/example-images/
 
 ### Step 3: Define Examples in Configuration
 
-Add examples to each document class in your configuration file. You can use images, text, or both:
+Add examples to each document class in your configuration file using JSON Schema format. You can use images, text, or both:
 
 ```yaml
 classes:
-  - name: invoice
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Invoice
+    x-aws-idp-document-type: Invoice
+    type: object
     description: "A commercial document requesting payment..."
-    attributes:
-      - name: invoice_number
+    properties:
+      InvoiceNumber:
+        type: string
         description: "The unique invoice identifier..."
-      - name: total_amount
+      TotalAmount:
+        type: string
         description: "The total amount due..."
-    examples:
+    x-aws-idp-examples:
       # Example with both image and OCR text content
-      - classPrompt: |
-          This is an example of the class 'invoice'. 
+      - x-aws-idp-class-prompt: |
+          This is an example of the class 'Invoice'. 
           
           Sample invoice text content:
           ACME CORPORATION
@@ -294,30 +308,30 @@ classes:
           Bill To: Tech Solutions Inc
           Amount Due: $1,250.00
         name: "Invoice1"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           For an invoice like the above, expected attributes are:
-              "invoice_number": "INV-2024-001",
-              "invoice_date": "01/15/2024",
-              "vendor_name": "ACME Corporation",
-              "total_amount": "$1,250.00",
-              "due_date": "02/15/2024"
-        imagePath: "config_library/pattern-2/your_config/example-images/invoice1.pdf"
+              "InvoiceNumber": "INV-2024-001",
+              "InvoiceDate": "01/15/2024",
+              "VendorName": "ACME Corporation",
+              "TotalAmount": "$1,250.00",
+              "DueDate": "02/15/2024"
+        x-aws-idp-image-path: "config_library/unified/your_config/example-images/invoice1.pdf"
       
       # Example with multiple images from directory
-      - classPrompt: "These are examples of the class 'invoice' showing different formats"
+      - x-aws-idp-class-prompt: "These are examples of the class 'Invoice' showing different formats"
         name: "InvoiceVariations"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           For invoices like these examples, expected attributes format:
-              "invoice_number": "string",
-              "invoice_date": "MM/DD/YYYY",
-              "vendor_name": "string",
-              "total_amount": "$X.XX",
-              "due_date": "MM/DD/YYYY or null"
-        imagePath: "config_library/pattern-2/your_config/example-images/invoices/"
+              "InvoiceNumber": "string",
+              "InvoiceDate": "MM/DD/YYYY",
+              "VendorName": "string",
+              "TotalAmount": "$X.XX",
+              "DueDate": "MM/DD/YYYY or null"
+        x-aws-idp-image-path: "config_library/unified/your_config/example-images/invoices/"
       
       # Example with text only (no image)
-      - classPrompt: |
-          This is another example of the class 'invoice'.
+      - x-aws-idp-class-prompt: |
+          This is another example of the class 'Invoice'.
           
           Text from a different invoice format:
           Invoice Number: 2024-0234
@@ -325,14 +339,14 @@ classes:
           Customer: Small Business LLC
           Total: $875.50
         name: "Invoice2"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           For this invoice format, expected attributes are:
-              "invoice_number": "2024-0234",
-              "invoice_date": "March 10, 2024",
-              "vendor_name": "Service Provider Inc",
-              "total_amount": "$875.50",
-              "due_date": null
-        # No imagePath - text-only example
+              "InvoiceNumber": "2024-0234",
+              "InvoiceDate": "March 10, 2024",
+              "VendorName": "Service Provider Inc",
+              "TotalAmount": "$875.50",
+              "DueDate": null
+        # No x-aws-idp-image-path - text-only example
 ```
 
 ### Step 4: Update Task Prompts with Cache Points
@@ -707,7 +721,7 @@ Monitor these metrics to ensure optimal cache usage:
 
 ### Complete Working Example with Caching
 
-See `config_library/pattern-2/few_shot_example/` for a complete working configuration that demonstrates:
+See `config_library/unified/few_shot_example/` for a complete working configuration that demonstrates:
 - Letter classification and extraction with 2 examples
 - Email classification and extraction with 1 example
 - Proper image path configuration
@@ -715,62 +729,72 @@ See `config_library/pattern-2/few_shot_example/` for a complete working configur
 
 ### Multi-Image Example Configuration
 
-For using multiple images per example:
+For using multiple images per example with JSON Schema format:
 
 ```yaml
 classes:
-  - name: letter
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Letter
+    x-aws-idp-document-type: Letter
+    type: object
     description: "A formal written correspondence"
-    attributes:
-      - name: sender_name
+    properties:
+      SenderName:
+        type: string
         description: "The name of the person who wrote the letter"
-      - name: recipient_name
+      RecipientName:
+        type: string
         description: "The name of the person receiving the letter"
-    examples:
+    x-aws-idp-examples:
       # Single image example
-      - classPrompt: "This is an example of the class 'letter'"
+      - x-aws-idp-class-prompt: "This is an example of the class 'Letter'"
         name: "Letter1"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           expected attributes are:
-              "sender_name": "John Smith",
-              "recipient_name": "Jane Doe"
-        imagePath: "config_library/pattern-2/your_config/example-images/letter1.jpg"
+              "SenderName": "John Smith",
+              "RecipientName": "Jane Doe"
+        x-aws-idp-image-path: "config_library/unified/your_config/example-images/letter1.jpg"
       
       # Multiple images from directory
-      - classPrompt: "These are various examples of the class 'letter'"
+      - x-aws-idp-class-prompt: "These are various examples of the class 'Letter'"
         name: "LetterVariations"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           For letters like these examples, the expected format is:
-              "sender_name": "string",
-              "recipient_name": "string"
-        imagePath: "config_library/pattern-2/your_config/example-images/letters/"
+              "SenderName": "string",
+              "RecipientName": "string"
+        x-aws-idp-image-path: "config_library/unified/your_config/example-images/letters/"
       
       # Multiple images from S3 prefix
-      - classPrompt: "Additional letter examples from S3"
+      - x-aws-idp-class-prompt: "Additional letter examples from S3"
         name: "LetterS3Examples"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           For these letter types, extract:
-              "sender_name": "actual sender name",
-              "recipient_name": "actual recipient name"
-        imagePath: "s3://my-config-bucket/examples/letters/"
+              "SenderName": "actual sender name",
+              "RecipientName": "actual recipient name"
+        x-aws-idp-image-path: "s3://my-config-bucket/examples/letters/"
 ```
 
 ### Text-Only Example Configuration
 
-For environments where images cannot be used:
+For environments where images cannot be used, using JSON Schema format:
 
 ```yaml
 classes:
-  - name: invoice
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Invoice
+    x-aws-idp-document-type: Invoice
+    type: object
     description: "A commercial document requesting payment"
-    attributes:
-      - name: invoice_number
+    properties:
+      InvoiceNumber:
+        type: string
         description: "The unique invoice identifier"
-      - name: total_amount
+      TotalAmount:
+        type: string
         description: "The total amount due"
-    examples:
-      - classPrompt: |
-          This is an example of the class 'invoice'.
+    x-aws-idp-examples:
+      - x-aws-idp-class-prompt: |
+          This is an example of the class 'Invoice'.
           
           Example invoice text:
           INVOICE
@@ -779,13 +803,13 @@ classes:
           Bill To: Customer Name
           Amount: $1,250.00
         name: "Invoice1"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           For the above invoice text, expected attributes are:
-              "invoice_number": "INV-2024-001",
-              "invoice_date": "January 15, 2024",
-              "vendor_name": "Your Company",
-              "total_amount": "$1,250.00"
-        # No imagePath - text-only example
+              "InvoiceNumber": "INV-2024-001",
+              "InvoiceDate": "January 15, 2024",
+              "VendorName": "Your Company",
+              "TotalAmount": "$1,250.00"
+        # No x-aws-idp-image-path - text-only example
 
 classification:
   task_prompt: |

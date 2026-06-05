@@ -195,17 +195,6 @@ pricing:
       - name: cacheWriteInputTokens
         price: "3.75E-6"
   
-  - name: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0:1m
-    units:
-      - name: inputTokens
-        price: "6.0E-6"
-      - name: outputTokens
-        price: "2.25E-5"
-      - name: cacheReadInputTokens
-        price: "6.0E-7"
-      - name: cacheWriteInputTokens
-        price: "7.5E-6"
-  
   - name: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
     units:
       - name: inputTokens
@@ -217,17 +206,6 @@ pricing:
       - name: cacheWriteInputTokens
         price: "4.125E-6"
   
-  - name: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m
-    units:
-      - name: inputTokens
-        price: "6.6E-6"
-      - name: outputTokens
-        price: "2.475E-5"
-      - name: cacheReadInputTokens
-        price: "6.6E-7"
-      - name: cacheWriteInputTokens
-        price: "8.25E-6"
-
   - name: bedrock/us.anthropic.claude-sonnet-4-6
     units:
       - name: inputTokens
@@ -295,6 +273,28 @@ pricing:
         price: "6.25E-6"
 
   - name: bedrock/us.anthropic.claude-opus-4-6-v1:1m
+    units:
+      - name: inputTokens
+        price: "10.0E-6"
+      - name: outputTokens
+        price: "3.75E-5"
+      - name: cacheReadInputTokens
+        price: "1.0E-6"
+      - name: cacheWriteInputTokens
+        price: "12.5E-6"
+
+  - name: bedrock/us.anthropic.claude-opus-4-7
+    units:
+      - name: inputTokens
+        price: "5.0E-6"
+      - name: outputTokens
+        price: "2.5E-5"
+      - name: cacheReadInputTokens
+        price: "5.0E-7"
+      - name: cacheWriteInputTokens
+        price: "6.25E-6"
+
+  - name: bedrock/us.anthropic.claude-opus-4-7:1m
     units:
       - name: inputTokens
         price: "10.0E-6"
@@ -406,17 +406,6 @@ pricing:
       - name: cacheWriteInputTokens
         price: "4.125E-6"
   
-  - name: bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m
-    units:
-      - name: inputTokens
-        price: "6.6E-6"
-      - name: outputTokens
-        price: "2.475E-5"
-      - name: cacheReadInputTokens
-        price: "6.6E-7"
-      - name: cacheWriteInputTokens
-        price: "8.25E-6"
-
   - name: bedrock/eu.anthropic.claude-sonnet-4-6
     units:
       - name: inputTokens
@@ -462,6 +451,28 @@ pricing:
         price: "6.25E-6"
 
   - name: bedrock/eu.anthropic.claude-opus-4-6-v1:1m
+    units:
+      - name: inputTokens
+        price: "10.0E-6"
+      - name: outputTokens
+        price: "3.75E-5"
+      - name: cacheReadInputTokens
+        price: "1.0E-6"
+      - name: cacheWriteInputTokens
+        price: "12.5E-6"
+
+  - name: bedrock/eu.anthropic.claude-opus-4-7
+    units:
+      - name: inputTokens
+        price: "5.0E-6"
+      - name: outputTokens
+        price: "2.5E-5"
+      - name: cacheReadInputTokens
+        price: "5.0E-7"
+      - name: cacheWriteInputTokens
+        price: "6.25E-6"
+
+  - name: bedrock/eu.anthropic.claude-opus-4-7:1m
     units:
       - name: inputTokens
         price: "10.0E-6"
@@ -530,17 +541,6 @@ pricing:
       - name: cacheWriteInputTokens
         price: "3.75E-6"
   
-  - name: bedrock/global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m
-    units:
-      - name: inputTokens
-        price: "6.0E-6"
-      - name: outputTokens
-        price: "2.25E-5"
-      - name: cacheReadInputTokens
-        price: "6.0E-7"
-      - name: cacheWriteInputTokens
-        price: "7.5E-6"
-
   - name: bedrock/global.anthropic.claude-sonnet-4-6
     units:
       - name: inputTokens
@@ -596,6 +596,28 @@ pricing:
       - name: cacheWriteInputTokens
         price: "12.5E-6"
 
+  - name: bedrock/global.anthropic.claude-opus-4-7
+    units:
+      - name: inputTokens
+        price: "5.0E-6"
+      - name: outputTokens
+        price: "2.5E-5"
+      - name: cacheReadInputTokens
+        price: "5.0E-7"
+      - name: cacheWriteInputTokens
+        price: "6.25E-6"
+
+  - name: bedrock/global.anthropic.claude-opus-4-7:1m
+    units:
+      - name: inputTokens
+        price: "10.0E-6"
+      - name: outputTokens
+        price: "3.75E-5"
+      - name: cacheReadInputTokens
+        price: "1.0E-6"
+      - name: cacheWriteInputTokens
+        price: "12.5E-6"
+
   # ---------------------------------------------------------------------------
   # Amazon Bedrock Models - Third-Party
   # ---------------------------------------------------------------------------
@@ -605,6 +627,35 @@ pricing:
         price: "5.3E-7"
       - name: outputTokens
         price: "2.66E-6"
+
+  - name: bedrock/us.meta.llama4-maverick-17b-instruct-v1:0
+    units:
+      - name: inputTokens
+        price: "2.4E-7"
+      - name: outputTokens
+        price: "9.7E-7"
+
+  - name: bedrock/us.meta.llama4-scout-17b-instruct-v1:0
+    units:
+      - name: inputTokens
+        price: "1.7E-7"
+      - name: outputTokens
+        price: "6.6E-7"
+
+  - name: bedrock/google.gemma-3-27b-it
+    units:
+      - name: inputTokens
+        price: "2.3E-7"
+      - name: outputTokens
+        price: "3.8E-7"
+
+  - name: bedrock/nvidia.nemotron-nano-12b-v2
+    units:
+      - name: inputTokens
+        price: "2.0E-7"
+      - name: outputTokens
+        price: "6.0E-7"
+
 
   # ---------------------------------------------------------------------------
   # AWS Lambda Pricing (US East - N. Virginia)

@@ -81,6 +81,7 @@ const ConfigurationComparison = ({ versions, configs }: ConfigurationComparisonP
           if (!Array.isArray(arr)) return null;
           current = (arr.find((item) => item && item['$id'] === id) || null) as Record<string, unknown> | null;
         } else if (typeof current === 'object' && current !== null && part in current) {
+          // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
           current = current[part] as Record<string, unknown> | null;
         } else {
           return null;
@@ -139,7 +140,7 @@ const ConfigurationComparison = ({ versions, configs }: ConfigurationComparisonP
         if (!firstValueSet) {
           firstValue = strValue;
           firstValueSet = true;
-        } else if (!areStrValuesEqual(firstValue, strValue)) {
+        } else if (!areStrValuesEqual(firstValue ?? '', strValue)) {
           hasDifferences = true;
         }
       });
@@ -235,14 +236,14 @@ const ConfigurationComparison = ({ versions, configs }: ConfigurationComparisonP
     {
       id: 'field',
       header: 'Field',
-      cell: (item) => item.field,
+      cell: (item: { field: string; values: Record<string, string> }) => item.field,
       sortingField: 'field',
       width: `${equalWidth}%`,
     },
     ...versions.map((version) => ({
       id: version,
       header: version,
-      cell: (item) => formatValue(item.values[version]),
+      cell: (item: { field: string; values: Record<string, string> }) => formatValue(item.values[version]),
       width: `${equalWidth}%`,
     })),
   ];

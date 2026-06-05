@@ -1,12 +1,13 @@
 # Classification Service Configuration
 classification:
   classificationMethod: multimodalPageLevelClassification
+  sectionSplitting: llm_determined
   image:
     target_height: ''
     target_width: ''
   model: us.amazon.nova-pro-v1:0
-  temperature: '0.0'
-  top_p: '0.1'
+  temperature: "0.0"
+  top_p: "0.0"
   max_tokens: '4096'
   top_k: '5'
   system_prompt: >-

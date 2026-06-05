@@ -5,9 +5,9 @@ import { Table, Button, SpaceBetween, ButtonDropdown, Pagination, Box, TextFilte
 import type { IconProps } from '@cloudscape-design/components';
 import { useCollection } from '@cloudscape-design/collection-hooks';
 import { generateClient } from 'aws-amplify/api';
-import GET_TEST_RUNS from '../../graphql/queries/getTestRuns';
-import DELETE_TESTS from '../../graphql/queries/deleteTests';
+import { getTestRuns, deleteTests, abortTestRuns } from '../../graphql/generated';
 import DeleteTestModal from './DeleteTestModal';
+import AbortTestModal from './AbortTestModal';
 import DateRangeModal from '../common/DateRangeModal';
 import { paginationLabels } from '../common/labels';
 import TestRunnerStatus from './TestRunnerStatus';
@@ -124,10 +124,13 @@ const TestResultsList = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [isAbortModalVisible, setIsAbortModalVisible] = useState(false);
   const [isDateRangeModalVisible, setIsDateRangeModalVisible] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [abortLoading, setAbortLoading] = useState(false);
   const [pageSize, setPageSize] = useState(10);
 
   // Load saved time period from localStorage on mount
@@ -169,13 +172,25 @@ const TestResultsList = ({
     window.location.hash = `#/test-studio?tab=results&testRunId=${testRunId}`;
   };
 
-  const getTestRunIdCell = (item) => <TestRunIdCell item={item} onSelect={handleTestRunSelect} />;
-  const getTestSetNameCell = (item) => <TextCell text={item.testSetName} />;
-  const getContextCell = (item) => <TextCell text={item.context || 'N/A'} />;
+  const getTestRunIdCell = (item: TestRunItem) => <TestRunIdCell item={item} onSelect={handleTestRunSelect} />;
+  const getTestSetNameCell = (item: TestRunItem) => <TextCell text={item.testSetName} />;
+  const getContextCell = (item: TestRunItem) => <TextCell text={item.context || 'N/A'} />;
 
-  const getStatusCell = (item) => {
-    if (item.isActive) {
-      return <TestRunnerStatus testRunId={item.testRunId} onComplete={() => onTestComplete(item.testRunId)} />;
+  const getStatusCell = (item: TestRunItem) => {
+    const terminalStatuses = ['COMPLETE', 'PARTIAL_COMPLETE', 'FAILED', 'ABORTED'];
+
+    if (!terminalStatuses.includes(item.status || '')) {
+      return (
+        <TestRunnerStatus
+          testRunId={item.testRunId}
+          createdAt={item.createdAt}
+          onComplete={() => onTestComplete(item.testRunId)}
+          onAbort={() => {
+            setSelectedItems([item]);
+            setIsAbortModalVisible(true);
+          }}
+        />
+      );
     }
     return item.status;
   };
@@ -186,14 +201,10 @@ const TestResultsList = ({
       const variables = customDateRange
         ? { startDateTime: customDateRange.startDateTime, endDateTime: customDateRange.endDateTime }
         : { timePeriodHours };
-      console.log('Fetching test runs with variables:', variables);
       const result = (await client.graphql({
-        query: GET_TEST_RUNS,
+        query: getTestRuns,
         variables,
       })) as GqlResult;
-      console.log('Raw GraphQL result:', result);
-      console.log('getTestRuns data:', result.data.getTestRuns);
-      console.log('Number of test runs returned:', result.data.getTestRuns?.length || 0);
 
       const completedRuns = result.data.getTestRuns || [];
 
@@ -201,19 +212,19 @@ const TestResultsList = ({
       const activeRunsWithProgress = activeTestRuns.map((run) => ({
         testRunId: run.testRunId,
         testSetName: run.testSetName,
-        status: 'Running',
+        status: 'RUNNING',
         isActive: true,
         progress: Math.min(90, Math.floor(((Date.now() - run.startTime.getTime()) / 1000 / 60) * 10)), // Simulate progress
         filesCount: run.filesCount || 0,
         createdAt: run.startTime.toISOString(),
-        completedAt: null,
+        completedAt: null as string | null,
         context: run.context || 'N/A',
         configVersion: run.configVersion || null,
       }));
 
       // Filter out completed runs that match active run IDs to avoid duplicates
-      const activeRunIds = new Set(activeTestRuns.map((run) => run.testRunId));
-      const filteredCompletedRuns = completedRuns.filter((run) => !activeRunIds.has(run.testRunId));
+      const activeRunIds = new Set(activeTestRuns.map((run: ActiveTestRun) => run.testRunId));
+      const filteredCompletedRuns = completedRuns.filter((run: TestRunItem) => !activeRunIds.has(run.testRunId));
 
       // Merge active and completed runs, active runs first
       const allRuns = [...activeRunsWithProgress, ...filteredCompletedRuns];
@@ -221,8 +232,12 @@ const TestResultsList = ({
       setError(null);
     } catch (err) {
       console.error('Error fetching test runs:', err);
-      const errorMessage = err.errors?.length > 0 ? err.errors.map((e) => e.message).join('; ') : 'Failed to load test runs';
-      setError(errorMessage);
+      const typedErr = err as { errors?: Array<{ message: string }> };
+      const fetchErrorMsg =
+        typedErr.errors?.length && typedErr.errors.length > 0
+          ? typedErr.errors.map((e: { message: string }) => e.message).join('; ')
+          : 'Failed to load test runs';
+      setError(fetchErrorMsg);
     } finally {
       setLoading(false);
     }
@@ -275,13 +290,11 @@ const TestResultsList = ({
     try {
       setDeleteLoading(true);
       const testRunIds = selectedItems.map((item) => item.testRunId);
-      console.log('Attempting to delete test runs:', testRunIds);
 
       const result = (await client.graphql({
-        query: DELETE_TESTS,
+        query: deleteTests,
         variables: { testRunIds },
       })) as GqlResult;
-      console.log('Delete result:', result);
 
       const count = selectedItems.length;
       setSuccessMessage(`Successfully deleted ${count} test run${count > 1 ? 's' : ''}`);
@@ -295,10 +308,49 @@ const TestResultsList = ({
       return result.data.deleteTests;
     } catch (err) {
       console.error('Error deleting test runs:', err);
-      console.error('Error details:', err.errors);
+      console.error('Error details:', (err as { errors?: unknown }).errors);
       return false;
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const confirmAbort = async () => {
+    try {
+      setAbortLoading(true);
+      const testRunIds = selectedItems.map((item) => item.testRunId);
+
+      const result = (await client.graphql({
+        query: abortTestRuns,
+        variables: { testRunIds },
+      })) as GqlResult;
+
+      const abortResult = result.data.abortTestRuns;
+      if (abortResult.success) {
+        const { abortedCount, failedCount } = abortResult;
+        let message = `Successfully aborted ${abortedCount} test run${abortedCount > 1 ? 's' : ''}`;
+        if (failedCount > 0) {
+          message += `, ${failedCount} failed`;
+        }
+        setSuccessMessage(message);
+        setSelectedItems([]);
+        setIsAbortModalVisible(false);
+        fetchTestRuns(); // Refresh the list
+
+        // Clear success message after 5 seconds
+        setTimeout(() => setSuccessMessage(null), 5000);
+      } else {
+        setErrorMessage(`Abort failed: ${abortResult.message}`);
+        setTimeout(() => setErrorMessage(null), 5000);
+      }
+
+      return abortResult;
+    } catch (err) {
+      setErrorMessage('Error aborting test runs');
+      setTimeout(() => setErrorMessage(null), 5000);
+      return null;
+    } finally {
+      setAbortLoading(false);
     }
   };
 
@@ -315,6 +367,18 @@ const TestResultsList = ({
               content: successMessage,
               dismissible: true,
               onDismiss: () => setSuccessMessage(null),
+            },
+          ]}
+        />
+      )}
+      {errorMessage && (
+        <Flashbar
+          items={[
+            {
+              type: 'error',
+              content: errorMessage,
+              dismissible: true,
+              onDismiss: () => setErrorMessage(null),
             },
           ]}
         />
@@ -465,6 +529,14 @@ const TestResultsList = ({
         selectedItems={selectedItems}
         itemType="test run"
         loading={deleteLoading}
+      />
+
+      <AbortTestModal
+        visible={isAbortModalVisible}
+        onDismiss={() => setIsAbortModalVisible(false)}
+        onConfirm={confirmAbort}
+        selectedItems={selectedItems}
+        loading={abortLoading}
       />
 
       <DateRangeModal

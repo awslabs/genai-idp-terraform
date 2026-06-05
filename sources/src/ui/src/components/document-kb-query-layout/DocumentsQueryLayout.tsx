@@ -1,15 +1,15 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-/* eslint-disable max-len */
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import rehypeRaw from 'rehype-raw';
 import { Box, Button, Spinner, Header, Grid, Container, SpaceBetween, Input, Link } from '@cloudscape-design/components';
+import SafeMarkdown from '../common/SafeMarkdown';
+
 import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
-import queryKnowledgeBase from '../../graphql/queries/queryKnowledgeBase';
+import { queryKnowledgeBase } from '../../graphql/generated';
 import { DOCUMENTS_PATH } from '../../routes/constants';
 import useSettingsContext from '../../contexts/settings';
 
@@ -44,15 +44,14 @@ interface CustomLinkProps {
 }
 
 const CustomLink = ({ href, children }: CustomLinkProps): React.JSX.Element => {
-  const handleClick = (e: CustomEvent): void => {
-    e.preventDefault();
+  const handleClick = (): void => {
     // Handle the link click here
     console.log('Link clicked:', href);
     // You can add your custom navigation logic here
   };
 
   return (
-    <Link href={`#${DOCUMENTS_PATH}/${href}`} onClick={handleClick as unknown as (event: CustomEvent) => void}>
+    <Link href={`#${DOCUMENTS_PATH}/${href}`} onClick={handleClick}>
       {children}
     </Link>
   );
@@ -65,7 +64,6 @@ export const DocumentsQueryLayout = (): React.JSX.Element => {
   const { settings } = useSettingsContext();
 
   const getElementByIdAsync = (id: string): Promise<HTMLElement> =>
-    // eslint-disable-next-line
     new Promise((resolve) => {
       const getElement = () => {
         const element = document.getElementById(id);
@@ -85,7 +83,7 @@ export const DocumentsQueryLayout = (): React.JSX.Element => {
 
   const getDocumentsQueryResponseFromKB = async (input: string, sessionId: string) => {
     const response = await client.graphql({
-      query: queryKnowledgeBase as unknown as string,
+      query: queryKnowledgeBase,
       variables: { input, sessionId },
     });
     return response;
@@ -135,12 +133,11 @@ export const DocumentsQueryLayout = (): React.JSX.Element => {
     return true;
   };
 
-  // eslint-disable-next-line
   const placeholder =
     (settings as Record<string, unknown>).ShouldUseDocumentKnowledgeBase === 'true'
       ? 'Enter a question to query your document knowledge base.'
       : 'Document Knowledge Base is set to DISABLED for this GenAIIDP deployment.';
-  // eslint-disable-next-line
+
   const initialMsg =
     (settings as Record<string, unknown>).ShouldUseDocumentKnowledgeBase === 'true'
       ? 'Ask a question below.'
@@ -170,8 +167,7 @@ export const DocumentsQueryLayout = (): React.JSX.Element => {
                     <Spinner />
                   </div>
                 ) : (
-                  <ReactMarkdown
-                    rehypePlugins={[rehypeRaw]}
+                  <SafeMarkdown
                     components={
                       {
                         documentid: CustomLink,
@@ -179,7 +175,7 @@ export const DocumentsQueryLayout = (): React.JSX.Element => {
                     }
                   >
                     {entry.value}
-                  </ReactMarkdown>
+                  </SafeMarkdown>
                 )}
               </ValueWithLabel>
             ))

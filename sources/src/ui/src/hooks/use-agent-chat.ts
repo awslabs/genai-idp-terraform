@@ -4,8 +4,7 @@ import { useEffect, useRef } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
-import { SEND_AGENT_MESSAGE, ON_AGENT_MESSAGE_UPDATE } from '../graphql/queries/agentChatQueries';
-import { GET_AGENT_CHAT_MESSAGES } from '../graphql/queries/agentChatSessionQueries';
+import { sendAgentChatMessage, onAgentChatMessageUpdate, getChatMessages } from '../graphql/generated';
 import { useAgentChatContext } from '../contexts/agentChat';
 import type { ChatMessage } from '../types/agent-chat';
 
@@ -14,6 +13,8 @@ const client = generateClient();
 
 interface AgentChatConfig {
   agentType: string;
+  // TODO: mutation/subscription are typed as string, losing branded GraphQL type info.
+  // This is a known tradeoff of the dynamic config pattern - the default config always wins.
   mutation: string;
   subscription: string;
   method: string;
@@ -44,8 +45,8 @@ const useAgentChat = (config: Partial<AgentChatConfig> = {}): UseAgentChatReturn
   // Default configuration for backward compatibility
   const defaultConfig: AgentChatConfig = {
     agentType: 'idp-help',
-    mutation: SEND_AGENT_MESSAGE,
-    subscription: ON_AGENT_MESSAGE_UPDATE,
+    mutation: sendAgentChatMessage,
+    subscription: onAgentChatMessageUpdate,
     method: 'chat',
   };
 
@@ -874,8 +875,21 @@ const useAgentChat = (config: Partial<AgentChatConfig> = {}): UseAgentChatReturn
 
       return response;
     } catch (err) {
+      // Extract detailed error message from GraphQL errors
+      const gqlErr = err as { errors?: { message: string; errorType?: string }[]; message?: string };
+      let errorMessage = 'Failed to send message. Please try again.';
+      if (gqlErr.errors && gqlErr.errors.length > 0) {
+        const firstError = gqlErr.errors[0];
+        if (firstError.errorType === 'Unauthorized') {
+          errorMessage = `Access denied: ${firstError.message}. Check your role permissions.`;
+        } else {
+          errorMessage = firstError.message || errorMessage;
+        }
+      } else if (gqlErr.message) {
+        errorMessage = gqlErr.message;
+      }
       updateAgentChatState({
-        error: 'Failed to send message. Please try again.',
+        error: errorMessage,
         waitingForResponse: false,
       });
       logger.error('Chat error:', err);
@@ -916,10 +930,11 @@ const useAgentChat = (config: Partial<AgentChatConfig> = {}): UseAgentChatReturn
       // Otherwise, fetch messages from the server
       if (!messagesToLoad) {
         const response = await client.graphql({
-          query: GET_AGENT_CHAT_MESSAGES,
+          query: getChatMessages,
           variables: { sessionId: targetSessionId },
-        } as unknown as Parameters<typeof client.graphql>[0]);
-        messagesToLoad = (response as unknown as { data: { getChatMessages: ChatMessage[] } })?.data?.getChatMessages || [];
+        });
+        // getChatMessages returns partial shape (no `id` field) - normalized in formatting below
+        messagesToLoad = (response.data.getChatMessages as unknown as ChatMessage[]) ?? [];
       }
 
       // Convert messages to the format expected by the UI

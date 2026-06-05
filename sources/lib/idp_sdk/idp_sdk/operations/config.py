@@ -3,15 +3,23 @@
 
 """Configuration operations for IDP SDK."""
 
+import logging
 from typing import Optional
 
-from idp_sdk.exceptions import IDPResourceNotFoundError
+from idp_sdk.exceptions import IDPProcessingError, IDPResourceNotFoundError
 from idp_sdk.models import (
+    ConfigActivateResult,
     ConfigCreateResult,
+    ConfigDeleteResult,
     ConfigDownloadResult,
+    ConfigListResult,
+    ConfigSyncBdaResult,
     ConfigUploadResult,
     ConfigValidationResult,
+    ConfigVersionInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigOperation:
@@ -19,6 +27,34 @@ class ConfigOperation:
 
     def __init__(self, client):
         self._client = client
+
+    def _get_config_table(self, stack_name: str) -> str:
+        """Look up the ConfigurationTable physical resource ID for a stack.
+
+        Returns the physical resource ID.
+        Raises IDPResourceNotFoundError if not found.
+        """
+        import boto3
+
+        # Enhancement 8: use self._client._region consistently
+        cfn = boto3.client("cloudformation", region_name=self._client._region)
+        paginator = cfn.get_paginator("list_stack_resources")
+        config_table = None
+
+        for page in paginator.paginate(StackName=stack_name):
+            for resource in page.get("StackResourceSummaries", []):
+                if resource.get("LogicalResourceId") == "ConfigurationTable":
+                    config_table = resource.get("PhysicalResourceId")
+                    break
+            if config_table:
+                break
+
+        if not config_table:
+            raise IDPResourceNotFoundError(
+                f"ConfigurationTable not found in stack '{stack_name}'"
+            )
+
+        return config_table
 
     def create(
         self,
@@ -33,7 +69,7 @@ class ConfigOperation:
 
         Args:
             features: Feature set to include
-            pattern: Pattern to use (pattern-1, pattern-2, pattern-3)
+            pattern: Pattern to use (pattern-1, pattern-2)
             output: Optional output file path
             include_prompts: Include prompt templates
             include_comments: Include explanatory comments
@@ -67,6 +103,7 @@ class ConfigOperation:
         config_file: str,
         pattern: str = "pattern-2",
         show_merged: bool = False,
+        strict: bool = False,
         **kwargs,
     ) -> ConfigValidationResult:
         """Validate a configuration file against system defaults.
@@ -75,10 +112,13 @@ class ConfigOperation:
             config_file: Path to configuration file
             pattern: Pattern to validate against
             show_merged: Include merged configuration in result
+            strict: If True, report deprecated/unknown fields as errors
+                    (the caller decides whether to fail — the SDK only reports them)
             **kwargs: Additional parameters
 
         Returns:
-            ConfigValidationResult with validation status
+            ConfigValidationResult with validation status, including deprecated_fields
+            and unknown_fields populated when extra keys are found.
         """
         from pathlib import Path
 
@@ -98,10 +138,46 @@ class ConfigOperation:
 
         result = validate_config(user_config, pattern=pattern)
 
+        # Enhancement 3: detect deprecated and unknown fields
+        deprecated_fields: list = []
+        unknown_fields: list = []
+        errors = list(result.get("errors", []))
+        warnings = list(result.get("warnings", []))
+
+        try:
+            from idp_common.config.models import IDP_CONFIG_DEPRECATED_FIELDS, IDPConfig
+
+            defined_fields = set(IDPConfig.model_fields.keys())
+            user_fields = (
+                set(user_config.keys()) if isinstance(user_config, dict) else set()
+            )
+            extra_fields = user_fields - defined_fields
+
+            deprecated_fields = sorted(extra_fields & IDP_CONFIG_DEPRECATED_FIELDS)
+            unknown_fields = sorted(extra_fields - IDP_CONFIG_DEPRECATED_FIELDS)
+
+            # Add informational warnings for deprecated / unknown fields
+            for field in deprecated_fields:
+                warnings.append(
+                    f"Deprecated field '{field}' found — it will be ignored by the pipeline"
+                )
+            for field in unknown_fields:
+                warnings.append(
+                    f"Unknown field '{field}' found — it is not part of the IDPConfig schema"
+                )
+
+        except ImportError:
+            # If idp_common.config.models is not available, skip the check gracefully
+            logger.warning(
+                "Could not import IDP_CONFIG_DEPRECATED_FIELDS — skipping deprecated field check"
+            )
+
         return ConfigValidationResult(
             valid=result["valid"],
-            errors=result.get("errors", []),
-            warnings=result.get("warnings", []),
+            errors=errors,
+            warnings=warnings,
+            deprecated_fields=deprecated_fields,
+            unknown_fields=unknown_fields,
             merged_config=result.get("merged_config") if show_merged else None,
         )
 
@@ -127,32 +203,38 @@ class ConfigOperation:
         Returns:
             ConfigDownloadResult with downloaded configuration
         """
-        import boto3
+        import os
+
         import yaml
 
         name = self._client._require_stack(stack_name)
+        config_table = self._get_config_table(name)
 
-        cfn = boto3.client("cloudformation", region_name=self._client._region)
-        paginator = cfn.get_paginator("list_stack_resources")
-        config_table = None
+        # If no version specified, resolve the active version from DynamoDB
+        # (all configs are stored as Config#<version>, never as bare "Config")
+        if not config_version:
+            from idp_common.config.configuration_manager import ConfigurationManager
 
-        for page in paginator.paginate(StackName=name):
-            for resource in page.get("StackResourceSummaries", []):
-                if resource.get("LogicalResourceId") == "ConfigurationTable":
-                    config_table = resource.get("PhysicalResourceId")
+            os.environ["CONFIGURATION_TABLE_NAME"] = config_table
+            manager = ConfigurationManager()
+            for v in manager.list_config_versions():
+                if v.get("isActive"):
+                    config_version = v.get("versionName")
+                    logger.info(f"Resolved active config version: {config_version}")
                     break
-            if config_table:
-                break
+            if not config_version:
+                from idp_common.config.constants import DEFAULT_VERSION
 
-        if not config_table:
-            raise IDPResourceNotFoundError("ConfigurationTable not found in stack")
+                config_version = DEFAULT_VERSION
+                logger.info(
+                    f"No active version found, falling back to: {config_version}"
+                )
 
         from idp_common.config import ConfigurationReader
 
         reader = ConfigurationReader(table_name=config_table)
-        # config_data = reader.get_merged_configuration(as_model=False)
-        config_data = reader.get_merged_configuration(
-            version=config_version, as_model=False
+        config_data = reader.get_configuration(
+            "Config", version=config_version, as_model=False
         )
 
         if format == "minimal":
@@ -162,13 +244,15 @@ class ConfigOperation:
             )
 
             if not pattern:
-                classification_method = config_data.get("classification", {}).get(
-                    "classificationMethod", ""
+                classification_method = (
+                    config_data.get("classification", {}).get(
+                        "classificationMethod", ""
+                    )
+                    if config_data
+                    else ""
                 )
                 if classification_method == "bda":
                     pattern = "pattern-1"
-                elif classification_method == "udop":
-                    pattern = "pattern-3"
                 else:
                     pattern = "pattern-2"
 
@@ -190,16 +274,16 @@ class ConfigOperation:
                 f.write(yaml_content)
 
         return ConfigDownloadResult(
-            config=config_data, yaml_content=yaml_content, output_path=output
+            config=config_data or {}, yaml_content=yaml_content, output_path=output
         )
 
     def upload(
         self,
         config_file: str,
+        config_version: str,
         stack_name: Optional[str] = None,
         validate: bool = True,
         pattern: Optional[str] = None,
-        config_version: Optional[str] = None,
         description: Optional[str] = None,
         **kwargs,
     ) -> ConfigUploadResult:
@@ -207,10 +291,12 @@ class ConfigOperation:
 
         Args:
             config_file: Path to configuration file
+            config_version: Configuration version to upload to (e.g., "default", "v1", "v2").
+                Use "default" to update the base default configuration.
+                If the version doesn't exist, it will be created.
             stack_name: Optional stack name override
             validate: Validate before uploading
             pattern: Pattern for validation
-            config_version: Configuration version to upload to (default: active version)
             description: Description for the configuration version
             **kwargs: Additional parameters
 
@@ -220,7 +306,6 @@ class ConfigOperation:
         import json
         import os
 
-        import boto3
         import yaml
 
         name = self._client._require_stack(stack_name)
@@ -238,6 +323,21 @@ class ConfigOperation:
                 success=False, error=f"Failed to load config: {e}"
             )
 
+        # Check if config has managed=true and reject it
+        if isinstance(user_config, dict) and user_config.get("managed") is True:
+            return ConfigUploadResult(
+                success=False,
+                error="Cannot upload managed configuration via CLI. Managed configs are stack-controlled and overwritten on stack updates. Remove 'managed: true' from your config or set 'managed: false'.",
+            )
+
+        # Ensure managed field is explicitly set to false for user-uploaded configs.
+        # Force-write this field even if absent to protect against future model defaults
+        # changing — if the ConfigurationManager later defaults managed to true,
+        # user-uploaded configs would be incorrectly marked as stack-managed and
+        # overwritten on stack updates.
+        if isinstance(user_config, dict):
+            user_config["managed"] = False
+
         if validate:
             result = self.validate(config_file, pattern=pattern or "pattern-2")
             if not result.valid:
@@ -246,36 +346,42 @@ class ConfigOperation:
                     error=f"Validation failed: {'; '.join(result.errors)}",
                 )
 
-        cfn = boto3.client("cloudformation", region_name=self._client._region)
-        paginator = cfn.get_paginator("list_stack_resources")
-        config_table = None
-
-        for page in paginator.paginate(StackName=name):
-            for resource in page.get("StackResourceSummaries", []):
-                if resource.get("LogicalResourceId") == "ConfigurationTable":
-                    config_table = resource.get("PhysicalResourceId")
-                    break
-            if config_table:
-                break
-
-        if not config_table:
-            return ConfigUploadResult(
-                success=False, error="ConfigurationTable not found"
-            )
+        config_table = self._get_config_table(name)
 
         try:
             os.environ["CONFIGURATION_TABLE_NAME"] = config_table
             from idp_common.config.configuration_manager import ConfigurationManager
 
             manager = ConfigurationManager()
+
+            # Enhancement 4: check whether the version already exists and set saveAsVersion
+            # flag for new versions, matching CLI config_upload behavior.
+            version_exists = False
+            version_created = False
+            if config_version:
+                try:
+                    existing = manager.get_configuration(
+                        "Config", version=config_version
+                    )
+                    version_exists = existing is not None
+                except Exception:
+                    version_exists = False
+
+                if not version_exists:
+                    # New version — signal ConfigurationManager to create a new version record
+                    user_config["saveAsVersion"] = True
+                    version_created = True
+
             config_json = json.dumps(user_config)
-            # success = manager.handle_update_custom_configuration(config_json)
             success = manager.handle_update_custom_configuration(
                 config_json, version=config_version, description=description
             )
 
             return ConfigUploadResult(
-                success=success, error=None if success else "Upload failed"
+                success=success,
+                version=config_version,
+                version_created=version_created,
+                error=None if success else "Upload failed",
             )
         except Exception as e:
             return ConfigUploadResult(success=False, error=str(e))
@@ -284,7 +390,7 @@ class ConfigOperation:
         self,
         stack_name: Optional[str] = None,
         **kwargs,
-    ) -> dict:
+    ) -> ConfigListResult:
         """List all configuration versions in a deployed IDP stack.
 
         Args:
@@ -292,47 +398,53 @@ class ConfigOperation:
             **kwargs: Additional parameters
 
         Returns:
-            Dict with list of configuration versions
+            ConfigListResult with typed list of configuration versions
         """
-        import boto3
+        import os
 
         name = self._client._require_stack(stack_name)
-
-        cfn = boto3.client("cloudformation", region_name=self._client._region)
-        paginator = cfn.get_paginator("list_stack_resources")
-        config_table = None
-
-        for page in paginator.paginate(StackName=name):
-            for resource in page.get("StackResourceSummaries", []):
-                if resource.get("LogicalResourceId") == "ConfigurationTable":
-                    config_table = resource.get("PhysicalResourceId")
-                    break
-            if config_table:
-                break
-
-        if not config_table:
-            raise IDPResourceNotFoundError("ConfigurationTable not found in stack")
+        config_table = self._get_config_table(name)
 
         try:
-            import os
-
+            os.environ["CONFIGURATION_TABLE_NAME"] = config_table
             from idp_common.config.configuration_manager import ConfigurationManager
 
-            os.environ["CONFIGURATION_TABLE_NAME"] = config_table
             manager = ConfigurationManager()
-            versions = manager.list_config_versions()
+            versions_raw = manager.list_config_versions()
 
-            return {"versions": versions, "count": len(versions)}
+            versions = [
+                ConfigVersionInfo(
+                    version_name=v.get("versionName", v.get("version_name", str(v)))
+                    if isinstance(v, dict)
+                    else str(v),
+                    is_active=v.get("isActive", v.get("is_active", False))
+                    if isinstance(v, dict)
+                    else False,
+                    created_at=v.get("createdAt", v.get("created_at"))
+                    if isinstance(v, dict)
+                    else None,
+                    updated_at=v.get("updatedAt", v.get("updated_at"))
+                    if isinstance(v, dict)
+                    else None,
+                    description=v.get("description") if isinstance(v, dict) else None,
+                )
+                for v in (versions_raw or [])
+            ]
+
+            return ConfigListResult(versions=versions, count=len(versions))
         except Exception as e:
-            raise IDPResourceNotFoundError(f"Failed to list configurations: {e}")
+            raise IDPResourceNotFoundError(f"Failed to list configurations: {e}") from e
 
     def activate(
         self,
         config_version: str,
         stack_name: Optional[str] = None,
         **kwargs,
-    ) -> dict:
+    ) -> ConfigActivateResult:
         """Activate a configuration version in a deployed IDP stack.
+
+        If the configuration has use_bda=True, performs BDA blueprint sync
+        before activation (matches CLI and Web UI behavior).
 
         Args:
             config_version: Configuration version to activate
@@ -340,55 +452,146 @@ class ConfigOperation:
             **kwargs: Additional parameters
 
         Returns:
-            Dict with activation status
+            ConfigActivateResult with typed activation status and BDA sync details
         """
-        import boto3
+        import os
 
         name = self._client._require_stack(stack_name)
-
-        cfn = boto3.client("cloudformation", region_name=self._client._region)
-        paginator = cfn.get_paginator("list_stack_resources")
-        config_table = None
-
-        for page in paginator.paginate(StackName=name):
-            for resource in page.get("StackResourceSummaries", []):
-                if resource.get("LogicalResourceId") == "ConfigurationTable":
-                    config_table = resource.get("PhysicalResourceId")
-                    break
-            if config_table:
-                break
-
-        if not config_table:
-            raise IDPResourceNotFoundError("ConfigurationTable not found in stack")
+        config_table = self._get_config_table(name)
 
         try:
-            import os
-
+            os.environ["CONFIGURATION_TABLE_NAME"] = config_table
+            os.environ["STACK_NAME"] = name
             from idp_common.config.configuration_manager import ConfigurationManager
 
-            os.environ["CONFIGURATION_TABLE_NAME"] = config_table
             manager = ConfigurationManager()
 
-            # Check if version exists
+            # Check if the version exists
             existing_config = manager.get_configuration(
                 "Config", version=config_version
             )
             if not existing_config:
-                raise ValueError(
-                    f"Configuration version '{config_version}' does not exist"
+                return ConfigActivateResult(
+                    success=False,
+                    activated_version=config_version,
+                    error=f"Configuration version '{config_version}' does not exist",
                 )
 
+            # Enhancement 2: BDA blueprint sync before activation
+            use_bda = (
+                existing_config.use_bda
+                if hasattr(existing_config, "use_bda")
+                else False
+            )
+
+            bda_synced = False
+            bda_classes_synced = 0
+            bda_classes_failed = 0
+
+            if use_bda:
+                logger.info(
+                    "Configuration '%s' uses BDA — performing blueprint sync before activation",
+                    config_version,
+                )
+                try:
+                    from idp_common.bda.bda_blueprint_service import BdaBlueprintService
+
+                    bda_project_arn = manager.get_bda_project_arn(config_version)
+                    bda_service = BdaBlueprintService(
+                        dataAutomationProjectArn=bda_project_arn
+                    )
+
+                    if not bda_project_arn:
+                        bda_project_arn = bda_service.get_or_create_project_for_version(
+                            config_version
+                        )
+                        bda_service.dataAutomationProjectArn = bda_project_arn
+
+                    sync_result = (
+                        bda_service.create_blueprints_from_custom_configuration(
+                            sync_direction="idp_to_bda",
+                            version=config_version,
+                            sync_mode="replace",
+                        )
+                    )
+
+                    sync_failed = [
+                        item for item in sync_result if item.get("status") != "success"
+                    ]
+                    sync_succeeded = [
+                        item for item in sync_result if item.get("status") == "success"
+                    ]
+
+                    bda_classes_synced = len(sync_succeeded)
+                    bda_classes_failed = len(sync_failed)
+
+                    if bda_classes_synced == 0 and bda_classes_failed > 0:
+                        # Total failure — abort activation
+                        return ConfigActivateResult(
+                            success=False,
+                            activated_version=config_version,
+                            bda_synced=False,
+                            bda_classes_synced=0,
+                            bda_classes_failed=bda_classes_failed,
+                            error="BDA sync failed for all classes — activation aborted",
+                        )
+                    elif bda_classes_failed > 0:
+                        # Partial failure — continue with partial sync (matching CLI behavior)
+                        manager.set_bda_project_arn(
+                            config_version, bda_project_arn, "partial"
+                        )
+                        logger.warning(
+                            "BDA sync partially failed: %d succeeded, %d failed — continuing with activation",
+                            bda_classes_synced,
+                            bda_classes_failed,
+                        )
+                    else:
+                        # Full success
+                        manager.set_bda_project_arn(
+                            config_version, bda_project_arn, "synced"
+                        )
+
+                    bda_synced = True
+
+                except Exception as bda_exc:
+                    logger.error("BDA blueprint sync raised an exception: %s", bda_exc)
+                    return ConfigActivateResult(
+                        success=False,
+                        activated_version=config_version,
+                        bda_synced=False,
+                        bda_classes_synced=bda_classes_synced,
+                        bda_classes_failed=bda_classes_failed,
+                        error=f"BDA sync error: {bda_exc}",
+                    )
+
+            # Activate the version (BDA sync complete, or use_bda is False)
             manager.activate_version(config_version)
-            return {"success": True, "activated_version": config_version}
+
+            return ConfigActivateResult(
+                success=True,
+                activated_version=config_version,
+                bda_synced=bda_synced,
+                bda_classes_synced=bda_classes_synced,
+                bda_classes_failed=bda_classes_failed,
+            )
+
+        except IDPResourceNotFoundError:
+            raise
+        except IDPProcessingError:
+            raise
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return ConfigActivateResult(
+                success=False,
+                activated_version=config_version,
+                error=str(e),
+            )
 
     def delete(
         self,
         config_version: str,
         stack_name: Optional[str] = None,
         **kwargs,
-    ) -> dict:
+    ) -> ConfigDeleteResult:
         """Delete a configuration version from a deployed IDP stack.
 
         Args:
@@ -397,36 +600,129 @@ class ConfigOperation:
             **kwargs: Additional parameters
 
         Returns:
-            Dict with deletion status
+            ConfigDeleteResult with typed deletion status
         """
-        import boto3
+        import os
 
         name = self._client._require_stack(stack_name)
-
-        cfn = boto3.client("cloudformation", region_name=self._client._region)
-        paginator = cfn.get_paginator("list_stack_resources")
-        config_table = None
-
-        for page in paginator.paginate(StackName=name):
-            for resource in page.get("StackResourceSummaries", []):
-                if resource.get("LogicalResourceId") == "ConfigurationTable":
-                    config_table = resource.get("PhysicalResourceId")
-                    break
-            if config_table:
-                break
-
-        if not config_table:
-            raise IDPResourceNotFoundError("ConfigurationTable not found in stack")
+        config_table = self._get_config_table(name)
 
         try:
-            import os
-
+            os.environ["CONFIGURATION_TABLE_NAME"] = config_table
             from idp_common.config.configuration_manager import ConfigurationManager
 
+            manager = ConfigurationManager()
+            manager.delete_configuration("Config", version=config_version)
+
+            return ConfigDeleteResult(success=True, deleted_version=config_version)
+        except IDPResourceNotFoundError:
+            raise
+        except Exception as e:
+            return ConfigDeleteResult(
+                success=False, deleted_version=config_version, error=str(e)
+            )
+
+    def sync_bda(
+        self,
+        direction: str = "bidirectional",
+        mode: str = "replace",
+        config_version: Optional[str] = None,
+        stack_name: Optional[str] = None,
+        **kwargs,
+    ) -> ConfigSyncBdaResult:
+        """Synchronize document class schemas between IDP configuration and BDA blueprints.
+
+        Performs bidirectional or one-way synchronization between the IDP
+        configuration's document classes and BDA (Bedrock Data Automation)
+        blueprints.
+
+        Args:
+            direction: Sync direction — ``'bidirectional'`` (default),
+                ``'bda_to_idp'``, or ``'idp_to_bda'``.
+            mode: Sync mode — ``'replace'`` (default, full alignment) or
+                ``'merge'`` (additive, don't delete).
+            config_version: Configuration version to sync (default: active version).
+            stack_name: Optional stack name override.
+            **kwargs: Additional parameters.
+
+        Returns:
+            ConfigSyncBdaResult with sync status and details.
+        """
+        import os
+
+        name = self._client._require_stack(stack_name)
+        config_table = self._get_config_table(name)
+
+        try:
             os.environ["CONFIGURATION_TABLE_NAME"] = config_table
+            os.environ["STACK_NAME"] = name
+            from idp_common.bda.bda_blueprint_service import BdaBlueprintService
+            from idp_common.config.configuration_manager import ConfigurationManager
+
             manager = ConfigurationManager()
 
-            manager.delete_configuration("Config", version=config_version)
-            return {"success": True, "deleted_version": config_version}
+            # Resolve config version if not provided
+            if not config_version:
+                for v in manager.list_config_versions():
+                    if v.get("isActive"):
+                        config_version = v.get("versionName")
+                        break
+
+            # Get or create BDA project ARN
+            bda_project_arn = manager.get_bda_project_arn(config_version)
+            bda_service = BdaBlueprintService(dataAutomationProjectArn=bda_project_arn)
+
+            if not bda_project_arn:
+                bda_project_arn = bda_service.get_or_create_project_for_version(
+                    config_version
+                )
+                bda_service.dataAutomationProjectArn = bda_project_arn
+
+            # Perform sync
+            sync_result = bda_service.create_blueprints_from_custom_configuration(
+                sync_direction=direction,
+                version=config_version,
+                sync_mode=mode,
+            )
+
+            # Process results
+            sync_succeeded = [
+                item for item in sync_result if item.get("status") == "success"
+            ]
+            sync_failed = [
+                item for item in sync_result if item.get("status") != "success"
+            ]
+            processed_names = [
+                item.get("class_name", item.get("name", "unknown"))
+                for item in sync_result
+            ]
+
+            classes_synced = len(sync_succeeded)
+            classes_failed = len(sync_failed)
+
+            # Update BDA project ARN status
+            if classes_synced > 0 and classes_failed == 0:
+                manager.set_bda_project_arn(config_version, bda_project_arn, "synced")
+            elif classes_synced > 0:
+                manager.set_bda_project_arn(config_version, bda_project_arn, "partial")
+
+            return ConfigSyncBdaResult(
+                success=classes_failed == 0,
+                direction=direction,
+                mode=mode,
+                classes_synced=classes_synced,
+                classes_failed=classes_failed,
+                processed_classes=processed_names,
+                error=f"{classes_failed} class(es) failed to sync"
+                if classes_failed > 0
+                else None,
+            )
+
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.error(f"BDA sync failed: {e}")
+            return ConfigSyncBdaResult(
+                success=False,
+                direction=direction,
+                mode=mode,
+                error=str(e),
+            )

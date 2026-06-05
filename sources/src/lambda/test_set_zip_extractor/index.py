@@ -36,8 +36,11 @@ def handler(event, context):
             logger.info(f"Processing zip extraction for test set: {test_set_id}, key: {key}")
             
             # Extract the uploaded ZIP file
-            file_count = _extract_uploaded_zip(bucket, test_set_id, zip_key)
-            
+            _extract_uploaded_zip(bucket, test_set_id, zip_key)
+
+            # Recount total files in test set (accurate for both new and append)
+            file_count = _count_test_set_files(bucket, test_set_id)
+
             # Update test set status to COMPLETED with file count
             _update_test_set_status(test_set_id, 'COMPLETED', None, file_count)
             
@@ -150,9 +153,21 @@ def _extract_uploaded_zip(bucket, test_set_id, zip_key):
     # Delete original ZIP file
     s3.delete_object(Bucket=bucket, Key=zip_key)
     logger.info(f"Deleted original ZIP file: {zip_key}")
-    
-    # Return file count for status update
-    return len(input_files)
+
+
+def _count_test_set_files(bucket, test_set_id):
+    """Count total input files in a test set by listing S3 objects"""
+    prefix = f"{test_set_id}/input/"
+    count = 0
+
+    paginator = s3.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            if not obj['Key'].endswith('/'):
+                count += 1
+
+    logger.info(f"Counted {count} total input files in test set {test_set_id}")
+    return count
 
 def _update_test_set_status(test_set_id, status, error=None, file_count=None):
     """Update test set status and optionally file count in tracking table"""

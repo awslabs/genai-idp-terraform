@@ -9,6 +9,7 @@ export interface ConfigVersion {
   description?: string;
   created?: string;
   isActive?: boolean;
+  managed?: boolean;
   [key: string]: unknown;
 }
 

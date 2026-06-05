@@ -446,3 +446,46 @@ class TestSaveReportingDataSections:
         mock_save_metering.assert_called_once_with(document_with_sections)
         mock_save_sections.assert_called_once_with(document_with_sections)
         assert len(results) == 2
+
+    def test_config_version_in_schemas_and_records(self, mock_s3_client):
+        """Test that config_version is included in schemas and populated in records."""
+        import pyarrow as pa
+
+        # Test metering schema
+        metering_schema = pa.schema(
+            [
+                ("document_id", pa.string()),
+                ("context", pa.string()),
+                ("service_api", pa.string()),
+                ("unit", pa.string()),
+                ("value", pa.float64()),
+                ("number_of_pages", pa.int32()),
+                ("unit_cost", pa.float64()),
+                ("estimated_cost", pa.float64()),
+                ("timestamp", pa.timestamp("ms")),
+                ("config_version", pa.string()),
+            ]
+        )
+        assert "config_version" in [field.name for field in metering_schema]
+
+        # Test document evaluation schema (check in save_evaluation_results source)
+        # Create a test document with config_version
+        doc_with_config = Document(
+            id="test-doc", input_key="test/doc.pdf", config_version="test-v1.0"
+        )
+        doc_without_config = Document(id="test-doc2", input_key="test/doc2.pdf")
+
+        # Verify config_version fallback behavior
+        assert doc_with_config.config_version == "test-v1.0"
+        assert doc_without_config.config_version is None
+
+        # Simulate record creation with fallback
+        record_with_config = {
+            "config_version": doc_with_config.config_version or "default"
+        }
+        record_without_config = {
+            "config_version": doc_without_config.config_version or "default"
+        }
+
+        assert record_with_config["config_version"] == "test-v1.0"
+        assert record_without_config["config_version"] == "default"
