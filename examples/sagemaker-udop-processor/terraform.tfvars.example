@@ -35,6 +35,15 @@ summarization_model_id = "us.amazon.nova-pro-v1:0"
 evaluation_model_id    = "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # API Configuration
+#
+# Feature-plugin wiring (v0.5.12): the auxiliary features (MCP, Chat-with-Document,
+# HITL) are now self-contained feature submodules. The legacy `var.api.*` flags
+# below remain the supported way to turn them on (transition path) — setting them
+# drives the matching feature submodule under the hood:
+#   - enable_mcp                  -> module.mcp_integration
+#   - chat_with_document.enabled  -> module.chat_with_document
+#   - enable_hitl                 -> inline HITL feature-plugin model (complete_section_review)
+# Each feature stays default-off (HITL default-on per upstream) unless its flag is set.
 api = {
   enabled = true
 
@@ -43,10 +52,10 @@ api = {
   enable_test_studio          = false  # Automated dataset testing
   enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
   enable_error_analyzer       = false  # AI-powered error diagnostics
-  enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
+  enable_mcp                  = false  # Forwarded to module.mcp_integration (Bedrock AgentCore Gateway, opt-in)
 
   # v0.4.16 feature flags
-  enable_hitl                     = true   # Built-in HITL review (replaces SageMaker A2I)
+  enable_hitl                     = true   # Forwarded to the inline HITL feature-plugin (complete_section_review review)
   enable_capacity_planning        = false  # Capacity planning calculator
   enable_omni_ai_dataset          = false  # OmniAI OCR Benchmark dataset (requires enable_test_studio)
   enable_docplit_poly_seq_dataset = false  # DocSplit RVL-CDIP-NMP dataset (requires enable_test_studio)
@@ -59,7 +68,7 @@ api = {
     enabled = true  # Creates a dedicated discovery bucket and workflow
   }
   chat_with_document = {
-    enabled                  = false
+    enabled                  = false  # Forwarded to module.chat_with_document (streaming document Q&A)
     guardrail_id_and_version = null
     # Optional: requires knowledge_base.enabled = true
     # guardrail_id_and_version = "your-guardrail-id:1"

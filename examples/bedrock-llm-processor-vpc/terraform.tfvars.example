@@ -37,6 +37,13 @@ enable_evaluation     = false
 enable_reporting      = false
 
 # API Configuration
+#
+# Feature-plugin wiring (v0.5.12): auxiliary features (MCP, Chat-with-Document,
+# HITL) are now self-contained feature submodules. The legacy `var.api.*` flags
+# remain the supported way to turn them on (transition path) — setting a flag
+# drives the matching feature submodule under the hood (e.g.
+# chat_with_document.enabled -> module.chat_with_document, enable_mcp ->
+# module.mcp_integration). Each feature stays default-off unless its flag is set.
 api = {
   enabled = true
 
@@ -50,7 +57,7 @@ api = {
   # Agent Analytics (requires reporting to be enabled)
   agent_analytics = {
     enabled  = false
-    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   }
 
   # Discovery Configuration
@@ -60,7 +67,7 @@ api = {
 
   # Chat with Document Configuration
   chat_with_document = {
-    enabled = false
+    enabled = false  # Forwarded to module.chat_with_document (streaming document Q&A)
     # Optional: requires knowledge_base.enabled = true
     # guardrail_id_and_version = "your-guardrail-id:1"
   }

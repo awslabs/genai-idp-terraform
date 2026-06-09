@@ -1,0 +1,97 @@
+# Claude Opus 4.7 sample configuration (v0.5.12, B6 / Requirement 7)
+#
+# Demonstrates selecting Claude Opus 4.7 for the document-processing models and
+# the Chat-with-Document feature. Both the base inference-profile id
+# (us.anthropic.claude-opus-4-7) and the 1M-context variant
+# (us.anthropic.claude-opus-4-7:1m) are accepted by the wrapper's model
+# validation / picklists (see modules/processors/unified-processor/schema.json).
+#
+# Copy to terraform.tfvars to use:
+#   cp terraform.tfvars.opus-4-7.example terraform.tfvars
+
+# AWS Configuration
+region = "us-east-1"
+prefix = "genai-idp"
+
+# Administrator Configuration
+admin_email = "admin@example.com"
+
+# Logging Configuration
+log_level          = "INFO"
+log_retention_days = 7
+
+# Data Retention
+data_tracking_retention_days = 365
+
+# Model Configuration — Claude Opus 4.7 (top-tier model at the v0.5.12 target)
+classification_model_id = "us.anthropic.claude-opus-4-7"
+extraction_model_id     = "us.anthropic.claude-opus-4-7:1m"
+summarization_model_id  = "us.anthropic.claude-opus-4-7:1m"
+evaluation_model_id     = "us.anthropic.claude-opus-4-7"
+
+# Feature Toggles
+summarization_enabled = true
+enable_evaluation     = false
+enable_reporting      = false
+
+# API Configuration
+#
+# Feature-plugin wiring (v0.5.12) — DEMONSTRATION (all three forwarded flags ON).
+#
+# The auxiliary features (MCP, Chat-with-Document, HITL) are now self-contained
+# feature submodules (modules/features/*). The legacy `var.api.*` flags below
+# remain the supported consumer surface during the transition: setting a flag
+# forwards (root features.tf) to enable the matching feature submodule —
+#   - enable_mcp                  -> module.mcp_integration       (.enable()-style)
+#   - chat_with_document.enabled  -> module.chat_with_document
+#   - enable_hitl                 -> inline HITL feature-plugin (complete_section_review)
+# Unlike the base examples (which keep every feature default-off as safe copy
+# targets), THIS showcase turns all three on to demonstrate the transition path.
+api = {
+  enabled = true
+
+  enable_agent_companion_chat = false
+  enable_test_studio          = false
+  enable_fcc_dataset          = false
+  enable_error_analyzer       = false
+  enable_mcp                  = true # Forwarded to module.mcp_integration (Bedrock AgentCore Gateway + OAuth resource server)
+
+  enable_hitl                     = true # Forwarded to the inline HITL feature-plugin (complete_section_review review)
+  enable_capacity_planning        = false
+  enable_omni_ai_dataset          = false
+  enable_docplit_poly_seq_dataset = false
+
+  agent_analytics = {
+    enabled  = false
+    model_id = "us.anthropic.claude-opus-4-7"
+  }
+  discovery = {
+    enabled = true
+  }
+  # Chat-with-Document defaults its model to us.anthropic.claude-opus-4-7:1m
+  # (v0.5.12 default; the id is set in the document config, not this object).
+  chat_with_document = {
+    enabled                  = true # Forwarded to module.chat_with_document (streaming document Q&A)
+    guardrail_id_and_version = null
+  }
+  knowledge_base = {
+    enabled            = false
+    knowledge_base_arn = null
+    model_id           = "amazon.nova-pro-v1:0"
+    embedding_model_id = "amazon.titan-embed-text-v2:0"
+  }
+  process_changes = {
+    enabled = false
+  }
+}
+
+# Web UI Configuration
+web_ui = {
+  enabled = true
+}
+
+# Tags
+tags = {
+  Environment = "dev"
+  Project     = "genai-idp-accelerator"
+}
