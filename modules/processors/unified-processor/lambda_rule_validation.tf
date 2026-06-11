@@ -85,7 +85,8 @@ resource "aws_iam_role_policy" "rule_validation_policy" {
         Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile"]
         Resource = [
           "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
-          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
         ]
       },
       {

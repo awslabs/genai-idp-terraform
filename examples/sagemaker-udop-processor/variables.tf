@@ -57,7 +57,7 @@ variable "api" {
     # Agent Analytics (GraphQL resolvers for agent functionality)
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
-      model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+      model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     }), { enabled = false })
 
     # Discovery (Document discovery and classification workflow)
@@ -130,7 +130,7 @@ variable "agent_analytics" {
   description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
   type = object({
     enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
   })
   default = null
 }
@@ -277,7 +277,7 @@ variable "summarization_enabled" {
 variable "summarization_model_id" {
   description = "Model ID for document summarization (SageMaker UDOP processor)"
   type        = string
-  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 # Extraction model is required by the UDOP Lambda env vars; the slim
@@ -285,7 +285,7 @@ variable "summarization_model_id" {
 variable "extraction_model_id" {
   description = "Model ID for information extraction (SageMaker UDOP processor)"
   type        = string
-  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 # Configuration File Path

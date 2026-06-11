@@ -530,7 +530,7 @@ resource "aws_cloudwatch_log_group" "agent_chat_resolver" {
 data "archive_file" "agent_chat_resolver" {
   count       = var.enable_agent_companion_chat ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/agent_chat_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/agent_chat_resolver"
   output_path = "${path.module}/../../.terraform/archives/agent_chat_resolver.zip"
 }
 
@@ -694,7 +694,7 @@ resource "aws_cloudwatch_log_group" "list_agent_chat_sessions_resolver" {
 data "archive_file" "list_agent_chat_sessions_resolver" {
   count       = var.enable_agent_companion_chat ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/list_agent_chat_sessions_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/list_agent_chat_sessions_resolver"
   output_path = "${path.module}/../../.terraform/archives/list_agent_chat_sessions_resolver.zip"
 }
 
@@ -738,7 +738,7 @@ resource "aws_cloudwatch_log_group" "get_agent_chat_messages_resolver" {
 data "archive_file" "get_agent_chat_messages_resolver" {
   count       = var.enable_agent_companion_chat ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/get_agent_chat_messages_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_agent_chat_messages_resolver"
   output_path = "${path.module}/../../.terraform/archives/get_agent_chat_messages_resolver.zip"
 }
 
@@ -782,7 +782,7 @@ resource "aws_cloudwatch_log_group" "delete_agent_chat_session_resolver" {
 data "archive_file" "delete_agent_chat_session_resolver" {
   count       = var.enable_agent_companion_chat ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/delete_agent_chat_session_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/delete_agent_chat_session_resolver"
   output_path = "${path.module}/../../.terraform/archives/delete_agent_chat_session_resolver.zip"
 }
 

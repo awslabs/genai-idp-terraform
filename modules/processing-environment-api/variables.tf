@@ -276,7 +276,7 @@ variable "agent_analytics" {
   description = "Agent analytics configuration"
   type = object({
     enabled                 = bool
-    model_id                = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    model_id                = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     reporting_database_name = optional(string)
     reporting_bucket_arn    = optional(string)
   })
@@ -387,13 +387,7 @@ variable "enable_fcc_dataset" {
 }
 
 variable "enable_error_analyzer" {
-  description = "Enable Error Analyzer feature (AI-powered error diagnostics)"
-  type        = bool
-  default     = true
-}
-
-variable "enable_mcp" {
-  description = "Enable MCP Integration feature (Bedrock AgentCore Gateway with OAuth 2.0). Not supported in GovCloud regions."
+  description = "DEPRECATED (no-op as of v0.5.12). The standalone Error Analyzer Lambdas were removed upstream; error analysis is now provided by the unified agents framework (Error-Analyzer-Agent via the agent resolvers). Retained for backward compatibility; setting it has no effect."
   type        = bool
   default     = false
 }
@@ -440,14 +434,31 @@ variable "lookup_function_name" {
   default     = null
 }
 
-variable "user_pool_id" {
-  description = "Cognito User Pool ID (used by MCP Integration for OAuth 2.0 app client)"
-  type        = string
-  default     = null
-}
+# =============================================================================
+# Feature-plugin composition (Requirement 3 — .enable()-style wiring)
+# =============================================================================
+#
+# NOTE: MCP integration moved to the `mcp-integration` feature submodule in
+# v0.5.12-tf.0. Its former inputs (`user_pool_id`, `mcp_callback_urls`) now live
+# on `modules/features/mcp-integration` and are wired at the root (features.tf).
 
-variable "mcp_callback_urls" {
-  description = "Optional list of OAuth 2.0 callback URLs for the MCP external app client. Required by Cognito when the `code` flow is enabled, but unused by AgentCore Gateway (which uses JWT validation). When empty, falls back to a Cognito-hosted UI placeholder. Wire this to the CloudFront distribution URL from the caller for cleanest behaviour."
-  type        = list(string)
-  default     = []
+variable "enabled_feature_contracts" {
+  description = <<-EOT
+    Map of enabled feature-plugin contracts to compose into the API, mirroring
+    the CDK accelerator's `api.enable(feature)` mechanism. Each value is a
+    feature submodule's outputs contract with the shape:
+
+      {
+        enabled          = bool
+        resolvers        = { <field> = { data_source, request_template, response_template } }
+        iam_statements   = [ <policy statement objects> ]
+        environment      = { <env-var name> = <value> }
+        schema_additions = optional(string)  # GraphQL SDL fragment
+      }
+
+    Default `{}` is a no-op: no feature resolvers, IAM statements, or env vars
+    are composed (default-off preserved).
+  EOT
+  type        = map(any)
+  default     = {}
 }

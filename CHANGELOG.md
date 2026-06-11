@@ -6,6 +6,156 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.5.12-tf.0] - 2026-06-09
+
+### Summary
+
+Upstream IDP v0.5.12 snapshot reconciliation (Round 1). The vendored `sources/`
+snapshot is refreshed to v0.5.12 and the three version markers are realigned
+(`IDP_VERSION` → `0.5.12`, `sources/VERSION` → `0.5.12`, `VERSION` →
+`0.5.12-tf.0`). The headline change is the **per-pattern processor façade**
+model: a single shared internal engine (`modules/processors/unified-processor`)
+with three thin public façades that delegate to it, mirroring the CDK
+accelerator's `UnifiedDocumentProcessor` + per-pattern processor constructs.
+Auxiliary features are restructured as **feature-plugins** wired through an
+`enabled_feature_contracts` contract, with the legacy `var.api.*` flags still
+forwarded for a transition window. Plus a batch of additive parity drop-ins
+(inference-profile IAM, reporting column, model enablement, MCP rename,
+chat-with-document streaming, Python 3.12 runtimes).
+
+This release carries breaking changes to module internal addresses; see
+[Breaking Changes](#breaking-changes) below and the full
+[migration guide](docs/migration-v0.4.16-to-v0.5.12.md).
+
+### New Features & Changes
+
+#### Processor façades over a shared engine (A4, A3)
+
+- New internal engine `modules/processors/unified-processor/` wires all Lambda
+  archives, state machine, and config from `sources/patterns/unified/...`. It is
+  not a public input surface — façades instantiate it as a nested
+  `module "engine"` and route on a required `use_bda` input (BDA invoke/completion
+  steps gated on `use_bda = true`; the LLM pipeline branch is always present).
+- `bda-processor`, `bedrock-llm-processor`, and `sagemaker-udop-processor` are now
+  thin façades delegating to the engine:
+  - `bda-processor` creates BDA Blueprints + Data Automation Project and delegates
+    with `use_bda = true` + `bda_project_arn`.
+  - `bedrock-llm-processor` creates no BDA resources and delegates with
+    `use_bda = false`.
+  - `sagemaker-udop-processor` (Pattern 3 **retained**) delegates with
+    `use_bda = false` and bridges classification to a consumer-supplied SageMaker
+    endpoint via a `LambdaHook` (sets `config.classification.model = "LambdaHook"`
+    + `model_lambda_hook_arn`). It provisions the classification-hook bridge
+    Lambda and grants `sagemaker:InvokeEndpoint` + S3 read; it creates no
+    SageMaker hosting/training.
+- Root wiring instantiates the three façades count-gated from
+  `var.bda_processor` / `var.bedrock_llm_processor` / `var.sagemaker_udop_processor`,
+  with an exactly-one-façade validation replacing the old
+  `check "single_processor_required"`.
+
+#### Feature-plugin wiring (B / Requirement 3)
+
+- Self-contained feature submodules — `modules/features/mcp-integration`,
+  `modules/features/chat-with-document`, and `modules/features/hitl` — are composed
+  into `processing-environment-api` via an `enabled_feature_contracts` contract
+  (resolvers, IAM statement fragments, env wiring, optional GraphQL SDL) using
+  `for_each`. This mirrors the CDK `api.enable(feature)` idiom.
+- Legacy `var.api.*` flags (`enable_mcp`, the chat flag, `enable_hitl`, …) are
+  forwarded via root `locals` to enable the matching feature submodule. Default-off
+  behavior is preserved (transition path; `var.api.*` still accepted).
+
+#### Additive parity drop-ins
+
+- **B1**: Bedrock inference-profile IAM (`bedrock:GetInferenceProfile` +
+  `application-inference-profile/*`) added to the unified engine IAM.
+- **B2**: Glue reporting table gains an additive `config_version` column.
+- **B5**: Default extraction model bumped off the retired Claude 3.5 Sonnet to
+  `us.anthropic.claude-sonnet-4-5-20250929-v1:0` across modules and examples.
+- **B6**: Claude Opus 4.7 enabled in model picklists/validation/pricing; added an
+  Opus 4.7 sample tfvars.
+- **C5**: MCP integration submodule renames `agentcore_analytics_processor` →
+  `agentcore_mcp_handler`, provisions the OAuth resource server, preserves the
+  GovCloud guard, and stays default-off.
+- **C13**: Chat-with-Document async streaming resolver(s); honors a `chat:` config
+  block with `summarization.*` fallback and default
+  `us.anthropic.claude-opus-4-7:1m`.
+- **E5/E6**: Lambda runtimes moved to Python 3.12; layer builds use pypdfium2
+  (PyMuPDF removed) via buildspec-only changes (no `sources/` edits).
+
+### Breaking Changes
+
+- **Processor façade refactor (module internal address change).** Per-pattern
+  processor internals now live under
+  `module.<facade>[0].module.engine.*`. `moved {}` blocks are provided to remap the
+  old `module.bda_processor.*` / `module.bedrock_llm_processor.*` /
+  `module.sagemaker_udop_processor.*` addresses into the new façade→engine nested
+  addresses (SQS, DDB, ECR, CloudWatch) — target **0 destroy / 0 create** for the
+  moved resources. Some BDA/UDOP-only resources (ECR/CodeBuild and other
+  pattern-specific resources) are **unavoidable recreates**.
+- **Pattern 3 monolith replaced.** The former monolithic SageMaker-UDOP module is
+  replaced by the new `sagemaker-udop-processor` façade (the `LambdaHook`
+  classification-bridge recipe).
+- **MCP Lambda rename.** `agentcore_analytics_processor` →
+  `agentcore_mcp_handler`. A `moved {}` block preserves the resource (and its
+  `function_name`) into the feature-submodule address.
+- **`var.api` flags object → feature-plugin wiring.** Auxiliary features are now
+  enabled through the feature-plugin contract. `var.api.*` flags are still
+  forwarded during the transition window.
+- **Removed orphaned `pattern2-hitl` trio.** The
+  `pattern2-hitl-{process,wait,status-update}` handlers in `modules/human-review/`
+  referenced `sources/` paths that never existed upstream; they are removed (HITL
+  is the feature-plugin submodule + `complete_section_review`).
+- **Removed legacy synchronous chat module.** The in-API
+  `modules/processing-environment-api/chat-with-document/` submodule is removed and
+  replaced by the self-contained `modules/features/chat-with-document/`
+  feature-plugin (async streaming, composed via `enabled_feature_contracts`).
+  Chat is still enabled through the forwarded `var.api` chat flag during the
+  transition window.
+- **Removed standalone Error Analyzer Lambdas.** The `error_analyzer` and
+  `error_analyzer_resolver` Lambdas (and their IAM roles, log groups, VPC
+  attachments, and AppSync datasource) in `processing-environment-api` were
+  removed upstream at v0.5.12 — their `sources/src/lambda/error_analyzer{,_resolver}`
+  directories no longer exist in the snapshot, and v0.5.12 ships no replacement
+  Lambda/resolver/schema field. Error analysis is now provided by the unified
+  **agents framework** (`Error-Analyzer-Agent`, a library agent in
+  `sources/lib/idp_common_pkg/idp_common/agents/error_analyzer/`, surfaced via the
+  generic agent resolvers). `removed {}` blocks (with `destroy = false`) drop the
+  orphaned resources from state without destroying real infrastructure;
+  `var.enable_error_analyzer` is retained as a deprecated no-op so existing
+  consumer tfvars keep planning.
+
+### Migration
+
+See [docs/migration-v0.4.16-to-v0.5.12.md](docs/migration-v0.4.16-to-v0.5.12.md)
+for the full migration steps, the complete `moved {}` mapping, the SageMaker-UDOP
+façade `LambdaHook` recipe, the MCP rename, and the `var.api` → feature-plugin
+shift (with `var.api.*` forwarding).
+
+Key steps (summary — the guide has the exhaustive list):
+
+1. **Upgrade the module** and run `terraform plan`. The bundled `moved {}` blocks
+   remap the per-pattern processor internals into the new façade→engine addresses
+   (`module.<facade>[0].module.engine.*`) and the renamed MCP Lambda
+   (`agentcore_analytics_processor` → `agentcore_mcp_handler`) automatically — no
+   manual `terraform state mv` is required for the preservable resources.
+2. **Confirm the move is non-destructive.** The moved resources (SQS, DynamoDB
+   wiring, ECR repo, CloudWatch resources, MCP Lambda) MUST report **0 destroy /
+   0 create** in the plan before you apply. If they show destroy/create, stop and
+   re-check the `moved {}` mapping against your state addresses.
+3. **Accept the unavoidable recreates.** Some BDA/UDOP-only resources
+   (ECR/CodeBuild and other pattern-specific resources) are recreated; the guide
+   lists each with its impact and a rollback note. Back up state
+   (`terraform state pull > backup.tfstate`) before applying.
+4. **No tfvars changes required for the transition.** `var.api.*` flags
+   (`enable_mcp`, the chat flag, `enable_hitl`, …) are still forwarded to the new
+   feature-plugins, so existing tfvars keep working; migrate to feature-plugin
+   wiring at your own pace.
+
+Run a `terraform plan` after upgrading and confirm the moved resources report 0
+destroy / 0 create before applying.
+
+---
+
 ## [0.4.16-tf.2] - 2026-05-27
 
 ### Summary

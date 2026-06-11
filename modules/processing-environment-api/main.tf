@@ -117,45 +117,19 @@ module "discovery" {
 }
 
 # =============================================================================
-# Chat with Document Sub-module (Optional)
+# Chat with Document — RELOCATED to the chat-with-document feature submodule
 # =============================================================================
-
-module "chat_with_document" {
-  count  = var.chat_with_document.enabled ? 1 : 0
-  source = "./chat-with-document"
-
-  name_prefix              = "chat-${random_string.suffix.result}"
-  tracking_table_name      = local.tracking_table_name
-  tracking_table_arn       = local.tracking_table_arn
-  configuration_table_name = local.configuration_table_name
-  configuration_table_arn  = local.configuration_table_arn
-  appsync_api_id           = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn  = aws_iam_role.appsync_lambda_role.arn
-  idp_common_layer_arn     = var.idp_common_layer_arn
-
-  # S3 bucket access
-  input_bucket_arn   = local.input_bucket_arn
-  output_bucket_arn  = local.output_bucket_arn
-  working_bucket_arn = local.working_bucket_arn
-
-  # Optional Bedrock Guardrail configuration
-  guardrail_id_and_version = var.chat_with_document.guardrail_id_and_version
-
-  # Optional Knowledge Base configuration
-  knowledge_base_arn = local.knowledge_base_id != null ? "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:knowledge-base/${local.knowledge_base_id}" : null
-
-  # Configuration
-  log_level           = var.log_level
-  log_retention_days  = var.log_retention_days
-  encryption_key_arn  = local.encryption_key_arn
-  lambda_tracing_mode = var.lambda_tracing_mode
-
-  # VPC configuration
-  vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
-  vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
-
-  tags = var.tags
-}
+# The legacy SYNCHRONOUS `chatWithDocument` Query (and its resolver Lambda,
+# which zipped `sources/src/lambda/chat_with_document_resolver`) was REMOVED
+# upstream at v0.5.12 — both the schema field and that source directory no
+# longer exist in the snapshot. Chat-with-Document is now an async streaming
+# feature provided by `modules/features/chat-with-document`, instantiated at the
+# root (features.tf) and composed into this API via `enabled_feature_contracts`
+# (the `sendChatDocumentMessage` mutation + `onChatDocumentMessageUpdate`
+# subscription resolvers). The old in-API `./chat-with-document` submodule is
+# removed; there is no `moved {}`/`removed {}` because it was never applyable on
+# v0.5.12 (its archive_file source path was deleted from sources/) — see the
+# migration guide.
 
 # =============================================================================
 # PROCESS CHANGES SUB-MODULE

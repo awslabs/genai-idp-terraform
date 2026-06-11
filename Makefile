@@ -1,7 +1,7 @@
 # Makefile for GenAI IDP Accelerator Terraform
 # Based on AWS IA Terraform standards
 
-.PHONY: help install-tools fmt validate lint security docs test clean all
+.PHONY: help install-tools fmt check-sources validate lint security docs test clean all
 
 # Default target
 help: ## Show this help message
@@ -42,8 +42,13 @@ fmt: ## Format all Terraform files (excludes sources/ - upstream files synced 1:
 	@terraform fmt *.tf
 	@echo "✅ Terraform files formatted"
 
+# Source-path reconciliation check
+check-sources: ## Assert no .tf references a non-existent sources/ path (guards upstream re-snapshots)
+	@echo "Checking sources/ path references in Terraform files..."
+	@./scripts/check-sources-paths.sh
+
 # Terraform validation
-validate: ## Validate all Terraform configurations
+validate: check-sources ## Validate all Terraform configurations
 	@echo "Validating Terraform configurations in modules..."
 	@for dir in modules/*/; do \
 		if [ -f "$$dir/main.tf" ] || [ -f "$$dir/versions.tf" ]; then \

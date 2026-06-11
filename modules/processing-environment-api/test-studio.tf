@@ -251,7 +251,7 @@ resource "aws_cloudwatch_log_group" "test_runner" {
 data "archive_file" "test_runner" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/test_runner"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/test_runner"
   output_path = "${path.module}/../../.terraform/archives/test_runner.zip"
 }
 
@@ -294,7 +294,7 @@ resource "aws_cloudwatch_log_group" "test_results_resolver" {
 data "archive_file" "test_results_resolver" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/test_results_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/test_results_resolver"
   output_path = "${path.module}/../../.terraform/archives/test_results_resolver.zip"
 }
 
@@ -336,7 +336,7 @@ resource "aws_cloudwatch_log_group" "test_set_resolver" {
 data "archive_file" "test_set_resolver" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/test_set_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/test_set_resolver"
   output_path = "${path.module}/../../.terraform/archives/test_set_resolver.zip"
 }
 
@@ -505,7 +505,7 @@ resource "aws_cloudwatch_log_group" "delete_tests" {
 data "archive_file" "delete_tests" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/delete_tests"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/delete_tests"
   output_path = "${path.module}/../../.terraform/archives/delete_tests.zip"
 }
 

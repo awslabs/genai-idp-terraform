@@ -60,14 +60,18 @@ check "agent_analytics_requires_reporting" {
   }
 }
 
-# Validation: Exactly one processor must be configured
+# Validation: Exactly one processor façade must be configured.
+# All three are first-class processor inputs; none is a plan-time tripwire.
+# Replaces the prior check "single_processor_required".
 #tfsec:ignore:*
-check "single_processor_required" {
+check "exactly_one_processor" {
   assert {
-    condition = length([
-      for p in [var.bedrock_llm_processor, var.bda_processor, var.sagemaker_udop_processor] : p if p != null
-    ]) == 1
-    error_message = "Exactly one processor must be configured (bedrock_llm_processor, bda_processor, or sagemaker_udop_processor)."
+    condition = length(compact([
+      var.bda_processor != null ? "bda" : "",
+      var.bedrock_llm_processor != null ? "bedrock_llm" : "",
+      var.sagemaker_udop_processor != null ? "sagemaker_udop" : "",
+    ])) == 1
+    error_message = "Exactly one of var.bda_processor, var.bedrock_llm_processor, or var.sagemaker_udop_processor must be set. Set one processor façade; see docs/migration-v0.4.16-to-v0.5.12.md."
   }
 }
 
@@ -401,11 +405,12 @@ module "processing_environment_api" {
   enable_test_studio          = try(var.api.enable_test_studio, false)
   enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
-  enable_mcp                  = try(var.api.enable_mcp, false)
 
-  # User pool for the MCP external app client. The MCP custom resource
-  # needs a Cognito client to authenticate to the AgentCore Gateway.
-  user_pool_id = local.user_pool_id
+  # MCP integration moved to the `mcp_integration` feature submodule
+  # (modules/features/mcp-integration), instantiated at the root in features.tf
+  # and composed via `enabled_feature_contracts`. The API module no longer owns
+  # the MCP stack, so `enable_mcp` / `user_pool_id` (the MCP OAuth client pool)
+  # are no longer passed here.
 
   # v0.4.16 feature flags
   enable_hitl                     = try(var.api.enable_hitl, true)
@@ -427,6 +432,12 @@ module "processing_environment_api" {
   base_layer_arn           = module.processing_environment.base_layer_arn
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+
+  # Feature-plugin contracts (Requirement 3 — .enable()-style composition).
+  # Forwarded from the root `local.enabled_feature_contracts` (see features.tf).
+  # Currently an empty map ({}) until the feature submodules land (tasks
+  # 6.3/10/11); a no-op that preserves default-off behavior.
+  enabled_feature_contracts = local.enabled_feature_contracts
 
   tags = var.tags
 }
@@ -465,6 +476,7 @@ module "bda_processor" {
 
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+  base_layer_arn       = module.processing_environment.base_layer_arn
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -521,7 +533,7 @@ module "bedrock_llm_processor" {
   encryption_key_arn   = var.encryption_key_arn
   enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
-  base_layer_arn       = module.idp_base_layer.layer_arn
+  base_layer_arn       = module.processing_environment.base_layer_arn
   evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
@@ -577,6 +589,7 @@ module "sagemaker_udop_processor" {
   working_bucket_arn      = var.working_bucket_arn
   tracking_table_arn      = module.processing_environment.tracking_table_arn
   configuration_table_arn = module.processing_environment.configuration_table_arn
+  concurrency_table_arn   = module.processing_environment.concurrency_table_arn
 
   # Processing environment configuration
   metric_namespace   = module.processing_environment.metric_namespace
@@ -585,6 +598,8 @@ module "sagemaker_udop_processor" {
 
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+  base_layer_arn       = module.processing_environment.base_layer_arn
+  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids

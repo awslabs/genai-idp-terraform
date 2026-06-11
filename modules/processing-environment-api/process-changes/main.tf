@@ -51,7 +51,7 @@ resource "random_id" "process_changes_resolver_build_id" {
 # Source code archive for process changes resolver
 data "archive_file" "process_changes_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/src/lambda/process_changes_resolver"
+  source_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/process_changes_resolver"
   output_path = "${local.module_build_dir}/process-changes-resolver.zip_${random_id.process_changes_resolver_build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]

@@ -100,7 +100,7 @@ resource "docker_image" "generate_demo_data" {
     platform   = "linux/amd64"
 
     build_args = {
-      PYTHON_VERSION = "3.11"
+      PYTHON_VERSION = "3.12"
     }
   }
 
@@ -121,7 +121,7 @@ resource "docker_image" "sagemaker_train" {
     platform   = "linux/amd64"
 
     build_args = {
-      PYTHON_VERSION = "3.11"
+      PYTHON_VERSION = "3.12"
     }
   }
 
@@ -395,7 +395,7 @@ module "sagemaker_train_is_complete_lambda" {
   function_name = "${local.name_prefix}-sagemaker-train-is-complete"
   description   = "Checks if SageMaker training job is complete"
   handler       = "index.lambda_handler"
-  runtime       = "python3.11"
+  runtime       = "python3.12"
 
   # Source code
   source_path = "${path.module}/../src/sagemaker_train_is_complete/index.py"
