@@ -26,7 +26,7 @@ idpcli = "idp_cli.cli.main:app"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
-tornado = ">=6.5,<7.0"
+tornado = ">=6.5.7,<7.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
