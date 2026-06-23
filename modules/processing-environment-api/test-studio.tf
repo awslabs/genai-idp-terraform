@@ -575,6 +575,61 @@ resource "aws_lambda_function" "fcc_dataset_deployer" {
 }
 
 # =============================================================================
+# Lambda: w2_dataset_deployer (conditional on enable_w2_dataset)
+#
+# Mirrors the fcc_dataset_deployer above. Like FCC, the shipped W2 deployer is a
+# CloudFormation custom resource (Custom::W2DatasetDeployer, uses cfnresponse) —
+# NOT an AppSync-invoked resolver — so it gets no AppSync data source/resolver
+# and is not added to the AppSync invoke policy (matching the FCC deployer).
+# It reuses the shared Test Studio execution role and local.test_studio_env
+# (LOG_LEVEL / TRACKING_TABLE / TEST_SET_BUCKET); the deployer reads
+# TESTSET_BUCKET / TRACKING_TABLE / LOG_LEVEL.
+# Memory (3008) / timeout (900) / ephemeral storage (10240) match the upstream
+# W2DatasetDeployerFunction in sources/template.yaml — it downloads parquet
+# splits and ~2000 images into /tmp, so the larger ephemeral storage is required.
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "w2_dataset_deployer" {
+  count             = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0
+  name              = "/aws/lambda/${local.api_name}-w2-dataset-deployer"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = var.tags
+}
+
+data "archive_file" "w2_dataset_deployer" {
+  count       = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0
+  type        = "zip"
+  source_dir  = "${path.module}/../../sources/src/lambda/w2_dataset_deployer"
+  output_path = "${path.module}/../../.terraform/archives/w2_dataset_deployer.zip"
+}
+
+resource "aws_lambda_function" "w2_dataset_deployer" {
+  count            = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0
+  function_name    = "${local.api_name}-w2-dataset-deployer"
+  role             = aws_iam_role.test_studio_lambdas[0].arn
+  filename         = data.archive_file.w2_dataset_deployer[0].output_path
+  source_code_hash = data.archive_file.w2_dataset_deployer[0].output_base64sha256
+  handler          = "index.handler"
+  runtime          = "python3.12"
+  timeout          = 900
+  memory_size      = 3008
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
+  ephemeral_storage { size = 10240 }
+  environment { variables = local.test_studio_env }
+  tracing_config { mode = var.lambda_tracing_mode }
+  dynamic "vpc_config" {
+    for_each = var.vpc_config != null ? [var.vpc_config] : []
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.w2_dataset_deployer]
+  tags       = var.tags
+}
+
+# =============================================================================
 # AppSync data sources and resolvers for Test Studio
 # =============================================================================
 

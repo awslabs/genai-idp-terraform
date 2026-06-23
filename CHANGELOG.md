@@ -6,6 +6,366 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.5.12-tf.2] - 2026-07-07
+
+### Summary
+
+Round 3 of the upstream IDP v0.5.12 migration — the **cheap + small tier** of the
+backlog: low-risk parity items that need no new subsystem and reuse the seams
+Rounds 1 and 2 built (the per-pattern processor façade over the shared
+`unified-processor` engine, and the consolidated `var.api` / feature wiring). Six
+items in three weight classes: three config-shape schema flags (B9/B10/B12) that
+are pure configuration pass-through, two small additive features on existing seams
+(C14 version-check resolver, C16 W2 dataset deployer), and the one real breaking
+change — the tracking-table `TypeDateIndex` GSI plus an operator-triggered backfill
+(C1).
+
+All new behavior is **default-off / backward-compatible**: with the new inputs
+unset (`var.api.public_artifacts_bucket`, `var.api.enable_w2_dataset`,
+`var.tracking.enable_gsi_backfill`), the deployment behaves identically to
+`0.5.12-tf.1`. The single material change on upgrade is the additive
+`TypeDateIndex` GSI on the tracking table, which DynamoDB adds **in place** (no
+table replacement); see [Breaking Changes](#breaking-changes) below.
+
+No file under `sources/` is modified.
+
+### New Features & Changes
+
+#### Config-shape schema flags — pass-through (B9 / B10 / B12)
+
+Three families of `x-aws-idp-*` schema keys that the read-only `idp_common` runtime
+enforces upstream. The wrapper's entire obligation is **faithful pass-through**: the
+configuration seeder persists the keys into the configuration DynamoDB table
+unchanged. The seeder already deep-merges user config with system defaults and
+stringifies values generically (no closed schema / key allow-list), so these are
+realized as verification + documentation, not new code or new resources.
+
+- **B9 — `x-aws-idp-extraction-model`** (upstream v0.5.5): a per-class or
+  per-attribute flag overriding the extraction model for that class/attribute
+  instead of the document-level model. Config pass-through; enforced at runtime
+  upstream.
+- **B10 — `x-aws-idp-exclude-from-processing`** (+ optional reason; upstream
+  v0.5.8): a per-section flag causing the runtime to skip LLM extraction calls for
+  that section entirely. Config pass-through; enforced upstream.
+- **B12 — `x-aws-idp-page-types` / `x-aws-idp-source-page-types`** (upstream
+  v0.5.12): schema hints letting the runtime distinguish a **MISSING** field (the
+  page that would carry it was never present) from a **BLANK** field (the page was
+  present but empty). Config pass-through; enforced upstream.
+
+All three are purely additive: absence changes nothing, and a config without the
+flags seeds byte-identically to pre-Round-3 output.
+
+#### `getLatestPublishedVersion` resolver + public artifacts bucket (C14)
+
+- New inline feature in `modules/processing-environment-api/version-check.tf`: a
+  `version_check_resolver` Lambda (source zipped from
+  `sources/src/lambda/version_check_resolver/`, base layer attached via
+  `compact([var.base_layer_arn, ...])`), an `AWS_LAMBDA` AppSync data source, and a
+  `Query.getLatestPublishedVersion` resolver bound to it. The Lambda reads the
+  latest published IDP release version from a public artifacts S3 bucket so the web
+  UI can surface an "update available" indicator.
+- **Input-gated, default-off:** enablement is driven by
+  `var.api.public_artifacts_bucket` (string, default `""`), with optional
+  `public_artifacts_prefix` (default `"artifacts/genai-idp"`) and
+  `public_artifacts_region`. When the bucket input is empty, neither the Lambda nor
+  the resolver is created and there is no plan diff. This matches the shipped
+  resolver's own opt-in semantics (inert when its bucket env is empty).
+- **Least-privilege:** the resolver role grants `s3:GetObject` / `s3:ListBucket` on
+  exactly the configured public artifacts bucket (and its objects) plus its own
+  CloudWatch log group, and no broader; `appsync_lambda_role` is granted
+  `lambda:InvokeFunction` scoped to exactly the resolver Lambda.
+- **No SDL injection:** `getLatestPublishedVersion` already ships in the read-only
+  schema (no `sources/` edit).
+
+#### W2 dataset deployer (C16)
+
+- New `w2_dataset_deployer` block in `modules/processing-environment-api/test-studio.tf`,
+  a near-verbatim clone of the existing `fcc_dataset_deployer` wiring (CloudWatch
+  log group, `data "archive_file"` over `sources/src/lambda/w2_dataset_deployer/`,
+  the Lambda reusing the shared `test_studio_lambdas` role and `local.test_studio_env`
+  — `TESTSET_BUCKET` / `TRACKING_TABLE` / `LOG_LEVEL`, the exact keys the W2 deployer
+  reads — tracing, optional VPC config). Memory/timeout are set to the upstream W2
+  values (it loads a parquet dataset). The W2 Lambda ARN is added to the
+  `appsync_invoke_test_studio_policy` so AppSync may invoke it.
+- **Default-off:** gated by `count = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0`.
+  The new `enable_w2_dataset` flag (default `false`) joins `enable_fcc_dataset` on
+  the consolidated `var.api` object, not as a free-standing root boolean. When Test
+  Studio is disabled or the W2 dataset is disabled, no W2 resources are created.
+
+#### TypeDateIndex GSI on the tracking table (C1)
+
+- `modules/tracking-table/` now declares the `ItemType` (S) and `InitialEventTime`
+  (S) attributes and a `TypeDateIndex` global secondary index — HASH `ItemType`,
+  RANGE `InitialEventTime`, `projection_type = "INCLUDE"` with the 21 non-key list
+  attributes copied exactly from `sources/template.yaml` (`ObjectKey` …
+  `CompletedAt`). This replaces full-table-scan document listing with a query by
+  type and time range. For `PROVISIONED` billing the GSI's `read_capacity` /
+  `write_capacity` are gated off `var.billing_mode` like the table. The list/HITL
+  resolver roles already grant `<tracking_table_arn>/index/*`, so index read access
+  is covered.
+
+#### GSI attribute backfill — operator-triggered, default-off (C1)
+
+- New module `modules/tracking-gsi-backfill/` provisioning a
+  `backfill_gsi_attributes` worker Lambda (source zipped from
+  `sources/src/lambda/backfill_gsi_attributes/`, `python3.12`, `timeout = 900`,
+  `memory_size = 512`) and a Step Functions **distributed-map** state machine that
+  fans the worker across tracking-table scan segments to populate `ItemType` (and
+  related GSI attributes) on items that predate the GSI, so historical rows appear
+  in `TypeDateIndex` queries. The worker derives `ItemType` from each item's PK
+  prefix (`doc#` → `document`, `testrun#` → `testrun`, `testset#` → `testset`;
+  `list#` / `agent#` skipped) and is idempotent.
+- **Least-privilege:** the worker role grants DynamoDB
+  `GetItem`/`UpdateItem`/`Scan`/`Query`/`BatchWriteItem` on exactly the tracking
+  table (+ `/index/*`) and KMS `Decrypt`/`Encrypt`/`GenerateDataKey*`/`DescribeKey`
+  on the encryption key; the state-machine role grants only `lambda:InvokeFunction`
+  on the worker plus the distributed-map permissions a map run needs. A
+  `time_sleep.wait_for_iam_propagation` (30s) guard prevents the create-time IAM
+  race, per project convention.
+- **Default-off and never auto-runs:** gated by `var.tracking.enable_gsi_backfill`
+  (default `false`). There is **no `aws_lambda_invocation` / no auto-start** —
+  applying the module creates the machinery only; the operator starts the backfill
+  explicitly. The GSI (above) is created regardless of this toggle; new/updated
+  items populate the GSI without any backfill.
+
+### Breaking Changes
+
+- **Tracking-table `TypeDateIndex` GSI added in place (C1).** Adding the
+  `global_secondary_index` block (plus the `ItemType` / `InitialEventTime`
+  attribute definitions) to `aws_dynamodb_table.tracking_table` is an **additive,
+  in-place** table update in the AWS provider — DynamoDB supports online GSI
+  creation, so the table is **not** replaced and no `moved {}` block is required.
+  No resource addresses change in Round 3.
+
+  Per the project's state-migration discipline, the merge gate is a `terraform
+  plan` proving the update is non-destructive — **not** merely the presence of the
+  GSI block. Confirm the tracking table reports **0 destroy / 0 create** before
+  applying:
+
+  ```bash
+  # 1. Upgrade the module and review the plan. The TypeDateIndex GSI is added to
+  #    the existing tracking table; DynamoDB creates the GSI online (in place).
+  terraform plan
+
+  # 2. Confirm the change is non-destructive. The tracking table
+  #    (aws_dynamodb_table.tracking_table) MUST report "update in place"
+  #    (0 destroy / 0 create) before you apply. If the plan shows the table being
+  #    destroyed/recreated, STOP and reconcile — do not apply.
+  terraform state pull > backup.tfstate   # back up state before applying
+
+  # 3. Apply only after confirming the 0 destroy / 0 create table-update plan.
+  #    DynamoDB backfills the index for new/updated items automatically; the table
+  #    remains usable during the online GSI build.
+  terraform apply
+  ```
+
+- **GSI attribute backfill is operator-triggered (C1).** For **historical**
+  tracking-table items (rows that predate the GSI) to appear in `TypeDateIndex`
+  queries, enable and run the backfill. This is intentionally a manual step:
+  `terraform apply` provisions the backfill machinery but **never** starts a run, so
+  the upgrade does not mutate tracking-table data unattended.
+
+  ```bash
+  # 1. Opt in to the backfill module and apply (creates the worker Lambda + the
+  #    Step Functions distributed-map state machine; does NOT run the backfill).
+  #    In your tfvars:  tracking = { enable_gsi_backfill = true }
+  terraform apply
+
+  # 2. Read the state-machine ARN from the module output.
+  terraform output -raw   # or: terraform output tracking_gsi_backfill_state_machine_arn
+
+  # 3. Start the backfill explicitly. Apply alone does NOT start it.
+  aws stepfunctions start-execution \
+    --state-machine-arn <state_machine_arn> \
+    --input '{"tableName":"<tracking_table_name>","totalSegments":10}'
+  ```
+
+  The backfill is idempotent (it only sets `ItemType` where missing) and resumes
+  past the Lambda timeout via a continuation token, so it can be safely re-run.
+
+### Migration
+
+See [docs/migration-v0.4.16-to-v0.5.12.md](docs/migration-v0.4.16-to-v0.5.12.md)
+for adopting the three config-shape flags (runtime-enforced, pass-through),
+enabling the version-check resolver (`var.api.public_artifacts_bucket`), toggling
+the W2 dataset deployer (`var.api.enable_w2_dataset`), and the `TypeDateIndex` GSI
+addition (the in-place-update plan gate) plus the explicit, operator-triggered
+backfill (`var.tracking.enable_gsi_backfill` + the `aws stepfunctions
+start-execution` command). All Round 3 features are default-off; no tfvars changes
+are required to keep an existing `0.5.12-tf.1` deployment planning unchanged, and
+the only on-upgrade change is the additive in-place GSI.
+
+---
+
+## [0.5.12-tf.1] - 2026-06-23
+
+### Summary
+
+Round 2 of the upstream IDP v0.5.12 migration, building the production-readiness
+subsystems on the two architectural patterns Round 1 established: the per-pattern
+**processor façade** over a single shared `unified-processor` engine, and
+**feature-plugin** wiring composed by `modules/processing-environment-api` through
+the `enabled_feature_contracts` contract (`{ enabled, resolvers, iam_statements,
+environment, schema_additions }`). This release adds two feature-plugin submodules
+(RBAC, IdP federation), one standalone building-block module (`vpc-endpoints`),
+and three additive drop-ins (AppSyncVisibility, BedrockHubRoleArn, managed_config).
+
+All new subsystems are **default-off / backward-compatible**: with the new root
+variables unset, the deployment behaves identically to `0.5.12-tf.0`. The only
+material breaking change is the VPC-endpoints example refactor, which ships
+`moved {}` blocks so a normal upgrade plans **0 destroy / 0 create**; see
+[Breaking Changes](#breaking-changes) below.
+
+No file under `sources/` is modified.
+
+### New Features & Changes
+
+#### RBAC + `Users` table feature-plugin submodule (C2)
+
+- New self-contained feature-plugin submodule `modules/features/rbac/` (instantiated
+  independently and composed into `processing-environment-api` via the Round 1
+  feature-plugin contract — mirrors the CDK `api.enable(userManagement)` idiom).
+- Provisions the four Cognito user-pool groups (`Admin`, `Author`, `Reviewer`,
+  `Viewer`) with default-or-override names, a `Users` DynamoDB table (KMS-encrypted
+  via `encryption_key_arn`, point-in-time recovery enabled — consistent with the
+  other IDP tables) storing user id, email, persona, status, timestamps, and
+  `allowedConfigVersions`, and a least-privilege user-management Lambda.
+- Server-side **Reviewer document filtering** and **`allowedConfigVersions` scoping**
+  enforced in the resolver/Lambda layer (not the web UI), so the restriction cannot
+  be bypassed by a direct API call; the profile query exposes `allowedConfigVersions`.
+- The user-management role grants only `dynamodb:{GetItem,PutItem,UpdateItem,DeleteItem,
+  Query,Scan}` on the `Users` table (+ its KMS key) and the Cognito admin actions
+  required for group membership, scoped to the user-pool ARN — and no broader.
+- Default-off: with `var.rbac` unset, no RBAC resources are created and the
+  pre-Round-2 single-tenant Cognito authorization behavior is preserved.
+
+#### External SAML/OIDC IdP federation feature-plugin submodule (C6)
+
+- New self-contained feature-plugin submodule `modules/features/idp-federation/`
+  (composed through the same Round 1 contract as RBAC).
+- Configures the Cognito identity provider (SAML via metadata URL/file, OIDC via
+  issuer + client) on the user pool, additively appending the external provider to
+  the user-pool client's `supported_identity_providers` while keeping `COGNITO`.
+- **OIDC client-secret resolver**: the secret is supplied only as a reference
+  (Secrets Manager ARN / SSM name), resolved at apply time and passed solely into
+  `provider_details.client_secret` — never stored as a plaintext module input or a
+  non-sensitive output.
+- Provisions a **group-mapping trigger Lambda** that maps external IdP groups/claims
+  to the four RBAC group names (Requirement 1) at sign-in.
+- Default-off: with `var.idp_federation` unset, no federation resources are created
+  and the user pool stays configured for direct Cognito authentication.
+
+#### Private Network Deployment + standalone `vpc-endpoints` module (C7)
+
+- New standalone module `modules/vpc-endpoints/` provisioning ~16 interface
+  endpoints (ssm, ssmmessages, ec2messages, logs, monitoring, kms, sts, sqs, states,
+  bedrock, bedrock-runtime, bedrock-agent-runtime, appsync-api, codebuild, lambda,
+  events, textract) plus the S3 and DynamoDB gateway endpoints. Each endpoint is
+  **individually toggleable**, and `service_name` is built from the current region
+  (`com.amazonaws.${region}.${service}`) so the module is **partition-aware**
+  (incl. `us-gov-*`).
+- Root **private-network wiring**: `var.vpc_subnet_ids` / `var.vpc_security_group_ids`
+  thread VPC-capable resources into the supplied private subnets/SGs and instantiate
+  `module.vpc_endpoints` for the services the enabled processors/features need.
+- Root **PRIVATE endpoint-gap `check {}`**: fails the plan when
+  `var.api.visibility == "PRIVATE"` and the `appsync-api` interface endpoint is not
+  provisioned, plus a companion best-effort check surfacing an enabled feature's
+  missing required endpoint with a remediation pointer.
+
+#### AppSyncVisibility wired at the root API layer (B3)
+
+- `var.api.visibility` (`GLOBAL` / `PRIVATE`) is threaded from the root into
+  `modules/processing-environment-api`, which sets `aws_appsync_graphql_api.visibility`
+  and validates the value. Unset defaults to `GLOBAL`, preserving current behavior;
+  any value other than `GLOBAL`/`PRIVATE` fails validation with an error naming the
+  allowed values.
+
+#### BedrockHubRoleArn cross-account assume-role (B8)
+
+- Optional cross-account assume-role for a centralized Bedrock "hub" account, added
+  on the **unified-processor engine** execution role(s) so all three façades inherit
+  it. When `var.bedrock_hub_role_arn` is set, the engine grants `sts:AssumeRole`
+  scoped to exactly that ARN (and no other) and wires the hub role ARN into the
+  processing Lambdas' environment.
+- Fully additive: when unset/empty, no `sts:AssumeRole` grant and no env var are
+  rendered, and same-account Bedrock access is identical to pre-Round-2 behavior.
+
+#### managed_config baselines seeded as `managed: true` rows (B11)
+
+- The configuration seeder now seeds the baselines under
+  `sources/config_library/managed_config/*/config.yaml` into the configuration
+  DynamoDB table as rows carrying `Managed = true` (non-editable through the normal
+  config-edit path; enforcement stays upstream). Additive: new managed rows only —
+  consumer-authored non-managed rows are never overwritten or deleted.
+
+### Breaking Changes
+
+- **`vpc-endpoints` example refactor (module internal address change).** The
+  `bedrock-llm-processor-vpc` example now consumes `modules/vpc-endpoints/` in place
+  of its inline `aws_vpc_endpoint.*` resources, and sets `AppSyncVisibility =
+  "PRIVATE"` to demonstrate B3 + private networking. The change ships `moved {}`
+  blocks mapping each old inline endpoint address into the module, so a normal
+  `terraform plan`/`apply` shows **0 destroy / 0 create** for the moved endpoints.
+
+  New root variables `var.rbac`, `var.idp_federation`, `var.private_network`, and
+  `var.api.visibility` are introduced — all **default-off / backward-compatible**;
+  no tfvars changes are required to keep existing deployments planning unchanged.
+
+  Migration (review the plan and confirm 0/0 before applying):
+
+  ```bash
+  # 1. Upgrade the module and review the plan. The bundled moved {} blocks remap the
+  #    inline endpoint addresses into module.vpc_endpoints automatically — no manual
+  #    terraform state mv is required.
+  terraform plan
+
+  # 2. Confirm the move is non-destructive. The moved endpoints (the ~16 interface
+  #    endpoints + the S3/DynamoDB gateways) MUST report 0 destroy / 0 create before
+  #    you apply. If they show destroy/create, stop and re-check the moved {} mapping
+  #    against your state addresses (terraform state list | grep vpc_endpoint).
+  terraform state pull > backup.tfstate   # back up state before applying
+
+  # 3. Apply only after confirming the 0 destroy / 0 create plan.
+  terraform apply
+  ```
+
+### Tooling
+
+- **`make security` (tfsec) reworked to a per-module scan.** tfsec 1.28.x cannot
+  parse Terraform 1.5+ `check {}` / `removed {}` blocks — such a block anywhere in
+  a scanned root module is a *fatal parse abort that happens before result
+  filtering*, so the previous `tfsec . --exclude-path main.tf` invocation never
+  actually skipped those files (the flag only filters findings, it does not skip
+  parsing) and `make security` had in fact been aborting since before
+  `v0.4.16-tf.2`. The target now scans each module directory individually (the only
+  exclusion form that works in 1.28.x), skipping the directories whose `.tf` files
+  carry `check {}`/`removed {}` glue (the repo root and
+  `processing-environment-api`, neither of which holds scannable resources beyond
+  already-excluded IAM glue). `make all` now completes green.
+- **All Round 2 modules pass tfsec strictly** (`rbac`, `idp-federation`,
+  `vpc-endpoints`, `processor-configuration`): the B8 `sts:AssumeRole` statement is
+  scoped to exactly `var.bedrock_hub_role_arn` and the user-management role is
+  least-privilege — both produce zero findings.
+- **Pre-existing findings are scanned with `--soft-fail`** (findings still printed,
+  non-blocking) for a fixed allowlist of modules that carried MEDIUM/HIGH findings
+  before the v0.5.12 work (`assets-bucket`, `web-ui`, `user-identity`, `reporting`,
+  `chat-with-document`, `agent-analytics`, `discovery`, and the `kms:Encrypt`
+  wildcard in the four processor modules — all present at `v0.4.16-tf.2`). Every
+  module not on that allowlist — including all Round 2 modules — is scanned
+  strictly, so a new finding in current work fails the gate. Remediating the
+  allowlisted debt is tracked separately and is out of scope for the v0.5.12 rounds.
+
+### Migration
+
+See [docs/migration-v0.4.16-to-v0.5.12.md](docs/migration-v0.4.16-to-v0.5.12.md)
+for enabling RBAC (incl. the Cognito-required constraint), configuring SAML/OIDC
+federation, adopting `modules/vpc-endpoints/` (the `moved {}` mapping + the
+0-destroy/0-create plan gate), and the `BedrockHubRoleArn` opt-in. All Round 2
+subsystems are default-off; no action is required to keep an existing
+`0.5.12-tf.0` deployment planning unchanged.
+
+---
+
 ## [0.5.12-tf.0] - 2026-06-09
 
 ### Summary
@@ -24,7 +384,7 @@ forwarded for a transition window. Plus a batch of additive parity drop-ins
 chat-with-document streaming, Python 3.12 runtimes).
 
 This release carries breaking changes to module internal addresses; see
-[Breaking Changes](#breaking-changes) below and the full
+[Breaking Changes](#breaking-changes-1) below and the full
 [migration guide](docs/migration-v0.4.16-to-v0.5.12.md).
 
 ### New Features & Changes

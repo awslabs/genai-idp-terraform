@@ -87,8 +87,15 @@ variable "api" {
     enable_agent_companion_chat = optional(bool, false)
     enable_test_studio          = optional(bool, false)
     enable_fcc_dataset          = optional(bool, false)
+    enable_w2_dataset           = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
+
+    # v0.5.11 — version-check resolver (C14). When public_artifacts_bucket is
+    # empty (default), the getLatestPublishedVersion resolver is not created.
+    public_artifacts_bucket = optional(string, "")
+    public_artifacts_prefix = optional(string, "artifacts/genai-idp")
+    public_artifacts_region = optional(string, "")
 
     # v0.4.16 feature flags
     enable_hitl                     = optional(bool, true)
@@ -116,6 +123,53 @@ variable "api" {
   validation {
     condition     = !var.api.agent_analytics.enabled || var.api.agent_analytics.model_id != null
     error_message = "When api.agent_analytics.enabled is true, model_id must be provided."
+  }
+}
+
+# RBAC feature plugin (C2, v0.5.12) — forwarded to module.rbac at the root.
+# Default-off. When enabled, provisions the four Cognito groups (Admin/Author/
+# Reviewer/Viewer), the Users table, and the user-management Lambda. Requires a
+# Cognito user pool (this example always provisions one), enforced at plan time.
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin (C2). Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+# External SAML/OIDC IdP federation feature plugin (C6, v0.5.12) — forwarded to
+# module.idp_federation at the root. Default-off. The OIDC client secret is
+# supplied by REFERENCE (oidc_client_secret_ref — a Secrets Manager ARN / SSM
+# parameter name), never as a raw value. When both rbac and idp_federation are
+# enabled, the federation group-mapping targets the four RBAC group names.
+variable "idp_federation" {
+  description = "Configuration for the external SAML/OIDC IdP federation feature plugin (C6). Default-off. The OIDC client secret is supplied by reference, never in plaintext."
+  type = object({
+    enabled                = optional(bool, false)
+    provider_type          = optional(string, "SAML")
+    provider_name          = optional(string, "ExternalIdP")
+    saml_metadata_url      = optional(string, "")
+    saml_metadata_file     = optional(string, "")
+    oidc_issuer            = optional(string, "")
+    oidc_client_id         = optional(string, "")
+    oidc_client_secret_ref = optional(string, "")
+    oidc_authorize_scopes  = optional(string, "openid email profile")
+    attribute_mapping      = optional(map(string), {})
+    group_attribute_name   = optional(string, "")
+    group_mapping          = optional(map(string), {})
+  })
+  default = {
+    enabled = false
   }
 }
 
@@ -279,6 +333,18 @@ variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
   default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+}
+
+# Round 3 (v0.5.12-tf.2): when true, append the demonstration classes in
+# config-overlays/round3-x-aws-idp-flags.yaml (the three config-shape
+# `x-aws-idp-*` flags, B9/B10/B12) onto the seeded config's classes list so the
+# flags travel through the configuration seeder unchanged. The flags are
+# runtime-enforced upstream and add no AWS resources. Set false to seed the base
+# config verbatim.
+variable "demo_x_aws_idp_flags" {
+  description = "Demonstrate the Round 3 config-shape x-aws-idp-* schema flags (B9/B10/B12) by appending overlay classes to the seeded config. No new AWS resources; the flags pass through the seeder unchanged."
+  type        = bool
+  default     = true
 }
 
 variable "tags" {

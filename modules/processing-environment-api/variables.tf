@@ -386,6 +386,34 @@ variable "enable_fcc_dataset" {
   default     = false
 }
 
+variable "enable_w2_dataset" {
+  description = "Enable W2 dataset deployer (deploys the Fake W-2 Tax Form sample dataset for Test Studio). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
+# VERSION-CHECK FEATURE VARIABLES (C14, v0.5.11)
+# =============================================================================
+
+variable "public_artifacts_bucket" {
+  description = "Name of the (optionally public / cross-account) S3 bucket the version_check_resolver Lambda lists for `<prefix>/idp-main_<version>.yaml` templates. When empty (default), the version-check Lambda, AppSync data source, and resolver are not created (default-off)."
+  type        = string
+  default     = ""
+}
+
+variable "public_artifacts_prefix" {
+  description = "S3 key prefix under public_artifacts_bucket where versioned IDP templates live. Threaded into the resolver's PUBLIC_ARTIFACTS_PREFIX env var. Only used when public_artifacts_bucket is set."
+  type        = string
+  default     = "artifacts/genai-idp"
+}
+
+variable "public_artifacts_region" {
+  description = "Region of public_artifacts_bucket, threaded into the resolver's PUBLIC_ARTIFACTS_REGION env var. When empty, the shipped resolver defaults to AWS_REGION. Only used when public_artifacts_bucket is set."
+  type        = string
+  default     = ""
+}
+
 variable "enable_error_analyzer" {
   description = "DEPRECATED (no-op as of v0.5.12). The standalone Error Analyzer Lambdas were removed upstream; error analysis is now provided by the unified agents framework (Error-Analyzer-Agent via the agent resolvers). Retained for backward compatibility; setting it has no effect."
   type        = bool

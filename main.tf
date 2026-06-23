@@ -404,7 +404,15 @@ module "processing_environment_api" {
   enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
   enable_test_studio          = try(var.api.enable_test_studio, false)
   enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
+  enable_w2_dataset           = try(var.api.enable_w2_dataset, false)
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
+
+  # v0.5.11 — version-check resolver (C14). Default-off: when
+  # public_artifacts_bucket is empty the API module creates no version-check
+  # Lambda/data source/resolver.
+  public_artifacts_bucket = try(var.api.public_artifacts_bucket, "")
+  public_artifacts_prefix = try(var.api.public_artifacts_prefix, "artifacts/genai-idp")
+  public_artifacts_region = try(var.api.public_artifacts_region, "")
 
   # MCP integration moved to the `mcp_integration` feature submodule
   # (modules/features/mcp-integration), instantiated at the root in features.tf

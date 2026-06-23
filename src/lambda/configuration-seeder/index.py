@@ -49,6 +49,16 @@ def _stringify_values(obj: Any) -> Any:
     Pydantic model that expects ``float`` / ``int``. The IDP convention is to
     store every numeric value as a string and let the Pydantic models coerce
     on read.
+
+    Pass-through contract (B9/B10/B12): this recursion is intentionally
+    *generic* — it walks dicts and lists without any key allow-list or closed
+    schema. Author-supplied ``x-aws-idp-*`` schema flags
+    (``x-aws-idp-extraction-model``, ``x-aws-idp-exclude-from-processing`` +
+    its ``reason``, ``x-aws-idp-page-types`` / ``x-aws-idp-source-page-types``)
+    are therefore persisted into the configuration item verbatim, neither
+    stripped nor renamed. These flags are enforced by the read-only
+    ``idp_common`` runtime upstream; the seeder's only obligation is faithful
+    pass-through, so do NOT add key-specific handling here.
     """
     if obj is None:
         return None
@@ -92,6 +102,12 @@ def _merge_with_system_defaults(user_config: Dict[str, Any]) -> Dict[str, Any]:
     pattern = _detect_pattern(user_config)
     logger.info("Merging user config with system defaults for pattern=%s", pattern)
     try:
+        # validate=False is required for the B9/B10/B12 pass-through contract:
+        # it deep-merges the user config onto system defaults (user keys win,
+        # arbitrary keys preserved) WITHOUT running idp_common's Pydantic /
+        # JSON-Schema validation, which carries a closed ALLOWED_KEYWORDS set
+        # that would otherwise flag unknown x-aws-idp-* schema flags. Runtime
+        # enforcement of those flags lives upstream in idp_common.
         merged = merge_config_with_defaults(user_config, pattern=pattern, validate=False)
     except FileNotFoundError as exc:
         logger.warning(
@@ -143,7 +159,12 @@ def _detect_pattern(config: Dict[str, Any]) -> str:
 
 
 def _put_config_default(
-    table, version: str, merged_config: Dict[str, Any], description: str
+    table,
+    version: str,
+    merged_config: Dict[str, Any],
+    description: str,
+    is_active: bool = True,
+    managed: bool = False,
 ) -> Dict[str, Any]:
     """
     Write a versioned Config item to DynamoDB.
@@ -151,19 +172,35 @@ def _put_config_default(
     DynamoDB key shape: ``Configuration = "Config#<version>"``.
     Merged config sections are spread as top-level attributes (matching
     the v0.4.8 seeder convention and the IDPConfig.model_dump shape).
-    Always sets ``IsActive=true`` so the runtime config loader resolves
-    this version when no active version is explicitly tracked.
+
+    ``is_active`` defaults to ``True`` so the runtime config loader resolves
+    the seeded ``default`` version when no active version is explicitly
+    tracked. Managed baseline configs (B11) are seeded with
+    ``is_active=False`` so they remain selectable templates without
+    hijacking the active runtime config.
+
+    ``managed`` writes the top-level ``Managed`` attribute that the upstream
+    ``idp_common`` config layer reads back as ``managed`` (see
+    ``configuration_manager.py`` ``_DYNAMODB_METADATA_FIELDS`` /
+    ``list_config_versions``). Rows flagged ``Managed=true`` are rejected by
+    the upstream config-write path, making them non-editable through the
+    normal config-edit operations.
     """
     now = _isoformat_now()
 
     item: Dict[str, Any] = {
         "Configuration": f"Config#{version}",
-        "IsActive": True,
+        "IsActive": is_active,
         "Description": description,
         "CreatedAt": now,
         "UpdatedAt": now,
         **_stringify_values(merged_config),
     }
+
+    # Only stamp the Managed marker when requested so non-managed rows are
+    # byte-identical to the pre-B11 seeder output.
+    if managed:
+        item["Managed"] = True
 
     return table.put_item(Item=item)
 
@@ -245,6 +282,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # key == "Default"
         version = event.get("Version", "default")
         description = event.get("Description", "Default IDP configuration")
+        # B11: managed baseline configs are seeded as non-active, non-editable
+        # rows. Default invocations keep the historical is_active=true behavior.
+        managed = bool(event.get("Managed", False))
+        is_active = bool(event.get("IsActive", not managed))
 
         if not isinstance(value, dict):
             raise ValueError(
@@ -252,11 +293,20 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 f"{type(value).__name__}."
             )
 
-        # Belt-and-braces cleanup of any stale v0.4.8 record.
-        _delete_legacy_default_if_present(table)
+        # Belt-and-braces cleanup of any stale v0.4.8 record — only relevant
+        # to the active default version, never to managed baselines.
+        if not managed:
+            _delete_legacy_default_if_present(table)
 
         merged = _merge_with_system_defaults(value)
-        response = _put_config_default(table, version, merged, description)
+        response = _put_config_default(
+            table,
+            version,
+            merged,
+            description,
+            is_active=is_active,
+            managed=managed,
+        )
 
         return {
             "statusCode": 200,
@@ -265,6 +315,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     "message": f"Stored Config#{version}",
                     "key": "Default",
                     "version": version,
+                    "managed": managed,
+                    "isActive": is_active,
                     "merged_sections": sorted(merged.keys()),
                     "response": response,
                 },

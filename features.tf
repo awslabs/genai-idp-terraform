@@ -30,6 +30,29 @@ locals {
     mcp                = try(var.api.enable_mcp, false)
     chat_with_document = try(var.api.chat_with_document.enabled, false)
     hitl               = try(var.api.enable_hitl, false)
+    # Round 2 feature plugins (C2/C6). Each is a first-class entry in the
+    # enable map and the enabled_feature_contracts merge below — no new boolean
+    # is added to the monolithic `var.api` object (Req 4.3, 6.2). Default-off:
+    # `try(..., false)` guards a missing object so an absent var never enables.
+    rbac       = try(var.rbac.enabled, false)
+    federation = try(var.idp_federation.enabled, false)
+  }
+}
+
+# =============================================================================
+# Validation: RBAC requires a Cognito user_identity (Req 4.4)
+# =============================================================================
+# Mirrors the CDK `UserManagement` constructor guard, which throws when
+# `props.userIdentity` is absent ("UserManagement requires a UserIdentity").
+# `local.user_pool_id` is derived from `local.user_pool_arn` and is null when
+# neither an external `var.user_identity` nor an internally-created
+# `module.user_identity` supplies a Cognito user pool. Enabling RBAC without a
+# Cognito user pool therefore fails `terraform plan` before any apply.
+#tfsec:ignore:*
+check "rbac_requires_cognito" {
+  assert {
+    condition     = !try(var.rbac.enabled, false) || local.user_pool_id != null
+    error_message = "RBAC (var.rbac.enabled = true) requires a Cognito user_identity (user pool). Configure Cognito (set var.user_identity or let the module create a user pool) or disable RBAC. See docs/migration-v0.4.16-to-v0.5.12.md."
   }
 }
 
@@ -133,7 +156,125 @@ module "chat_with_document" {
   tags = var.tags
 }
 
+# =============================================================================
+# RBAC feature submodule (C2, Round 2 — Req 4.1/4.3)
+# =============================================================================
+# Self-contained RBAC stack (CDK `UserManagement` analog): the four Cognito
+# groups (Admin/Author/Reviewer/Viewer), the `Users` DynamoDB table, the
+# user-management Lambda, and the server-side authorization surface. Emits the
+# Round 1 feature-plugin contract that `module.processing_environment_api`
+# composes via `enabled_feature_contracts` (below), exactly the way it composes
+# MCP/Chat.
+#
+# Default-off (Req 1.6): instantiated only when `var.rbac.enabled` is true. RBAC
+# requires a Cognito user pool; that constraint is enforced at plan time by a
+# root `check {}` (task 8.2).
+module "rbac" {
+  source = "./modules/features/rbac"
+  count  = local.feature_enable.rbac ? 1 : 0
+
+  enabled     = true
+  name_prefix = "${local.name_prefix}-api"
+
+  # Cognito user pool the four RBAC groups are created on and the
+  # user-management Lambda administers (scoped to this pool's ARN).
+  user_pool_id  = local.user_pool_id
+  user_pool_arn = local.user_pool_arn
+
+  # Group-name overrides (Req 1.5) — defaults to Admin/Author/Reviewer/Viewer.
+  group_names = try(var.rbac.group_names, {})
+
+  allowed_signup_email_domains = try(var.rbac.allowed_signup_email_domains, "")
+
+  # Encryption + data stores: Users-table SSE and the tracking/configuration
+  # tables read by the Reviewer-filtering / allowedConfigVersions scoping path.
+  encryption_key_arn       = var.encryption_key_arn
+  tracking_table_arn       = module.processing_environment.tracking_table_arn
+  tracking_table_name      = module.processing_environment.tracking_table_name
+  configuration_table_arn  = module.processing_environment.configuration_table_arn
+  configuration_table_name = module.processing_environment.configuration_table_name
+
+  # Layers — same wiring the other feature submodules use for the base/idp_common layers.
+  base_layer_arn       = module.processing_environment.base_layer_arn
+  idp_common_layer_arn = module.idp_common_layer.layer_arn
+
+  # Optional VPC placement for the user-management Lambda (matches the MCP wiring).
+  vpc_config = length(var.vpc_subnet_ids) > 0 ? {
+    subnet_ids         = var.vpc_subnet_ids
+    security_group_ids = var.vpc_security_group_ids
+  } : null
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+
+  tags = var.tags
+}
+
+# =============================================================================
+# External SAML/OIDC IdP federation feature submodule (C6, Round 2 — Req 6.1/6.2)
+# =============================================================================
+# Self-contained federation stack: the Cognito identity provider (SAML or
+# OIDC), the OIDC client-secret resolver (no plaintext in state), and the
+# group-mapping trigger Lambda that maps external groups to the four RBAC
+# groups. Always emits the Round 1 contract (Req 6.2); default-off provisioning
+# is gated by `var.idp_federation.enabled` (Req 5.6).
+#
+# When RBAC is also enabled, the group-mapping targets the RBAC submodule's
+# resolved group names so federated users land in the four roles consistently
+# (Req 6.3); otherwise it falls back to the configured/default RBAC group names.
+module "idp_federation" {
+  source = "./modules/features/idp-federation"
+  count  = local.feature_enable.federation ? 1 : 0
+
+  enabled = true
+
+  # Provider surface (~12 vars) forwarded from var.idp_federation.
+  provider_type          = try(var.idp_federation.provider_type, "SAML")
+  provider_name          = try(var.idp_federation.provider_name, "ExternalIdP")
+  saml_metadata_url      = try(var.idp_federation.saml_metadata_url, "")
+  saml_metadata_file     = try(var.idp_federation.saml_metadata_file, "")
+  oidc_issuer            = try(var.idp_federation.oidc_issuer, "")
+  oidc_client_id         = try(var.idp_federation.oidc_client_id, "")
+  oidc_client_secret_ref = try(var.idp_federation.oidc_client_secret_ref, "")
+  oidc_authorize_scopes  = try(var.idp_federation.oidc_authorize_scopes, "openid email profile")
+  attribute_mapping      = try(var.idp_federation.attribute_mapping, {})
+  group_attribute_name   = try(var.idp_federation.group_attribute_name, "")
+  group_mapping          = try(var.idp_federation.group_mapping, {})
+
+  # Cognito wiring.
+  user_pool_id        = local.user_pool_id
+  user_pool_client_id = local.user_pool_client_id
+
+  # Group-mapping targets the RBAC group names (Req 6.3): use the RBAC
+  # submodule's resolved names when RBAC is enabled, otherwise the
+  # configured/default group names (casing-correct Admin/Author/Reviewer/Viewer
+  # keys the federation module expects).
+  rbac_group_names = local.feature_enable.rbac ? module.rbac[0].group_names : local.rbac_group_names_fallback
+
+  # Layers.
+  base_layer_arn       = module.processing_environment.base_layer_arn
+  idp_common_layer_arn = module.idp_common_layer.layer_arn
+
+  encryption_key_arn = var.encryption_key_arn
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+
+  tags = var.tags
+}
+
 locals {
+  # Fallback RBAC group names for the federation group-mapping when RBAC is not
+  # enabled (when RBAC IS enabled, module.rbac[0].group_names is used instead).
+  # The federation submodule expects capitalized role keys
+  # (Admin/Author/Reviewer/Viewer); var.rbac.group_names carries lowercase keys
+  # with canonical defaults, so map them through here.
+  rbac_group_names_fallback = {
+    Admin    = try(var.rbac.group_names.admin, "Admin")
+    Author   = try(var.rbac.group_names.author, "Author")
+    Reviewer = try(var.rbac.group_names.reviewer, "Reviewer")
+    Viewer   = try(var.rbac.group_names.viewer, "Viewer")
+  }
+
   # Document config handed to the chat submodule for chat:/summarization.*
   # resolution. Use the active processor's config object when present.
   #
@@ -171,5 +312,45 @@ locals {
   enabled_feature_contracts = merge(
     local.feature_enable.mcp ? { mcp = module.mcp_integration[0].contract } : {},
     local.feature_enable.chat_with_document ? { chat_with_document = module.chat_with_document[0].contract } : {},
+    local.feature_enable.rbac ? { rbac = module.rbac[0].contract } : {},
+    local.feature_enable.federation ? { federation = module.idp_federation[0].contract } : {},
   )
+}
+
+# =============================================================================
+# Tracking-table GSI backfill (C1 — default-off, operator-triggered)
+# =============================================================================
+# Provisions the `backfill_gsi_attributes` worker Lambda + the Step Functions
+# state machine that drives it as a parallel-scan map over the tracking table,
+# populating `ItemType`/`InitialEventTime` on items that predate the
+# `TypeDateIndex` GSI. The GSI itself (modules/tracking-table) is always created;
+# this backfill is independently controllable and gated on
+# `var.tracking.enable_gsi_backfill` (default false).
+#
+# Crucially, even when enabled this module never auto-runs on apply — it creates
+# the machinery only. The operator starts the run explicitly via
+# `module.tracking_gsi_backfill[0].state_machine_arn` (Req 8.4). `try(...)`
+# guards a missing object so an absent var never enables the backfill.
+module "tracking_gsi_backfill" {
+  source = "./modules/tracking-gsi-backfill"
+  count  = try(var.tracking.enable_gsi_backfill, false) ? 1 : 0
+
+  name_prefix = local.name_prefix
+
+  # Tracking table the worker scans/updates (name for the scan input, ARN for
+  # least-privilege IAM scoped to exactly this table + its indexes).
+  tracking_table_name = module.processing_environment.tracking_table_name
+  tracking_table_arn  = module.processing_environment.tracking_table_arn
+
+  # KMS key the tracking table + worker log group are encrypted with.
+  encryption_key_arn = var.encryption_key_arn
+
+  # Layers — same base/idp_common wiring the other feature submodules use.
+  base_layer_arn       = module.processing_environment.base_layer_arn
+  idp_common_layer_arn = module.idp_common_layer.layer_arn
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+
+  tags = var.tags
 }

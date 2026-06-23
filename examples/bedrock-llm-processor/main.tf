@@ -391,10 +391,36 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
 }
 
 # Read configuration from config library (pattern-2 for Bedrock LLM processor)
+#
+# Round 3 (v0.5.12-tf.2): demonstrate the three config-shape `x-aws-idp-*` schema
+# flags (B9/B10/B12) by appending the classes in
+# config-overlays/round3-x-aws-idp-flags.yaml onto the seeded config's `classes`
+# list. The flags are runtime-enforced upstream and pass through the
+# configuration seeder unchanged — no new AWS resources, no key allow-listing.
+# Toggle the demonstration via var.demo_x_aws_idp_flags (default true).
 locals {
   config_file_path = var.config_file_path
   config_yaml      = file(local.config_file_path)
-  config           = yamldecode(local.config_yaml)
+  base_config      = yamldecode(local.config_yaml)
+
+  x_aws_idp_overlay = yamldecode(file("${path.module}/config-overlays/round3-x-aws-idp-flags.yaml"))
+
+  # Conditionally select the overlay classes as a list (empty when the demo is
+  # off). A `for ... if` comprehension is used instead of a ternary because
+  # Terraform treats tuples of different lengths as different types, so a
+  # `cond ? overlay.classes : []` ternary fails type-checking. The comprehension
+  # is a single expression whose element type is consistent.
+  demo_overlay_classes = [
+    for c in try(local.x_aws_idp_overlay.classes, []) : c
+    if var.demo_x_aws_idp_flags
+  ]
+
+  config = merge(local.base_config, {
+    classes = concat(
+      try(local.base_config.classes, []),
+      local.demo_overlay_classes,
+    )
+  })
 }
 
 # Deploy the GenAI IDP Accelerator with Bedrock LLM processor
@@ -469,8 +495,14 @@ module "genai_idp_accelerator" {
     enable_agent_companion_chat = var.api.enable_agent_companion_chat
     enable_test_studio          = var.api.enable_test_studio
     enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_w2_dataset           = var.api.enable_w2_dataset
     enable_error_analyzer       = var.api.enable_error_analyzer
     enable_mcp                  = var.api.enable_mcp
+
+    # v0.5.11 — version-check resolver (C14). Empty bucket ⇒ default-off.
+    public_artifacts_bucket = var.api.public_artifacts_bucket
+    public_artifacts_prefix = var.api.public_artifacts_prefix
+    public_artifacts_region = var.api.public_artifacts_region
     # v0.4.16 feature flags
     enable_hitl                     = var.api.enable_hitl
     enable_capacity_planning        = var.api.enable_capacity_planning
@@ -485,6 +517,14 @@ module "genai_idp_accelerator" {
   discovery          = var.discovery
   chat_with_document = var.chat_with_document
   process_changes    = var.process_changes
+
+  # RBAC + IdP federation feature plugins (v0.5.12, C2 + C6).
+  # Both wire through the root feature-plugin path. RBAC requires the Cognito
+  # user pool this example provisions (enforced at plan time by the root
+  # `rbac_requires_cognito` check). When both are enabled, the federation
+  # group-mapping Lambda targets the four RBAC group names automatically.
+  rbac           = var.rbac
+  idp_federation = var.idp_federation
 
   # Web UI configuration
   web_ui = {

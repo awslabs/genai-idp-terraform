@@ -15,6 +15,13 @@ data_tracking_retention_days = 365
 # Configuration File Path (optional - uses default lending package config)
 # config_file_path = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
+# Round 3 (v0.5.12-tf.2): demonstrate the three config-shape x-aws-idp-* schema
+# flags (B9/B10/B12) by appending the overlay classes in
+# config-overlays/round3-x-aws-idp-flags.yaml onto the seeded config. These flags
+# are runtime-enforced upstream and pass through the seeder unchanged (no new AWS
+# resources). Set false to seed the base config verbatim.
+# demo_x_aws_idp_flags = true
+
 # Model Configuration
 classification_model_id = "us.amazon.nova-2-lite-v1:0"
 extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
@@ -43,8 +50,15 @@ api = {
   enable_agent_companion_chat = false  # Multi-agent AI chat sessions
   enable_test_studio          = false  # Automated dataset testing
   enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
+  enable_w2_dataset           = false  # C16 — deploy sample W2 dataset (requires enable_test_studio)
   enable_error_analyzer       = false  # AI-powered error diagnostics
   enable_mcp                  = false  # Forwarded to module.mcp_integration (Bedrock AgentCore Gateway, opt-in)
+
+  # v0.5.11 — version-check resolver (C14). Naming a public artifacts bucket
+  # enables the getLatestPublishedVersion query (default-off when empty).
+  # public_artifacts_bucket = "my-org-idp-published-artifacts"
+  # public_artifacts_prefix = "artifacts/genai-idp"  # optional, default shown
+  # public_artifacts_region = ""                     # optional, "" = deployment region
 
   # v0.4.16 feature flags
   enable_hitl                     = true   # Forwarded to the inline HITL feature-plugin (complete_section_review review)
@@ -100,3 +114,75 @@ enable_rule_validation = false  # Enable compliance rule validation
 # lambda_hook_extraction     = ""  # e.g. "GENAIIDP-my-custom-extraction-hook"
 # lambda_hook_assessment     = ""  # e.g. "GENAIIDP-my-custom-assessment-hook"
 # lambda_hook_summarization  = ""  # e.g. "GENAIIDP-my-custom-summarization-hook"
+
+# ---------------------------------------------------------------------------
+# RBAC + External IdP federation (v0.5.12 — C2 + C6)
+# ---------------------------------------------------------------------------
+#
+# Both features wire through the root feature-plugin path
+# (var.rbac -> module.rbac, var.idp_federation -> module.idp_federation) and are
+# default-OFF. The blocks below are commented out; uncomment and fill in to
+# enable them. This example always provisions a Cognito user pool, which RBAC
+# requires (the root `rbac_requires_cognito` check fails at plan time otherwise).
+#
+# RBAC (C2): four server-side-enforced Cognito groups (Admin/Author/Reviewer/
+# Viewer), a Users DynamoDB table, and a user-management Lambda. Group names are
+# overridable; overriding one or more does not change the default-on behavior of
+# the four roles.
+#
+# rbac = {
+#   enabled = true
+#   # Optional group-name overrides (defaults shown):
+#   # group_names = {
+#   #   admin    = "Admin"
+#   #   author   = "Author"
+#   #   reviewer = "Reviewer"
+#   #   viewer   = "Viewer"
+#   # }
+#   # Optionally restrict which email domains the user-management Lambda may
+#   # create users for (comma-separated; empty = no restriction):
+#   # allowed_signup_email_domains = "example.com,corp.example.com"
+# }
+#
+# IdP federation (C6): federate the Cognito user pool with an external SAML or
+# OIDC provider. The configured provider is ADDED to the user-pool client's
+# supported identity providers without removing COGNITO, so direct sign-in keeps
+# working. When rbac is also enabled, the group-mapping trigger Lambda maps
+# external IdP groups/claims into the four RBAC groups at sign-in.
+#
+# --- SAML example ---
+# idp_federation = {
+#   enabled           = true
+#   provider_type     = "SAML"
+#   provider_name     = "CorpSAML"
+#   saml_metadata_url = "https://idp.example.com/metadata.xml"
+#   # Map external IdP groups -> the four RBAC groups (requires rbac.enabled):
+#   group_attribute_name = "groups"
+#   group_mapping = {
+#     "corp-idp-admins"    = "Admin"
+#     "corp-idp-authors"   = "Author"
+#     "corp-idp-reviewers" = "Reviewer"
+#     "corp-idp-viewers"   = "Viewer"
+#   }
+#   attribute_mapping = {
+#     email = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+#   }
+# }
+#
+# --- OIDC example ---
+# The OIDC client secret is supplied by REFERENCE only (a Secrets Manager ARN or
+# SSM parameter name). Never put the raw secret value in tfvars or state.
+# idp_federation = {
+#   enabled                = true
+#   provider_type          = "OIDC"
+#   provider_name          = "CorpOIDC"
+#   oidc_issuer            = "https://idp.example.com"
+#   oidc_client_id         = "your-oidc-client-id"
+#   oidc_client_secret_ref = "arn:aws:secretsmanager:us-east-1:111122223333:secret:corp-oidc-client-secret"
+#   oidc_authorize_scopes  = "openid email profile"
+#   group_attribute_name   = "groups"
+#   group_mapping = {
+#     "corp-idp-admins" = "Admin"
+#     "corp-idp-viewers" = "Viewer"
+#   }
+# }
