@@ -209,6 +209,18 @@ variable "model_id" {
   default     = "us.amazon.nova-2-lite-v1:0"
 }
 
+variable "bedrock_hub_role_arn" {
+  description = "Optional ARN of a centralized 'hub' account role that owns Bedrock access (BedrockHubRoleArn, v0.5.12). When non-empty, the Bedrock-calling processing Lambdas are granted sts:AssumeRole scoped to exactly this ARN and receive BEDROCK_ASSUME_ROLE_ARN in their environment so they assume it for Bedrock calls. When empty (default), processors use same-account Bedrock access unchanged (fully additive)."
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_assume_role_external_id" {
+  description = "Optional ExternalId passed to sts:AssumeRole when assuming var.bedrock_hub_role_arn (rendered as BEDROCK_ASSUME_ROLE_EXTERNAL_ID). Only used when bedrock_hub_role_arn is set. Common requirement for cross-account trust policies."
+  type        = string
+  default     = ""
+}
+
 variable "classification_model_id" {
   description = "Optional model ID for document classification. Overrides model_id for this step. If not provided, model_id is used."
   type        = string

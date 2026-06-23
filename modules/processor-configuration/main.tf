@@ -92,3 +92,57 @@ resource "aws_lambda_invocation" "seed_schema" {
     aws_iam_role_policy_attachment.kms_access
   ]
 }
+
+# ----------------------------------------------------------------------------
+# B11 — Managed baseline configurations
+#
+# Seed the upstream managed-config baselines
+# (`sources/config_library/managed_config/<name>/config.yaml`) as additional,
+# non-active configuration versions stamped `Managed = true`. The upstream
+# `idp_common` config layer reads that attribute back as `managed` and the
+# config-write path (`idp_sdk` config operations) rejects edits/uploads to
+# managed rows — so this seeding is what makes those rows non-editable, while
+# enforcement stays entirely upstream (no `sources/` edit).
+#
+# Discovery is via `fileset(...)`, so the set tracks whatever ships in the
+# read-only snapshot (currently `fake-w2`, `docsplit`, `realkie-fcc-verified`,
+# `ocr-benchmark`). If the directory is absent the map is empty and no rows are
+# seeded. Each managed row uses its directory name as a deterministic version
+# key (`Config#<name>`); consumer-authored non-managed rows are never touched.
+# ----------------------------------------------------------------------------
+locals {
+  managed_config_dir   = "${path.module}/../../sources/config_library/managed_config"
+  managed_config_files = fileset(local.managed_config_dir, "*/config.yaml")
+
+  # version-name (subdir) => parsed config dict
+  managed_configs = {
+    for f in local.managed_config_files :
+    dirname(f) => yamldecode(file("${local.managed_config_dir}/${f}"))
+  }
+}
+
+# Seed each managed baseline as a non-active, non-editable `Config#<name>` row.
+resource "aws_lambda_invocation" "seed_managed" {
+  for_each = local.managed_configs
+
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key         = "Default"
+    Version     = each.key
+    Managed     = true
+    IsActive    = false
+    Description = try(each.value.description, "Managed configuration: ${each.key}")
+    Value       = each.value
+  })
+
+  triggers = {
+    configuration_hash = sha256(jsonencode(each.value))
+    seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}

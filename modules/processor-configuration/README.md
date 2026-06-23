@@ -30,6 +30,7 @@ No modules.
 | [aws_iam_role_policy_attachment.lambda_vpc_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_lambda_function.configuration_seeder](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_invocation.seed_default](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
+| [aws_lambda_invocation.seed_managed](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_lambda_invocation.seed_schema](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [archive_file.lambda_zip](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
@@ -58,4 +59,5 @@ No modules.
 | <a name="output_default_seeded"></a> [default\_seeded](#output\_default\_seeded) | Result of seeding the Default configuration |
 | <a name="output_lambda_function_arn"></a> [lambda\_function\_arn](#output\_lambda\_function\_arn) | ARN of the configuration seeder Lambda function |
 | <a name="output_lambda_function_name"></a> [lambda\_function\_name](#output\_lambda\_function\_name) | Name of the configuration seeder Lambda function |
+| <a name="output_managed_versions_seeded"></a> [managed\_versions\_seeded](#output\_managed\_versions\_seeded) | Names of the managed baseline configuration versions seeded with Managed = true (B11). |
 | <a name="output_schema_seeded"></a> [schema\_seeded](#output\_schema\_seeded) | Result of seeding the Schema |

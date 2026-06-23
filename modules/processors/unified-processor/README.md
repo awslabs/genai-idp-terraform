@@ -55,23 +55,29 @@
 | [aws_iam_role.rule_validation_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.state_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.summarization_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy.assessment_bedrock_hub_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.assessment_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.assessment_lambda_appsync](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.assessment_lambda_kms](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.bda_completion_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.bda_invoke_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.bda_process_results_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.classification_bedrock_hub_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.classification_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.evaluation_bedrock_hub_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.evaluation_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.evaluation_lambda_appsync](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.extraction_bedrock_hub_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.extraction_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.ocr_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.process_results_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.rule_validation_bedrock_hub_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.rule_validation_kms](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.rule_validation_orchestration_extras](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.rule_validation_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.state_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.state_machine_hook_inference](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy.summarization_bedrock_hub_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.summarization_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy_attachment.assessment_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.assessment_lambda_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
@@ -145,6 +151,8 @@
 | <a name="input_assessment_model_id"></a> [assessment\_model\_id](#input\_assessment\_model\_id) | The Bedrock model ID to use for assessment (when assessment is enabled) | `string` | `null` | no |
 | <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (idp\_common with docs\_service extras, v0.4.11+) | `string` | `null` | no |
 | <a name="input_bda_project_arn"></a> [bda\_project\_arn](#input\_bda\_project\_arn) | ARN of the Bedrock Data Automation project to invoke on the BDA branch. Non-null only when delegated from the bda-processor façade (use\_bda = true); null for the pipeline-branch façades. | `string` | `null` | no |
+| <a name="input_bedrock_assume_role_external_id"></a> [bedrock\_assume\_role\_external\_id](#input\_bedrock\_assume\_role\_external\_id) | Optional ExternalId passed to sts:AssumeRole when assuming var.bedrock\_hub\_role\_arn (rendered as BEDROCK\_ASSUME\_ROLE\_EXTERNAL\_ID). Only used when bedrock\_hub\_role\_arn is set. Common requirement for cross-account trust policies. | `string` | `""` | no |
+| <a name="input_bedrock_hub_role_arn"></a> [bedrock\_hub\_role\_arn](#input\_bedrock\_hub\_role\_arn) | Optional ARN of a centralized 'hub' account role that owns Bedrock access (BedrockHubRoleArn, v0.5.12). When non-empty, the Bedrock-calling processing Lambdas are granted sts:AssumeRole scoped to exactly this ARN and receive BEDROCK\_ASSUME\_ROLE\_ARN in their environment so they assume it for Bedrock calls. When empty (default), processors use same-account Bedrock access unchanged (fully additive). | `string` | `""` | no |
 | <a name="input_classification_guardrail"></a> [classification\_guardrail](#input\_classification\_guardrail) | Optional Bedrock guardrail to apply to classification model interactions | <pre>object({<br>    guardrail_id  = string<br>    guardrail_arn = string<br>  })</pre> | `null` | no |
 | <a name="input_classification_max_workers"></a> [classification\_max\_workers](#input\_classification\_max\_workers) | The maximum number of concurrent workers for document classification | `number` | `20` | no |
 | <a name="input_classification_model_id"></a> [classification\_model\_id](#input\_classification\_model\_id) | Optional model ID for document classification. Overrides model\_id for this step. If not provided, model\_id is used. | `string` | `null` | no |
@@ -211,4 +219,6 @@
 | <a name="output_schema_definition"></a> [schema\_definition](#output\_schema\_definition) | The JSON Schema definition for unified processor engine configuration |
 | <a name="output_state_machine_arn"></a> [state\_machine\_arn](#output\_state\_machine\_arn) | ARN of the Step Functions state machine for document processing |
 | <a name="output_state_machine_name"></a> [state\_machine\_name](#output\_state\_machine\_name) | Name of the Step Functions state machine for document processing |
+| <a name="output_state_machine_start_at"></a> [state\_machine\_start\_at](#output\_state\_machine\_start\_at) | The StartAt state of the document-processing state machine: 'RouteByProcessingMode' on the BDA path (use\_bda = true), 'OCRStep' on the pipeline path. |
+| <a name="output_state_machine_state_names"></a> [state\_machine\_state\_names](#output\_state\_machine\_state\_names) | The set of state names in the document-processing state machine definition. Includes the BDA-branch states only when use\_bda = true. |
 | <a name="output_summarization_model"></a> [summarization\_model](#output\_summarization\_model) | The summarization model being used (from variable override or config.yaml) |

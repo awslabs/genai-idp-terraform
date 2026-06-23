@@ -161,7 +161,7 @@ resource "aws_lambda_function" "rule_validation_function" {
   kms_key_arn = local.encryption_key_arn
 
   environment {
-    variables = {
+    variables = merge({
       METRIC_NAMESPACE         = local.metric_namespace
       CONFIGURATION_TABLE_NAME = local.configuration_table_name
       LOG_LEVEL                = local.log_level
@@ -169,7 +169,7 @@ resource "aws_lambda_function" "rule_validation_function" {
       TRACKING_TABLE           = local.tracking_table_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
-    }
+    }, local.bedrock_assume_role_env)
   }
 
   dynamic "vpc_config" {
@@ -204,7 +204,7 @@ resource "aws_lambda_function" "rule_validation_orchestration_function" {
   kms_key_arn = local.encryption_key_arn
 
   environment {
-    variables = {
+    variables = merge({
       METRIC_NAMESPACE             = local.metric_namespace
       CONFIGURATION_TABLE_NAME     = local.configuration_table_name
       LOG_LEVEL                    = local.log_level
@@ -213,7 +213,7 @@ resource "aws_lambda_function" "rule_validation_orchestration_function" {
       RULE_VALIDATION_FUNCTION_ARN = aws_lambda_function.rule_validation_function[0].arn
       DOCUMENT_TRACKING_MODE       = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL              = local.api_graphql_url != null ? local.api_graphql_url : ""
-    }
+    }, local.bedrock_assume_role_env)
   }
 
   dynamic "vpc_config" {
