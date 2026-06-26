@@ -1,10 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for B3 — AppSyncVisibility wiring on the
-# processing-environment-api module (task 2.2).
+# Native `terraform test` for AppSync visibility wiring on the
+# processing-environment-api module.
 #
-# Property 13 (visibility portion) — Requirements 9.1, 9.2, 9.4:
+# Visibility wiring:
 #   * visibility in {GLOBAL, PRIVATE} reaches the API
 #     (aws_appsync_graphql_api.api.visibility == the input);
 #   * unset -> defaults to GLOBAL;
@@ -74,7 +74,7 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# Unset -> default visibility is GLOBAL (Req 9.4).
+# Unset -> default visibility is GLOBAL.
 # ---------------------------------------------------------------------------
 run "default_visibility_is_global" {
   command = plan
@@ -86,7 +86,7 @@ run "default_visibility_is_global" {
 }
 
 # ---------------------------------------------------------------------------
-# Explicit GLOBAL reaches the API (Req 9.1).
+# Explicit GLOBAL reaches the API.
 # ---------------------------------------------------------------------------
 run "visibility_global_reaches_api" {
   command = plan
@@ -102,7 +102,7 @@ run "visibility_global_reaches_api" {
 }
 
 # ---------------------------------------------------------------------------
-# Explicit PRIVATE reaches the API (Req 9.1).
+# Explicit PRIVATE reaches the API.
 # ---------------------------------------------------------------------------
 run "visibility_private_reaches_api" {
   command = plan
@@ -118,8 +118,8 @@ run "visibility_private_reaches_api" {
 }
 
 # ---------------------------------------------------------------------------
-# Any other value -> variable validation fails naming the allowed values
-# (Req 9.2). expect_failures on var.visibility needs no resources.
+# Any other value -> variable validation fails naming the allowed values.
+# expect_failures on var.visibility needs no resources.
 # ---------------------------------------------------------------------------
 run "invalid_visibility_rejected" {
   command = plan

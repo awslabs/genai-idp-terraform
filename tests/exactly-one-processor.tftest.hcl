@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Native `terraform test` for the root exactly-one-processor validation
-# (task 4.4 — the `check "exactly_one_processor"` block in main.tf).
+# (the `check "exactly_one_processor"` block in main.tf).
 #
-# Property 2 (Requirement 2.7): the root validation succeeds if and only if
+# The root validation succeeds if and only if
 # exactly one of var.bda_processor / var.bedrock_llm_processor /
 # var.sagemaker_udop_processor is non-null. Zero, two, or three → plan error.
 #
@@ -33,8 +33,6 @@
 # check. The guard is non-behavioral for every valid (exactly-one) deployment
 # and only turns the already-invalid zero case from a hard crash into a clean
 # check failure that this test can assert.
-#
-# Validates: Requirements 2.7, Property 2
 
 mock_provider "aws" {
   mock_data "aws_partition" {

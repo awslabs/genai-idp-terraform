@@ -1,19 +1,18 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Version-check sub-feature (C14, upstream v0.5.11)
+# Version-check sub-feature (upstream v0.5.11)
 #
 # Provisions the shipped `version_check_resolver` Lambda backing the
-# `Query.getLatestPublishedVersion` AppSync field (already present in the
-# read-only schema, so no SDL injection here). The Lambda lists a public
-# artifacts S3 bucket for `<prefix>/idp-main_<version>.yaml` objects and
-# returns the newest published IDP version so the web UI can surface an
-# "update available" banner.
+# `Query.getLatestPublishedVersion` AppSync field. It lists a public artifacts
+# S3 bucket for `<prefix>/idp-main_<version>.yaml` objects and returns the
+# newest published IDP version so the web UI can surface an "update available"
+# banner.
 #
-# Input-gated: everything is created only when `var.public_artifacts_bucket`
-# is non-empty. When unset (the default), zero resources are created and the
-# plan is a no-op. This matches the shipped resolver's own opt-in semantics
-# (it returns `checkEnabled=false` when `PUBLIC_ARTIFACTS_BUCKET` is empty).
+# Default-off: resources are created only when `var.public_artifacts_bucket`
+# is non-empty. When unset (the default) the plan is a no-op, matching the
+# shipped resolver's opt-in semantics (it returns `checkEnabled=false` when
+# `PUBLIC_ARTIFACTS_BUCKET` is empty).
 
 locals {
   version_check_enabled = var.public_artifacts_bucket != ""

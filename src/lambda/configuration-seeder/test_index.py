@@ -3,16 +3,16 @@
 #
 # Unit tests for the IDP configuration seeder (wrapper-owned Lambda).
 #
-# Round 3 (B9/B10/B12) is a *pass-through* slice: the upstream `idp_common`
+# The schema flags are a *pass-through* slice: the upstream `idp_common`
 # runtime enforces the `x-aws-idp-*` schema flags, and the wrapper's only
 # obligation is to persist them into the configuration DynamoDB item
-# unchanged. These tests pin that contract (design Property 1):
+# unchanged. These tests pin that contract:
 #
 #   (a) a config carrying all three flag families survives the seeder's
 #       merge + item-construction path with every flag key present, unchanged,
 #       in the constructed item; and
 #   (b) a config WITHOUT the flags produces output byte-identical to the
-#       pre-Round-3 seeder output — no flag is injected by default.
+#       flag-free seeder output — no flag is injected by default.
 #
 # The tests run fully offline: DynamoDB `put_item` is captured by a fake table
 # (never called against AWS), and the layer-provided `idp_common` merge is
@@ -93,18 +93,18 @@ def _identity_merge(monkeypatch):
 # Flag fixtures — exact key names verified against
 # sources/lib/idp_common_pkg/idp_common/config/schema_constants.py
 # ---------------------------------------------------------------------------
-# B9  — per-class / per-attribute extraction-model override
+# Per-class / per-attribute extraction-model override
 B9_KEY = "x-aws-idp-extraction-model"
-# B10 — exclude-from-processing + its reason key
+# Exclude-from-processing + its reason key
 B10_KEY = "x-aws-idp-exclude-from-processing"
 B10_REASON_KEY = "x-aws-idp-exclusion-reason"
-# B12 — page-type / source-page-type presence hints
+# Page-type / source-page-type presence hints
 B12_PAGE_TYPES_KEY = "x-aws-idp-page-types"
 B12_SOURCE_PAGE_TYPES_KEY = "x-aws-idp-source-page-types"
 
 
 def _config_without_flags():
-    """A representative pattern-2 config carrying none of the Round 3 flags."""
+    """A representative pattern-2 config carrying none of the schema flags."""
     return {
         "classes": [
             {
@@ -128,13 +128,13 @@ def _config_without_flags():
 def _config_with_all_flags():
     """The flag-free config with all three flag families layered on."""
     config = _config_without_flags()
-    # B9: per-class extraction-model override + a per-attribute override.
+    # Per-class extraction-model override + a per-attribute override.
     config["classes"][0][B9_KEY] = "us.anthropic.claude-3-haiku"
     config["classes"][0]["attributes"][0][B9_KEY] = "us.amazon.nova-pro"
-    # B10: exclude a whole class from processing, with a reason.
+    # Exclude a whole class from processing, with a reason.
     config["classes"][1][B10_KEY] = True
     config["classes"][1][B10_REASON_KEY] = "instructions"
-    # B12: page-type declarations + per-attribute source-page-type hint.
+    # Page-type declarations + per-attribute source-page-type hint.
     config["classes"][0][B12_PAGE_TYPES_KEY] = [
         {"name": "header", "description": "Invoice header page"},
     ]
@@ -156,14 +156,12 @@ def _seed_default(table, value):
 
 
 # ---------------------------------------------------------------------------
-# Property 1 (a): all three flag families survive seeding unchanged
+# (a): all three flag families survive seeding unchanged
 # ---------------------------------------------------------------------------
 def test_all_three_flag_families_survive_seeding():
     """
-    Property 1 (B9/B10/B12): every x-aws-idp-* flag key supplied by the author
-    is present, unchanged, in the constructed configuration item.
-
-    Validates: Requirements 1.1, 2.1, 3.1, 4.1, 4.2
+    Every x-aws-idp-* flag key supplied by the author is present, unchanged,
+    in the constructed configuration item.
     """
     table = FakeTable()
     item = _seed_default(table, _config_with_all_flags())
@@ -189,8 +187,6 @@ def test_all_three_flag_families_survive_seeding():
 def test_flag_keys_not_renamed_or_dropped():
     """
     The merge must not drop or overwrite any author-supplied flag family.
-
-    Validates: Requirements 4.2
     """
     table = FakeTable()
     item = _seed_default(table, _config_with_all_flags())
@@ -220,20 +216,18 @@ def test_flag_keys_not_renamed_or_dropped():
 
 
 # ---------------------------------------------------------------------------
-# Property 1 (b): a flag-free config is byte-identical to pre-Round-3 output
+# (b): a flag-free config is byte-identical to the flag-free output
 # ---------------------------------------------------------------------------
 def test_config_without_flags_is_byte_identical_to_pre_round3():
     """
-    A config carrying none of the Round 3 flags produces output byte-identical
-    to the pre-Round-3 seeder item — no flag is injected by default.
-
-    Validates: Requirements 1.3, 2.3, 3.3, 4.3
+    A config carrying none of the schema flags produces output byte-identical
+    to the flag-free seeder item — no flag is injected by default.
     """
     table = FakeTable()
     source = _config_without_flags()
     item = _seed_default(table, source)
 
-    # The pre-Round-3 seeder wraps the (stringified) config in the versioned
+    # The flag-free seeder wraps the (stringified) config in the versioned
     # metadata envelope and adds nothing else. This is the golden output.
     expected = {
         "Configuration": "Config#default",
@@ -246,7 +240,7 @@ def test_config_without_flags_is_byte_identical_to_pre_round3():
 
     assert item == expected
 
-    # And explicitly: none of the Round 3 flag keys were injected.
+    # And explicitly: none of the schema flag keys were injected.
     serialized = repr(item)
     for key in (
         B9_KEY,

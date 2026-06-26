@@ -20,15 +20,6 @@
 # delegates ALL document processing to the shared internal engine
 # (`modules/processors/unified-processor/`) via a nested `module "engine"`,
 # routing down the non-BDA pipeline branch (`use_bda = false`).
-#
-# The legacy monolith resources (its own image-based OCR/classification/
-# extraction/assessment/process-results/summarization/evaluation Lambdas, the
-# Step Functions state machine, the per-function IAM roles/policies, the
-# CloudWatch log groups, the ECR repository + CodeBuild image pipeline, and all
-# `sources/patterns/pattern-3/...` references) have been removed. Those
-# responsibilities now live in the shared engine. The engine resources live at
-# `module.engine.*`; the root `moved {}` blocks remap the preservable former
-# per-façade addresses to `module.sagemaker_udop_processor[0].module.engine.*`.
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
@@ -230,8 +221,7 @@ resource "aws_lambda_function" "sagemaker_hook" {
 module "engine" {
   source = "../unified-processor"
 
-  # Engine naming: the engine resources adopt the façade's name so the former
-  # monolith resource names are preserved across the refactor (see moved.tf).
+  # Engine naming: the engine resources adopt the façade's name.
   name = var.name
 
   # ---------------------------------------------------------------------------

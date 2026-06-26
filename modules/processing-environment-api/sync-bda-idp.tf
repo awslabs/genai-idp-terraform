@@ -3,7 +3,7 @@
 #
 # BDA Sync sub-feature (v0.4.10+)
 # Always-on — syncBdaIdp is a core API operation when BDA processor is used.
-# Sourced from CDK nested appsync tree (DEC-007/DEC-009).
+# Sourced from the CDK nested appsync tree.
 
 # =============================================================================
 # IAM Role: sync_bda_idp

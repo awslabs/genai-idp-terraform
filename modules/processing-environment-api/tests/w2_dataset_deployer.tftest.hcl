@@ -1,11 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for C16 — the W2 dataset deployer on the
-# processing-environment-api module (task 3.2).
+# Native `terraform test` for the W2 dataset deployer on the
+# processing-environment-api module.
 #
-# Property 3 — W2 deployer present iff Test-Studio+W2 enabled, mirrors FCC
-# (Requirements 6.1, 6.4, 6.5):
+# W2 deployer present iff Test-Studio+W2 enabled, mirrors FCC:
 #   * Test Studio off entirely      -> 0 w2_dataset_deployer resources;
 #   * Test Studio on, W2 off         -> 0 w2_dataset_deployer resources;
 #   * Test Studio on, W2 on          -> the W2 Lambda (+ log group + archive) is
@@ -14,14 +13,14 @@
 #     to `local.test_studio_env`), and it reuses the shared
 #     `aws_iam_role.test_studio_lambdas` role.
 #
-# Mirrors-FCC note: investigation (task 3.1) confirmed the shipped W2 deployer is
-# a CloudFormation custom-resource-style deployer (Custom::W2DatasetDeployer via
-# cfnresponse), NOT an AppSync-invoked resolver — exactly like the FCC deployer.
+# Mirrors-FCC note: the shipped W2 deployer is a CloudFormation
+# custom-resource-style deployer (Custom::W2DatasetDeployer via cfnresponse),
+# NOT an AppSync-invoked resolver — exactly like the FCC deployer.
 # So, faithfully mirroring FCC, the W2 deployer gets NO AppSync data source /
 # resolver and is NOT added to `appsync_invoke_test_studio_policy`. This test
 # asserts that: the W2 Lambda ARN is absent from the AppSync invoke policy's
 # Resource list (decoded via `jsondecode`), and that the invoke policy holds the
-# same six Test Studio resolver Lambdas it held before C16 (no W2 entry).
+# same six Test Studio resolver Lambdas (no W2 entry).
 #
 # Offline harness: the aws provider is mocked (real partition/region/account so
 # ARN-partition validation passes); archive/random/null/local mocked. A Cognito
@@ -115,7 +114,7 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# Test Studio OFF entirely -> 0 W2 deployer resources (Req 6.4).
+# Test Studio OFF entirely -> 0 W2 deployer resources.
 # ---------------------------------------------------------------------------
 run "test_studio_off_no_w2" {
   command = plan
@@ -140,7 +139,7 @@ run "test_studio_off_no_w2" {
 }
 
 # ---------------------------------------------------------------------------
-# Test Studio ON, W2 OFF -> 0 W2 deployer resources (Req 6.4; default-off).
+# Test Studio ON, W2 OFF -> 0 W2 deployer resources (default-off).
 # ---------------------------------------------------------------------------
 run "test_studio_on_w2_off_no_w2" {
   command = plan
@@ -167,7 +166,7 @@ run "test_studio_on_w2_off_no_w2" {
 # ---------------------------------------------------------------------------
 # Test Studio ON, W2 ON -> W2 Lambda present; env == local.test_studio_env
 # (via equality with the always-present test_runner Lambda); shared role
-# reused; mirrors FCC (no AppSync invoke grant for the W2 ARN). (Req 6.1, 6.5)
+# reused; mirrors FCC (no AppSync invoke grant for the W2 ARN).
 #
 # Uses `command = apply` (against the mocked providers) because the env map,
 # the Lambda's role ARN, and the rendered AppSync invoke-policy JSON are
@@ -181,7 +180,7 @@ run "test_studio_on_w2_on_present_mirrors_fcc" {
     enable_w2_dataset  = true
   }
 
-  # --- Present (Req 6.1) ---
+  # --- Present ---
   assert {
     condition     = length(aws_lambda_function.w2_dataset_deployer) == 1
     error_message = "Test Studio + W2 enabled must create exactly one W2 deployer Lambda."
@@ -195,7 +194,7 @@ run "test_studio_on_w2_on_present_mirrors_fcc" {
     error_message = "Test Studio + W2 enabled must create the W2 deployer archive."
   }
 
-  # --- Environment equals local.test_studio_env (Req 6.1) ---
+  # --- Environment equals local.test_studio_env ---
   # test_runner is always created when Test Studio is on and is wired to
   # local.test_studio_env; asserting equality proves the W2 deployer uses the
   # exact same env map (TESTSET_BUCKET / TRACKING_TABLE / LOG_LEVEL, ...).
@@ -204,13 +203,13 @@ run "test_studio_on_w2_on_present_mirrors_fcc" {
     error_message = "W2 deployer environment must equal local.test_studio_env (the shared Test Studio env)."
   }
 
-  # --- Shared Test Studio execution role reused (Req 6.3) ---
+  # --- Shared Test Studio execution role reused ---
   assert {
     condition     = aws_lambda_function.w2_dataset_deployer[0].role == aws_iam_role.test_studio_lambdas[0].arn
     error_message = "W2 deployer must reuse the shared test_studio_lambdas execution role."
   }
 
-  # --- Mirrors FCC: W2 is NOT AppSync-invoked (Req 6.2 as reconciled) ---
+  # --- Mirrors FCC: W2 is NOT AppSync-invoked ---
   # The shipped W2 deployer (like FCC) is a CloudFormation custom-resource-style
   # deployer, not an AppSync resolver, so it must have no AppSync data source.
   # Assert there is no `w2_dataset_deployer` AppSync data source in the config.

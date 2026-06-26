@@ -2,27 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 /**
- * # External SAML/OIDC IdP Federation Feature Submodule (C6)
+ * # External SAML/OIDC IdP Federation Feature Submodule
  *
  * Self-contained feature-plugin submodule that federates the Cognito user pool
  * with an external SAML or OIDC identity provider, mirroring the upstream
  * v0.5.6 `ExternalIdP*` surface (`sources/template.yaml`) and the CDK
- * federation construct. Emits the Round 1 feature-plugin `contract` so the API
- * module composes it the same way as MCP/Chat (see outputs, task 7.4).
+ * federation construct. Emits the feature-plugin `contract` so the API module
+ * composes it the same way as MCP/Chat (see outputs).
  *
- * Built incrementally across subtasks:
+ * What it provisions:
  *
- *   * 7.1 — scaffolding + the `aws_cognito_identity_provider` resource,
- *     selected by `provider_type` (SAML metadata vs OIDC issuer).
- *   * 7.2 (this file) — OIDC client-secret resolver: resolve
- *     `oidc_client_secret_ref` (Secrets Manager ARN / SSM parameter name) at
- *     apply time via a data source and feed `local.oidc_client_secret`; the
- *     resolved plaintext flows ONLY into `provider_details.client_secret` and
- *     is never set as a module input value or non-sensitive output. The
- *     provider marks `secret_string` / `value` sensitive, so it does not leak
- *     into plan output (Requirement 5.3, 13.1).
- *   * 7.3 — group-mapping Cognito trigger Lambda targeting the RBAC group names.
- *   * 7.4 — additive user-pool-client update + the feature-plugin contract.
+ *   * The `aws_cognito_identity_provider` resource, selected by `provider_type`
+ *     (SAML metadata vs OIDC issuer).
+ *   * An OIDC client-secret resolver: `oidc_client_secret_ref` (Secrets Manager
+ *     ARN / SSM parameter name) is resolved at apply time via a data source and
+ *     fed into `local.oidc_client_secret`; the resolved plaintext flows ONLY
+ *     into `provider_details.client_secret` and is never set as a module input
+ *     value or non-sensitive output. The provider marks `secret_string` /
+ *     `value` sensitive, so it does not leak into plan output.
+ *   * A group-mapping Cognito trigger Lambda targeting the RBAC group names.
+ *   * The additive user-pool-client update + the feature-plugin contract.
  *
  * Provider details mirror the upstream CFN `ExternalIdentityProvider`:
  *   * SAML uses `provider_details.MetadataURL` (or `MetadataFile`).
@@ -35,7 +34,7 @@ locals {
   is_oidc = var.provider_type == "OIDC"
 
   # ---------------------------------------------------------------------------
-  # OIDC client-secret resolution (task 7.2).
+  # OIDC client-secret resolution.
   #
   # `var.oidc_client_secret_ref` is a *reference*, never the raw secret: either
   # a Secrets Manager secret ARN or an SSM parameter name. We resolve it at
@@ -112,7 +111,7 @@ locals {
 }
 
 # =============================================================================
-# OIDC client-secret resolution (task 7.2, Requirement 5.3 / 13.1)
+# OIDC client-secret resolution
 # =============================================================================
 # Resolve the OIDC client secret from its reference at apply time. Exactly one
 # of these data sources is activated when federation is an enabled OIDC provider
@@ -143,7 +142,7 @@ data "aws_ssm_parameter" "oidc_client_secret" {
 # Mirrors upstream `ExternalIdentityProvider`
 # (sources/template.yaml, AWS::Cognito::UserPoolIdentityProvider). Provisioned
 # only when federation is enabled; otherwise the user pool keeps direct Cognito
-# authentication (Requirement 5.6).
+# authentication.
 resource "aws_cognito_identity_provider" "external" {
   count = var.enabled ? 1 : 0
 
@@ -156,7 +155,7 @@ resource "aws_cognito_identity_provider" "external" {
 }
 
 # =============================================================================
-# Group-mapping Cognito trigger Lambda (task 7.3, Req 5.4 / 6.3)
+# Group-mapping Cognito trigger Lambda
 # =============================================================================
 # Mirrors upstream `ExternalIdPGroupMappingFunction` (sources/template.yaml,
 # AWS::Serverless::Function, Condition ShouldMapExternalIdPGroups) and the
@@ -164,7 +163,7 @@ resource "aws_cognito_identity_provider" "external" {
 #
 # The Lambda is a Cognito **pre-token-generation** trigger: on sign-in it reads
 # the `custom:idp_groups` attribute (populated from the external IdP group claim
-# via `local.attribute_mapping`, task 7.1), maps those external groups to the
+# via `local.attribute_mapping`), maps those external groups to the
 # four IDP RBAC Cognito groups, syncs the user's group membership via the
 # Cognito admin APIs, and injects the resolved groups into the token through
 # `claimsAndScopeOverrideDetails.groupOverrideDetails` — which requires the
@@ -204,9 +203,9 @@ locals {
   user_pool_arn = "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:userpool/${var.user_pool_id}"
 
   # The four env keys read by index.py. Each is the external IdP group name that
-  # maps to the corresponding hardcoded Cognito role; per Req 6.3 / Property 9
-  # these are wired from the RBAC group names so federated users land in the
-  # same groups the RBAC submodule provisions.
+  # maps to the corresponding hardcoded Cognito role; these are wired from the
+  # RBAC group names so federated users land in the same groups the RBAC
+  # submodule provisions.
   group_mapping_env = {
     LOG_LEVEL           = var.log_level
     ADMIN_GROUP_NAME    = lookup(var.rbac_group_names, "Admin", "Admin")
@@ -216,8 +215,7 @@ locals {
   }
 
   # ---------------------------------------------------------------------------
-  # Additive user-pool-client supported-identity-providers contribution
-  # (task 7.4, Requirement 5.5).
+  # Additive user-pool-client supported-identity-providers contribution.
   #
   # The Cognito user-pool client is owned OUTSIDE this module (passed in via
   # `var.user_pool_client_id`). `aws_cognito_user_pool_client` is a full
@@ -227,8 +225,8 @@ locals {
   # other client setting). Instead we SURFACE the contribution: the provider
   # name to append (e.g. `["PingOne"]`) so the pool/client owner (root) merges
   # it into the client's `supported_identity_providers` while KEEPING `COGNITO`,
-  # preserving direct-Cognito sign-in (Requirement 5.5). When federation is
-  # disabled the contribution is empty, so the owner appends nothing.
+  # preserving direct-Cognito sign-in. When federation is disabled the
+  # contribution is empty, so the owner appends nothing.
   supported_identity_providers_contribution = var.enabled ? [var.provider_name] : []
 }
 
@@ -291,7 +289,7 @@ resource "aws_iam_role_policy" "group_mapping_logging" {
 # Cognito group-membership permissions, scoped to exactly the supplied user
 # pool ARN (mirrors upstream `ExternalIdPGroupMappingCognitoPolicy`). The Lambda
 # does not resolve any secret, so no secretsmanager/ssm grant is added here
-# (the OIDC client secret is resolved by the apply-time data source in 7.2).
+# (the OIDC client secret is resolved by the apply-time data source).
 resource "aws_iam_role_policy" "group_mapping_cognito" {
   count = local.enable_group_mapping ? 1 : 0
   name  = "cognito-group-access"
@@ -313,7 +311,7 @@ resource "aws_iam_role_policy" "group_mapping_cognito" {
 
 # IAM eventual-consistency guard: the synchronous Lambda CreateFunction call
 # validates the execution role, so wait for the role + inline policies to
-# propagate before creating the function (terraform-conventions.md, 30s).
+# propagate before creating the function. 30s per project convention.
 resource "time_sleep" "wait_for_iam_propagation" {
   count = local.enable_group_mapping ? 1 : 0
 

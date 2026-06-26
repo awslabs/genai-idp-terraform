@@ -1,13 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# IAM for the BDA branch Lambda functions (task 2.2).
+# IAM for the BDA branch Lambda functions.
 #
 # All roles/policies here are GATED on the façade-supplied `use_bda` flag: they
 # only exist on the BDA path (bda-processor façade). The pipeline-branch façades
 # (use_bda = false) never render any of these BDA invoke permissions or
-# resources (Property 1 — gated so the BDA permission/resources only apply on
-# the BDA path).
+# resources.
 #
 # Mirrors the upstream `sources/patterns/unified/template.yaml` SAM policies for
 # InvokeBDAFunction / BDAProcessResultsFunction / BDACompletionFunction.

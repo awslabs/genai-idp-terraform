@@ -2,43 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 /**
- * # RBAC Feature Submodule (C2 — CDK `UserManagement` analog)
+ * # RBAC Feature Submodule (CDK `UserManagement` analog)
  *
  * Self-contained feature-plugin submodule that delivers role-based access
- * control for the GenAI IDP API and emits the Round 1 feature-plugin `contract`
- * for `modules/processing-environment-api` to compose (mirroring the CDK
+ * control for the GenAI IDP API and emits the feature-plugin `contract` for
+ * `modules/processing-environment-api` to compose (mirroring the CDK
  * accelerator's `api.enable(userManagement)` mechanism).
  *
  * Mirrors the CDK `UserManagement` construct
  * (`reference/genai-idp-cdk/.../processing-environment-api/user-management/`,
- * verified against `cdklabs/genai-idp@main`):
- *
- *   * The four Cognito user-pool groups (`Admin`/`Author`/`Reviewer`/`Viewer`)
- *     that the shipped `@aws_auth(cognito_groups: [...])` schema directives
- *     resolve against (this file).
- *   * The `Users` DynamoDB table (CDK `UsersTable`) — subtask 6.2.
- *   * The user-management Lambda (CDK `UserManagementFunction`) — subtask 6.3.
- *   * Server-side Reviewer document filtering + `allowedConfigVersions` scoping
- *     wiring — subtask 6.4.
- *   * The Round 1 contract output — subtask 6.5.
+ * verified against `cdklabs/genai-idp@main`): the four Cognito user-pool groups
+ * (`Admin`/`Author`/`Reviewer`/`Viewer`) the shipped
+ * `@aws_auth(cognito_groups: [...])` directives resolve against, the `Users`
+ * DynamoDB table (CDK `UsersTable`), the user-management Lambda (CDK
+ * `UserManagementFunction`), server-side Reviewer document filtering +
+ * `allowedConfigVersions` scoping wiring, and the feature-plugin contract output.
  *
  * The `@aws_auth` directives already ship in the read-only v0.5.12 snapshot
  * (`sources/nested/appsync/src/api/schema.graphql`), so RBAC's job is to make
  * them enforceable by guaranteeing the four groups exist — not to inject SDL.
- *
- * ## Build scope (tasks 6.1, 6.2)
- *
- * This file currently provisions the four Cognito groups (6.1) and the `Users`
- * DynamoDB table (6.2). The user-management Lambda (6.3), resolver wiring (6.4),
- * and the contract output (6.5) are added by later subtasks. The full variable
- * surface is already declared in variables.tf so those subtasks add resources
- * without re-touching the inputs.
  */
 
 locals {
-  # Resolved RBAC group names: canonical defaults with per-role override support
-  # (Req 1.5). Keyed by canonical role so the four groups always exist regardless
-  # of overrides, and `for_each` keeps stable resource addresses.
+  # Resolved RBAC group names: canonical defaults with per-role override support.
+  # Keyed by canonical role so the four groups always exist regardless of
+  # overrides, and `for_each` keeps stable resource addresses.
   group_names = {
     Admin    = var.group_names.admin
     Author   = var.group_names.author
@@ -56,7 +44,7 @@ locals {
 }
 
 # =============================================================================
-# RBAC Cognito user-pool groups (Req 1.1, 1.5)
+# RBAC Cognito user-pool groups
 # =============================================================================
 # Ensure the four RBAC groups exist on the supplied user pool so the shipped
 # `@aws_auth(cognito_groups: [...])` directives resolve to real groups and
@@ -71,7 +59,7 @@ resource "aws_cognito_user_group" "rbac" {
 }
 
 # =============================================================================
-# Users DynamoDB table (Req 2.1, 2.2 — CDK `UsersTable` analog)
+# Users DynamoDB table (CDK `UsersTable` analog)
 # =============================================================================
 # Stores user records (user id, email, persona, status, timestamps,
 # `allowedConfigVersions`). Single-table design mirroring the CDK `UsersTable`
@@ -126,7 +114,7 @@ resource "aws_dynamodb_table" "users" {
   # Server-side encryption consistent with the other IDP DynamoDB tables
   # (tracking/configuration/concurrency): always enabled, using the project KMS
   # key when supplied (var.encryption_key_arn) and the AWS-owned key otherwise
-  # (kms_key_arn = null). Req 2.2.
+  # (kms_key_arn = null).
   server_side_encryption {
     enabled     = true
     kms_key_arn = var.encryption_key_arn
@@ -136,7 +124,7 @@ resource "aws_dynamodb_table" "users" {
 }
 
 # =============================================================================
-# User-management Lambda (Req 2.3, 2.4, 13.1 — CDK `UserManagementFunction`)
+# User-management Lambda (CDK `UserManagementFunction`)
 # =============================================================================
 # Services the createUser / updateUser / deleteUser / listUsers / getMyProfile
 # AppSync operations (verified against `sources/src/lambda/user_management/
@@ -144,10 +132,10 @@ resource "aws_dynamodb_table" "users" {
 # `USER_POOL_ID`, `ADMIN_GROUP`/`AUTHOR_GROUP`/`REVIEWER_GROUP`/`VIEWER_GROUP`,
 # `ALLOWED_SIGNUP_EMAIL_DOMAINS`, and `LOG_LEVEL` from its environment.
 #
-# Least-privilege execution role (Req 2.4): DynamoDB CRUD on exactly the Users
-# table (+ its indexes), the KMS key when encryption is enabled, and ONLY the
-# Cognito admin actions the Lambda actually calls for group-membership
-# management — all scoped to the supplied user-pool ARN and no broader.
+# Least-privilege execution role: DynamoDB CRUD on exactly the Users table
+# (+ its indexes), the KMS key when encryption is enabled, and ONLY the Cognito
+# admin actions the Lambda actually calls for group-membership management — all
+# scoped to the supplied user-pool ARN and no broader.
 
 data "aws_partition" "current" {}
 data "aws_region" "current" {}
@@ -158,7 +146,7 @@ locals {
 
   # Scope Cognito admin actions to exactly the supplied user pool. When the ARN
   # is not provided, construct it from the pool id so the policy is always
-  # scoped to this pool and never broader (Req 2.4).
+  # scoped to this pool and never broader.
   user_pool_arn = var.user_pool_arn != null ? var.user_pool_arn : "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:userpool/${var.user_pool_id}"
 }
 
@@ -181,7 +169,7 @@ resource "aws_iam_role" "user_management" {
   tags = var.tags
 }
 
-# Least-privilege inline policy (Req 2.4).
+# Least-privilege inline policy.
 resource "aws_iam_role_policy" "user_management" {
   name = "user-management-policy"
   role = aws_iam_role.user_management.id
@@ -272,7 +260,7 @@ resource "aws_cloudwatch_log_group" "user_management" {
 }
 
 # -----------------------------------------------------------------------------
-# IAM eventual-consistency guard (terraform-conventions.md)
+# IAM eventual-consistency guard
 # -----------------------------------------------------------------------------
 # Lambda creation synchronously validates the execution role; without this the
 # create can race the IAM role/policy propagation and fail with an
@@ -336,7 +324,7 @@ resource "aws_lambda_function" "user_management" {
 }
 
 # =============================================================================
-# Reviewer document filtering + `allowedConfigVersions` scoping wiring (6.4)
+# Reviewer document filtering + `allowedConfigVersions` scoping wiring
 # =============================================================================
 # The filtering/scoping LOGIC ships in the read-only v0.5.12 snapshot — the
 # document-list resolvers and the configuration resolver all consult the Users
@@ -351,21 +339,20 @@ resource "aws_lambda_function" "user_management" {
 #     document-list resolvers additionally apply Reviewer-only document
 #     filtering against the tracking table.
 #
-# Req 3.4 (profile query exposes `allowedConfigVersions`) is already satisfied
-# by the shipped schema: `getMyProfile: User` returns the `User` type, which
-# declares `allowedConfigVersions: [String]`
+# The profile query already exposes `allowedConfigVersions` via the shipped
+# schema: `getMyProfile: User` returns the `User` type, which declares
+# `allowedConfigVersions: [String]`
 # (`sources/nested/appsync/src/api/schema.graphql`). No SDL injection needed.
 #
 # RBAC's Terraform job (this submodule) is therefore the WIRING: give those
 # AppSync resolver Lambdas the env var and the least-privilege read path to the
 # Users table so the server-side filtering can run. These two fragments are
-# emitted to the feature-plugin contract by subtask 6.5; they are exposed as
-# locals + outputs here so 6.5 can merge them without re-deriving the values.
+# exposed as locals + outputs here and merged into the feature-plugin contract.
 
 locals {
   # `environment` fragment merged onto the core/config resolver Lambdas so they
-  # can resolve the Users table at runtime (Req 3.1, 3.2, 3.3). This is the
-  # exact env key the shipped resolvers read.
+  # can resolve the Users table at runtime. This is the exact env key the
+  # shipped resolvers read.
   reviewer_filtering_environment = {
     USERS_TABLE_NAME = aws_dynamodb_table.users.name
   }
@@ -375,7 +362,7 @@ locals {
   # Users table and its EmailIndex GSI (the resolvers query by email via
   # `IndexName="EmailIndex"`). When the table is KMS-encrypted, the role also
   # needs Decrypt to read it — added only when an encryption key is configured,
-  # scoped to exactly that key (Req 2.4 least-privilege discipline).
+  # scoped to exactly that key (least-privilege discipline).
   reviewer_filtering_iam_statements = concat(
     [
       {

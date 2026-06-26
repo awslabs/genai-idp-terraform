@@ -1,13 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Inputs for the External SAML/OIDC IdP federation feature-plugin submodule (C6).
+# Inputs for the External SAML/OIDC IdP federation feature-plugin submodule.
 #
 # Mirrors the upstream v0.5.6 federation surface (the `ExternalIdP*` CFN
-# parameters in `sources/template.yaml`) and the CDK federation construct. The
-# full variable surface is declared here in task 7.1; the OIDC secret resolver
-# (7.2), the group-mapping Lambda (7.3), and the user-pool-client update +
-# feature-plugin contract (7.4) are implemented in later subtasks.
+# parameters in `sources/template.yaml`) and the CDK federation construct.
 
 # ---------------------------------------------------------------------------
 # Enable / provider selection
@@ -17,7 +14,7 @@ variable "enabled" {
   description = <<-EOT
     Whether external IdP federation is requested. When false the submodule
     provisions no Cognito identity provider and leaves the user pool configured
-    for direct Cognito authentication (default-off, Requirement 5.6).
+    for direct Cognito authentication (default-off).
   EOT
   type        = bool
   default     = false
@@ -112,9 +109,9 @@ variable "oidc_client_secret_ref" {
   description = <<-EOT
     (OIDC) Reference to the OIDC client secret — an AWS Secrets Manager secret
     ARN (or SSM parameter name) — NOT the raw secret value. The secret is
-    resolved at apply time (task 7.2) and passed only to the Cognito provider
-    details; the plaintext is never stored as a module input value or output.
-    Mirrors the upstream `ExternalIdPOIDCClientSecretArn`.
+    resolved at apply time and passed only to the Cognito provider details; the
+    plaintext is never stored as a module input value or output. Mirrors the
+    upstream `ExternalIdPOIDCClientSecretArn`.
   EOT
   type        = string
   default     = ""
@@ -156,9 +153,9 @@ variable "group_attribute_name" {
 variable "group_mapping" {
   description = <<-EOT
     Map of external IdP group name -> IDP RBAC role (`Admin`/`Author`/
-    `Reviewer`/`Viewer`). Consumed by the group-mapping Lambda (task 7.3) to
-    place federated users into the four RBAC groups at sign-in. Mirrors the
-    upstream `ExternalIdP{Admin,Author,Reviewer,Viewer}GroupName` parameters.
+    `Reviewer`/`Viewer`). Consumed by the group-mapping Lambda to place
+    federated users into the four RBAC groups at sign-in. Mirrors the upstream
+    `ExternalIdP{Admin,Author,Reviewer,Viewer}GroupName` parameters.
   EOT
   type        = map(string)
   default     = {}
@@ -176,8 +173,8 @@ variable "user_pool_id" {
 variable "user_pool_client_id" {
   description = <<-EOT
     ID of the Cognito user-pool client whose `supported_identity_providers` is
-    additively updated to include the external provider (task 7.4), keeping the
-    `COGNITO` provider so direct sign-in continues to work (Requirement 5.5).
+    additively updated to include the external provider, keeping the `COGNITO`
+    provider so direct sign-in continues to work.
   EOT
   type        = string
   default     = null
@@ -187,8 +184,8 @@ variable "rbac_group_names" {
   description = <<-EOT
     Map of the four IDP RBAC role names (`Admin`/`Author`/`Reviewer`/`Viewer`)
     to the concrete Cognito group names provisioned by the RBAC submodule. The
-    group-mapping Lambda (task 7.3) targets these so federated users land in the
-    same groups RBAC creates (Requirement 6.3).
+    group-mapping Lambda targets these so federated users land in the same
+    groups RBAC creates.
   EOT
   type        = map(string)
   default = {

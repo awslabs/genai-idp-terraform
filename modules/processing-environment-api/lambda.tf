@@ -238,8 +238,8 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 }
 
 # Configuration Resolver Lambda
-# Sourced from CDK nested appsync tree (DEC-007/DEC-008) — handles all config
-# versioning, pricing, and config library operations via fieldName dispatch.
+# Sourced from the CDK nested appsync tree — handles all config versioning,
+# pricing, and config library operations via fieldName dispatch.
 data "archive_file" "configuration_resolver_code" {
   type        = "zip"
   source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/configuration_resolver"

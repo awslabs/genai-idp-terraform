@@ -74,7 +74,7 @@ locals {
   document_queue_url    = var.document_queue_url
   document_queue_arn    = var.document_queue_arn
 
-  # Post-processing decompressor (from processing-environment module, task 4.11)
+  # Post-processing decompressor (from processing-environment module)
   post_processing_decompressor_arn = var.post_processing_decompressor_arn
 }
 
@@ -117,19 +117,12 @@ module "discovery" {
 }
 
 # =============================================================================
-# Chat with Document — RELOCATED to the chat-with-document feature submodule
+# Chat with Document — relocated to the chat-with-document feature submodule
 # =============================================================================
-# The legacy SYNCHRONOUS `chatWithDocument` Query (and its resolver Lambda,
-# which zipped `sources/src/lambda/chat_with_document_resolver`) was REMOVED
-# upstream at v0.5.12 — both the schema field and that source directory no
-# longer exist in the snapshot. Chat-with-Document is now an async streaming
-# feature provided by `modules/features/chat-with-document`, instantiated at the
-# root (features.tf) and composed into this API via `enabled_feature_contracts`
-# (the `sendChatDocumentMessage` mutation + `onChatDocumentMessageUpdate`
-# subscription resolvers). The old in-API `./chat-with-document` submodule is
-# removed; there is no `moved {}`/`removed {}` because it was never applyable on
-# v0.5.12 (its archive_file source path was deleted from sources/) — see the
-# migration guide.
+# The legacy synchronous `chatWithDocument` Query and its resolver Lambda were
+# removed upstream at v0.5.12. Chat-with-Document is now an async streaming
+# feature in `modules/features/chat-with-document`, instantiated at the root
+# (features.tf) and composed into this API via `enabled_feature_contracts`.
 
 # =============================================================================
 # PROCESS CHANGES SUB-MODULE

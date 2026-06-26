@@ -3,14 +3,12 @@
 #
 # Inputs for the MCP-integration feature-plugin submodule.
 #
-# This submodule is a self-contained auxiliary feature (Requirement 3 / 8): it
-# provisions the Bedrock AgentCore Gateway MCP stack — the renamed
-# `agentcore_mcp_handler` Lambda (upstream v0.5.3 rename of
-# `agentcore_analytics_processor`), the gateway-manager custom-resource Lambda,
-# the gateway execution role, the AgentCore Gateway (via a CloudFormation
-# custom resource), the Cognito OAuth external app client, and the OAuth
-# resource server + connector client — then emits a feature-plugin `contract`
-# that `processing-environment-api` composes.
+# This submodule is a self-contained auxiliary feature: it provisions the
+# Bedrock AgentCore Gateway MCP stack — the `agentcore_mcp_handler` Lambda, the
+# gateway-manager custom-resource Lambda, the gateway execution role, the
+# AgentCore Gateway (via a CloudFormation custom resource), the Cognito OAuth
+# external app client, and the OAuth resource server + connector client — then
+# emits a feature-plugin `contract` that `processing-environment-api` composes.
 #
 # The submodule is only instantiated when MCP is enabled (default-off; the root
 # count-gates it on the forwarded `var.api.enable_mcp` flag). A GovCloud guard
@@ -30,8 +28,8 @@ variable "enabled" {
 variable "name_prefix" {
   description = <<-EOT
     Name prefix for MCP resources (Lambdas, roles, gateway). Mirrors the
-    `processing-environment-api` API name so resource names match the historical
-    `<api_name>-agentcore-*` shape and `moved {}` blocks can preserve identity.
+    `processing-environment-api` API name so resource names share the
+    `<api_name>-agentcore-*` shape.
   EOT
   type        = string
 }

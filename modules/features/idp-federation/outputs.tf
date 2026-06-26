@@ -3,12 +3,12 @@
 #
 # Outputs for the IdP-federation submodule.
 #
-# Task 7.4 adds the additive user-pool-client supported-identity-providers
-# contribution and the Round 1 feature-plugin `contract` (always emitted per
-# Requirement 6.2). Federation-specific wiring the API module / pool owner needs
-# (the group-mapping trigger ARN and the identity-provider contribution) is
-# surfaced through dedicated outputs rather than stuffed into the core contract,
-# keeping the contract shape byte-identical to the MCP/Chat Round 1 modules.
+# Surfaces the additive user-pool-client supported-identity-providers
+# contribution and the feature-plugin `contract` (always emitted). Federation-
+# specific wiring the API module / pool owner needs (the group-mapping trigger
+# ARN and the identity-provider contribution) is surfaced through dedicated
+# outputs rather than stuffed into the core contract, keeping the contract shape
+# byte-identical to the MCP/Chat feature modules.
 
 output "enabled" {
   description = "Whether external IdP federation is effectively enabled."
@@ -21,14 +21,13 @@ output "provider_name" {
 }
 
 # ---------------------------------------------------------------------------
-# Group-mapping trigger Lambda (task 7.3).
+# Group-mapping trigger Lambda.
 #
 # The Cognito user pool is owned outside this module, so the
 # pre-token-generation trigger cannot be attached here. These outputs surface
 # the group-mapping Lambda so the pool owner (root/pool module) can wire it as
 # the `PreTokenGeneration` (V2_0) trigger on the `aws_cognito_user_pool`
-# `lambda_config`. They are also the contract handle task 7.4 will fold into the
-# feature-plugin contract. Both are null when group mapping is not provisioned
+# `lambda_config`. Both are null when group mapping is not provisioned
 # (federation disabled or no `group_attribute_name`).
 # ---------------------------------------------------------------------------
 
@@ -43,7 +42,7 @@ output "group_mapping_function_name" {
 }
 
 # ---------------------------------------------------------------------------
-# Additive user-pool-client contribution (task 7.4, Requirement 5.5).
+# Additive user-pool-client contribution.
 #
 # The user-pool client is owned externally; `aws_cognito_user_pool_client` is a
 # full resource, not patchable by id, so this module surfaces the provider name
@@ -57,20 +56,19 @@ output "supported_identity_providers_contribution" {
   description = <<-EOT
     Identity-provider names to append to the externally-owned user-pool client's
     `supported_identity_providers` (e.g. `["PingOne"]`), keeping the existing
-    `COGNITO` provider intact (Requirement 5.5). Empty when federation is
-    disabled. The root merges this with `COGNITO` rather than this module owning
-    the full client resource.
+    `COGNITO` provider intact. Empty when federation is disabled. The root merges
+    this with `COGNITO` rather than this module owning the full client resource.
   EOT
   value       = local.supported_identity_providers_contribution
 }
 
 # ---------------------------------------------------------------------------
-# Round 1 feature-plugin contract (task 7.4, Requirement 6.2).
+# Feature-plugin contract.
 #
 # ALWAYS emitted regardless of `var.enabled`, because the outputs-contract is
-# the wiring architecture itself, not a conditional behavior (Req 6.2). The
-# shape matches the Round 1 feature modules (MCP / Chat-with-Document) exactly so
-# the root `enabled_feature_contracts` merge (task 8.1) composes it uniformly:
+# the wiring architecture itself, not a conditional behavior. The shape matches
+# the other feature modules (MCP / Chat-with-Document) exactly so the root
+# `enabled_feature_contracts` merge composes it uniformly:
 #
 #   { enabled, resolvers, iam_statements, environment, schema_additions }
 #
@@ -81,14 +79,14 @@ output "supported_identity_providers_contribution" {
 # not AppSync-side). The federation-specific wiring the pool owner needs (the
 # group-mapping trigger ARN and the supported-identity-providers contribution)
 # rides on the dedicated outputs above, keeping the core five contract fields
-# identical to the other Round 1 modules.
+# identical to the other feature modules.
 # ---------------------------------------------------------------------------
 
 output "contract" {
   description = <<-EOT
     Feature-plugin contract consumed by `processing-environment-api` via its
     `enabled_feature_contracts` input (mirrors the CDK `api.enable(feature)`
-    mechanism). Always emitted (Requirement 6.2). Federation contributes no
+    mechanism). Always emitted. Federation contributes no
     AppSync resolvers, IAM statements, environment, or schema additions — its
     integration is Cognito-side (identity provider + group-mapping trigger) —
     so the core five fields are empty/null with `enabled` reflecting the toggle.

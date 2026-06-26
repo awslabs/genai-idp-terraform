@@ -19,7 +19,7 @@ This repository uses a dual-version scheme to track both the upstream IDP soluti
 
 ### Current Version
 
-The current release is **`0.4.16-tf.2`** (compatible with upstream IDP v0.4.16). See [`CHANGELOG.md`](CHANGELOG.md) for the full history and [`docs/migration-guide.md`](docs/migration-guide.md) for upgrade instructions.
+The current release is **`0.5.12-tf.2`** (compatible with upstream IDP v0.5.12). See [`CHANGELOG.md`](CHANGELOG.md) for the full history and upgrade notes.
 
 ### Version Format Examples
 
@@ -27,8 +27,10 @@ The current release is **`0.4.16-tf.2`** (compatible with upstream IDP v0.4.16).
 |---------|---------|
 | `0.3.18-tf.1` | IDP v0.3.18, initial Terraform release |
 | `0.4.8-tf.0` | IDP v0.4.8, initial Terraform release |
-| `0.4.16-tf.1` | IDP v0.4.16, first Terraform patch |
-| `0.4.16-tf.2` | IDP v0.4.16, sagemaker-udop fixes (current) |
+| `0.4.16-tf.2` | IDP v0.4.16, sagemaker-udop fixes |
+| `0.5.12-tf.0` | IDP v0.5.12, façade processors + feature-plugin wiring |
+| `0.5.12-tf.1` | IDP v0.5.12, RBAC, SAML/OIDC federation, VPC endpoints |
+| `0.5.12-tf.2` | IDP v0.5.12, config-shape flags, version-check, W2 deployer, TypeDateIndex GSI (current) |
 
 The Terraform version (`tf.X`) resets to `0` when the upstream IDP version changes.
 

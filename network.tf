@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Private Network Deployment wiring (C7, Req 8.1, 8.2, 8.3)
+# Private Network Deployment wiring
 #
 # VPC *placement* of the IDP Lambdas (and other VPC-capable resources) is already
 # threaded throughout main.tf via `var.vpc_subnet_ids` / `var.vpc_security_group_ids`
@@ -22,12 +22,12 @@ locals {
   # interface ENIs in. Empty subnets ⇒ nothing to privately route ⇒ no module.
   private_network_enabled = var.private_network != null && length(var.vpc_subnet_ids) > 0
 
-  # Whether the AppSync API is configured PRIVATE (B3). PRIVATE requires the
+  # Whether the AppSync API is configured PRIVATE. PRIVATE requires the
   # appsync-api interface endpoint so VPC clients can resolve/reach the GraphQL
-  # API (Req 8.3 / 9.3).
+  # API.
   appsync_visibility_private = try(var.api.visibility, "GLOBAL") == "PRIVATE"
 
-  # Interface endpoints required by the enabled processors and features (Req 8.2).
+  # Interface endpoints required by the enabled processors and features.
   # The map key doubles as the PrivateLink service suffix
   # (com.amazonaws.<region>.<key>) so the set stays partition-portable.
   #
@@ -43,7 +43,7 @@ locals {
   #   Textract; BDA does its own document extraction.
   # - Bedrock agent runtime: used by Knowledge Base / agent-analytics / chat
   #   retrieval features.
-  # - appsync-api: only required when the API is PRIVATE (Req 8.3).
+  # - appsync-api: only required when the API is PRIVATE.
   _vpc_endpoint_base = {
     ssm         = true
     ssmmessages = true
@@ -110,7 +110,7 @@ module "vpc_endpoints" {
 }
 
 # ---------------------------------------------------------------------------
-# Private-network endpoint-gap checks (Req 8.3, 8.4, 9.3)
+# Private-network endpoint-gap checks
 #
 # These surface, at *plan* time, a private deployment whose interface-endpoint
 # set does not cover what the chosen configuration needs — instead of letting
@@ -136,7 +136,7 @@ check "private_appsync_endpoint_present" {
       keys(try(module.vpc_endpoints[0].interface_endpoint_ids, {})),
       "appsync-api"
     )
-    error_message = "AppSyncVisibility = PRIVATE requires the appsync-api interface VPC endpoint so VPC clients can resolve and reach the GraphQL API. Provision it by enabling a private-network deployment (set var.private_network and var.vpc_subnet_ids) so module.vpc_endpoints includes the \"appsync-api\" endpoint. See docs/migration-v0.4.16-to-v0.5.12.md."
+    error_message = "AppSyncVisibility = PRIVATE requires the appsync-api interface VPC endpoint so VPC clients can resolve and reach the GraphQL API. Provision it by enabling a private-network deployment (set var.private_network and var.vpc_subnet_ids) so module.vpc_endpoints includes the \"appsync-api\" endpoint."
   }
 }
 
@@ -155,6 +155,6 @@ check "private_required_endpoints_present" {
       keys(local.required_interface_endpoints),
       keys(try(module.vpc_endpoints[0].interface_endpoint_ids, {}))
     )) == 0
-    error_message = "A private-network deployment is missing interface VPC endpoint(s) required by the enabled processors/features: ${join(", ", setsubtract(keys(local.required_interface_endpoints), keys(try(module.vpc_endpoints[0].interface_endpoint_ids, {}))))}. Enable the missing service(s) in module.vpc_endpoints (var.private_network) so the VPC-placed Lambdas can reach them privately. See docs/migration-v0.4.16-to-v0.5.12.md."
+    error_message = "A private-network deployment is missing interface VPC endpoint(s) required by the enabled processors/features: ${join(", ", setsubtract(keys(local.required_interface_endpoints), keys(try(module.vpc_endpoints[0].interface_endpoint_ids, {}))))}. Enable the missing service(s) in module.vpc_endpoints (var.private_network) so the VPC-placed Lambdas can reach them privately."
   }
 }

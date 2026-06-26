@@ -63,8 +63,6 @@ locals {
 # Shared internal engine (unified-processor)
 # =============================================================================
 # Delegates ALL document processing to the shared engine with use_bda = true.
-# The nested module MUST be named "engine" — the root moved.tf maps the former
-# monolith addresses to module.bda_processor[0].module.engine.*.
 module "engine" {
   source = "../unified-processor"
 

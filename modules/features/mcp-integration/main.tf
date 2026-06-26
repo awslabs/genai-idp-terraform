@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 /**
- * # MCP Integration Feature Submodule (C5)
+ * # MCP Integration Feature Submodule
  *
  * Self-contained feature-plugin submodule for the Bedrock AgentCore Gateway MCP
  * integration. Mirrors the CDK accelerator's `api.enable(feature)` composition:
@@ -10,18 +10,8 @@
  * (IAM statements + environment wiring) that `processing-environment-api`
  * composes via its `enabled_feature_contracts` `for_each` mechanism.
  *
- * ## v0.5.3 rename (breaking-changes.md)
- *
- * Upstream v0.5.3 renamed the MCP Lambda `agentcore_analytics_processor`
- * -> `agentcore_mcp_handler`, including its `sources/` source path
- * (`sources/src/lambda/agentcore_analytics_processor` ->
- * `sources/src/lambda/agentcore_mcp_handler`) and its handler entrypoint
- * (`index.handler` -> `index.lambda_handler`). This module reflects that rename.
- * The Lambda's deployed `function_name` is preserved (the legacy
- * `${name_prefix}-agentcore-analytics-proc` value) so the renamed resource maps
- * 1:1 via `moved {}` with 0 destroy / 0 create — `function_name` is ForceNew, so
- * preserving it is what keeps the real infrastructure in place while the
- * Terraform resource label and source path change.
+ * The MCP Lambda is `agentcore_mcp_handler` (source
+ * `sources/src/lambda/agentcore_mcp_handler`, handler `index.lambda_handler`).
  *
  * ## GovCloud guard
  *
@@ -48,21 +38,18 @@ locals {
   output_bucket_name = element(split(":", var.output_bucket_arn), 5)
   encryption_key_arn = var.encryption_key_arn
 
-  # Legacy deployed function name preserved across the rename so `moved {}`
-  # yields 0 destroy / 0 create. The Terraform resource LABEL is renamed to
-  # `agentcore_mcp_handler`; the AWS `function_name` keeps its historical value.
-  mcp_handler_function_name = "${local.api_name}-agentcore-analytics-proc"
+  mcp_handler_function_name = "${local.api_name}-agentcore-mcp-handler"
 
   lambda_vpc_access_arn = var.lambda_vpc_access_policy_arn != null ? var.lambda_vpc_access_policy_arn : "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 # =============================================================================
-# IAM Role: agentcore_mcp_handler (renamed from agentcore_analytics_processor)
+# IAM Role: agentcore_mcp_handler
 # =============================================================================
 
 resource "aws_iam_role" "agentcore_mcp_handler" {
   count = local.enable_mcp_effective ? 1 : 0
-  name  = "${local.api_name}-agentcore-analytics-proc"
+  name  = "${local.api_name}-agentcore-mcp-handler"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -78,7 +65,7 @@ resource "aws_iam_role" "agentcore_mcp_handler" {
 
 resource "aws_iam_role_policy" "agentcore_mcp_handler" {
   count = local.enable_mcp_effective ? 1 : 0
-  name  = "agentcore-analytics-processor-policy"
+  name  = "agentcore-mcp-handler-policy"
   role  = aws_iam_role.agentcore_mcp_handler[0].id
 
   policy = jsonencode({
@@ -139,9 +126,7 @@ resource "aws_iam_role_policy_attachment" "agentcore_mcp_handler_xray" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# VPC/ENI access — attached only when a VPC config is supplied. Mirrors the
-# `agentcore_analytics_processor_vpc` attachment that lived in the API module's
-# iam-vpc-attachments.tf.
+# VPC/ENI access — attached only when a VPC config is supplied.
 resource "aws_iam_role_policy_attachment" "agentcore_mcp_handler_vpc" {
   count      = local.enable_mcp_effective && var.vpc_config != null ? 1 : 0
   role       = aws_iam_role.agentcore_mcp_handler[0].name
@@ -149,7 +134,7 @@ resource "aws_iam_role_policy_attachment" "agentcore_mcp_handler_vpc" {
 }
 
 # =============================================================================
-# Lambda: agentcore_mcp_handler (renamed from agentcore_analytics_processor)
+# Lambda: agentcore_mcp_handler
 # =============================================================================
 
 resource "aws_cloudwatch_log_group" "agentcore_mcp_handler" {

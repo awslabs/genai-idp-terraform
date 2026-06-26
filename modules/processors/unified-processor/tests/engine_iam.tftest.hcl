@@ -2,15 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Native `terraform test` for the shared unified-processor engine: Bedrock
-# inference-profile IAM (task 7.2; Requirement 4.3, depends on 4.1/4.2; B1).
+# inference-profile IAM.
 #
-# Requirement 4.1: the engine IAM allows `bedrock:GetInferenceProfile`.
-# Requirement 4.2: the engine IAM resource scope includes
-#   `arn:<partition>:bedrock:*:<account>:application-inference-profile/*`
-#   alongside the existing `inference-profile/*` and `foundation-model/*`
-#   resources.
+# The engine IAM allows `bedrock:GetInferenceProfile`, and its resource scope
+# includes `arn:<partition>:bedrock:*:<account>:application-inference-profile/*`
+# alongside the existing `inference-profile/*` and `foundation-model/*`
+# resources.
 #
-# The B1 grant lives in the engine's Bedrock-invoking Lambda policies — the
+# The grant lives in the engine's Bedrock-invoking Lambda policies — the
 # evaluation Lambda policy (gated on `evaluation_enabled`) and the
 # rule-validation Lambda policy (gated on `enable_rule_validation`). This suite
 # enables both so it can assert against the rendered IAM policy documents in the
@@ -59,7 +58,7 @@ variables {
   # Pipeline branch (non-BDA) — IAM scope is identical across branches.
   use_bda = false
 
-  # Enable the two engine subsystems that carry the Bedrock B1 grant.
+  # Enable the two engine subsystems that carry the Bedrock grant.
   evaluation_enabled             = true
   evaluation_baseline_bucket_arn = "arn:aws:s3:::idp-baseline-bucket"
   evaluation_model_id            = "us.anthropic.claude-opus-4-7:1m"
@@ -67,58 +66,58 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# Evaluation Lambda policy carries the full B1 Bedrock inference-profile grant.
+# Evaluation Lambda policy carries the full Bedrock inference-profile grant.
 # ---------------------------------------------------------------------------
 run "evaluation_policy_includes_application_inference_profile" {
   command = plan
 
-  # bedrock:GetInferenceProfile action present (Req 4.1).
+  # bedrock:GetInferenceProfile action present.
   assert {
     condition     = strcontains(aws_iam_role_policy.evaluation_lambda[0].policy, "bedrock:GetInferenceProfile")
-    error_message = "Evaluation engine policy must allow bedrock:GetInferenceProfile (Req 4.1)."
+    error_message = "Evaluation engine policy must allow bedrock:GetInferenceProfile."
   }
 
-  # application-inference-profile/* resource present (Req 4.2).
+  # application-inference-profile/* resource present.
   assert {
     condition     = strcontains(aws_iam_role_policy.evaluation_lambda[0].policy, "application-inference-profile/*")
-    error_message = "Evaluation engine policy must scope application-inference-profile/* (Req 4.2)."
+    error_message = "Evaluation engine policy must scope application-inference-profile/*."
   }
 
-  # Existing inference-profile/* resource still present (Req 4.2 "alongside").
+  # Existing inference-profile/* resource still present.
   # Matches the non-application profile ARN specifically (a leading ':' rules
   # out an accidental substring match on application-inference-profile).
   assert {
     condition     = strcontains(aws_iam_role_policy.evaluation_lambda[0].policy, ":inference-profile/*")
-    error_message = "Evaluation engine policy must retain inference-profile/* (Req 4.2)."
+    error_message = "Evaluation engine policy must retain inference-profile/*."
   }
 
-  # Existing foundation-model/* resource still present (Req 4.2 "alongside").
+  # Existing foundation-model/* resource still present.
   assert {
     condition     = strcontains(aws_iam_role_policy.evaluation_lambda[0].policy, "foundation-model/*")
-    error_message = "Evaluation engine policy must retain foundation-model/* (Req 4.2)."
+    error_message = "Evaluation engine policy must retain foundation-model/*."
   }
 }
 
 # ---------------------------------------------------------------------------
-# Rule-validation Lambda policy carries the same B1 Bedrock grant.
+# Rule-validation Lambda policy carries the same Bedrock grant.
 # ---------------------------------------------------------------------------
 run "rule_validation_policy_includes_application_inference_profile" {
   command = plan
 
   assert {
     condition     = strcontains(aws_iam_role_policy.rule_validation_policy[0].policy, "bedrock:GetInferenceProfile")
-    error_message = "Rule-validation engine policy must allow bedrock:GetInferenceProfile (Req 4.1)."
+    error_message = "Rule-validation engine policy must allow bedrock:GetInferenceProfile."
   }
   assert {
     condition     = strcontains(aws_iam_role_policy.rule_validation_policy[0].policy, "application-inference-profile/*")
-    error_message = "Rule-validation engine policy must scope application-inference-profile/* (Req 4.2)."
+    error_message = "Rule-validation engine policy must scope application-inference-profile/*."
   }
   assert {
     condition     = strcontains(aws_iam_role_policy.rule_validation_policy[0].policy, ":inference-profile/*")
-    error_message = "Rule-validation engine policy must retain inference-profile/* (Req 4.2)."
+    error_message = "Rule-validation engine policy must retain inference-profile/*."
   }
   assert {
     condition     = strcontains(aws_iam_role_policy.rule_validation_policy[0].policy, "foundation-model/*")
-    error_message = "Rule-validation engine policy must retain foundation-model/* (Req 4.2)."
+    error_message = "Rule-validation engine policy must retain foundation-model/*."
   }
 }

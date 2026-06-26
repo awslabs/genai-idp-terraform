@@ -1,18 +1,17 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the shared unified-processor engine: B8 —
-# BedrockHubRoleArn cross-account assume-role (task 1.2; Requirements 10.2,
-# 10.3, 10.4).
+# Native `terraform test` for the shared unified-processor engine:
+# BedrockHubRoleArn cross-account assume-role.
 #
-# Property 12: `BedrockHubRoleArn` is fully additive and exactly scoped.
+# `BedrockHubRoleArn` is fully additive and exactly scoped:
 #   - empty `var.bedrock_hub_role_arn`  -> NO assume-role policy rendered on any
 #     Bedrock-calling role AND no BEDROCK_ASSUME_ROLE_ARN env var on the
-#     processing Lambdas (no B8-attributable resources; Req 10.2, 10.4).
+#     processing Lambdas.
 #   - non-empty `var.bedrock_hub_role_arn` -> exactly ONE `sts:AssumeRole`
 #     statement per Bedrock-calling role whose `Resource` is EXACTLY that ARN
-#     and no other (Req 10.3), and `BEDROCK_ASSUME_ROLE_ARN` set on the
-#     processing Lambdas' environment.
+#     and no other, and `BEDROCK_ASSUME_ROLE_ARN` set on the processing Lambdas'
+#     environment.
 #
 # Offline by design: the AWS provider is mocked so the suite runs with no AWS
 # credentials and no network. `command = plan` is used throughout — the hub
@@ -62,7 +61,7 @@ variables {
 
   config = {}
 
-  # Pipeline branch (non-BDA) — B8 placement is identical across branches.
+  # Pipeline branch (non-BDA) — hub placement is identical across branches.
   use_bda = false
 
   # Enable every gated Bedrock-calling subsystem so all six hub policies render
@@ -85,45 +84,45 @@ run "hub_disabled_renders_no_policy_or_env" {
   }
 
   # No assume-role policy rendered on ANY Bedrock-calling role (count 0 each) —
-  # so there is no B8-attributable resource in the plan (Req 10.2, 10.4).
+  # so there is no hub-attributable resource in the plan.
   assert {
     condition     = length(aws_iam_role_policy.classification_bedrock_hub_assume) == 0
-    error_message = "B8: classification hub assume-role policy must not render when bedrock_hub_role_arn is empty (Req 10.2)."
+    error_message = "Classification hub assume-role policy must not render when bedrock_hub_role_arn is empty."
   }
   assert {
     condition     = length(aws_iam_role_policy.extraction_bedrock_hub_assume) == 0
-    error_message = "B8: extraction hub assume-role policy must not render when bedrock_hub_role_arn is empty (Req 10.2)."
+    error_message = "Extraction hub assume-role policy must not render when bedrock_hub_role_arn is empty."
   }
   assert {
     condition     = length(aws_iam_role_policy.assessment_bedrock_hub_assume) == 0
-    error_message = "B8: assessment hub assume-role policy must not render when bedrock_hub_role_arn is empty (Req 10.2)."
+    error_message = "Assessment hub assume-role policy must not render when bedrock_hub_role_arn is empty."
   }
   assert {
     condition     = length(aws_iam_role_policy.summarization_bedrock_hub_assume) == 0
-    error_message = "B8: summarization hub assume-role policy must not render when bedrock_hub_role_arn is empty (Req 10.2)."
+    error_message = "Summarization hub assume-role policy must not render when bedrock_hub_role_arn is empty."
   }
   assert {
     condition     = length(aws_iam_role_policy.evaluation_bedrock_hub_assume) == 0
-    error_message = "B8: evaluation hub assume-role policy must not render when bedrock_hub_role_arn is empty (Req 10.2)."
+    error_message = "Evaluation hub assume-role policy must not render when bedrock_hub_role_arn is empty."
   }
   assert {
     condition     = length(aws_iam_role_policy.rule_validation_bedrock_hub_assume) == 0
-    error_message = "B8: rule-validation hub assume-role policy must not render when bedrock_hub_role_arn is empty (Req 10.2)."
+    error_message = "Rule-validation hub assume-role policy must not render when bedrock_hub_role_arn is empty."
   }
 
   # No BEDROCK_ASSUME_ROLE_ARN env var on the always-present processing Lambdas
-  # (Req 10.4 — no B8-attributable diff on same-account deployments).
+  # (no diff on same-account deployments).
   assert {
     condition     = !contains(keys(aws_lambda_function.classification.environment[0].variables), "BEDROCK_ASSUME_ROLE_ARN")
-    error_message = "B8: classification Lambda must not set BEDROCK_ASSUME_ROLE_ARN when the hub ARN is empty (Req 10.4)."
+    error_message = "Classification Lambda must not set BEDROCK_ASSUME_ROLE_ARN when the hub ARN is empty."
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.extraction.environment[0].variables), "BEDROCK_ASSUME_ROLE_ARN")
-    error_message = "B8: extraction Lambda must not set BEDROCK_ASSUME_ROLE_ARN when the hub ARN is empty (Req 10.4)."
+    error_message = "Extraction Lambda must not set BEDROCK_ASSUME_ROLE_ARN when the hub ARN is empty."
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.assessment.environment[0].variables), "BEDROCK_ASSUME_ROLE_ARN")
-    error_message = "B8: assessment Lambda must not set BEDROCK_ASSUME_ROLE_ARN when the hub ARN is empty (Req 10.4)."
+    error_message = "Assessment Lambda must not set BEDROCK_ASSUME_ROLE_ARN when the hub ARN is empty."
   }
 }
 
@@ -141,82 +140,82 @@ run "hub_enabled_scopes_assume_role_exactly_and_sets_env" {
   # --- classification role: exactly one statement, exactly that ARN ---------
   assert {
     condition     = length(aws_iam_role_policy.classification_bedrock_hub_assume) == 1
-    error_message = "B8: classification hub assume-role policy must render exactly once when the hub ARN is set (Req 10.1)."
+    error_message = "Classification hub assume-role policy must render exactly once when the hub ARN is set."
   }
   assert {
     condition     = length(jsondecode(aws_iam_role_policy.classification_bedrock_hub_assume[0].policy).Statement) == 1
-    error_message = "B8: classification hub policy must contain exactly one statement (Req 10.3)."
+    error_message = "Classification hub policy must contain exactly one statement."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.classification_bedrock_hub_assume[0].policy).Statement[0].Action == "sts:AssumeRole"
-    error_message = "B8: classification hub statement action must be exactly sts:AssumeRole (Req 10.3)."
+    error_message = "Classification hub statement action must be exactly sts:AssumeRole."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.classification_bedrock_hub_assume[0].policy).Statement[0].Resource == var.bedrock_hub_role_arn
-    error_message = "B8: classification hub statement Resource must be exactly the supplied hub ARN and no other (Req 10.3)."
+    error_message = "Classification hub statement Resource must be exactly the supplied hub ARN and no other."
   }
 
   # --- extraction role ------------------------------------------------------
   assert {
     condition     = length(aws_iam_role_policy.extraction_bedrock_hub_assume) == 1
-    error_message = "B8: extraction hub assume-role policy must render exactly once when the hub ARN is set (Req 10.1)."
+    error_message = "Extraction hub assume-role policy must render exactly once when the hub ARN is set."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.extraction_bedrock_hub_assume[0].policy).Statement[0].Resource == var.bedrock_hub_role_arn
-    error_message = "B8: extraction hub statement Resource must be exactly the supplied hub ARN and no other (Req 10.3)."
+    error_message = "Extraction hub statement Resource must be exactly the supplied hub ARN and no other."
   }
 
   # --- assessment role ------------------------------------------------------
   assert {
     condition     = length(aws_iam_role_policy.assessment_bedrock_hub_assume) == 1
-    error_message = "B8: assessment hub assume-role policy must render exactly once when the hub ARN is set (Req 10.1)."
+    error_message = "Assessment hub assume-role policy must render exactly once when the hub ARN is set."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.assessment_bedrock_hub_assume[0].policy).Statement[0].Resource == var.bedrock_hub_role_arn
-    error_message = "B8: assessment hub statement Resource must be exactly the supplied hub ARN and no other (Req 10.3)."
+    error_message = "Assessment hub statement Resource must be exactly the supplied hub ARN and no other."
   }
 
   # --- summarization role (gated on is_summarization_enabled = true) --------
   assert {
     condition     = length(aws_iam_role_policy.summarization_bedrock_hub_assume) == 1
-    error_message = "B8: summarization hub assume-role policy must render once when enabled and the hub ARN is set (Req 10.1)."
+    error_message = "Summarization hub assume-role policy must render once when enabled and the hub ARN is set."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.summarization_bedrock_hub_assume[0].policy).Statement[0].Resource == var.bedrock_hub_role_arn
-    error_message = "B8: summarization hub statement Resource must be exactly the supplied hub ARN and no other (Req 10.3)."
+    error_message = "Summarization hub statement Resource must be exactly the supplied hub ARN and no other."
   }
 
   # --- evaluation role (gated on evaluation_enabled = true) -----------------
   assert {
     condition     = length(aws_iam_role_policy.evaluation_bedrock_hub_assume) == 1
-    error_message = "B8: evaluation hub assume-role policy must render once when enabled and the hub ARN is set (Req 10.1)."
+    error_message = "Evaluation hub assume-role policy must render once when enabled and the hub ARN is set."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.evaluation_bedrock_hub_assume[0].policy).Statement[0].Resource == var.bedrock_hub_role_arn
-    error_message = "B8: evaluation hub statement Resource must be exactly the supplied hub ARN and no other (Req 10.3)."
+    error_message = "Evaluation hub statement Resource must be exactly the supplied hub ARN and no other."
   }
 
   # --- rule-validation role (gated on enable_rule_validation = true) --------
   assert {
     condition     = length(aws_iam_role_policy.rule_validation_bedrock_hub_assume) == 1
-    error_message = "B8: rule-validation hub assume-role policy must render once when enabled and the hub ARN is set (Req 10.1)."
+    error_message = "Rule-validation hub assume-role policy must render once when enabled and the hub ARN is set."
   }
   assert {
     condition     = jsondecode(aws_iam_role_policy.rule_validation_bedrock_hub_assume[0].policy).Statement[0].Resource == var.bedrock_hub_role_arn
-    error_message = "B8: rule-validation hub statement Resource must be exactly the supplied hub ARN and no other (Req 10.3)."
+    error_message = "Rule-validation hub statement Resource must be exactly the supplied hub ARN and no other."
   }
 
   # --- env var wired onto the processing Lambdas ----------------------------
   assert {
     condition     = aws_lambda_function.classification.environment[0].variables["BEDROCK_ASSUME_ROLE_ARN"] == var.bedrock_hub_role_arn
-    error_message = "B8: classification Lambda must set BEDROCK_ASSUME_ROLE_ARN to the hub ARN (Req 10.1)."
+    error_message = "Classification Lambda must set BEDROCK_ASSUME_ROLE_ARN to the hub ARN."
   }
   assert {
     condition     = aws_lambda_function.extraction.environment[0].variables["BEDROCK_ASSUME_ROLE_ARN"] == var.bedrock_hub_role_arn
-    error_message = "B8: extraction Lambda must set BEDROCK_ASSUME_ROLE_ARN to the hub ARN (Req 10.1)."
+    error_message = "Extraction Lambda must set BEDROCK_ASSUME_ROLE_ARN to the hub ARN."
   }
   assert {
     condition     = aws_lambda_function.assessment.environment[0].variables["BEDROCK_ASSUME_ROLE_ARN"] == var.bedrock_hub_role_arn
-    error_message = "B8: assessment Lambda must set BEDROCK_ASSUME_ROLE_ARN to the hub ARN (Req 10.1)."
+    error_message = "Assessment Lambda must set BEDROCK_ASSUME_ROLE_ARN to the hub ARN."
   }
 }

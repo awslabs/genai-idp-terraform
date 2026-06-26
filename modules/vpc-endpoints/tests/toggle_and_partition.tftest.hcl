@@ -1,15 +1,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the standalone vpc-endpoints module (task 3.2).
+# Native `terraform test` for the standalone vpc-endpoints module.
 #
-# Property 10 (Requirements 7.1, 7.3, 7.4): VPC interface endpoints are
-# individually toggleable and partition/region-aware.
+# Verifies that VPC interface endpoints are individually toggleable and
+# partition/region-aware:
 #
-#   * toggle (Req 7.1, 7.3): several `enabled_interface_endpoints` maps -> the
-#     planned interface endpoints equal exactly the enabled set, no more and no
-#     fewer. Asserted on the keys/count of `aws_vpc_endpoint.interface`.
-#   * partition-aware (Req 7.4): for the configured region, every interface
+#   * toggle: several `enabled_interface_endpoints` maps -> the planned
+#     interface endpoints equal exactly the enabled set, no more and no fewer.
+#     Asserted on the keys/count of `aws_vpc_endpoint.interface`.
+#   * partition-aware: for the configured region, every interface
 #     `service_name` renders as `com.amazonaws.${region}.${service}`. Multiple
 #     regions are exercised with per-`run` provider overrides.
 #
@@ -156,7 +156,7 @@ run "service_names_us_gov_west_1" {
       for service, endpoint in aws_vpc_endpoint.interface :
       endpoint.service_name == "com.amazonaws.us-gov-west-1.${service}"
     ])
-    error_message = "Every interface service_name must render as com.amazonaws.us-gov-west-1.<service> in the GovCloud partition (Req 7.4)."
+    error_message = "Every interface service_name must render as com.amazonaws.us-gov-west-1.<service> in the GovCloud partition."
   }
   assert {
     condition     = aws_vpc_endpoint.s3_gateway[0].service_name == "com.amazonaws.us-gov-west-1.s3"

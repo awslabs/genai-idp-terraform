@@ -1,14 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# BDA branch Lambda functions for the unified engine (task 2.2).
+# BDA branch Lambda functions for the unified engine.
 #
 # These functions implement the Bedrock Data Automation (BDA) processing branch
 # of the unified state machine. They are GATED on the façade-supplied `use_bda`
 # delegation flag: only the bda-processor façade (use_bda = true) instantiates
 # them. The bedrock-llm-processor / sagemaker-udop-processor façades
 # (use_bda = false) never create these resources — the pipeline branch is always
-# present, the BDA branch is added only on the BDA path (Property 1).
+# present, the BDA branch is added only on the BDA path.
 #
 # Mirrors the upstream `sources/patterns/unified/template.yaml`
 # InvokeBDAFunction / BDAProcessResultsFunction / BDACompletionFunction and the

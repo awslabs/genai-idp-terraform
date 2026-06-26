@@ -15,7 +15,7 @@ output "state_machine_name" {
 # the feature flags (independent of the computed Lambda ARNs embedded in the
 # rendered definition). Exposed so `terraform test` can assert the `use_bda`
 # routing at `command = plan` (the full `definition` string is unknown at plan
-# because it interpolates computed ARNs). See Property 1.
+# because it interpolates computed ARNs).
 output "state_machine_start_at" {
   description = "The StartAt state of the document-processing state machine: 'RouteByProcessingMode' on the BDA path (use_bda = true), 'OCRStep' on the pipeline path."
   value       = var.use_bda ? "RouteByProcessingMode" : "OCRStep"

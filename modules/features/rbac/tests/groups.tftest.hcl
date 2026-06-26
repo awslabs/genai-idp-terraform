@@ -1,17 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the RBAC submodule scaffold (task 6.1) — the four
-# Cognito user-pool groups.
+# Native `terraform test` for the RBAC submodule — the four Cognito user-pool
+# groups.
 #
-# Property 2 (Requirements 1.1, 1.5): the four RBAC groups always exist with
-# default-or-override names — exactly four groups, named `Admin`/`Author`/
-# `Reviewer`/`Viewer` by default, renamed via `var.group_names` overrides without
-# changing the default-on behavior of the four roles.
-#
-# Scaffold scope: this file asserts only the group creation that task 6.1 builds.
-# Subtask 6.6 extends RBAC's tests with the user-management role least-privilege
-# assertions once the Lambda (6.3) exists.
+# Verifies the four RBAC groups always exist with default-or-override names:
+# exactly four groups, named `Admin`/`Author`/`Reviewer`/`Viewer` by default,
+# renamed via `var.group_names` overrides without changing the default-on
+# behavior of the four roles.
 #
 # Offline harness: the aws provider is mocked; the four `aws_cognito_user_group`
 # resources are input-derived (name from var.group_names, user_pool_id from

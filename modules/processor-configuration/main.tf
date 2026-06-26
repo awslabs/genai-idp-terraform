@@ -94,21 +94,17 @@ resource "aws_lambda_invocation" "seed_schema" {
 }
 
 # ----------------------------------------------------------------------------
-# B11 — Managed baseline configurations
+# Managed baseline configurations
 #
 # Seed the upstream managed-config baselines
 # (`sources/config_library/managed_config/<name>/config.yaml`) as additional,
-# non-active configuration versions stamped `Managed = true`. The upstream
-# `idp_common` config layer reads that attribute back as `managed` and the
-# config-write path (`idp_sdk` config operations) rejects edits/uploads to
-# managed rows — so this seeding is what makes those rows non-editable, while
-# enforcement stays entirely upstream (no `sources/` edit).
-#
-# Discovery is via `fileset(...)`, so the set tracks whatever ships in the
-# read-only snapshot (currently `fake-w2`, `docsplit`, `realkie-fcc-verified`,
-# `ocr-benchmark`). If the directory is absent the map is empty and no rows are
-# seeded. Each managed row uses its directory name as a deterministic version
-# key (`Config#<name>`); consumer-authored non-managed rows are never touched.
+# non-active versions stamped `Managed = true`. The upstream `idp_common` config
+# layer reads that attribute back as `managed` and rejects edits/uploads to
+# those rows, so this seeding is what makes them non-editable while enforcement
+# stays entirely upstream. Discovery is via `fileset(...)`, so the set tracks
+# whatever ships in the read-only snapshot; an absent directory yields an empty
+# map. Each managed row uses its directory name as a deterministic version key;
+# consumer-authored non-managed rows are never touched.
 # ----------------------------------------------------------------------------
 locals {
   managed_config_dir   = "${path.module}/../../sources/config_library/managed_config"

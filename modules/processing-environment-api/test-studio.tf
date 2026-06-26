@@ -577,16 +577,12 @@ resource "aws_lambda_function" "fcc_dataset_deployer" {
 # =============================================================================
 # Lambda: w2_dataset_deployer (conditional on enable_w2_dataset)
 #
-# Mirrors the fcc_dataset_deployer above. Like FCC, the shipped W2 deployer is a
-# CloudFormation custom resource (Custom::W2DatasetDeployer, uses cfnresponse) —
-# NOT an AppSync-invoked resolver — so it gets no AppSync data source/resolver
-# and is not added to the AppSync invoke policy (matching the FCC deployer).
-# It reuses the shared Test Studio execution role and local.test_studio_env
-# (LOG_LEVEL / TRACKING_TABLE / TEST_SET_BUCKET); the deployer reads
-# TESTSET_BUCKET / TRACKING_TABLE / LOG_LEVEL.
-# Memory (3008) / timeout (900) / ephemeral storage (10240) match the upstream
-# W2DatasetDeployerFunction in sources/template.yaml — it downloads parquet
-# splits and ~2000 images into /tmp, so the larger ephemeral storage is required.
+# Mirrors fcc_dataset_deployer: a CloudFormation custom resource
+# (Custom::W2DatasetDeployer, cfnresponse), not an AppSync resolver, so it gets
+# no AppSync data source/resolver and no invoke-policy entry. Reuses the shared
+# Test Studio role and local.test_studio_env. Memory (3008) / timeout (900) /
+# ephemeral storage (10240) match the upstream W2DatasetDeployerFunction in
+# sources/template.yaml — it stages parquet splits and ~2000 images into /tmp.
 # =============================================================================
 
 resource "aws_cloudwatch_log_group" "w2_dataset_deployer" {

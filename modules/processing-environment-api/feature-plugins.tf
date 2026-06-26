@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Feature-plugin composition (Requirement 3 — `.enable()`-style wiring)
+# Feature-plugin composition (`.enable()`-style wiring)
 #
 # Mirrors the CDK accelerator's `api.enable(feature)` mechanism: each enabled
 # auxiliary-feature submodule (MCP, Chat-with-Document, HITL, …) emits an

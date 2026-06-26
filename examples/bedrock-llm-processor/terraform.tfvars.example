@@ -15,11 +15,11 @@ data_tracking_retention_days = 365
 # Configuration File Path (optional - uses default lending package config)
 # config_file_path = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
-# Round 3 (v0.5.12-tf.2): demonstrate the three config-shape x-aws-idp-* schema
-# flags (B9/B10/B12) by appending the overlay classes in
-# config-overlays/round3-x-aws-idp-flags.yaml onto the seeded config. These flags
-# are runtime-enforced upstream and pass through the seeder unchanged (no new AWS
-# resources). Set false to seed the base config verbatim.
+# Optionally demonstrate the config-shape x-aws-idp-* schema flags by appending
+# the overlay classes in config-overlays/round3-x-aws-idp-flags.yaml onto the
+# seeded config. These flags are runtime-enforced upstream and pass through the
+# seeder unchanged (no new AWS resources). Set false to seed the base config
+# verbatim.
 # demo_x_aws_idp_flags = true
 
 # Model Configuration
@@ -50,11 +50,11 @@ api = {
   enable_agent_companion_chat = false  # Multi-agent AI chat sessions
   enable_test_studio          = false  # Automated dataset testing
   enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
-  enable_w2_dataset           = false  # C16 — deploy sample W2 dataset (requires enable_test_studio)
+  enable_w2_dataset           = false  # Deploy sample W2 dataset (requires enable_test_studio)
   enable_error_analyzer       = false  # AI-powered error diagnostics
   enable_mcp                  = false  # Forwarded to module.mcp_integration (Bedrock AgentCore Gateway, opt-in)
 
-  # v0.5.11 — version-check resolver (C14). Naming a public artifacts bucket
+  # v0.5.11 — version-check resolver. Naming a public artifacts bucket
   # enables the getLatestPublishedVersion query (default-off when empty).
   # public_artifacts_bucket = "my-org-idp-published-artifacts"
   # public_artifacts_prefix = "artifacts/genai-idp"  # optional, default shown
@@ -116,7 +116,7 @@ enable_rule_validation = false  # Enable compliance rule validation
 # lambda_hook_summarization  = ""  # e.g. "GENAIIDP-my-custom-summarization-hook"
 
 # ---------------------------------------------------------------------------
-# RBAC + External IdP federation (v0.5.12 — C2 + C6)
+# RBAC + External IdP federation (v0.5.12)
 # ---------------------------------------------------------------------------
 #
 # Both features wire through the root feature-plugin path
@@ -125,7 +125,7 @@ enable_rule_validation = false  # Enable compliance rule validation
 # enable them. This example always provisions a Cognito user pool, which RBAC
 # requires (the root `rbac_requires_cognito` check fails at plan time otherwise).
 #
-# RBAC (C2): four server-side-enforced Cognito groups (Admin/Author/Reviewer/
+# RBAC: four server-side-enforced Cognito groups (Admin/Author/Reviewer/
 # Viewer), a Users DynamoDB table, and a user-management Lambda. Group names are
 # overridable; overriding one or more does not change the default-on behavior of
 # the four roles.
@@ -144,7 +144,7 @@ enable_rule_validation = false  # Enable compliance rule validation
 #   # allowed_signup_email_domains = "example.com,corp.example.com"
 # }
 #
-# IdP federation (C6): federate the Cognito user pool with an external SAML or
+# IdP federation: federate the Cognito user pool with an external SAML or
 # OIDC provider. The configured provider is ADDED to the user-pool client's
 # supported identity providers without removing COGNITO, so direct sign-in keeps
 # working. When rbac is also enabled, the group-mapping trigger Lambda maps

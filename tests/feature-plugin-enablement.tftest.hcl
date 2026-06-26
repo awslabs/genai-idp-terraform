@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Native `terraform test` for the root feature-plugin enablement wiring
-# (task 6.4 — features.tf `local.feature_enable` + the count-gated
+# (features.tf `local.feature_enable` + the count-gated
 # `module.mcp_integration` / `module.chat_with_document` + the
 # `local.enabled_feature_contracts` composition map).
 #
-# Property 5 (Requirements 3.3, 3.4): an auxiliary feature's resources appear in
+# An auxiliary feature's resources appear in
 # the rendered configuration if and only if it is enabled via the plugin path or
 # a forwarded `var.api.*` flag; otherwise the feature submodule contributes no
 # resources (default-off). Asserted here against:
@@ -26,7 +26,7 @@
 #     account so AWS ARN-partition validation passes. The root requires an
 #     `aws.us-east-1` provider alias (web-ui) — supplied as a second aliased mock.
 #   * random_string.suffix pinned at PLAN time (override_during = plan) so
-#     resource names embedding the suffix are known at plan (see task 4.4 note).
+#     resource names embedding the suffix are known at plan.
 #   * The chat feature reads AppSync ids from `module.processing_environment_api`
 #     (requires api.enabled = true). That module has `data "archive_file"`
 #     resources pointing at `sources/src/lambda/{abort_workflow_resolver,
@@ -37,9 +37,7 @@
 #     test (and avoid editing an out-of-scope module), the API module is replaced
 #     with `override_module`, supplying only the three AppSync outputs the chat
 #     submodule consumes. This isolates the assertion to the root feature-plugin
-#     wiring (the subject of Property 5) rather than the API module internals.
-#
-# Validates: Requirements 3.4, Property 5
+#     wiring (the subject of this test) rather than the API module internals.
 
 mock_provider "aws" {
   mock_data "aws_partition" {

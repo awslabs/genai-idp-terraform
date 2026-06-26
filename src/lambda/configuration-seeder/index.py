@@ -19,9 +19,6 @@
 #   2. Always treats the call as a Create — the previous version of this
 #      Lambda was idempotent on `put_item`, and aws_lambda_invocation
 #      already triggers only when its input hash changes.
-#
-# Captures NOTE-014 / NOTE-014b in
-# `.kiro/terraform-upgrades/history/v0.4.8-to-v0.4.16/notes.md`.
 
 import json
 import logging
@@ -50,9 +47,9 @@ def _stringify_values(obj: Any) -> Any:
     store every numeric value as a string and let the Pydantic models coerce
     on read.
 
-    Pass-through contract (B9/B10/B12): this recursion is intentionally
-    *generic* — it walks dicts and lists without any key allow-list or closed
-    schema. Author-supplied ``x-aws-idp-*`` schema flags
+    Pass-through contract: this recursion is intentionally *generic* — it
+    walks dicts and lists without any key allow-list or closed schema.
+    Author-supplied ``x-aws-idp-*`` schema flags
     (``x-aws-idp-extraction-model``, ``x-aws-idp-exclude-from-processing`` +
     its ``reason``, ``x-aws-idp-page-types`` / ``x-aws-idp-source-page-types``)
     are therefore persisted into the configuration item verbatim, neither
@@ -102,8 +99,8 @@ def _merge_with_system_defaults(user_config: Dict[str, Any]) -> Dict[str, Any]:
     pattern = _detect_pattern(user_config)
     logger.info("Merging user config with system defaults for pattern=%s", pattern)
     try:
-        # validate=False is required for the B9/B10/B12 pass-through contract:
-        # it deep-merges the user config onto system defaults (user keys win,
+        # validate=False is required for the pass-through contract: it
+        # deep-merges the user config onto system defaults (user keys win,
         # arbitrary keys preserved) WITHOUT running idp_common's Pydantic /
         # JSON-Schema validation, which carries a closed ALLOWED_KEYWORDS set
         # that would otherwise flag unknown x-aws-idp-* schema flags. Runtime
@@ -175,9 +172,9 @@ def _put_config_default(
 
     ``is_active`` defaults to ``True`` so the runtime config loader resolves
     the seeded ``default`` version when no active version is explicitly
-    tracked. Managed baseline configs (B11) are seeded with
-    ``is_active=False`` so they remain selectable templates without
-    hijacking the active runtime config.
+    tracked. Managed baseline configs are seeded with ``is_active=False`` so
+    they remain selectable templates without hijacking the active runtime
+    config.
 
     ``managed`` writes the top-level ``Managed`` attribute that the upstream
     ``idp_common`` config layer reads back as ``managed`` (see
@@ -282,7 +279,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # key == "Default"
         version = event.get("Version", "default")
         description = event.get("Description", "Default IDP configuration")
-        # B11: managed baseline configs are seeded as non-active, non-editable
+        # Managed baseline configs are seeded as non-active, non-editable
         # rows. Default invocations keep the historical is_active=true behavior.
         managed = bool(event.get("Managed", False))
         is_active = bool(event.get("IsActive", not managed))

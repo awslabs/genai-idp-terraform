@@ -1,20 +1,19 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the IdP-federation submodule (task 7.5).
+# Native `terraform test` for the IdP-federation submodule.
 #
-# Property 8 (Requirement 5.3): the OIDC client secret never appears in
-# plaintext. The secret is supplied ONLY as a reference
-# (`var.oidc_client_secret_ref` — a Secrets Manager ARN / SSM parameter name),
-# resolved at apply time SOLELY into the Cognito identity provider's
-# `provider_details.client_secret`, and is never a plaintext module input value
-# nor carried by any non-sensitive module output.
+# Secret handling: the OIDC client secret never appears in plaintext. The secret
+# is supplied ONLY as a reference (`var.oidc_client_secret_ref` — a Secrets
+# Manager ARN / SSM parameter name), resolved at apply time SOLELY into the
+# Cognito identity provider's `provider_details.client_secret`, and is never a
+# plaintext module input value nor carried by any non-sensitive module output.
 #
-# Property 9 (Requirements 5.5, 6.3): federation is additive to the user-pool
-# client and targets the RBAC group names. The
-# `supported_identity_providers_contribution` is the external provider-name list
-# (the root merges it WITH `COGNITO`, keeping `COGNITO`), and the group-mapping
-# Lambda's `*_GROUP_NAME` environment values equal `var.rbac_group_names`.
+# Additivity: federation is additive to the user-pool client and targets the
+# RBAC group names. The `supported_identity_providers_contribution` is the
+# external provider-name list (the root merges it WITH `COGNITO`, keeping
+# `COGNITO`), and the group-mapping Lambda's `*_GROUP_NAME` environment values
+# equal `var.rbac_group_names`.
 #
 # Offline harness: the aws provider is mocked so the suite runs with no AWS
 # credentials and no network. The secret-resolution data sources
@@ -60,7 +59,7 @@ mock_provider "aws" {
 }
 
 # Shared dummy inputs for an enabled OIDC federation with group mapping turned
-# on (group_attribute_name != "") and an RBAC group-name override so Property 9
+# on (group_attribute_name != "") and an RBAC group-name override so the test
 # can assert the env vars track the supplied names rather than the defaults.
 variables {
   enabled       = true
@@ -88,8 +87,9 @@ variables {
 
 # ---------------------------------------------------------------------------
 # OIDC secret resolved from Secrets Manager (ref looks like a secretsmanager
-# ARN). Asserts Property 8 (secret only via ref, only into client_secret, no
-# plaintext input/output) and Property 9 (additive provider list + RBAC env).
+# ARN). Asserts the secret is only supplied via a ref and lands only in
+# client_secret with no plaintext input/output, plus the additive provider list
+# and RBAC env.
 # ---------------------------------------------------------------------------
 run "oidc_secret_from_secretsmanager_and_additive_rbac_env" {
   command = plan
@@ -98,91 +98,91 @@ run "oidc_secret_from_secretsmanager_and_additive_rbac_env" {
     oidc_client_secret_ref = "arn:aws:secretsmanager:us-east-1:123456789012:secret:idp/oidc-client-AbCdEf"
   }
 
-  # --- Property 8: the input is a REFERENCE, not the raw secret -------------
+  # --- The input is a REFERENCE, not the raw secret ------------------------
   # The ref is a Secrets Manager ARN string, and it is NOT the resolved secret
   # value the data source returns. Treating the input as a reference means the
   # module is fed the pointer, never the plaintext.
   assert {
     condition     = can(regex("^arn:aws[\\w-]*:secretsmanager:", var.oidc_client_secret_ref))
-    error_message = "Property 8: oidc_client_secret_ref must be supplied as a secret reference (Secrets Manager ARN), not a raw secret."
+    error_message = "oidc_client_secret_ref must be supplied as a secret reference (Secrets Manager ARN), not a raw secret."
   }
   assert {
     condition     = var.oidc_client_secret_ref != "MOCK-OIDC-CLIENT-SECRET-sm-zzz"
-    error_message = "Property 8: the module input must be the reference, never the resolved plaintext secret value."
+    error_message = "The module input must be the reference, never the resolved plaintext secret value."
   }
 
-  # --- Property 8: secret resolves SOLELY into provider_details.client_secret
+  # --- Secret resolves SOLELY into provider_details.client_secret
   assert {
     condition     = aws_cognito_identity_provider.external[0].provider_details["client_secret"] == "MOCK-OIDC-CLIENT-SECRET-sm-zzz"
-    error_message = "Property 8: the resolved secret must flow into the Cognito provider_details.client_secret."
+    error_message = "The resolved secret must flow into the Cognito provider_details.client_secret."
   }
   # The resolved plaintext is distinct from the reference — proving it was
   # resolved via the data source, not passed through as the ref.
   assert {
     condition     = aws_cognito_identity_provider.external[0].provider_details["client_secret"] != var.oidc_client_secret_ref
-    error_message = "Property 8: the resolved client_secret must differ from the reference (it is resolved at apply time, not the ref string)."
+    error_message = "The resolved client_secret must differ from the reference (it is resolved at apply time, not the ref string)."
   }
 
-  # --- Property 8: NO module output carries the resolved secret -------------
+  # --- NO module output carries the resolved secret ------------------------
   # The module exposes enabled / provider_name / group_mapping_function_* /
   # supported_identity_providers_contribution / contract — none may equal or
   # contain the resolved secret value.
   assert {
     condition     = output.provider_name != "MOCK-OIDC-CLIENT-SECRET-sm-zzz"
-    error_message = "Property 8: provider_name output must not carry the resolved secret."
+    error_message = "provider_name output must not carry the resolved secret."
   }
   assert {
     condition     = output.group_mapping_function_name != "MOCK-OIDC-CLIENT-SECRET-sm-zzz"
-    error_message = "Property 8: group_mapping_function_name output must not carry the resolved secret."
+    error_message = "group_mapping_function_name output must not carry the resolved secret."
   }
   assert {
     condition     = !contains(output.supported_identity_providers_contribution, "MOCK-OIDC-CLIENT-SECRET-sm-zzz")
-    error_message = "Property 8: supported_identity_providers_contribution must not carry the resolved secret."
+    error_message = "supported_identity_providers_contribution must not carry the resolved secret."
   }
   # The feature-plugin contract carries no environment/IAM/resolver/schema data
   # at all (it is Cognito-side), so it structurally cannot leak the secret.
   assert {
     condition     = length(output.contract.environment) == 0 && length(output.contract.iam_statements) == 0
-    error_message = "Property 8: the feature-plugin contract must expose no environment or IAM data (it cannot carry the secret)."
+    error_message = "The feature-plugin contract must expose no environment or IAM data (it cannot carry the secret)."
   }
   assert {
     condition     = output.contract.schema_additions == null
-    error_message = "Property 8: the feature-plugin contract schema_additions must be null (no secret-bearing SDL)."
+    error_message = "The feature-plugin contract schema_additions must be null (no secret-bearing SDL)."
   }
 
-  # --- Property 9: additive to the user-pool client (provider-name list) ----
+  # --- Additive to the user-pool client (provider-name list) ---------------
   # The contribution is the external provider name; the ROOT merges it with
   # COGNITO (keeping COGNITO). Here we assert the contribution equals the
   # provider-name list when enabled.
   assert {
     condition     = length(output.supported_identity_providers_contribution) == 1 && output.supported_identity_providers_contribution[0] == var.provider_name
-    error_message = "Property 9: supported_identity_providers_contribution must be exactly the external provider-name list when federation is enabled."
+    error_message = "supported_identity_providers_contribution must be exactly the external provider-name list when federation is enabled."
   }
 
-  # --- Property 9: group-mapping Lambda *_GROUP_NAME == rbac_group_names -----
+  # --- Group-mapping Lambda *_GROUP_NAME == rbac_group_names ---------------
   assert {
     condition     = aws_lambda_function.group_mapping[0].environment[0].variables["ADMIN_GROUP_NAME"] == var.rbac_group_names["Admin"]
-    error_message = "Property 9: ADMIN_GROUP_NAME env must equal rbac_group_names[\"Admin\"]."
+    error_message = "ADMIN_GROUP_NAME env must equal rbac_group_names[\"Admin\"]."
   }
   assert {
     condition     = aws_lambda_function.group_mapping[0].environment[0].variables["AUTHOR_GROUP_NAME"] == var.rbac_group_names["Author"]
-    error_message = "Property 9: AUTHOR_GROUP_NAME env must equal rbac_group_names[\"Author\"]."
+    error_message = "AUTHOR_GROUP_NAME env must equal rbac_group_names[\"Author\"]."
   }
   assert {
     condition     = aws_lambda_function.group_mapping[0].environment[0].variables["REVIEWER_GROUP_NAME"] == var.rbac_group_names["Reviewer"]
-    error_message = "Property 9: REVIEWER_GROUP_NAME env must equal rbac_group_names[\"Reviewer\"]."
+    error_message = "REVIEWER_GROUP_NAME env must equal rbac_group_names[\"Reviewer\"]."
   }
   assert {
     condition     = aws_lambda_function.group_mapping[0].environment[0].variables["VIEWER_GROUP_NAME"] == var.rbac_group_names["Viewer"]
-    error_message = "Property 9: VIEWER_GROUP_NAME env must equal rbac_group_names[\"Viewer\"]."
+    error_message = "VIEWER_GROUP_NAME env must equal rbac_group_names[\"Viewer\"]."
   }
 }
 
 # ---------------------------------------------------------------------------
 # OIDC secret resolved from SSM Parameter Store (ref is a parameter name, not a
-# secretsmanager ARN). Reasserts Property 8 across the second resolution branch:
-# the secret still lands solely in provider_details.client_secret and never in
-# an output.
+# secretsmanager ARN). Reasserts secret handling across the second resolution
+# branch: the secret still lands solely in provider_details.client_secret and
+# never in an output.
 # ---------------------------------------------------------------------------
 run "oidc_secret_from_ssm_no_plaintext_leak" {
   command = plan
@@ -194,22 +194,22 @@ run "oidc_secret_from_ssm_no_plaintext_leak" {
   # The ref is an SSM parameter NAME, not a secretsmanager ARN nor a raw secret.
   assert {
     condition     = !can(regex("^arn:aws[\\w-]*:secretsmanager:", var.oidc_client_secret_ref)) && var.oidc_client_secret_ref != "MOCK-OIDC-CLIENT-SECRET-ssm-zzz"
-    error_message = "Property 8: the SSM ref must be a parameter-name reference, never the raw secret value."
+    error_message = "The SSM ref must be a parameter-name reference, never the raw secret value."
   }
 
   # Secret resolves solely into provider_details.client_secret via the SSM path.
   assert {
     condition     = aws_cognito_identity_provider.external[0].provider_details["client_secret"] == "MOCK-OIDC-CLIENT-SECRET-ssm-zzz"
-    error_message = "Property 8: the SSM-resolved secret must flow into provider_details.client_secret."
+    error_message = "The SSM-resolved secret must flow into provider_details.client_secret."
   }
 
   # No output carries the SSM-resolved secret.
   assert {
     condition     = output.provider_name != "MOCK-OIDC-CLIENT-SECRET-ssm-zzz" && output.group_mapping_function_name != "MOCK-OIDC-CLIENT-SECRET-ssm-zzz"
-    error_message = "Property 8: no module output may carry the SSM-resolved secret."
+    error_message = "No module output may carry the SSM-resolved secret."
   }
   assert {
     condition     = !contains(output.supported_identity_providers_contribution, "MOCK-OIDC-CLIENT-SECRET-ssm-zzz")
-    error_message = "Property 8: supported_identity_providers_contribution must not carry the SSM-resolved secret."
+    error_message = "supported_identity_providers_contribution must not carry the SSM-resolved secret."
   }
 }

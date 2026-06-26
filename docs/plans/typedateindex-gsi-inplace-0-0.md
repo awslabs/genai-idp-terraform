@@ -9,7 +9,7 @@ offline constraint, so this single artifact serves both.
 plan, not the presence of the GSI block, is the merge gate), 7.1 / 7.2 (the GSI
 is an additive in-place table update, never a replacement).
 **Breaking change:** Migration guide
-[Breaking Change 6: Tracking-Table `TypeDateIndex` GSI (C1, Round 3)](../migration-v0.4.16-to-v0.5.12.md#breaking-change-6-tracking-table-typedateindex-gsi-c1-round-3)
+the Breaking Changes section of the `[0.5.12-tf.2]` entry in [CHANGELOG.md](../../CHANGELOG.md)
 **Module under test:** `modules/tracking-table/`
 
 ---
@@ -372,5 +372,5 @@ aws stepfunctions start-execution \
 The distributed map derives `ItemType` from each item's PK prefix (`doc#` →
 `document`, `testrun#` → `testrun`, `testset#` → `testset`; `list#` / `agent#`
 skipped) and sets it only where missing. The run is idempotent. See
-[Breaking Change 6](../migration-v0.4.16-to-v0.5.12.md#breaking-change-6-tracking-table-typedateindex-gsi-c1-round-3)
+the Breaking Changes section of [CHANGELOG.md](../../CHANGELOG.md)
 of the migration guide for the full migration + rollback steps.

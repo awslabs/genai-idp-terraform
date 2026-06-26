@@ -2,22 +2,21 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Native `terraform test` for the shared unified-processor engine: `use_bda`
-# routing (tasks 2.2/2.3; Requirements 2.4, 2.5; Property 1).
+# routing.
 #
-# Property 1: the engine receives a non-null boolean `use_bda` set by the
-# instantiating façade; the BDA branch resources (invoke/process-results/
-# completion Lambdas + DLQ + EventBridge wiring) are created ONLY on the
-# `use_bda = true` path, and the state machine routes through
-# `RouteByProcessingMode`. On the `use_bda = false` path the pipeline branch
-# (OCR → classification → extraction) is the entry point and the BDA-branch
-# resources are absent (count 0).
+# The engine receives a non-null boolean `use_bda` set by the instantiating
+# façade; the BDA branch resources (invoke/process-results/completion Lambdas +
+# DLQ + EventBridge wiring) are created ONLY on the `use_bda = true` path, and
+# the state machine routes through `RouteByProcessingMode`. On the
+# `use_bda = false` path the pipeline branch (OCR → classification → extraction)
+# is the entry point and the BDA-branch resources are absent (count 0).
 #
 # Offline by design: the AWS provider is mocked so the suite runs with no AWS
 # credentials and no network. `command = plan` is used throughout — assertions
 # target input-derived resource counts and the rendered state-machine
 # definition / IAM, which the mock provider makes known at plan time. The real
 # `archive`/`time`/`null` providers stay live so the `archive_file` data sources
-# also exercise Property 3 (every `sources/patterns/unified/...` path resolves).
+# also verify that every `sources/patterns/unified/...` path resolves.
 
 # The mocked AWS provider must return a valid partition/region/account for the
 # many `arn:${data.aws_partition.current.partition}:...` interpolations, or the

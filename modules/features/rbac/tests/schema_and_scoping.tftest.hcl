@@ -1,33 +1,32 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the RBAC submodule — task 6.7. Two properties:
+# Native `terraform test` for the RBAC submodule. Two checks:
 #
-#   * Property 3 (Requirements 1.3, 1.4): every RBAC-governed operation in the
-#     shipped AppSync schema carries a server-side
-#     `@aws_auth(cognito_groups: [...])` directive, so authorization is enforced
-#     server-side by AppSync rather than client-side. Asserted STATICALLY against
-#     the read-only v0.5.12 snapshot
+#   * Schema directives: every RBAC-governed operation in the shipped AppSync
+#     schema carries a server-side `@aws_auth(cognito_groups: [...])` directive,
+#     so authorization is enforced server-side by AppSync rather than
+#     client-side. Asserted STATICALLY against the read-only v0.5.12 snapshot
 #     (`sources/nested/appsync/src/api/schema.graphql`) — the directives ship in
-#     `sources/` (design decision 2), so RBAC's contribution is to make them
-#     enforceable, not to inject SDL.
+#     `sources/`, so RBAC's contribution is to make them enforceable, not to
+#     inject SDL.
 #
-#   * Property 6 (Requirements 3.1, 3.2, 3.3, 3.4): Reviewer document filtering
-#     and `allowedConfigVersions` scoping are enforced server-side. The filtering
+#   * Server-side scoping wiring: Reviewer document filtering and
+#     `allowedConfigVersions` scoping are enforced server-side. The filtering
 #     LOGIC ships in the snapshot's resolver Lambdas; RBAC's Terraform job is the
 #     WIRING — the `USERS_TABLE_NAME` env var and the least-privilege Users-table
 #     read path (GetItem/Query on the table + its `EmailIndex` GSI). This file
 #     asserts that wiring via the module's `reviewer_filtering_*` outputs and the
-#     feature-plugin `contract`. (Req 3.4 — `allowedConfigVersions` on the
-#     profile query — is verified statically in the Property 3 schema run, since
-#     it is satisfied by the shipped `User` type, not by injected SDL.)
+#     feature-plugin `contract`. (`allowedConfigVersions` on the profile query is
+#     verified statically in the schema run, since it is satisfied by the shipped
+#     `User` type, not by injected SDL.)
 #
-# This file is COMPLEMENTARY to groups.tftest.hcl (Property 2) and
-# role_least_privilege.tftest.hcl (Property 5); it does not touch them.
-# `terraform test` runs all three.
+# This file is COMPLEMENTARY to groups.tftest.hcl and
+# role_least_privilege.tftest.hcl; it does not touch them. `terraform test` runs
+# all three.
 
 # =============================================================================
-# Property 3 — static schema-directive invariant
+# Static schema-directive invariant
 # =============================================================================
 # The production RBAC module deliberately does NOT read the GraphQL schema, so
 # this run targets a small test-only fixture (./schema_fixture) that loads the
@@ -42,7 +41,7 @@ run "schema_aws_auth_directive_invariant" {
   }
 
   # (a) The schema actually carries `@aws_auth(cognito_groups: [...])` directives
-  # at all — the foundation of server-side RBAC enforcement (Req 1.3, 1.4).
+  # at all — the foundation of server-side RBAC enforcement.
   assert {
     condition     = length(regexall("@aws_auth\\(cognito_groups:\\s*\\[", output.schema)) > 0
     error_message = "The shipped schema must carry @aws_auth(cognito_groups: [...]) directives for server-side RBAC enforcement."
@@ -68,14 +67,14 @@ run "schema_aws_auth_directive_invariant" {
   }
 
   # Config-version deletion is Admin-only and RBAC-governed (config-version
-  # governance, Req 3.2) — assert its attached directive too.
+  # governance) — assert its attached directive too.
   assert {
     condition     = length(regexall("deleteConfigVersion\\([^)]*\\):[^@]*\\s+@aws_auth\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
     error_message = "deleteConfigVersion must carry an attached @aws_auth(cognito_groups: [\"Admin\"]) directive."
   }
 
   # Admin+Author and Admin+Reviewer governed operations are present, proving the
-  # role-to-operation mapping is server-side (not just Admin-only). Req 1.3.
+  # role-to-operation mapping is server-side (not just Admin-only).
   assert {
     condition     = length(regexall("@aws_auth\\(cognito_groups:\\s*\\[\"Admin\",\\s*\"Author\"\\]\\)", output.schema)) > 0
     error_message = "Admin+Author governed operations must carry server-side @aws_auth directives."
@@ -85,8 +84,8 @@ run "schema_aws_auth_directive_invariant" {
     error_message = "Admin+Reviewer (HITL) governed operations must carry server-side @aws_auth directives."
   }
 
-  # (b) Req 3.4: the profile query exposes `allowedConfigVersions` so the web UI
-  # can reflect scoping. `getMyProfile: User` returns the `User` type, which
+  # (b) The profile query exposes `allowedConfigVersions` so the web UI can
+  # reflect scoping. `getMyProfile: User` returns the `User` type, which
   # declares `allowedConfigVersions: [String]`. Both are asserted against the
   # shipped schema (no SDL injection by RBAC).
   assert {
@@ -95,16 +94,16 @@ run "schema_aws_auth_directive_invariant" {
   }
   assert {
     condition     = length(regexall("allowedConfigVersions:\\s*\\[String\\]", output.schema)) > 0
-    error_message = "Req 3.4: the `User` type must expose `allowedConfigVersions` so the profile query reflects config-version scoping."
+    error_message = "The `User` type must expose `allowedConfigVersions` so the profile query reflects config-version scoping."
   }
   assert {
     condition     = length(regexall("getMyProfile:\\s*User", output.schema)) == 1
-    error_message = "Req 3.4: the schema must expose `getMyProfile: User` so callers can read their `allowedConfigVersions`."
+    error_message = "The schema must expose `getMyProfile: User` so callers can read their `allowedConfigVersions`."
   }
 }
 
 # =============================================================================
-# Property 6 — server-side scoping wiring (Req 3.1, 3.2, 3.3)
+# Server-side scoping wiring
 # =============================================================================
 # The document-list and configuration AppSync resolver Lambdas ship the
 # server-side Reviewer-filtering / `allowedConfigVersions`-scoping logic; they
@@ -134,9 +133,9 @@ variables {
 run "reviewer_filtering_env_carries_users_table" {
   command = apply
 
-  # Req 3.1/3.2/3.3: the env fragment merged onto the resolver Lambdas carries
-  # exactly `USERS_TABLE_NAME`, pointing at the Users table, so the shipped
-  # resolvers can resolve the table at runtime to apply server-side scoping.
+  # The env fragment merged onto the resolver Lambdas carries exactly
+  # `USERS_TABLE_NAME`, pointing at the Users table, so the shipped resolvers can
+  # resolve the table at runtime to apply server-side scoping.
   assert {
     condition     = output.reviewer_filtering_environment["USERS_TABLE_NAME"] == aws_dynamodb_table.users.name
     error_message = "reviewer_filtering_environment must carry USERS_TABLE_NAME pointing at the Users table."
@@ -165,7 +164,7 @@ run "reviewer_filtering_iam_grants_users_read_path" {
 
   # That statement grants dynamodb:GetItem and dynamodb:Query — the read path the
   # shipped resolvers use to look the caller up by email and read back
-  # `allowedConfigVersions` (Req 3.1, 3.2, 3.3).
+  # `allowedConfigVersions`.
   assert {
     condition = alltrue([
       for s in output.reviewer_filtering_iam_statements :
@@ -203,7 +202,7 @@ run "reviewer_filtering_iam_grants_users_read_path" {
 
   # The same least-privilege read path must flow through the feature-plugin
   # contract's iam_statements so the API module merges it onto the resolver
-  # Lambda role (server-side enforcement wiring, Req 3.1/3.2/3.3).
+  # Lambda role (server-side enforcement wiring).
   assert {
     condition = one([
       for s in output.contract.iam_statements :

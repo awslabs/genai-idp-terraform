@@ -1,12 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Outputs for the RBAC feature-plugin submodule (C2).
+# Outputs for the RBAC feature-plugin submodule.
 #
 # Exposes the resolved group names (so the federation submodule can target them
-# via `rbac_group_names`, Req 6.3), the `Users` table / user-management Lambda
-# handles, and the Round 1 feature-plugin `contract` that
-# `modules/processing-environment-api` composes (subtask 6.5).
+# via `rbac_group_names`), the `Users` table / user-management Lambda handles,
+# and the feature-plugin `contract` that `modules/processing-environment-api`
+# composes.
 
 output "enabled" {
   description = "Whether the RBAC feature is enabled (mirrors var.enabled)."
@@ -18,7 +18,7 @@ output "group_names" {
     The resolved RBAC Cognito group names keyed by canonical role
     (`Admin`/`Author`/`Reviewer`/`Viewer`), reflecting any overrides. Consumed by
     the IdP-federation submodule's group-mapping Lambda so federated users land
-    in the correct RBAC roles (Req 6.3).
+    in the correct RBAC roles.
   EOT
   value = {
     Admin    = aws_cognito_user_group.rbac["Admin"].name
@@ -31,10 +31,9 @@ output "group_names" {
 output "users_table_name" {
   description = <<-EOT
     Name of the `Users` DynamoDB table. Consumed by the user-management Lambda
-    (subtask 6.3, `USERS_TABLE_NAME`) and threaded onto the AppSync resolver
-    Lambdas via the feature-plugin contract (subtask 6.5) so the document-list
-    and config-access resolvers can apply Reviewer filtering and
-    `allowedConfigVersions` scoping (subtask 6.4).
+    (`USERS_TABLE_NAME`) and threaded onto the AppSync resolver Lambdas via the
+    feature-plugin contract so the document-list and config-access resolvers can
+    apply Reviewer filtering and `allowedConfigVersions` scoping.
   EOT
   value       = aws_dynamodb_table.users.name
 }
@@ -42,9 +41,8 @@ output "users_table_name" {
 output "users_table_arn" {
   description = <<-EOT
     ARN of the `Users` DynamoDB table. Used to scope the user-management Lambda's
-    least-privilege DynamoDB access to exactly this table (subtask 6.3, Req 2.4)
-    and contributed to the AppSync Lambda role's read path via the feature-plugin
-    contract (subtask 6.5).
+    least-privilege DynamoDB access to exactly this table and contributed to the
+    AppSync Lambda role's read path via the feature-plugin contract.
   EOT
   value       = aws_dynamodb_table.users.arn
 }
@@ -52,7 +50,7 @@ output "users_table_arn" {
 output "user_management_function_arn" {
   description = <<-EOT
     ARN of the user-management Lambda. Consumed by the API module's
-    `feature-plugins.tf` (via the Round 1 contract, subtask 6.5) to create the
+    `feature-plugins.tf` (via the feature-plugin contract) to create the
     `aws_appsync_datasource` + the createUser/updateUser/deleteUser/listUsers/
     getMyProfile resolvers (mirrors CDK `enableInApi()`).
   EOT
@@ -65,13 +63,13 @@ output "user_management_function_name" {
 }
 
 # ---------------------------------------------------------------------------
-# Reviewer document filtering + `allowedConfigVersions` scoping wiring (6.4)
+# Reviewer document filtering + `allowedConfigVersions` scoping wiring
 # ---------------------------------------------------------------------------
-# Pre-derived contract fragments the feature-plugin contract output (subtask
-# 6.5) merges in, so the document-list and configuration AppSync resolver
-# Lambdas can read the Users table and apply Reviewer filtering /
-# `allowedConfigVersions` scoping server-side. Exposing them as outputs lets the
-# 6.5 contract task consume them without re-deriving the values.
+# Pre-derived contract fragments the feature-plugin contract output merges in,
+# so the document-list and configuration AppSync resolver Lambdas can read the
+# Users table and apply Reviewer filtering / `allowedConfigVersions` scoping
+# server-side. Exposing them as outputs lets the contract consume them without
+# re-deriving the values.
 
 output "reviewer_filtering_environment" {
   description = <<-EOT
@@ -80,9 +78,8 @@ output "reviewer_filtering_environment" {
     the exact env key the shipped document-list and configuration resolvers read
     (`sources/nested/appsync/src/lambda/{list_documents_gsi_resolver,
     list_documents_range_resolver,configuration_resolver}/index.py`) to apply
-    Reviewer document filtering and `allowedConfigVersions` scoping server-side
-    (Req 3.1, 3.2, 3.3). Merged into the feature-plugin contract's `environment`
-    by subtask 6.5.
+    Reviewer document filtering and `allowedConfigVersions` scoping server-side.
+    Merged into the feature-plugin contract's `environment`.
   EOT
   value       = local.reviewer_filtering_environment
 }
@@ -95,18 +92,18 @@ output "reviewer_filtering_iam_statements" {
     the table and its `EmailIndex` GSI (the resolvers query by email via
     `IndexName="EmailIndex"`), plus `kms:Decrypt`/`DescribeKey` scoped to the
     encryption key when the table is encrypted. Merged into the feature-plugin
-    contract's `iam_statements` by subtask 6.5.
+    contract's `iam_statements`.
   EOT
   value       = local.reviewer_filtering_iam_statements
 }
 
 # ---------------------------------------------------------------------------
-# Round 1 feature-plugin contract (subtask 6.5)
+# Feature-plugin contract
 # ---------------------------------------------------------------------------
-# The Round 1 contract shape — `{ enabled, resolvers, iam_statements,
-# environment, schema_additions }` — that `modules/processing-environment-api`
-# composes via its `enabled_feature_contracts` input, mirroring the CDK
-# accelerator's `api.enable(userManagement)` / `enableInApi()` mechanism.
+# The contract shape — `{ enabled, resolvers, iam_statements, environment,
+# schema_additions }` — that `modules/processing-environment-api` composes via
+# its `enabled_feature_contracts` input, mirroring the CDK accelerator's
+# `api.enable(userManagement)` / `enableInApi()` mechanism.
 #
 # Resolver descriptors match the shape the API module's `feature-plugins.tf`
 # expects (`type` / `field` / `data_source`, with the request/response mapping
@@ -131,7 +128,7 @@ output "reviewer_filtering_iam_statements" {
 # `schema_additions = null`: the `@aws_auth(cognito_groups: [...])` directives
 # and the `User`/`UserList` types already ship in the read-only v0.5.12 schema
 # (`sources/nested/appsync/src/api/schema.graphql`), so no SDL injection is
-# needed (design decision 2).
+# needed.
 locals {
   # Deterministic AppSync data source name (alphanumeric + underscore only) the
   # API module creates from the user-management Lambda ARN and that every
@@ -188,7 +185,7 @@ output "contract" {
     `enabled_feature_contracts` input, mirroring the CDK
     `api.enable(userManagement)` / `enableInApi()` mechanism.
 
-    Carries the Round 1 contract shape
+    Carries the contract shape
     `{ enabled, resolvers, iam_statements, environment, schema_additions }`:
 
       * `resolvers` — the five user-management operations

@@ -11,19 +11,14 @@
 # (`modules/processors/unified-processor/`) via a nested `module "engine"`,
 # routing down the Bedrock-LLM/SageMaker pipeline branch (`use_bda = false`).
 #
-# The legacy monolith resources (its own OCR/classification/extraction/
-# assessment/process-results/summarization/evaluation/rule-validation Lambdas,
-# the Step Functions state machine, the IAM roles/policies, the CloudWatch log
-# groups, and all `sources/patterns/pattern-2/...` references) have been removed.
-# Those responsibilities now live in the shared engine. The engine resources
-# live at `module.engine.*`; the root `moved {}` blocks remap the former
-# per-façade addresses to `module.bedrock_llm_processor[0].module.engine.*`.
+# The façade owns no document-processing resources of its own; that all lives in
+# the shared engine (`module.engine.*`), routed down the Bedrock-LLM pipeline
+# branch (`use_bda = false`).
 
 module "engine" {
   source = "../unified-processor"
 
-  # Engine naming: the engine resources adopt the façade's name so the former
-  # monolith resource names are preserved across the refactor (see moved.tf).
+  # The engine resources adopt the façade's name.
   name = var.name
 
   # ---------------------------------------------------------------------------

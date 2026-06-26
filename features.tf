@@ -1,24 +1,17 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Feature-plugin wiring (Requirement 3 — .enable()-style composition)
+# Feature-plugin wiring (.enable()-style composition)
 #
 # Auxiliary features (MCP, Chat-with-Document, HITL) are modeled as
 # self-contained submodules that each emit an outputs contract which
-# `modules/processing-environment-api` composes via `for_each`
-# (mirroring the CDK accelerator's `api.enable(feature)` mechanism).
-#
-# This file owns the ROOT side of that wiring:
-#   1. `feature_enable` — forwards the legacy `var.api.*` flags to a per-feature
-#      enable decision (deprecation-shim discipline: old flags keep working).
-#   2. `module.mcp_integration` / `module.chat_with_document` — the count-gated
-#      feature submodules.
-#   3. `enabled_feature_contracts` — the map of contracts handed to the API
-#      module, a guarded merge that resolves to {} when every feature is off.
-#
-# Default-off is preserved: a feature is enabled only when its forwarded
-# `var.api.*` flag resolves to true. `try(..., false)` guards missing
-# attributes so an absent flag never enables a feature.
+# `modules/processing-environment-api` composes via `for_each` (mirroring the
+# CDK accelerator's `api.enable(feature)` mechanism). This file owns the ROOT
+# side: forwarding the `var.api.*` flags to a per-feature enable map, the
+# count-gated feature submodules, and the `enabled_feature_contracts` merge that
+# resolves to {} when every feature is off. Default-off is preserved:
+# `try(..., false)` guards missing attributes so an absent flag never enables a
+# feature.
 
 locals {
   # Forward the legacy `var.api.*` feature flags to a per-feature enable map.
@@ -30,17 +23,17 @@ locals {
     mcp                = try(var.api.enable_mcp, false)
     chat_with_document = try(var.api.chat_with_document.enabled, false)
     hitl               = try(var.api.enable_hitl, false)
-    # Round 2 feature plugins (C2/C6). Each is a first-class entry in the
-    # enable map and the enabled_feature_contracts merge below — no new boolean
-    # is added to the monolithic `var.api` object (Req 4.3, 6.2). Default-off:
-    # `try(..., false)` guards a missing object so an absent var never enables.
+    # Feature plugins. Each is a first-class entry in the enable map and the
+    # enabled_feature_contracts merge below — no new boolean is added to the
+    # monolithic `var.api` object. Default-off: `try(..., false)` guards a
+    # missing object so an absent var never enables.
     rbac       = try(var.rbac.enabled, false)
     federation = try(var.idp_federation.enabled, false)
   }
 }
 
 # =============================================================================
-# Validation: RBAC requires a Cognito user_identity (Req 4.4)
+# Validation: RBAC requires a Cognito user_identity
 # =============================================================================
 # Mirrors the CDK `UserManagement` constructor guard, which throws when
 # `props.userIdentity` is absent ("UserManagement requires a UserIdentity").
@@ -52,20 +45,16 @@ locals {
 check "rbac_requires_cognito" {
   assert {
     condition     = !try(var.rbac.enabled, false) || local.user_pool_id != null
-    error_message = "RBAC (var.rbac.enabled = true) requires a Cognito user_identity (user pool). Configure Cognito (set var.user_identity or let the module create a user pool) or disable RBAC. See docs/migration-v0.4.16-to-v0.5.12.md."
+    error_message = "RBAC (var.rbac.enabled = true) requires a Cognito user_identity (user pool). Configure Cognito (set var.user_identity or let the module create a user pool) or disable RBAC."
   }
 }
 
 # =============================================================================
-# MCP integration feature submodule (C5, task 10 — root cutover)
+# MCP integration feature submodule
 # =============================================================================
-# Self-contained AgentCore Gateway MCP stack (renamed `agentcore_mcp_handler`,
-# gateway manager/execution roles, CFN gateway, Cognito OAuth client + resource
-# server). Owns no AppSync resolvers, so its contract is a composition signal
-# only. The old MCP stack that previously lived in
-# `modules/processing-environment-api/mcp-integration.tf` is removed in this same
-# change; the `moved {}` blocks in moved.tf remap the old API-module addresses
-# to this module (0 destroy / 0 create).
+# Self-contained AgentCore Gateway MCP stack (`agentcore_mcp_handler`, gateway
+# manager/execution roles, CFN gateway, Cognito OAuth client + resource server).
+# Owns no AppSync resolvers, so its contract is a composition signal only.
 #
 # GovCloud guard + default-off live inside the submodule; the root only decides
 # whether to instantiate it at all (forwarded `var.api.enable_mcp`).
@@ -104,7 +93,7 @@ module "mcp_integration" {
 }
 
 # =============================================================================
-# Chat-with-Document feature submodule (C13, task 11 — root cutover)
+# Chat-with-Document feature submodule
 # =============================================================================
 # Self-contained async streaming chat submodule: owns its Lambdas, session
 # table, and AppSync data sources, and emits the two chat resolvers
@@ -157,18 +146,17 @@ module "chat_with_document" {
 }
 
 # =============================================================================
-# RBAC feature submodule (C2, Round 2 — Req 4.1/4.3)
+# RBAC feature submodule
 # =============================================================================
 # Self-contained RBAC stack (CDK `UserManagement` analog): the four Cognito
 # groups (Admin/Author/Reviewer/Viewer), the `Users` DynamoDB table, the
 # user-management Lambda, and the server-side authorization surface. Emits the
-# Round 1 feature-plugin contract that `module.processing_environment_api`
-# composes via `enabled_feature_contracts` (below), exactly the way it composes
-# MCP/Chat.
+# feature-plugin contract that `module.processing_environment_api` composes via
+# `enabled_feature_contracts` (below), exactly the way it composes MCP/Chat.
 #
-# Default-off (Req 1.6): instantiated only when `var.rbac.enabled` is true. RBAC
-# requires a Cognito user pool; that constraint is enforced at plan time by a
-# root `check {}` (task 8.2).
+# Default-off: instantiated only when `var.rbac.enabled` is true. RBAC requires
+# a Cognito user pool; that constraint is enforced at plan time by a root
+# `check {}`.
 module "rbac" {
   source = "./modules/features/rbac"
   count  = local.feature_enable.rbac ? 1 : 0
@@ -181,7 +169,7 @@ module "rbac" {
   user_pool_id  = local.user_pool_id
   user_pool_arn = local.user_pool_arn
 
-  # Group-name overrides (Req 1.5) — defaults to Admin/Author/Reviewer/Viewer.
+  # Group-name overrides — defaults to Admin/Author/Reviewer/Viewer.
   group_names = try(var.rbac.group_names, {})
 
   allowed_signup_email_domains = try(var.rbac.allowed_signup_email_domains, "")
@@ -211,17 +199,17 @@ module "rbac" {
 }
 
 # =============================================================================
-# External SAML/OIDC IdP federation feature submodule (C6, Round 2 — Req 6.1/6.2)
+# External SAML/OIDC IdP federation feature submodule
 # =============================================================================
 # Self-contained federation stack: the Cognito identity provider (SAML or
 # OIDC), the OIDC client-secret resolver (no plaintext in state), and the
 # group-mapping trigger Lambda that maps external groups to the four RBAC
-# groups. Always emits the Round 1 contract (Req 6.2); default-off provisioning
-# is gated by `var.idp_federation.enabled` (Req 5.6).
+# groups. Always emits the feature-plugin contract; default-off provisioning is
+# gated by `var.idp_federation.enabled`.
 #
 # When RBAC is also enabled, the group-mapping targets the RBAC submodule's
-# resolved group names so federated users land in the four roles consistently
-# (Req 6.3); otherwise it falls back to the configured/default RBAC group names.
+# resolved group names so federated users land in the four roles consistently;
+# otherwise it falls back to the configured/default RBAC group names.
 module "idp_federation" {
   source = "./modules/features/idp-federation"
   count  = local.feature_enable.federation ? 1 : 0
@@ -245,7 +233,7 @@ module "idp_federation" {
   user_pool_id        = local.user_pool_id
   user_pool_client_id = local.user_pool_client_id
 
-  # Group-mapping targets the RBAC group names (Req 6.3): use the RBAC
+  # Group-mapping targets the RBAC group names: use the RBAC
   # submodule's resolved names when RBAC is enabled, otherwise the
   # configured/default group names (casing-correct Admin/Author/Reviewer/Viewer
   # keys the federation module expects).
@@ -293,8 +281,8 @@ locals {
   )
 
   # Map of enabled feature-plugin contracts composed by
-  # `module.processing_environment_api` (its `enabled_feature_contracts` input,
-  # task 6.1). Guarded merge: each per-feature entry contributes its contract
+  # `module.processing_environment_api` (its `enabled_feature_contracts` input).
+  # Guarded merge: each per-feature entry contributes its contract
   # only when the feature is enabled, otherwise an empty map, so an all-off
   # configuration resolves to {} (a no-op — default-off preserved).
   #
@@ -318,7 +306,7 @@ locals {
 }
 
 # =============================================================================
-# Tracking-table GSI backfill (C1 — default-off, operator-triggered)
+# Tracking-table GSI backfill (default-off, operator-triggered)
 # =============================================================================
 # Provisions the `backfill_gsi_attributes` worker Lambda + the Step Functions
 # state machine that drives it as a parallel-scan map over the tracking table,
@@ -329,7 +317,7 @@ locals {
 #
 # Crucially, even when enabled this module never auto-runs on apply — it creates
 # the machinery only. The operator starts the run explicitly via
-# `module.tracking_gsi_backfill[0].state_machine_arn` (Req 8.4). `try(...)`
+# `module.tracking_gsi_backfill[0].state_machine_arn`. `try(...)`
 # guards a missing object so an absent var never enables the backfill.
 module "tracking_gsi_backfill" {
   source = "./modules/tracking-gsi-backfill"

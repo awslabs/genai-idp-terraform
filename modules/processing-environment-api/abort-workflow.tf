@@ -3,7 +3,7 @@
 #
 # Abort Workflow sub-feature (v0.4.10+)
 # Always-on (no feature flag) — abortWorkflow is a core API operation.
-# Sourced from CDK nested appsync tree (DEC-007).
+# Sourced from the CDK nested appsync tree.
 
 # =============================================================================
 # IAM Role: abort_workflow

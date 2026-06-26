@@ -1,48 +1,43 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the Round 2 root RBAC + IdP-federation feature
-# wiring (task 8.3 — features.tf `local.feature_enable.{rbac,federation}`, the
-# count-gated `module.rbac` / `module.idp_federation`, the
-# `local.enabled_feature_contracts` merge, and the `check "rbac_requires_cognito"`
-# block).
+# Native `terraform test` for the root RBAC + IdP-federation feature wiring
+# (features.tf `local.feature_enable.{rbac,federation}`, the count-gated
+# `module.rbac` / `module.idp_federation`, the `local.enabled_feature_contracts`
+# merge, and the `check "rbac_requires_cognito"` block).
 #
 # This file is the RBAC/federation analog of feature-plugin-enablement.tftest.hcl
 # (which covers MCP/Chat) — it reuses that file's offline harness exactly and is
 # a SEPARATE file so it does not clobber the existing one.
 #
-# Properties asserted (Validates: Requirements 1.2, 1.6, 4.2, 4.4, 5.6):
+# What this verifies:
 #
-#   * Property 1 — Feature plugin present iff enabled (RBAC + federation
-#     default-off). Default (no var.rbac / var.idp_federation) →
-#     length(module.rbac) == 0, length(module.idp_federation) == 0, and neither
-#     "rbac" nor "federation" appears in keys(local.enabled_feature_contracts).
-#     RBAC on WITH Cognito → module.rbac instantiated + "rbac" in the contract
-#     map; federation on → module.idp_federation instantiated + "federation" in
-#     the contract map. (Req 1.2, 1.6, 4.2, 5.6)
+#   * Feature plugin present iff enabled (RBAC + federation default-off).
+#     Default (no var.rbac / var.idp_federation) → length(module.rbac) == 0,
+#     length(module.idp_federation) == 0, and neither "rbac" nor "federation"
+#     appears in keys(local.enabled_feature_contracts). RBAC on WITH Cognito →
+#     module.rbac instantiated + "rbac" in the contract map; federation on →
+#     module.idp_federation instantiated + "federation" in the contract map.
 #
-#   * Property 7 — RBAC without Cognito fails at plan time. var.rbac.enabled =
-#     true with NO Cognito (no var.user_identity, api/web_ui off ⇒
-#     local.user_pool_id == null) ⇒ the root `check "rbac_requires_cognito"`
-#     reports a failure during `command = plan`. (Req 4.4)
+#   * RBAC without Cognito fails at plan time. var.rbac.enabled = true with NO
+#     Cognito (no var.user_identity, api/web_ui off ⇒ local.user_pool_id ==
+#     null) ⇒ the root `check "rbac_requires_cognito"` reports a failure during
+#     `command = plan`.
 #
-#   * Property 4 — Multi-group membership grants the union of permissions.
-#     PLAN-TIME PROVABLE PORTION ONLY: assert module.rbac creates exactly the
-#     four Cognito groups Admin/Author/Reviewer/Viewer (the groups the shipped
-#     `@aws_auth(cognito_groups: […])` directives resolve against), with the
-#     default-or-override names. The RUNTIME union-of-permissions semantics are
-#     AppSync-enforced (a caller in a subset of groups receives the union of
-#     those groups' directives) and are validated via the deployed integration
-#     examples per the tasks.md PBT-framing note — NOT at plan time, since
+#   * RBAC creates exactly the four Cognito groups Admin/Author/Reviewer/Viewer
+#     (the groups the shipped `@aws_auth(cognito_groups: […])` directives
+#     resolve against), with the default-or-override names. The runtime
+#     union-of-permissions semantics are AppSync-enforced (a caller in a subset
+#     of groups receives the union of those groups' directives) and are
+#     validated via the deployed integration examples — NOT at plan time, since
 #     AppSync directive evaluation is not a plannable Terraform value.
 #
-# check{}-vs-expect_failures note (same mechanism as exactly-one-processor and
-# private-endpoint-gap tftests): a `check {}` assertion failure is only a plan
+# check{}-vs-expect_failures note: a `check {}` assertion failure is only a plan
 # *warning* in a normal plan, but `terraform test`'s
 # `expect_failures = [check.<name>]` is the first-class way to assert a check
 # failed during `command = plan` — the run PASSES iff the named check reported a
-# failure. Property 7 is asserted that way; the passing cases assert clean
-# module counts / contract-map keys / group names.
+# failure. The RBAC-without-Cognito case is asserted that way; the passing cases
+# assert clean module counts / contract-map keys / group names.
 #
 # Offline harness (identical to feature-plugin-enablement.tftest.hcl): aws +
 # an aliased aws.us-east-1 provider are mocked (mock_data supplies real
@@ -54,8 +49,6 @@
 # and the RBAC-requires-Cognito check — RBAC and federation modules do not
 # consume `module.processing_environment_api`, so this stays a faithful
 # ROOT-level feature-wiring test (no override_module needed for the API module).
-#
-# Validates: Requirements 1.2, 1.6, 4.2, 4.4, 5.6
 
 mock_provider "aws" {
   mock_data "aws_partition" {
@@ -136,9 +129,9 @@ variables {
 # block per-run below.
 
 # ---------------------------------------------------------------------------
-# Property 1 (default-off): no var.rbac / var.idp_federation set → neither
-# feature module is instantiated and neither contract is in the merge map. This
-# preserves the pre-Round-2 single-tenant auth behavior (Req 1.6, 5.6).
+# Default-off: no var.rbac / var.idp_federation set → neither feature module is
+# instantiated and neither contract is in the merge map. This preserves the
+# single-tenant auth behavior.
 # ---------------------------------------------------------------------------
 run "rbac_and_federation_off_by_default" {
   command = plan
@@ -157,11 +150,11 @@ run "rbac_and_federation_off_by_default" {
   }
   assert {
     condition     = length(module.rbac) == 0
-    error_message = "RBAC submodule must NOT be instantiated when RBAC is disabled (default-off, Req 1.6)."
+    error_message = "RBAC submodule must NOT be instantiated when RBAC is disabled (default-off)."
   }
   assert {
     condition     = length(module.idp_federation) == 0
-    error_message = "Federation submodule must NOT be instantiated when federation is disabled (default-off, Req 5.6)."
+    error_message = "Federation submodule must NOT be instantiated when federation is disabled (default-off)."
   }
   assert {
     condition     = !contains(keys(local.enabled_feature_contracts), "rbac")
@@ -174,11 +167,10 @@ run "rbac_and_federation_off_by_default" {
 }
 
 # ---------------------------------------------------------------------------
-# Property 1 (RBAC on WITH Cognito) + Property 4 (four groups, default names):
-# var.rbac.enabled = true and a Cognito user pool present (local.user_pool_id !=
-# null) → module.rbac instantiated, "rbac" in the contract map; federation stays
-# off. The RBAC submodule's resolved group_names map carries exactly the four
-# canonical roles — the plan-time-provable portion of Property 4.
+# RBAC on WITH Cognito (four groups, default names): var.rbac.enabled = true and
+# a Cognito user pool present (local.user_pool_id != null) → module.rbac
+# instantiated, "rbac" in the contract map; federation stays off. The RBAC
+# submodule's resolved group_names map carries exactly the four canonical roles.
 # ---------------------------------------------------------------------------
 run "rbac_enabled_with_cognito_present" {
   command = plan
@@ -207,11 +199,11 @@ run "rbac_enabled_with_cognito_present" {
   }
   assert {
     condition     = length(module.rbac) == 1
-    error_message = "RBAC submodule must be instantiated when var.rbac.enabled = true (Req 4.2)."
+    error_message = "RBAC submodule must be instantiated when var.rbac.enabled = true."
   }
   assert {
     condition     = contains(keys(local.enabled_feature_contracts), "rbac")
-    error_message = "rbac contract must be present in enabled_feature_contracts when RBAC is enabled (Req 4.2)."
+    error_message = "rbac contract must be present in enabled_feature_contracts when RBAC is enabled."
   }
   # Federation stays off — only RBAC was enabled.
   assert {
@@ -223,9 +215,9 @@ run "rbac_enabled_with_cognito_present" {
     error_message = "federation contract must be absent when only RBAC is enabled."
   }
 
-  # Property 4 (plan-time portion): exactly the four Cognito groups, default
-  # names. group_names is keyed by canonical role and sourced from the four
-  # aws_cognito_user_group resources, so this proves exactly four groups exist.
+  # Exactly the four Cognito groups, default names. group_names is keyed by
+  # canonical role and sourced from the four aws_cognito_user_group resources,
+  # so this proves exactly four groups exist.
   assert {
     condition     = length(keys(module.rbac[0].group_names)) == 4
     error_message = "RBAC must create exactly four Cognito groups (Admin/Author/Reviewer/Viewer)."
@@ -251,9 +243,9 @@ run "rbac_enabled_with_cognito_present" {
 }
 
 # ---------------------------------------------------------------------------
-# Property 4 (override names): a group_names override renames the four groups
-# but still creates exactly four — the default-on behavior of the four roles is
-# unchanged (Req 1.5), only the names differ.
+# Override names: a group_names override renames the four groups but still
+# creates exactly four — the default-on behavior of the four roles is unchanged,
+# only the names differ.
 # ---------------------------------------------------------------------------
 run "rbac_group_name_overrides_still_four_groups" {
   command = plan
@@ -290,16 +282,15 @@ run "rbac_group_name_overrides_still_four_groups" {
       module.rbac[0].group_names["Reviewer"] == "Reviewers" &&
       module.rbac[0].group_names["Viewer"] == "Viewers"
     )
-    error_message = "Overridden RBAC group names must be reflected on the four groups (Req 1.5)."
+    error_message = "Overridden RBAC group names must be reflected on the four groups."
   }
 }
 
 # ---------------------------------------------------------------------------
-# Property 1 (federation on WITH Cognito): var.idp_federation.enabled = true →
+# Federation on WITH Cognito: var.idp_federation.enabled = true →
 # module.idp_federation instantiated, "federation" in the contract map. RBAC
-# stays off here, demonstrating the two plugins toggle independently (Req 6.2,
-# 5.6). Federation always emits its contract; here it is composed because the
-# feature is enabled.
+# stays off here, demonstrating the two plugins toggle independently. Federation
+# always emits its contract; here it is composed because the feature is enabled.
 # ---------------------------------------------------------------------------
 run "federation_enabled_with_cognito_present" {
   command = plan
@@ -328,7 +319,7 @@ run "federation_enabled_with_cognito_present" {
   }
   assert {
     condition     = length(module.idp_federation) == 1
-    error_message = "Federation submodule must be instantiated when var.idp_federation.enabled = true (Req 6.2)."
+    error_message = "Federation submodule must be instantiated when var.idp_federation.enabled = true."
   }
   assert {
     condition     = contains(keys(local.enabled_feature_contracts), "federation")
@@ -346,11 +337,11 @@ run "federation_enabled_with_cognito_present" {
 }
 
 # ---------------------------------------------------------------------------
-# Property 7 (RBAC requires Cognito): var.rbac.enabled = true with NO Cognito
-# (no var.user_identity; api + web_ui off ⇒ module.user_identity count = 0 ⇒
+# RBAC requires Cognito: var.rbac.enabled = true with NO Cognito (no
+# var.user_identity; api + web_ui off ⇒ module.user_identity count = 0 ⇒
 # local.user_pool_id == null). The root `check "rbac_requires_cognito"` must
 # report a failure during plan — asserted via expect_failures (the first-class,
-# faithful `terraform test` mechanism for a check{} firing at plan). (Req 4.4)
+# faithful `terraform test` mechanism for a check{} firing at plan).
 #
 # Why module.rbac is replaced with override_module here:
 #   With RBAC enabled, module.rbac is count-gated to one instance — and with no
@@ -402,7 +393,7 @@ run "rbac_without_cognito_fails_at_plan" {
   # the guard fires.
   assert {
     condition     = local.feature_enable.rbac == true && local.user_pool_id == null
-    error_message = "Property 7 scenario must be RBAC-enabled with no Cognito user pool (local.user_pool_id == null)."
+    error_message = "The scenario must be RBAC-enabled with no Cognito user pool (local.user_pool_id == null)."
   }
 
   expect_failures = [

@@ -4,14 +4,14 @@
 # Local values for Bedrock LLM Processor
 
 locals {
-  # B8 — BedrockHubRoleArn cross-account assume-role (v0.5.12).
+  # BedrockHubRoleArn cross-account assume-role (v0.5.12).
   # When var.bedrock_hub_role_arn is non-empty, the Bedrock-calling processing
   # Lambdas assume that hub-account role for Bedrock calls. The exact env keys
   # below are read by sources/lib/idp_common_pkg/idp_common/bedrock/session.py:
   #   BEDROCK_ASSUME_ROLE_ARN          -> os.environ["BEDROCK_ASSUME_ROLE_ARN"]
   #   BEDROCK_ASSUME_ROLE_EXTERNAL_ID  -> os.environ["BEDROCK_ASSUME_ROLE_EXTERNAL_ID"]
-  # When unset, the map is empty so no env var is rendered (no B8-attributable
-  # diff on same-account deployments).
+  # When unset, the map is empty so no env var is rendered (no diff on
+  # same-account deployments).
   bedrock_hub_enabled = var.bedrock_hub_role_arn != ""
 
   bedrock_assume_role_env = local.bedrock_hub_enabled ? merge(

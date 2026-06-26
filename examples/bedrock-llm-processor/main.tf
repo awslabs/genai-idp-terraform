@@ -392,12 +392,11 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
 
 # Read configuration from config library (pattern-2 for Bedrock LLM processor)
 #
-# Round 3 (v0.5.12-tf.2): demonstrate the three config-shape `x-aws-idp-*` schema
-# flags (B9/B10/B12) by appending the classes in
-# config-overlays/round3-x-aws-idp-flags.yaml onto the seeded config's `classes`
-# list. The flags are runtime-enforced upstream and pass through the
-# configuration seeder unchanged — no new AWS resources, no key allow-listing.
-# Toggle the demonstration via var.demo_x_aws_idp_flags (default true).
+# Optionally demonstrate the config-shape `x-aws-idp-*` schema flags by appending
+# the classes in config-overlays/round3-x-aws-idp-flags.yaml onto the seeded
+# config's `classes` list. The flags are runtime-enforced upstream and pass
+# through the configuration seeder unchanged — no new AWS resources, no key
+# allow-listing. Toggle via var.demo_x_aws_idp_flags (default true).
 locals {
   config_file_path = var.config_file_path
   config_yaml      = file(local.config_file_path)
@@ -499,7 +498,7 @@ module "genai_idp_accelerator" {
     enable_error_analyzer       = var.api.enable_error_analyzer
     enable_mcp                  = var.api.enable_mcp
 
-    # v0.5.11 — version-check resolver (C14). Empty bucket ⇒ default-off.
+    # v0.5.11 — version-check resolver. Empty bucket ⇒ default-off.
     public_artifacts_bucket = var.api.public_artifacts_bucket
     public_artifacts_prefix = var.api.public_artifacts_prefix
     public_artifacts_region = var.api.public_artifacts_region
@@ -518,7 +517,7 @@ module "genai_idp_accelerator" {
   chat_with_document = var.chat_with_document
   process_changes    = var.process_changes
 
-  # RBAC + IdP federation feature plugins (v0.5.12, C2 + C6).
+  # RBAC + IdP federation feature plugins (v0.5.12).
   # Both wire through the root feature-plugin path. RBAC requires the Cognito
   # user pool this example provisions (enforced at plan time by the root
   # `rbac_requires_cognito` check). When both are enabled, the federation

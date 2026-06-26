@@ -1,13 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Test-only fixture for the RBAC schema-directive invariant (Property 3, task
-# 6.7). The production RBAC module does NOT read the GraphQL schema (the
-# `@aws_auth` directives already ship in the read-only v0.5.12 snapshot — design
-# decision 2 — so RBAC injects no SDL). This fixture exists solely so the
-# `schema_and_scoping.tftest.hcl` run can load the shipped schema and assert the
-# directive invariant statically against it, without adding a schema read to the
-# real module.
+# Test-only fixture for the RBAC schema-directive invariant. The production RBAC
+# module does NOT read the GraphQL schema (the `@aws_auth` directives already
+# ship in the read-only v0.5.12 snapshot, so RBAC injects no SDL). This fixture
+# exists solely so the `schema_and_scoping.tftest.hcl` run can load the shipped
+# schema and assert the directive invariant statically against it, without adding
+# a schema read to the real module.
 #
 # It reads the read-only schema verbatim and exposes it as an output; all
 # `regexall(...)` invariant checks live in the test file so the assertions are

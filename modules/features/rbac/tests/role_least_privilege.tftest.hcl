@@ -1,17 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the RBAC submodule — Property 5 (task 6.6): the
-# user-management execution role is least-privilege.
+# Native `terraform test` for the RBAC submodule — the user-management
+# execution role is least-privilege.
 #
-# Property 5 (Requirement 2.4): the user-management role's inline policy grants
-# NO wildcard ("*") resource on the Cognito-admin actions or the Users-table
-# actions. The Cognito statement is scoped to exactly the supplied user-pool ARN
-# and the DynamoDB statement is scoped to exactly the Users table ARN (+ its
-# index), never "*".
+# Verifies the user-management role's inline policy grants NO wildcard ("*")
+# resource on the Cognito-admin actions or the Users-table actions. The Cognito
+# statement is scoped to exactly the supplied user-pool ARN and the DynamoDB
+# statement is scoped to exactly the Users table ARN (+ its index), never "*".
 #
-# This file is COMPLEMENTARY to groups.tftest.hcl (Property 2 — four groups,
-# default/override names), which it does not touch. `terraform test` runs both.
+# This file is COMPLEMENTARY to groups.tftest.hcl (four groups, default/override
+# names), which it does not touch. `terraform test` runs both.
 #
 # Offline harness: the aws provider is mocked. The inline policy
 # (`aws_iam_role_policy.user_management.policy`) is `jsonencode(...)` over the
@@ -41,7 +40,7 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# Property 5: least-privilege user-management role — no wildcard resources.
+# Least-privilege user-management role — no wildcard resources.
 # ---------------------------------------------------------------------------
 run "user_management_role_is_least_privilege" {
   command = apply
@@ -106,8 +105,8 @@ run "user_management_role_is_least_privilege" {
 }
 
 # ---------------------------------------------------------------------------
-# Property 5 holds under group-name overrides too: renaming groups changes only
-# names, never the role's resource scoping.
+# Least-privilege holds under group-name overrides too: renaming groups changes
+# only names, never the role's resource scoping.
 # ---------------------------------------------------------------------------
 run "least_privilege_preserved_under_overrides" {
   command = apply

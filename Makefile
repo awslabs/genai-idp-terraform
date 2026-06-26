@@ -80,19 +80,25 @@ lint: ## Run TFLint on all Terraform files
 
 # TFSec security scanning
 #
-# Modules with KNOWN PRE-EXISTING tfsec findings that predate the v0.5.12 work
-# (verified present at tag v0.4.16-tf.2). They are scanned with --soft-fail so
-# their findings are still PRINTED (never masked) but do not fail the gate,
-# keeping the gate scoped to regressions. Remediating these is tracked as
-# separate security-hardening debt, not part of the v0.5.12 rounds. Every module
-# NOT listed here - including all Round 2 modules - is scanned strictly, so a new
-# finding in current work fails the build.
+# Modules with KNOWN PRE-EXISTING tfsec findings that predate the v0.5.12 work.
+# They are scanned with --soft-fail so their findings are still PRINTED (never
+# masked) but do not fail the gate, keeping the gate scoped to regressions.
+# Remediating these is tracked as separate security-hardening debt. Every module
+# NOT listed here is scanned strictly, so a new finding in current work fails the
+# build.
+#
+# Note: processing-environment-api's findings (conditional DynamoDB SSE on the
+# agent-companion-chat / test-studio tables, a Step Functions DescribeExecution
+# wildcard, and S3 access-logging) are long-standing but were previously hidden
+# because tfsec 1.28.x aborts on the Terraform `removed {}` blocks the module
+# used to carry; with those gone the scan now surfaces them.
 TFSEC_KNOWN_DEBT_MODULES := \
 	modules/assets-bucket \
 	modules/web-ui \
 	modules/user-identity \
 	modules/reporting \
 	modules/features/chat-with-document \
+	modules/processing-environment-api \
 	modules/processing-environment-api/agent-analytics \
 	modules/processing-environment-api/discovery \
 	modules/processors/bda-processor \

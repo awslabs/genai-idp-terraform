@@ -170,21 +170,10 @@ resource "aws_security_group" "vpc_endpoints" {
   })
 }
 
-# VPC Endpoints for AWS services (based on CDK sample requirements)
-#
-# These were previously ~17 inline `aws_vpc_endpoint.*` resources. Round 2
-# (v0.5.12-tf.1) generalizes that set into the reusable, partition-aware
-# `modules/vpc-endpoints/` building block. The module is instantiated only when
-# this example creates its own VPC (existing-VPC consumers are expected to bring
-# their own endpoints), preserving the original `local.create_vpc_resources`
-# gate. The `moved {}` blocks below remap each old inline address onto the
-# module so an in-place upgrade does not destroy/recreate live endpoints —
-# verified by a 0-destroy/0-create plan (Req 7.5, 12.1).
-#
-# `enabled_interface_endpoints` is constrained to exactly the service set the
-# example provisioned inline (no ssmmessages/ec2messages) so the migration plan
-# stays additive-free. The `appsync-api` endpoint is included to demonstrate B3
-# + private networking: it is required when `api.visibility = "PRIVATE"`.
+# VPC endpoints for AWS services, via the reusable partition-aware
+# `modules/vpc-endpoints/` building block. Instantiated only when this example
+# creates its own VPC (existing-VPC consumers bring their own endpoints). The
+# `appsync-api` endpoint is required when `api.visibility = "PRIVATE"`.
 module "vpc_endpoints" {
   source = "../../modules/vpc-endpoints"
 
@@ -220,94 +209,6 @@ module "vpc_endpoints" {
   route_table_ids         = aws_route_table.isolated[*].id
 
   tags = var.tags
-}
-
-# State migration: preserve the existing endpoint addresses (Req 7.5, 12.1).
-# Each old inline `aws_vpc_endpoint.<name>[0]` maps onto the module's
-# `for_each`-keyed interface endpoint or `count`-indexed gateway endpoint.
-moved {
-  from = aws_vpc_endpoint.ssm[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["ssm"]
-}
-
-moved {
-  from = aws_vpc_endpoint.cloudwatch_logs[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["logs"]
-}
-
-moved {
-  from = aws_vpc_endpoint.cloudwatch_monitoring[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["monitoring"]
-}
-
-moved {
-  from = aws_vpc_endpoint.kms[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["kms"]
-}
-
-moved {
-  from = aws_vpc_endpoint.bedrock[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["bedrock"]
-}
-
-moved {
-  from = aws_vpc_endpoint.bedrock_runtime[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["bedrock-runtime"]
-}
-
-moved {
-  from = aws_vpc_endpoint.bedrock_agent_runtime[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["bedrock-agent-runtime"]
-}
-
-moved {
-  from = aws_vpc_endpoint.sts[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["sts"]
-}
-
-moved {
-  from = aws_vpc_endpoint.codebuild[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["codebuild"]
-}
-
-moved {
-  from = aws_vpc_endpoint.eventbridge[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["events"]
-}
-
-moved {
-  from = aws_vpc_endpoint.lambda[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["lambda"]
-}
-
-moved {
-  from = aws_vpc_endpoint.sqs[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["sqs"]
-}
-
-moved {
-  from = aws_vpc_endpoint.step_functions[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["states"]
-}
-
-moved {
-  from = aws_vpc_endpoint.textract[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["textract"]
-}
-
-moved {
-  from = aws_vpc_endpoint.appsync_api[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.interface["appsync-api"]
-}
-
-moved {
-  from = aws_vpc_endpoint.s3[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.s3_gateway[0]
-}
-
-moved {
-  from = aws_vpc_endpoint.dynamodb[0]
-  to   = module.vpc_endpoints[0].aws_vpc_endpoint.dynamodb_gateway[0]
 }
 
 # Create KMS key for encryption

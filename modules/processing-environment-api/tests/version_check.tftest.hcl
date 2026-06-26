@@ -1,19 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for C14 — the version-check sub-feature on the
-# processing-environment-api module (task 2.2).
+# Native `terraform test` for the version-check sub-feature on the
+# processing-environment-api module.
 #
-# Property 2 — Version check is input-gated and least-privilege
-# (Requirements 5.1, 5.3, 5.4):
+# Version check is input-gated and least-privilege:
 #   * bucket unset (public_artifacts_bucket = "") -> 0 version_check Lambda,
 #     AppSync data source, and resolver (default-off, no plan diff);
 #   * bucket set -> the Lambda, data source, and resolver are all present, the
 #     Lambda env `PUBLIC_ARTIFACTS_BUCKET` equals the input, and the resolver
 #     role's S3 statement is scoped to exactly that bucket (its arn + `/*`),
 #     never a `*` wildcard (asserted via `jsondecode` on the inline policy).
-#
-# Validates: Requirements 5.1, 5.3, 5.4
 #
 # Gating is input-derived (`local.version_check_enabled = var.public_artifacts_bucket
 # != ""`), so the count assertions and the env assertion are known at `plan`.
@@ -107,7 +104,7 @@ variables {
 
 # ---------------------------------------------------------------------------
 # Bucket unset -> the version-check feature is inert: 0 Lambda / DS / resolver
-# (Req 5.4, default-off).
+# (default-off).
 # ---------------------------------------------------------------------------
 run "version_check_disabled_when_bucket_unset" {
   command = plan
@@ -136,8 +133,8 @@ run "version_check_disabled_when_bucket_unset" {
 }
 
 # ---------------------------------------------------------------------------
-# Bucket set -> all three resources present and the env carries the bucket input
-# (Req 5.1, 5.3). Input-derived, so `plan` is sufficient here.
+# Bucket set -> all three resources present and the env carries the bucket input.
+# Input-derived, so `plan` is sufficient here.
 # ---------------------------------------------------------------------------
 run "version_check_enabled_when_bucket_set" {
   command = plan
@@ -170,7 +167,7 @@ run "version_check_enabled_when_bucket_set" {
   }
 
   # The Lambda env must thread the bucket input under the exact key the shipped
-  # resolver reads (Req 5.2/5.3 grounding).
+  # resolver reads.
   assert {
     condition     = aws_lambda_function.version_check_resolver[0].environment[0].variables["PUBLIC_ARTIFACTS_BUCKET"] == "my-public-idp-artifacts"
     error_message = "The Lambda env PUBLIC_ARTIFACTS_BUCKET must equal the public_artifacts_bucket input."
@@ -179,7 +176,7 @@ run "version_check_enabled_when_bucket_set" {
 
 # ---------------------------------------------------------------------------
 # Bucket set -> the execution role's S3 statement is least-privilege: scoped to
-# exactly the bucket arn + `/*`, never a `*` wildcard (Req 5.3). The inline
+# exactly the bucket arn + `/*`, never a `*` wildcard. The inline
 # policy JSON embeds the computed log-group ARN, so this run uses `apply` to
 # materialize it for `jsondecode`.
 # ---------------------------------------------------------------------------

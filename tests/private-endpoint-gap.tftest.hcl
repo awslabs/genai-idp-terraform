@@ -2,14 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Native `terraform test` for the root PRIVATE endpoint-gap validation
-# (task 5.2 — the `check "private_appsync_endpoint_present"` block in network.tf).
+# (the `check "private_appsync_endpoint_present"` block in network.tf).
 #
-# Property 13 (gap portion, Requirements 8.4, 9.3): the check fails if and only
-# if `var.api.visibility == "PRIVATE"` AND the `appsync-api` interface VPC
-# endpoint is absent from the provisioned set (the keys of
-# `module.vpc_endpoints[0].interface_endpoint_ids`). On every other path
-# (GLOBAL/unset, or PRIVATE *with* the appsync-api endpoint present) the check
-# holds.
+# Verifies the check fails if and only if `var.api.visibility == "PRIVATE"` AND
+# the `appsync-api` interface VPC endpoint is absent from the provisioned set
+# (the keys of `module.vpc_endpoints[0].interface_endpoint_ids`). On every other
+# path (GLOBAL/unset, or PRIVATE *with* the appsync-api endpoint present) the
+# check holds.
 #
 # How the gap arises (and why this is the faithful gap case):
 #   network.tf wires `_vpc_endpoint_appsync = appsync_visibility_private ?
@@ -17,7 +16,7 @@
 #   a private-network deployment is active AND visibility is PRIVATE the
 #   appsync-api endpoint is *always* provisioned. The only way to reach
 #   "PRIVATE without appsync-api" is therefore the operator-error case the check
-#   exists to catch (Req 8.4): visibility set to PRIVATE while no private-network
+#   exists to catch: visibility set to PRIVATE while no private-network
 #   deployment is configured (var.private_network = null / empty subnets), so
 #   `module.vpc_endpoints` is count = 0 and the provisioned set is empty ({}).
 #   That is exactly the iff boundary this test pins.
@@ -40,8 +39,6 @@
 # checks — the AppSync API module is never instantiated, so this stays a faithful
 # ROOT-level test of the gap check rather than of API-module internals
 # (var.api.visibility is read by the check directly, independent of api.enabled).
-#
-# Validates: Requirements 8.4, 9.3, Property 13 (gap portion)
 
 mock_provider "aws" {
   mock_data "aws_partition" {
@@ -243,8 +240,8 @@ run "private_with_appsync_endpoint_passes" {
 # ---------------------------------------------------------------------------
 # PRIVATE *without* a private-network deployment → the appsync-api endpoint is
 # absent from the (empty) provisioned set → the gap check FIRES. This is the
-# operator-error case Req 8.4 exists to surface at plan time, and the "gap" half
-# of the iff.
+# operator-error case the check exists to surface at plan time, and the "gap"
+# half of the iff.
 # ---------------------------------------------------------------------------
 run "private_without_appsync_endpoint_fails" {
   command = plan

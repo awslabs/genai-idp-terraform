@@ -59,5 +59,5 @@ No modules.
 | <a name="output_default_seeded"></a> [default\_seeded](#output\_default\_seeded) | Result of seeding the Default configuration |
 | <a name="output_lambda_function_arn"></a> [lambda\_function\_arn](#output\_lambda\_function\_arn) | ARN of the configuration seeder Lambda function |
 | <a name="output_lambda_function_name"></a> [lambda\_function\_name](#output\_lambda\_function\_name) | Name of the configuration seeder Lambda function |
-| <a name="output_managed_versions_seeded"></a> [managed\_versions\_seeded](#output\_managed\_versions\_seeded) | Names of the managed baseline configuration versions seeded with Managed = true (B11). |
+| <a name="output_managed_versions_seeded"></a> [managed\_versions\_seeded](#output\_managed\_versions\_seeded) | Names of the managed baseline configuration versions seeded with Managed = true. |
 | <a name="output_schema_seeded"></a> [schema\_seeded](#output\_schema\_seeded) | Result of seeding the Schema |

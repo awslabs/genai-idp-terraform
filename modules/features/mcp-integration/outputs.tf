@@ -30,12 +30,12 @@ output "enabled" {
 }
 
 output "mcp_handler_function_arn" {
-  description = "ARN of the renamed agentcore_mcp_handler Lambda (v0.5.3 rename of agentcore_analytics_processor)."
+  description = "ARN of the agentcore_mcp_handler Lambda."
   value       = local.enable_mcp_effective ? aws_lambda_function.agentcore_mcp_handler[0].arn : null
 }
 
 output "mcp_handler_function_name" {
-  description = "Function name of the agentcore_mcp_handler Lambda (preserved across the rename for state continuity)."
+  description = "Function name of the agentcore_mcp_handler Lambda."
   value       = local.enable_mcp_effective ? aws_lambda_function.agentcore_mcp_handler[0].function_name : null
 }
 

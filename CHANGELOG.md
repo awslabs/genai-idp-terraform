@@ -185,7 +185,7 @@ flags seeds byte-identically to pre-Round-3 output.
 
 ### Migration
 
-See [docs/migration-v0.4.16-to-v0.5.12.md](docs/migration-v0.4.16-to-v0.5.12.md)
+See the breaking-change notes in this changelog entry
 for adopting the three config-shape flags (runtime-enforced, pass-through),
 enabling the version-check resolver (`var.api.public_artifacts_bucket`), toggling
 the W2 dataset deployer (`var.api.enable_w2_dataset`), and the `TypeDateIndex` GSI
@@ -357,7 +357,7 @@ No file under `sources/` is modified.
 
 ### Migration
 
-See [docs/migration-v0.4.16-to-v0.5.12.md](docs/migration-v0.4.16-to-v0.5.12.md)
+See the breaking-change notes in this changelog entry
 for enabling RBAC (incl. the Cognito-required constraint), configuring SAML/OIDC
 federation, adopting `modules/vpc-endpoints/` (the `moved {}` mapping + the
 0-destroy/0-create plan gate), and the `BedrockHubRoleArn` opt-in. All Round 2
@@ -385,7 +385,7 @@ chat-with-document streaming, Python 3.12 runtimes).
 
 This release carries breaking changes to module internal addresses; see
 [Breaking Changes](#breaking-changes-1) below and the full
-[migration guide](docs/migration-v0.4.16-to-v0.5.12.md).
+migration notes.
 
 ### New Features & Changes
 
@@ -486,7 +486,7 @@ This release carries breaking changes to module internal addresses; see
 
 ### Migration
 
-See [docs/migration-v0.4.16-to-v0.5.12.md](docs/migration-v0.4.16-to-v0.5.12.md)
+See the breaking-change notes in this changelog entry
 for the full migration steps, the complete `moved {}` mapping, the SageMaker-UDOP
 façade `LambdaHook` recipe, the MCP rename, and the `var.api` → feature-plugin
 shift (with `var.api.*` forwarding).
@@ -584,7 +584,7 @@ workflow, dataset deployers, and Pattern 3 deprecation.
   `aws_sagemaker_human_task_ui`, `create_a2i_resources` Lambda, `get-workforce-url` Lambda) have
   been removed from `modules/human-review/`. The `enable_hitl` and `private_workteam_arn` variables
   are also removed from that module. HITL is now built into `processing-environment-api` via the
-  `complete_section_review` Lambda. See the [migration guide](docs/migration-guide.md) for
+  `complete_section_review` Lambda. See the migration notes for
   `terraform state rm` commands.
 
 - **`base_layer_arn` required**: All processor modules (`bda-processor`, `bedrock-llm-processor`,

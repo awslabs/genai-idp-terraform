@@ -393,7 +393,7 @@ variable "enable_w2_dataset" {
 }
 
 # =============================================================================
-# VERSION-CHECK FEATURE VARIABLES (C14, v0.5.11)
+# VERSION-CHECK FEATURE VARIABLES (v0.5.11)
 # =============================================================================
 
 variable "public_artifacts_bucket" {
@@ -463,7 +463,7 @@ variable "lookup_function_name" {
 }
 
 # =============================================================================
-# Feature-plugin composition (Requirement 3 — .enable()-style wiring)
+# Feature-plugin composition (.enable()-style wiring)
 # =============================================================================
 #
 # NOTE: MCP integration moved to the `mcp-integration` feature submodule in

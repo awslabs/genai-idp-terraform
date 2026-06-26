@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 /**
- * # Chat-with-Document Feature Submodule (C13)
+ * # Chat-with-Document Feature Submodule
  *
  * Self-contained feature-plugin submodule that provisions the v0.5.11+
  * **async streaming** Chat-with-Document experience and emits a feature-plugin
@@ -52,7 +52,7 @@ locals {
   output_bucket_name = element(split(":", var.output_bucket_arn), 5)
 
   # ---------------------------------------------------------------------------
-  # Effective chat config resolution (Task 11.2 / Property 6)
+  # Effective chat config resolution
   # ---------------------------------------------------------------------------
   # The runtime processor Lambda performs the same resolution against the config
   # version it loads from DynamoDB; this local mirrors it at plan time so the
@@ -315,8 +315,8 @@ resource "aws_lambda_function" "chat_resolver" {
 # =============================================================================
 # AppSync data sources (self-contained)
 # =============================================================================
-# This submodule owns its AppSync data sources so it stays fully self-contained
-# (Requirement 3.1). The contract references them by name; the API module's
+# This submodule owns its AppSync data sources so it stays fully self-contained.
+# The contract references them by name; the API module's
 # feature-plugin composition (`aws_appsync_resolver.feature`) attaches the
 # `sendChatDocumentMessage` mutation to the Lambda data source and the
 # `onChatDocumentMessageUpdate` subscription to the NONE data source.

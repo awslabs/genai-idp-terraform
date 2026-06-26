@@ -1,13 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the tracking-gsi-backfill module (task 4.4).
+# Native `terraform test` for the tracking-gsi-backfill module.
 #
-# Property 5 (Requirements 8.1, 8.2, 8.4, 8.5): the GSI backfill is default-off,
-# never auto-runs, and its roles are least-privilege.
+# Verifies the GSI backfill is default-off, never auto-runs, and its roles are
+# least-privilege.
 #
-#   * default-off (Req 8.5): the *default-off gating lives at the ROOT*, not in
-#     this module. The module itself has no enable flag — it is always "on" when
+#   * default-off: the *default-off gating lives at the ROOT*, not in this
+#     module. The module itself has no enable flag — it is always "on" when
 #     instantiated, and the root gates it via
 #     `count = try(var.tracking.enable_gsi_backfill, false) ? 1 : 0` on
 #     `module.tracking_gsi_backfill` (features.tf). So `enable_gsi_backfill =
@@ -15,22 +15,22 @@
 #     created. That root-count behavior is a `count` on a module block and is
 #     verified by the root `terraform plan`/validate; this module test covers the
 #     complementary half: the "on" shape, the no-auto-start guarantee, and the
-#     least-privilege scoping (Req 8.1, 8.2, 8.4).
+#     least-privilege scoping.
 #
-#   * on-shape (Req 8.1): instantiating the module yields BOTH the
-#     `backfill_worker` Lambda and the `backfill` Step Functions state machine.
+#   * on-shape: instantiating the module yields BOTH the `backfill_worker` Lambda
+#     and the `backfill` Step Functions state machine.
 #
-#   * never auto-runs (Req 8.4): the worker is driven *only* by the Step
-#     Functions state machine (the rendered SFN definition references exactly the
-#     worker's ARN), and the module declares NO `aws_lambda_invocation`,
-#     `null_resource`, or any other auto-start/trigger resource. The latter is a
-#     STATIC guarantee: there is no such resource address to assert on, and
-#     referencing one would be a configuration error caught by `make validate`.
-#     `make check-sources`/grep over the module confirms zero
+#   * never auto-runs: the worker is driven *only* by the Step Functions state
+#     machine (the rendered SFN definition references exactly the worker's ARN),
+#     and the module declares NO `aws_lambda_invocation`, `null_resource`, or any
+#     other auto-start/trigger resource. The latter is a STATIC guarantee: there
+#     is no such resource address to assert on, and referencing one would be a
+#     configuration error caught by `make validate`. `make check-sources`/grep
+#     over the module confirms zero
 #     `aws_lambda_invocation`/`null_resource`/`local-exec`. Applying the module
 #     creates the machinery only; the operator triggers the run explicitly.
 #
-#   * least-privilege (Req 8.2):
+#   * least-privilege:
 #       - the WORKER role's policy has NO wildcard ("*") resource on ANY
 #         statement; its DynamoDB statement is scoped to exactly the tracking
 #         table ARN (+ `/index/*`) and its KMS statement to exactly the
@@ -92,8 +92,8 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# On-shape (Req 8.1): instantiating the module yields BOTH the worker Lambda and
-# the backfill state machine.
+# On-shape: instantiating the module yields BOTH the worker Lambda and the
+# backfill state machine.
 # ---------------------------------------------------------------------------
 run "on_shape_has_worker_and_state_machine" {
   command = apply
@@ -109,8 +109,8 @@ run "on_shape_has_worker_and_state_machine" {
 }
 
 # ---------------------------------------------------------------------------
-# Never auto-runs (Req 8.4): the worker is driven only by the state machine —
-# the rendered SFN definition references exactly the worker ARN. Combined with
+# Never auto-runs: the worker is driven only by the state machine — the
+# rendered SFN definition references exactly the worker ARN. Combined with
 # the static absence of any aws_lambda_invocation/null_resource (documented
 # above), applying the module creates machinery only; it never invokes the
 # worker as a side effect of `terraform apply`.
@@ -125,7 +125,7 @@ run "worker_is_driven_by_state_machine_not_auto_invoked" {
 }
 
 # ---------------------------------------------------------------------------
-# Least-privilege — WORKER role (Req 8.2): no wildcard resource on any statement;
+# Least-privilege — WORKER role: no wildcard resource on any statement;
 # DynamoDB scoped to exactly the table (+ /index/*); KMS scoped to exactly the
 # encryption key.
 # ---------------------------------------------------------------------------
@@ -179,8 +179,8 @@ run "worker_role_is_least_privilege" {
 }
 
 # ---------------------------------------------------------------------------
-# Least-privilege — STATE-MACHINE role (Req 8.2): the SCOPABLE
-# lambda:InvokeFunction statement is scoped to exactly the worker ARN (no "*").
+# Least-privilege — STATE-MACHINE role: the SCOPABLE lambda:InvokeFunction
+# statement is scoped to exactly the worker ARN (no "*").
 #
 # The log-delivery (logs:CreateLogDelivery, …) and X-Ray (xray:PutTraceSegments,
 # …) statements legitimately require Resource="*" — those actions are not

@@ -118,7 +118,7 @@ output "agent_table_name" {
 # MCP Integration outputs
 #
 # MCP moved to the `mcp-integration` feature submodule (modules/features/
-# mcp-integration) in v0.5.12-tf.0 per the feature-plugin model (Requirement 3 /
-# 8.4). The root reads MCP outputs (gateway endpoint, OAuth client, etc.) from
+# mcp-integration) in v0.5.12-tf.0 per the feature-plugin model. The root reads
+# MCP outputs (gateway endpoint, OAuth client, etc.) from
 # `module.mcp_integration` directly; they are no longer surfaced by the API
 # module.

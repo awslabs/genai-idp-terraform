@@ -62,9 +62,8 @@ resource "aws_iam_role_policy_attachment" "dataset_deployers_vpc" {
   policy_arn = local.lambda_vpc_access_arn
 }
 
-# error_analyzer_vpc / error_analyzer_resolver_vpc — REMOVED at v0.5.12.
-# The error-analyzer feature was removed upstream; see error-analyzer.tf for the
-# `removed {}` blocks that drop the orphaned VPC attachments from state.
+# error_analyzer_vpc / error_analyzer_resolver_vpc — removed at v0.5.12 along
+# with the error-analyzer feature (see error-analyzer.tf).
 
 resource "aws_iam_role_policy_attachment" "complete_section_review_vpc" {
   count      = var.enable_hitl && var.vpc_config != null ? 1 : 0

@@ -1,16 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for B11 managed-config seeding (task 9.2).
+# Native `terraform test` for managed-config seeding.
 #
-# Property 14 (Requirements 11.2, 11.3): managed config rows are non-editable
-# and seeding is additive.
+# Verifies that managed config rows are non-editable and that seeding is
+# additive. What is provable offline (mock_provider + command = plan):
 #
-# What is provable offline (mock_provider + command = plan):
-#
-#   * managed rows carry `managed: true` (Req 11.3 / non-editable marker):
-#     every `aws_lambda_invocation.seed_managed` input decodes to an object
-#     with `Managed == true` and `IsActive == false`. The seeder Lambda stamps
+#   * managed rows carry `managed: true`: every
+#     `aws_lambda_invocation.seed_managed` input decodes to an object with
+#     `Managed == true` and `IsActive == false`. The seeder Lambda stamps
 #     the DynamoDB `Managed` attribute from that input (see
 #     src/lambda/configuration-seeder/index.py `_put_config_default`), and the
 #     UPSTREAM config-write path rejects edits to `managed: true` rows. That
@@ -19,13 +17,12 @@
 #
 #   * the for_each covers exactly the managed_config subdirs present in
 #     `sources/config_library/managed_config/*/config.yaml` — no more, no
-#     fewer (Req 11.1 discovery feeds the additive seeding).
+#     fewer.
 #
-#   * seeding is additive (Req 11.3): the `seed_managed` invocations are
-#     separate resources from `seed_default` / `seed_schema`. The pre-existing
-#     consumer-row seeding (`seed_default`) is byte-identical to pre-B11: its
-#     decoded input carries NO `Managed` flag, so non-managed rows are
-#     untouched and only managed rows add the marker.
+#   * seeding is additive: the `seed_managed` invocations are separate
+#     resources from `seed_default` / `seed_schema`. The pre-existing
+#     consumer-row seeding (`seed_default`) carries NO `Managed` flag, so
+#     non-managed rows are untouched and only managed rows add the marker.
 #
 # Offline harness: the aws provider is mocked. The `seed_managed` `input` is
 # `jsonencode(...)` over `yamldecode(file(...))` of the read-only snapshot —
@@ -108,7 +105,7 @@ run "managed_rows_carry_managed_true_and_inactive" {
       for k, inv in aws_lambda_invocation.seed_managed :
       jsondecode(inv.input).Managed == true
     ])
-    error_message = "Every seed_managed invocation input must set Managed == true so the seeded row is non-editable (Req 11.2)."
+    error_message = "Every seed_managed invocation input must set Managed == true so the seeded row is non-editable."
   }
 
   assert {
@@ -132,8 +129,8 @@ run "managed_rows_carry_managed_true_and_inactive" {
 
 # ---------------------------------------------------------------------------
 # Seeding is additive: the pre-existing consumer seed_default row is unchanged
-# (no Managed flag), so non-managed rows are byte-identical to pre-B11. Only
-# the separate seed_managed resources add the managed marker.
+# (no Managed flag), so non-managed rows are byte-identical to the prior
+# behavior. Only the separate seed_managed resources add the managed marker.
 # ---------------------------------------------------------------------------
 run "seed_default_is_unchanged_and_non_managed" {
   command = plan
@@ -141,7 +138,7 @@ run "seed_default_is_unchanged_and_non_managed" {
   # seed_default carries no managed flag (the consumer/default row is untouched).
   assert {
     condition     = !can(jsondecode(aws_lambda_invocation.seed_default.input).Managed)
-    error_message = "seed_default input must NOT carry a Managed flag — pre-existing non-managed consumer rows must stay byte-identical to pre-B11 (additive seeding, Req 11.3)."
+    error_message = "seed_default input must NOT carry a Managed flag — pre-existing non-managed consumer rows must stay byte-identical (additive seeding)."
   }
 
   # seed_default still seeds the Default key with the supplied configuration.
@@ -153,7 +150,7 @@ run "seed_default_is_unchanged_and_non_managed" {
   # seed_schema likewise carries no managed flag.
   assert {
     condition     = !can(jsondecode(aws_lambda_invocation.seed_schema.input).Managed)
-    error_message = "seed_schema input must NOT carry a Managed flag — schema seeding is non-managed and unchanged by B11."
+    error_message = "seed_schema input must NOT carry a Managed flag — schema seeding is non-managed and unchanged."
   }
 
   # The managed seeding is a strictly separate resource set from the consumer

@@ -14,10 +14,6 @@
 # sagemaker-udop-processor) as a nested `module "engine"`. The processing path is
 # selected by the façade via the `use_bda` delegation input (BDA branch when
 # true; pipeline branch when false). Derived from `bedrock-llm-processor`.
-#
-# Note: The `use_bda` routing logic inside the state machine is wired in a
-# follow-up task (2.2); this scaffold declares the delegation interface and
-# always builds the pipeline branch.
 
 # Data sources
 data "aws_caller_identity" "current" {}
@@ -220,12 +216,10 @@ locals {
   check_hitl_default = local.post_hitl_next
 
   # HITL state map.
-  # v0.4.16 design: HITL is async — workflow marks the document as
-  # `HITL_IN_PROGRESS` via `process_results` and continues without
-  # waiting. Reviewers complete sections through AppSync mutations
-  # (`claimReview`, `releaseReview`, `completeSectionReview`,
-  # `skipAllSectionsReview`). Matches upstream CloudFormation and CDK
-  # exactly — no Lambda task states for HITL.
+  # v0.4.16: HITL is async — process_results marks the document
+  # HITL_IN_PROGRESS and the workflow continues without waiting; reviewers
+  # complete sections via AppSync mutations. Matches upstream CFN/CDK (no
+  # Lambda task states for HITL).
   hitl_states = local.hitl_enabled ? {
     MarkHITLPending = {
       Type    = "Pass"
@@ -263,19 +257,12 @@ locals {
     }
   } : {}
 
-  # BDA branch states — GATED on the façade-supplied `use_bda` flag.
-  #
-  # The pipeline branch (OCR → classify → extract → process-results) is ALWAYS
-  # present (see sfn_states below). The BDA branch is added ONLY when the engine
-  # is delegated from the bda-processor façade (var.use_bda = true), and the
-  # workflow is entered through the `RouteByProcessingMode` choice state which
-  # selects the branch at runtime from `$.document.use_bda` (injected per
-  # document by the queue_processor from the config version). Mirrors
-  # `sources/patterns/unified/statemachine/workflow.asl.json` (Property 1).
-  #
-  # When var.use_bda = false the BDA Lambdas/IAM are not created, so the BDA
-  # states and the routing choice are omitted and the state machine starts
-  # directly at OCRStep (pipeline only).
+  # BDA branch states — GATED on the façade-supplied `use_bda` flag. The
+  # pipeline branch (OCR → classify → extract → process-results) is ALWAYS
+  # present; the BDA branch is added only when use_bda = true, entered via the
+  # `RouteByProcessingMode` choice state that selects the branch at runtime from
+  # `$.document.use_bda`. Mirrors
+  # `sources/patterns/unified/statemachine/workflow.asl.json`.
   #
   # Built via the `merge([for …]…)` idiom rather than a `cond ? {…} : {}`
   # ternary: the BDA states are heterogeneously shaped (Choice / Task / Fail),

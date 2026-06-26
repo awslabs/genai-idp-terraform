@@ -91,7 +91,7 @@ variable "api" {
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
 
-    # v0.5.11 — version-check resolver (C14). When public_artifacts_bucket is
+    # v0.5.11 — version-check resolver. When public_artifacts_bucket is
     # empty (default), the getLatestPublishedVersion resolver is not created.
     public_artifacts_bucket = optional(string, "")
     public_artifacts_prefix = optional(string, "artifacts/genai-idp")
@@ -126,12 +126,12 @@ variable "api" {
   }
 }
 
-# RBAC feature plugin (C2, v0.5.12) — forwarded to module.rbac at the root.
+# RBAC feature plugin (v0.5.12) — forwarded to module.rbac at the root.
 # Default-off. When enabled, provisions the four Cognito groups (Admin/Author/
 # Reviewer/Viewer), the Users table, and the user-management Lambda. Requires a
 # Cognito user pool (this example always provisions one), enforced at plan time.
 variable "rbac" {
-  description = "Configuration for the RBAC feature plugin (C2). Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
   type = object({
     enabled = optional(bool, false)
     group_names = optional(object({
@@ -147,13 +147,13 @@ variable "rbac" {
   }
 }
 
-# External SAML/OIDC IdP federation feature plugin (C6, v0.5.12) — forwarded to
+# External SAML/OIDC IdP federation feature plugin (v0.5.12) — forwarded to
 # module.idp_federation at the root. Default-off. The OIDC client secret is
 # supplied by REFERENCE (oidc_client_secret_ref — a Secrets Manager ARN / SSM
 # parameter name), never as a raw value. When both rbac and idp_federation are
 # enabled, the federation group-mapping targets the four RBAC group names.
 variable "idp_federation" {
-  description = "Configuration for the external SAML/OIDC IdP federation feature plugin (C6). Default-off. The OIDC client secret is supplied by reference, never in plaintext."
+  description = "Configuration for the external SAML/OIDC IdP federation feature plugin. Default-off. The OIDC client secret is supplied by reference, never in plaintext."
   type = object({
     enabled                = optional(bool, false)
     provider_type          = optional(string, "SAML")
@@ -335,14 +335,13 @@ variable "config_file_path" {
   default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 }
 
-# Round 3 (v0.5.12-tf.2): when true, append the demonstration classes in
-# config-overlays/round3-x-aws-idp-flags.yaml (the three config-shape
-# `x-aws-idp-*` flags, B9/B10/B12) onto the seeded config's classes list so the
-# flags travel through the configuration seeder unchanged. The flags are
-# runtime-enforced upstream and add no AWS resources. Set false to seed the base
-# config verbatim.
+# When true, append the demonstration classes in
+# config-overlays/round3-x-aws-idp-flags.yaml (the config-shape `x-aws-idp-*`
+# flags) onto the seeded config's classes list so the flags travel through the
+# configuration seeder unchanged. The flags are runtime-enforced upstream and
+# add no AWS resources. Set false to seed the base config verbatim.
 variable "demo_x_aws_idp_flags" {
-  description = "Demonstrate the Round 3 config-shape x-aws-idp-* schema flags (B9/B10/B12) by appending overlay classes to the seeded config. No new AWS resources; the flags pass through the seeder unchanged."
+  description = "Demonstrate the config-shape x-aws-idp-* schema flags by appending overlay classes to the seeded config; the flags pass through the seeder unchanged."
   type        = bool
   default     = true
 }

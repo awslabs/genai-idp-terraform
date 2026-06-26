@@ -22,6 +22,6 @@ output "schema_seeded" {
 }
 
 output "managed_versions_seeded" {
-  description = "Names of the managed baseline configuration versions seeded with Managed = true (B11)."
+  description = "Names of the managed baseline configuration versions seeded with Managed = true."
   value       = sort(keys(local.managed_configs))
 }

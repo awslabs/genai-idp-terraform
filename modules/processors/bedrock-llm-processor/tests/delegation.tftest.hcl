@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the Bedrock-LLM processor façade (task 3.4).
+# Native `terraform test` for the Bedrock-LLM processor façade.
 #
 # Asserts the façade delegates the expected inputs down to the nested
 # `module.engine` (unified-processor):
@@ -15,8 +15,6 @@
 # Offline: the aws provider is mocked, so the plan needs no credentials/network.
 # The archive provider runs for real (zip the engine Lambda sources from the
 # read-only `sources/` snapshot).
-#
-# Validates: Requirements 2.5, Property 1
 
 mock_provider "aws" {
   # A real partition string is required: generated mock values fail the AWS

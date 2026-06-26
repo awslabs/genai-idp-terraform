@@ -15,7 +15,7 @@ variable "name" {
 # to this shared engine. `use_bda` is set by which façade is instantiated.
 
 variable "use_bda" {
-  description = "Runtime processing-path selector set by the instantiating façade: true routes documents through the Bedrock Data Automation (BDA) branch; false routes through the Bedrock-LLM/SageMaker pipeline branch. Required — the engine is never instantiated without an explicit value. (The state-machine routing that consumes this flag is wired in a follow-up task.)"
+  description = "Runtime processing-path selector set by the instantiating façade: true routes documents through the Bedrock Data Automation (BDA) branch; false routes through the Bedrock-LLM/SageMaker pipeline branch. Required — the engine is never instantiated without an explicit value."
   type        = bool
 }
 

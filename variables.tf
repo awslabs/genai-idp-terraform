@@ -146,17 +146,15 @@ variable "vpc_security_group_ids" {
   default     = []
 }
 
-# Private Network Deployment (C7, Req 8.1/8.2/8.3)
+# Private Network Deployment
 #
 # When set, the root instantiates `module.vpc_endpoints` so the VPC-placed IDP
-# Lambdas (see vpc_subnet_ids / vpc_security_group_ids above) can reach the AWS
-# services the enabled processors and features need over PrivateLink, without
-# public internet egress. The interface ENIs are placed in `vpc_subnet_ids` with
+# Lambdas can reach the AWS services the enabled processors and features need
+# over PrivateLink. The interface ENIs are placed in `vpc_subnet_ids` with
 # `vpc_security_group_ids`; the S3/DynamoDB gateway endpoints attach to
-# `route_table_ids`.
-#
-# Default-off: leave this null (and/or `vpc_subnet_ids` empty) and no endpoints
-# module resources are created — preserving the public-deployment behavior.
+# `route_table_ids`. Default-off: leave this null (and/or `vpc_subnet_ids`
+# empty) and no endpoint resources are created, preserving the public-deployment
+# behavior.
 variable "private_network" {
   description = "Optional private-network deployment configuration. When set with a vpc_id and non-empty vpc_subnet_ids, the root provisions the VPC interface/gateway endpoints (module.vpc_endpoints) required by the enabled processors and features. Leave null for a public deployment (default)."
   type = object({
@@ -312,7 +310,7 @@ variable "reporting" {
 # Human Review Configuration
 #
 variable "human_review" {
-  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api via complete_section_review (gated by the API enable_hitl flag). DEPRECATED in v0.5.12-tf.0: enable_pattern2_hitl and hitl_confidence_threshold are now accepted-but-ignored no-ops (the Pattern-2 Step Functions HITL trio was removed — it referenced upstream source paths that never existed). enabled still gates the legacy A2I IAM statements. These fields are retained as a deprecation shim so existing tfvars keep working; see docs/migration-v0.4.16-to-v0.5.12.md."
+  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api via complete_section_review (gated by the API enable_hitl flag). DEPRECATED in v0.5.12-tf.0: enable_pattern2_hitl and hitl_confidence_threshold are now accepted-but-ignored no-ops (the Pattern-2 Step Functions HITL trio was removed — it referenced upstream source paths that never existed). enabled still gates the legacy A2I IAM statements. These fields are retained as a deprecation shim so existing tfvars keep working."
   type = object({
     enabled                   = optional(bool, false)
     enable_pattern2_hitl      = optional(bool, false) # DEPRECATED v0.5.12-tf.0: no-op (Pattern-2 HITL trio removed)
@@ -404,7 +402,7 @@ variable "api" {
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
 
-    # v0.5.11 — version-check resolver (C14). When public_artifacts_bucket is
+    # v0.5.11 — version-check resolver. When public_artifacts_bucket is
     # empty (default), the getLatestPublishedVersion resolver Lambda is not
     # created (default-off). Optional prefix/region are threaded to the Lambda.
     public_artifacts_bucket = optional(string, "")
@@ -441,7 +439,7 @@ variable "api" {
 }
 
 #
-# Tracking table configuration (C1 — TypeDateIndex GSI backfill)
+# Tracking table configuration — TypeDateIndex GSI backfill
 #
 variable "tracking" {
   description = "Configuration for the tracking table and its TypeDateIndex GSI backfill. The GSI itself is always created (additive, in place); the backfill is an operator-triggered, default-off Step Functions run that populates GSI attributes on pre-existing items."
@@ -512,26 +510,26 @@ variable "lambda_tracing_mode" {
 # See locals.tf for processor validation logic
 
 #
-# RBAC feature plugin (C2, Round 2 — Req 4.1/4.3)
+# RBAC feature plugin
 #
 # Role-based access control modeled as a feature-plugin submodule
 # (`modules/features/rbac/`), NOT a boolean on the monolithic `var.api` object.
 # When `enabled`, the root instantiates `module.rbac` (features.tf): the four
 # Cognito groups, the `Users` table, the user-management Lambda, and the
-# server-side authorization surface, emitting the Round 1 feature-plugin
-# contract the API module composes.
+# server-side authorization surface, emitting the feature-plugin contract the
+# API module composes.
 #
-# Default-off (Req 1.6): leave `enabled = false` (the default) and no RBAC
-# resources are created — the pre-Round-2 single-tenant Cognito authorization
-# behavior is preserved. RBAC requires a Cognito user pool; that constraint is
-# enforced at plan time by a root `check {}` (task 8.2, Req 4.4).
+# Default-off: leave `enabled = false` (the default) and no RBAC resources are
+# created — the single-tenant Cognito authorization behavior is preserved. RBAC
+# requires a Cognito user pool; that constraint is enforced at plan time by a
+# root `check {}`.
 variable "rbac" {
-  description = "Configuration for the RBAC feature plugin (C2). Default-off. When enabled, provisions the four Cognito groups, the Users table, and the user-management Lambda via module.rbac. Requires a Cognito user pool (enforced at plan time)."
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, provisions the four Cognito groups, the Users table, and the user-management Lambda via module.rbac. Requires a Cognito user pool (enforced at plan time)."
   type = object({
     enabled = optional(bool, false)
     # Optional overrides for the four RBAC Cognito group names. Each key
     # defaults to its canonical name so overriding one or more does not change
-    # the default-on behavior of the four roles (Req 1.5).
+    # the default-on behavior of the four roles.
     group_names = optional(object({
       admin    = optional(string, "Admin")
       author   = optional(string, "Author")
@@ -548,22 +546,22 @@ variable "rbac" {
 }
 
 #
-# External SAML/OIDC IdP federation feature plugin (C6, Round 2 — Req 6.1/6.2)
+# External SAML/OIDC IdP federation feature plugin
 #
 # Federation modeled as a feature-plugin submodule
 # (`modules/features/idp-federation/`). When `enabled`, the root instantiates
 # `module.idp_federation` (features.tf): the Cognito SAML/OIDC identity
 # provider, the OIDC client-secret resolver (no plaintext in state), and the
 # group-mapping trigger Lambda that maps external groups to the four RBAC
-# groups. The submodule always emits the Round 1 contract (Req 6.2).
+# groups. The submodule always emits the feature-plugin contract.
 #
-# Default-off (Req 5.6): leave `enabled = false` (the default) and the user pool
-# stays configured for direct Cognito authentication. The ~12 provider fields
-# mirror the upstream v0.5.6 `ExternalIdP*` surface. The OIDC client secret is
-# supplied by REFERENCE (`oidc_client_secret_ref` — a Secrets Manager ARN / SSM
-# parameter name), never as a raw value (Req 5.3).
+# Default-off: leave `enabled = false` (the default) and the user pool stays
+# configured for direct Cognito authentication. The ~12 provider fields mirror
+# the upstream v0.5.6 `ExternalIdP*` surface. The OIDC client secret is supplied
+# by REFERENCE (`oidc_client_secret_ref` — a Secrets Manager ARN / SSM parameter
+# name), never as a raw value.
 variable "idp_federation" {
-  description = "Configuration for the external SAML/OIDC IdP federation feature plugin (C6). Default-off. When enabled, provisions the Cognito identity provider and group-mapping trigger via module.idp_federation. The OIDC client secret is supplied by reference (oidc_client_secret_ref), never in plaintext."
+  description = "Configuration for the external SAML/OIDC IdP federation feature plugin. Default-off. When enabled, provisions the Cognito identity provider and group-mapping trigger via module.idp_federation. The OIDC client secret is supplied by reference (oidc_client_secret_ref), never in plaintext."
   type = object({
     enabled                = optional(bool, false)
     provider_type          = optional(string, "SAML")

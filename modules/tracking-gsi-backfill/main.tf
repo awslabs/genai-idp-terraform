@@ -1,18 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Tracking-table GSI backfill (C1, upstream v0.5.1)
+# Tracking-table GSI backfill (upstream v0.5.1)
 #
 # Operator-triggered, default-off backfill that populates the `ItemType` (and
 # `HITLPendingReview`) attributes on tracking-table items that predate the
 # `TypeDateIndex` GSI, so historical items appear in type/time-range queries.
 #
-# This file scaffolds the worker Lambda only — the shipped
-# `backfill_gsi_attributes` function (`index.lambda_handler`), its execution
-# role, log group, and source archive. The Step Functions distributed-map
-# state machine that drives this worker (plus the IAM-propagation guard and the
-# `state_machine_arn` output) is added separately and wired from the root; this
-# module never auto-starts a run.
+# Creates the worker Lambda (`backfill_gsi_attributes`, `index.lambda_handler`),
+# its execution role, log group, source archive, and the Step Functions state
+# machine that drives it (with the IAM-propagation guard). The run is started
+# explicitly by an operator; this module never auto-starts a run.
 #
 # Runtime/timeout/memory/env mirror `sources/template.yaml`
 # `BackfillWorkerFunction` exactly (python3.12, 900s, 512MB, env LOG_LEVEL).
@@ -138,26 +136,22 @@ resource "aws_lambda_function" "backfill_worker" {
 # Step Functions state machine: GSI attribute backfill
 # =============================================================================
 #
-# Mirrors `sources/template.yaml` `BackfillStateMachine` +
-# `sources/src/lambda/backfill_gsi_attributes/statemachine.asl.json` faithfully.
+# Mirrors `sources/template.yaml` `BackfillStateMachine` faithfully. The
+# upstream definition is an inline `Map` (Iterator + MaxConcurrency 10) where
+# the worker Lambda performs the segmented DynamoDB parallel scan itself and
+# returns a continuation token past its timeout — NOT a Service-integration
+# Distributed Map with an `ItemReader`. We render the exact upstream ASL via
+# `templatefile` (the template lives in this module dir, never under
+# `sources/`). Because the map only invokes the worker, the state-machine role
+# grants exactly `lambda:InvokeFunction` and nothing else; the worker (not the
+# state machine) reads DynamoDB. We add only the CloudWatch Logs delivery +
+# X-Ray permissions the wrapper's SFN logging convention requires (see
+# unified-processor).
 #
-# Shape note: the upstream definition is an inline `Map` (Iterator +
-# MaxConcurrency 10) where the worker Lambda performs the segmented DynamoDB
-# parallel scan itself and returns a continuation token past its timeout — NOT a
-# Service-integration Distributed Map with an `ItemReader`. We render the exact
-# upstream ASL via `templatefile` (the template lives in this module dir, never
-# under `sources/`). Because the map only *invokes* the worker, the upstream
-# `BackfillStateMachinePolicy` grants exactly `lambda:InvokeFunction` on the
-# worker and nothing else — there is no state-machine-level DynamoDB scan or
-# child `states:StartExecution` to grant (that would only apply to a distributed
-# ItemReader map, which this is not). We keep that least-privilege shape and add
-# only the CloudWatch Logs delivery + X-Ray permissions the wrapper's SFN logging
-# convention requires (see unified-processor).
-#
-# Crucially there is NO `aws_lambda_invocation` and NO trigger/auto-start
-# resource: applying this module creates the machinery only. The operator starts
-# the run explicitly (`aws stepfunctions start-execution`), so `terraform apply`
-# never mutates tracking-table data unattended (Req 8.4).
+# There is no `aws_lambda_invocation` and no trigger/auto-start resource:
+# applying this module creates the machinery only. The operator starts the run
+# explicitly (`aws stepfunctions start-execution`), so `terraform apply` never
+# mutates tracking-table data unattended.
 
 # CloudWatch log group for the state machine (vended-logs path).
 resource "aws_cloudwatch_log_group" "backfill_state_machine" {

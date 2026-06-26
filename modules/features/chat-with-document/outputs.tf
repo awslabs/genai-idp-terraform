@@ -91,7 +91,7 @@ output "contract" {
 
 output "effective_chat_config" {
   description = <<-EOT
-    The resolved chat configuration (Task 11.2 / Property 6): the top-level
+    The resolved chat configuration: the top-level
     `chat:` block when present, otherwise the `summarization.*` fallback, with
     the model defaulting to `us.anthropic.claude-opus-4-7:1m` when unspecified.
     `source` reports which block the values came from ("chat" or "summarization").

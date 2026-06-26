@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Inputs for the Chat-with-Document feature-plugin submodule (C13).
+# Inputs for the Chat-with-Document feature-plugin submodule.
 #
 # The submodule is self-contained: it provisions the v0.5.11+ async streaming
 # Chat-with-Document Lambdas (a lightweight `sendChatDocumentMessage` resolver
@@ -110,7 +110,7 @@ variable "idp_common_layer_arn" {
 
 variable "config" {
   description = <<-EOT
-    Document configuration object. Task 11.2 / Property 6: the effective chat
+    Document configuration object. The effective chat
     configuration resolves to the top-level `chat:` block when present, else
     falls back to `summarization.*`; when no chat model is specified the default
     is `us.anthropic.claude-opus-4-7:1m` (v0.5.12 default). Only the chat-relevant

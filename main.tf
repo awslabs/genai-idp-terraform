@@ -71,7 +71,7 @@ check "exactly_one_processor" {
       var.bedrock_llm_processor != null ? "bedrock_llm" : "",
       var.sagemaker_udop_processor != null ? "sagemaker_udop" : "",
     ])) == 1
-    error_message = "Exactly one of var.bda_processor, var.bedrock_llm_processor, or var.sagemaker_udop_processor must be set. Set one processor façade; see docs/migration-v0.4.16-to-v0.5.12.md."
+    error_message = "Exactly one of var.bda_processor, var.bedrock_llm_processor, or var.sagemaker_udop_processor must be set. Set one processor façade."
   }
 }
 
@@ -227,38 +227,15 @@ module "user_identity" {
 
 # Human Review Environment (REMOVED in v0.5.12-tf.0)
 #
-# The legacy `human-review` module only ever instantiated the Pattern-2
-# Step Functions HITL trio (pattern2-hitl-{wait,process,status-update}).
-# Those functions zipped Lambda source from
-# `sources/patterns/pattern-2/src/hitl-*-function`, a path that NEVER existed
-# upstream (absent at v0.3.18, v0.4.16, and v0.5.12) — and `pattern-2/` is gone
-# entirely from the v0.5.12 unified-only snapshot. Because the archive_file
-# source was always broken, the trio was never applyable when enabled, so no
-# real infrastructure can exist for it.
-#
-# HITL is now handled by the built-in `complete_section_review` Lambda +
-# AppSync resolvers in `processing-environment-api` (gated by `var.enable_hitl`,
-# added v0.4.16-tf.1), which fully supersedes the synchronous Step Functions
-# trio. The dead module (including its equally-orphaned A2I-era cognito-updater /
-# create-a2i-resources / get-workforce-url leftovers that referenced the
-# likewise-nonexistent `sources/src/lambda/hitl/*` paths) is removed in full.
+# The legacy `human-review` module is gone. It only ever instantiated the
+# Pattern-2 Step Functions HITL trio, whose Lambda source path never existed
+# upstream, so it was never applyable. HITL is now the built-in
+# `complete_section_review` Lambda + AppSync resolvers in
+# `processing-environment-api` (gated by `var.enable_hitl`).
 #
 # `var.human_review` is retained as a deprecation shim: its `enabled` field
 # still gates the legacy A2I IAM statements in locals.tf, and keeping the input
-# lets existing tfvars continue to plan. See
-# docs/migration-v0.4.16-to-v0.5.12.md.
-#
-# The trio was count-gated and never applyable, so the real-infrastructure
-# impact of this removal is none. The `removed {}` block makes the address
-# departure explicit and (lifecycle.destroy = false) ensures that if any state
-# entry somehow exists, Terraform drops it from state rather than destroying it.
-removed {
-  from = module.human_review
-
-  lifecycle {
-    destroy = false
-  }
-}
+# lets existing tfvars continue to plan.
 
 #
 # Processing Environment
@@ -407,7 +384,7 @@ module "processing_environment_api" {
   enable_w2_dataset           = try(var.api.enable_w2_dataset, false)
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
 
-  # v0.5.11 — version-check resolver (C14). Default-off: when
+  # v0.5.11 — version-check resolver. Default-off: when
   # public_artifacts_bucket is empty the API module creates no version-check
   # Lambda/data source/resolver.
   public_artifacts_bucket = try(var.api.public_artifacts_bucket, "")
@@ -441,10 +418,10 @@ module "processing_environment_api" {
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
-  # Feature-plugin contracts (Requirement 3 — .enable()-style composition).
-  # Forwarded from the root `local.enabled_feature_contracts` (see features.tf).
-  # Currently an empty map ({}) until the feature submodules land (tasks
-  # 6.3/10/11); a no-op that preserves default-off behavior.
+  # Feature-plugin contracts (.enable()-style composition). Forwarded from the
+  # root `local.enabled_feature_contracts` (see features.tf). Resolves to an
+  # empty map ({}) when every feature is off — a no-op that preserves
+  # default-off behavior.
   enabled_feature_contracts = local.enabled_feature_contracts
 
   tags = var.tags
