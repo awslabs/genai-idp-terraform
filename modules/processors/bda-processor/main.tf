@@ -73,7 +73,7 @@ module "engine" {
   bda_project_arn = var.data_automation_project_arn
 
   # API wiring
-  enable_api      = var.api_id != null
+  enable_api      = var.enable_api
   api_id          = var.api_id
   api_arn         = var.api_arn
   api_graphql_url = var.api_graphql_url
@@ -93,7 +93,7 @@ module "engine" {
 
   # Encryption
   encryption_key_arn = var.encryption_key_arn
-  enable_encryption  = var.encryption_key_arn != null
+  enable_encryption  = var.enable_encryption
 
   # Layers
   idp_common_layer_arn = var.idp_common_layer_arn

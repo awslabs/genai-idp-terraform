@@ -442,6 +442,7 @@ module "bda_processor" {
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
   # API configuration (if enabled)
+  enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
   api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
@@ -459,6 +460,7 @@ module "bda_processor" {
   log_level          = module.processing_environment.log_level
   log_retention_days = module.processing_environment.log_retention_days
 
+  enable_encryption    = var.enable_encryption
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
   base_layer_arn       = module.processing_environment.base_layer_arn

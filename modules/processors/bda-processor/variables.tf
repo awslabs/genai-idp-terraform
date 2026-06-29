@@ -24,6 +24,12 @@ variable "lambda_layers_bucket_arn" {
 }
 
 # API wiring
+variable "enable_api" {
+  description = "Whether the API is enabled. Use this instead of checking api_id != null to avoid unknown value issues in count."
+  type        = bool
+  default     = false
+}
+
 variable "api_id" {
   description = "ID of the GraphQL API that provides interfaces for querying document status and metadata"
   type        = string
@@ -91,6 +97,12 @@ variable "log_retention_days" {
 }
 
 # Encryption
+variable "enable_encryption" {
+  description = "Whether encryption is enabled. Use this instead of checking encryption_key_arn != null to avoid unknown value issues in count."
+  type        = bool
+  default     = false
+}
+
 variable "encryption_key_arn" {
   description = "ARN of the KMS key used for encrypting resources in the document processing workflow"
   type        = string

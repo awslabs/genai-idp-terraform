@@ -248,6 +248,8 @@ resource "aws_lambda_function" "bda_completion" {
   }
 
   tags = local.common_tags
+
+  depends_on = [aws_iam_role_policy.bda_completion_lambda]
 }
 
 resource "aws_cloudwatch_log_group" "bda_completion_lambda" {
