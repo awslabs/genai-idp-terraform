@@ -75,9 +75,11 @@ locals {
       try(local.summ_cfg.model, null),
       local.default_chat_model,
     )
-    system_prompt = coalesce(
-      try(local.chat_cfg.system_prompt, null),
-      try(local.summ_cfg.system_prompt, null),
+    system_prompt = try(
+      coalesce(
+        try(local.chat_cfg.system_prompt, null),
+        try(local.summ_cfg.system_prompt, null),
+      ),
       "",
     )
     temperature = coalesce(
