@@ -93,7 +93,7 @@ resource "aws_lambda_function" "ocr_function" {
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
-    null_resource.trigger_udop_build,
+    null_resource.udop_images_ready,
     aws_iam_role_policy_attachment.ocr_function_basic_execution,
     aws_cloudwatch_log_group.ocr_function_logs,
   ]
@@ -137,7 +137,7 @@ resource "aws_lambda_function" "classification_function" {
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
-    null_resource.trigger_udop_build,
+    null_resource.udop_images_ready,
     aws_iam_role_policy_attachment.classification_function_basic_execution,
     aws_cloudwatch_log_group.classification_function_logs,
   ]
@@ -180,7 +180,7 @@ resource "aws_lambda_function" "extraction_function" {
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
-    null_resource.trigger_udop_build,
+    null_resource.udop_images_ready,
     aws_iam_role_policy_attachment.extraction_function_basic_execution,
     aws_cloudwatch_log_group.extraction_function_logs,
   ]
@@ -220,7 +220,7 @@ resource "aws_lambda_function" "process_results_function" {
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
-    null_resource.trigger_udop_build,
+    null_resource.udop_images_ready,
     aws_iam_role_policy_attachment.process_results_function_basic_execution,
     aws_cloudwatch_log_group.process_results_function_logs,
   ]
@@ -262,7 +262,7 @@ resource "aws_lambda_function" "summarization_function" {
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
-    null_resource.trigger_udop_build,
+    null_resource.udop_images_ready,
     aws_iam_role_policy_attachment.summarization_function_basic_execution,
     aws_cloudwatch_log_group.summarization_function_logs,
   ]
@@ -302,7 +302,7 @@ resource "aws_lambda_function" "assessment_function" {
 
   tracing_config { mode = var.lambda_tracing_mode }
 
-  depends_on = [null_resource.trigger_udop_build]
+  depends_on = [null_resource.udop_images_ready]
 
   tags = local.common_tags
 }
@@ -343,7 +343,7 @@ resource "aws_lambda_function" "evaluation_function" {
   tracing_config { mode = var.lambda_tracing_mode }
 
   depends_on = [
-    null_resource.trigger_udop_build,
+    null_resource.udop_images_ready,
     aws_iam_role_policy_attachment.evaluation_function_policy_attachment
   ]
 

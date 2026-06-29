@@ -2,13 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # CodeBuild project for building and pushing Pattern-1 (BDA) Docker images to ECR.
-# This mirrors the pattern used by the bedrock-llm-processor module.
+# Mirrors the bedrock-llm-processor module's structure.
+#
+# When var.lambda_local = true, every resource here collapses to count = 0
+# and modules/processors/bda-processor/local-build.tf takes over.
 
 # =============================================================================
 # IAM Role and Policy for CodeBuild
 # =============================================================================
 
 resource "aws_iam_role" "codebuild_role" {
+  count = var.lambda_local ? 0 : 1
+
   name = "${var.name}-codebuild-role-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
@@ -30,6 +35,8 @@ resource "aws_iam_role" "codebuild_role" {
 resource "aws_iam_policy" "codebuild_policy" {
   #checkov:skip=CKV_AWS_355:ecr:GetAuthorizationToken is an account-level API that does not support resource-level permissions
   #checkov:skip=CKV_AWS_290:CloudWatch Logs requires wildcard resource as log groups and streams are created dynamically by CodeBuild
+  count = var.lambda_local ? 0 : 1
+
   name        = "${var.name}-codebuild-policy-${random_string.suffix.result}"
   description = "Policy for BDA processor CodeBuild Docker image build"
 
@@ -37,7 +44,6 @@ resource "aws_iam_policy" "codebuild_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        # ecr:GetAuthorizationToken is account-level — cannot be scoped to a specific repo
         Effect = "Allow"
         Action = [
           "ecr:GetAuthorizationToken"
@@ -60,7 +66,6 @@ resource "aws_iam_policy" "codebuild_policy" {
         Resource = aws_ecr_repository.bda_processor.arn
       },
       {
-        # CloudWatch Logs — log group/stream names are determined at runtime by CodeBuild
         Effect = "Allow"
         Action = [
           "logs:CreateLogGroup",
@@ -81,7 +86,6 @@ resource "aws_iam_policy" "codebuild_policy" {
         Resource = var.encryption_key_arn != null ? [var.encryption_key_arn] : ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/nonexistent"]
       },
       {
-        # S3 access to pull the source zip and write build artifacts
         Effect = "Allow"
         Action = [
           "s3:GetObject",
@@ -101,8 +105,10 @@ resource "aws_iam_policy" "codebuild_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "codebuild_policy_attachment" {
-  role       = aws_iam_role.codebuild_role.name
-  policy_arn = aws_iam_policy.codebuild_policy.arn
+  count = var.lambda_local ? 0 : 1
+
+  role       = aws_iam_role.codebuild_role[0].name
+  policy_arn = aws_iam_policy.codebuild_policy[0].arn
 }
 
 # =============================================================================
@@ -120,6 +126,8 @@ data "archive_file" "pattern1_sources" {
 }
 
 resource "aws_s3_object" "pattern1_sources" {
+  count = var.lambda_local ? 0 : 1
+
   bucket = local.lambda_layers_bucket_name
   key    = "codebuild-sources/pattern-1/sources.zip"
   source = data.archive_file.pattern1_sources.output_path
@@ -132,9 +140,11 @@ resource "aws_s3_object" "pattern1_sources" {
 
 resource "aws_codebuild_project" "bda_processor_build" {
   #checkov:skip=CKV_AWS_316:privileged_mode is required for Docker-in-Docker builds to push images to ECR
+  count = var.lambda_local ? 0 : 1
+
   name          = "${var.name}-bda-processor-build-${random_string.suffix.result}"
   description   = "Builds Pattern-1 (BDA) Lambda Docker images and pushes them to ECR"
-  service_role  = aws_iam_role.codebuild_role.arn
+  service_role  = aws_iam_role.codebuild_role[0].arn
   build_timeout = 60
 
   artifacts {
@@ -184,13 +194,11 @@ resource "aws_codebuild_project" "bda_processor_build" {
 # =============================================================================
 # Trigger: run the CodeBuild build once at apply time
 # =============================================================================
-# This null_resource triggers the CodeBuild project immediately after it is
-# created (or whenever the ECR repository URL changes), so that Docker images
-# are available before any Lambda functions that reference them are created.
-
 resource "null_resource" "trigger_bda_build" {
+  count = var.lambda_local ? 0 : 1
+
   triggers = {
-    codebuild_project_name = aws_codebuild_project.bda_processor_build.name
+    codebuild_project_name = aws_codebuild_project.bda_processor_build[0].name
     ecr_repository_url     = aws_ecr_repository.bda_processor.repository_url
     sources_hash           = data.archive_file.pattern1_sources.output_md5
   }
@@ -199,7 +207,7 @@ resource "null_resource" "trigger_bda_build" {
     command = <<-EOT
       echo "Starting BDA processor Docker image build..."
       BUILD_ID=$(aws codebuild start-build \
-        --project-name "${aws_codebuild_project.bda_processor_build.name}" \
+        --project-name "${aws_codebuild_project.bda_processor_build[0].name}" \
         --region "${data.aws_region.current.id}" \
         --query 'build.id' \
         --output text)

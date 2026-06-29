@@ -83,3 +83,8 @@ output "data_automation_project_arn" {
   description = "ARN of the BDA Data Automation Project (consumed by processing-environment-api for BDA sync resolver)"
   value       = var.data_automation_project_arn
 }
+
+output "build_mode" {
+  description = "Active build path for the processor's container images: \"codebuild\" or \"local\"."
+  value       = var.lambda_local ? "local" : "codebuild"
+}

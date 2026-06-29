@@ -31,4 +31,9 @@ module "idp_common_layer" {
   idp_common_extras      = var.idp_common_extras
   idp_common_source_path = local.idp_common_source_path
   lambda_tracing_mode    = var.lambda_tracing_mode
+
+  # Build strategy (see root var.build)
+  lambda_local        = var.lambda_local
+  lambda_architecture = var.lambda_architecture
+  container_runtime   = var.container_runtime
 }

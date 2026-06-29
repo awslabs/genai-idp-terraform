@@ -84,7 +84,7 @@ resource "aws_lambda_function" "invoke_bda" {
   }
 
   depends_on = [
-    null_resource.trigger_bda_build,
+    null_resource.bda_images_ready,
     aws_iam_role_policy_attachment.invoke_bda_policy_attachment,
     aws_iam_role_policy_attachment.invoke_bda_data_automation_attachment
   ]
@@ -134,7 +134,7 @@ resource "aws_lambda_function" "bda_completion" {
   }
 
   depends_on = [
-    null_resource.trigger_bda_build,
+    null_resource.bda_images_ready,
     aws_iam_role_policy_attachment.bda_completion_policy_attachment
   ]
 
@@ -188,7 +188,7 @@ resource "aws_lambda_function" "process_results" {
   }
 
   depends_on = [
-    null_resource.trigger_bda_build,
+    null_resource.bda_images_ready,
     aws_iam_role_policy_attachment.process_results_policy_attachment
   ]
 
@@ -242,7 +242,7 @@ resource "aws_lambda_function" "summarization" {
   }
 
   depends_on = [
-    null_resource.trigger_bda_build,
+    null_resource.bda_images_ready,
     aws_iam_role_policy_attachment.summarization_policy_attachment
   ]
 
@@ -294,7 +294,7 @@ resource "aws_lambda_function" "evaluation_function" {
   }
 
   depends_on = [
-    null_resource.trigger_bda_build,
+    null_resource.bda_images_ready,
     aws_iam_role_policy_attachment.evaluation_function_policy_attachment
   ]
 

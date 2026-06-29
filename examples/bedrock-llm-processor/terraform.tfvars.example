@@ -91,3 +91,20 @@ enable_rule_validation = false  # Enable compliance rule validation
 # lambda_hook_extraction     = ""  # e.g. "GENAIIDP-my-custom-extraction-hook"
 # lambda_hook_assessment     = ""  # e.g. "GENAIIDP-my-custom-assessment-hook"
 # lambda_hook_summarization  = ""  # e.g. "GENAIIDP-my-custom-summarization-hook"
+
+# Build strategy
+#
+# Defaults preserve the historical AWS CodeBuild path bit-for-bit:
+#   - Lambda layers and processor container images build in-cloud on every apply.
+#   - No host-side dependencies.
+#
+# Set lambda_local = true to build artifacts locally on the deploy host with
+# Docker / Podman / Finch (requires a container runtime). Eliminates CodeBuild
+# infrastructure and shortens dev-loop apply time from minutes to seconds.
+# See docs/content/deployment-guides/local-lambda-build.md.
+#
+build = {
+  lambda_local        = false
+  lambda_architecture = "x86_64"
+  container_runtime   = "auto"
+}

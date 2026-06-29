@@ -235,6 +235,11 @@ module "agent_analytics" {
   vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
   vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
 
+  # Build strategy (see root var.build)
+  lambda_local        = var.lambda_local
+  lambda_architecture = var.lambda_architecture
+  container_runtime   = var.container_runtime
+
   tags = var.tags
 }
 

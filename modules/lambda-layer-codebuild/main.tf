@@ -1,78 +1,125 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Lambda layer build dispatcher.
+#
+# This module has two modes, selected by var.lambda_local:
+#
+#   - false (default): provision an AWS CodeBuild project + trigger Lambda
+#     that builds layers in-cloud (the historical behavior).
+#   - true: delegate to modules/lambda-layer-local-build, which builds the
+#     same layers on the deploy host using a container runtime.
+#
+# The downstream aws_lambda_layer_version resource lives here in BOTH
+# modes; it reads s3_bucket/s3_key from whichever path is active. Output
+# contracts (layer_arns, s3_bucket, layer_suffix, build_mode) are stable
+# across modes.
 
-# Registry-compatible build directory approach
 locals {
-  # Use the calling module's .terraform/tmp directory for build artifacts
-  # This ensures no files are created in the module directory
+  # Dispatcher switch. Computed once; referenced everywhere.
+  use_local_build = var.lambda_local
+
+  # Use the calling module's .terraform/tmp directory for build artifacts.
   module_build_dir = "${path.root}/.terraform/tmp/lambda-layer-codebuild"
-  # Unique identifier for this module instance (static to avoid unnecessary rebuilds)
+
+  # Unique identifier for this module instance (static to avoid unnecessary rebuilds).
   module_instance_id = substr(md5("${path.module}-${var.name_prefix}"), 0, 8)
 
-  # Bucket configuration - always use external bucket since it's always provided
-  # Extract bucket name from S3 ARN format: arn:aws:s3:::bucket-name
+  # Bucket configuration -- always external (provided by assets-bucket).
   lambda_layers_bucket_name = split(":::", var.lambda_layers_bucket_arn)[1]
   lambda_layers_bucket_arn  = var.lambda_layers_bucket_arn
 }
 
-# Get current region and account info
+# Get current region and account info.
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
-# Generate a random string for the S3 bucket name
+# Suffix used in all resource names. Same value across modes so flipping
+# lambda_local does NOT force-rename the layers themselves.
 resource "random_string" "layer_suffix" {
   length  = 8
   special = false
   upper   = false
 }
 
-# Generate unique build ID for this module instance
+# Build ID drives rebuild triggers and zip naming. Kept on both paths
+# because aws_lambda_layer_version's source_code_hash references hashes
+# derived from it; reusing the same resource in both modes keeps state
+# stable.
 resource "random_id" "build_id" {
   byte_length = 8
   keepers = {
-    # Include module instance ID for uniqueness
     module_instance_id = local.module_instance_id
-    # Trigger rebuild when requirements change
-    requirements_hash = md5(jsonencode(var.requirements_files))
-    name_prefix       = var.name_prefix
+    requirements_hash  = md5(jsonencode(var.requirements_files))
+    name_prefix        = var.name_prefix
   }
 }
 
-# Create a directory structure for requirements files
+# Filter out empty requirements files (consumers may pass empty strings
+# when the upstream file doesn't exist; the layer-version for-each must
+# skip those).
+locals {
+  non_empty_requirements = {
+    for k, v in var.requirements_files : k => v if length(v) > 0
+  }
+}
+
+# ----------------------------------------------------------------------------
+# CodeBuild path (lambda_local = false)
+# ----------------------------------------------------------------------------
+#
+# Every resource below gates on `local.use_local_build ? 0 : 1`. The
+# data "archive_file" is intentionally unconditional -- data sources only
+# create local files and have no AWS-side effect. Their consumers
+# (aws_s3_object, aws_codebuild_project) are gated, so the archive simply
+# goes unused in local mode.
+
+# Stage requirements.txt files for CodeBuild's S3-sourced buildspec.
 resource "local_file" "requirements_files" {
-  for_each = var.requirements_files
+  for_each = local.use_local_build ? {} : var.requirements_files
 
   content  = each.value
   filename = "${local.module_build_dir}/requirements/${each.key}/requirements.txt"
 }
 
-# Create archive of requirements
+# When in local-build mode, no requirements files are staged (the local-
+# build module handles its own staging). But the unconditional
+# data "archive_file" below will fail if the directory is missing or empty.
+# This placeholder file ensures the directory always has at least one file
+# regardless of mode. It's harmless: the resulting zip is never uploaded
+# in local mode (aws_s3_object.requirements_source has count = 0).
+resource "local_file" "requirements_dir_placeholder" {
+  content  = "# Placeholder — ensures archive_file has a non-empty source_dir in local-build mode.\n"
+  filename = "${local.module_build_dir}/requirements/.placeholder"
+}
+
+# Create archive of requirements -- consumed only by aws_s3_object below
+# on the CodeBuild path.
 data "archive_file" "requirements_source" {
   type        = "zip"
   source_dir  = "${local.module_build_dir}/requirements"
   output_path = "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip"
 
-  depends_on = [local_file.requirements_files]
+  depends_on = [local_file.requirements_files, local_file.requirements_dir_placeholder]
 }
 
-# Note: S3 bucket is provided externally via lambda_layers_bucket_arn variable
-# No bucket resources are created in this module
-
-# Upload the zip file to S3
+# Upload the zip to S3 as the CodeBuild project's source.
 resource "aws_s3_object" "requirements_source" {
+  count = local.use_local_build ? 0 : 1
+
   bucket = local.lambda_layers_bucket_name
   key    = "source/${var.name_prefix}-requirements_source.zip"
   source = data.archive_file.requirements_source.output_path
 
-  # Use a local variable for the etag to avoid the file not found error
   etag = md5(jsonencode({
     for k, v in var.requirements_files : k => v
   }))
 }
 
-# IAM role for CodeBuild
 resource "aws_iam_role" "codebuild_role" {
+  count = local.use_local_build ? 0 : 1
+
   name = "${var.name_prefix}-codebuild-role-${random_string.layer_suffix.result}"
 
   assume_role_policy = jsonencode({
@@ -89,10 +136,11 @@ resource "aws_iam_role" "codebuild_role" {
   })
 }
 
-# IAM inline policy for CodeBuild (attached directly to role)
 resource "aws_iam_role_policy" "codebuild_policy" {
+  count = local.use_local_build ? 0 : 1
+
   name = "CodeBuildPolicy"
-  role = aws_iam_role.codebuild_role.id
+  role = aws_iam_role.codebuild_role[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -128,8 +176,9 @@ resource "aws_iam_role_policy" "codebuild_policy" {
   })
 }
 
-# CloudWatch log group for CodeBuild
 resource "aws_cloudwatch_log_group" "codebuild_log_group" {
+  count = local.use_local_build ? 0 : 1
+
   name              = "/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}"
   retention_in_days = 14
 
@@ -138,11 +187,10 @@ resource "aws_cloudwatch_log_group" "codebuild_log_group" {
   }
 }
 
-# CodeBuild project
-# Wait for IAM role policy to propagate
-# We reach propagation issue, where IAM role and policy were created, CodeBuild was able to use it within its execution.
-# The execution was failing, as mentioned policies takes no effect yet.
+# IAM eventual-consistency guard before CodeBuild starts.
 resource "time_sleep" "wait_for_iam_propagation" {
+  count = local.use_local_build ? 0 : 1
+
   depends_on = [
     aws_iam_role.codebuild_role,
     aws_iam_role_policy.codebuild_policy,
@@ -152,30 +200,32 @@ resource "time_sleep" "wait_for_iam_propagation" {
   create_duration = "30s"
 }
 
-# Test IAM permissions before proceeding
 resource "null_resource" "test_iam_permissions" {
+  count = local.use_local_build ? 0 : 1
+
   depends_on = [time_sleep.wait_for_iam_propagation]
 
   provisioner "local-exec" {
     command = <<-EOT
       echo "Testing IAM role propagation for CodeBuild..."
-      # Wait a bit more to ensure IAM is fully propagated
       sleep 10
-      echo "IAM role should be ready: ${aws_iam_role.codebuild_role.arn}"
+      echo "IAM role should be ready: ${aws_iam_role.codebuild_role[0].arn}"
     EOT
   }
 
   triggers = {
-    role_arn  = aws_iam_role.codebuild_role.arn
-    policy_id = aws_iam_role_policy.codebuild_policy.id
+    role_arn  = aws_iam_role.codebuild_role[0].arn
+    policy_id = aws_iam_role_policy.codebuild_policy[0].id
   }
 }
 
 resource "aws_codebuild_project" "lambda_layers_build" {
+  count = local.use_local_build ? 0 : 1
+
   name          = "${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}"
   description   = "Build Lambda layers for ${var.name_prefix}"
   build_timeout = 60
-  service_role  = aws_iam_role.codebuild_role.arn
+  service_role  = aws_iam_role.codebuild_role[0].arn
 
   depends_on = [
     null_resource.test_iam_permissions,
@@ -193,11 +243,15 @@ resource "aws_codebuild_project" "lambda_layers_build" {
   }
 
   environment {
-    type         = "LINUX_CONTAINER"
-    compute_type = "BUILD_GENERAL1_LARGE"
-    image        = "aws/codebuild/amazonlinux2-x86_64-standard:5.0"
-    # Privileged mode is not required - this build only performs Python pip installations,
-    # system package installations via yum, and zip operations. No Docker operations are used.
+    # Architecture-aware CodeBuild image. Same SAM image family used by
+    # the local-build path so artifacts are bit-equivalent across modes.
+    type         = var.lambda_architecture == "arm64" ? "ARM_CONTAINER" : "LINUX_CONTAINER"
+    compute_type = var.lambda_architecture == "arm64" ? "BUILD_GENERAL1_LARGE" : "BUILD_GENERAL1_LARGE"
+    image = var.lambda_architecture == "arm64" ? (
+      "aws/codebuild/amazonlinux2-aarch64-standard:3.0"
+      ) : (
+      "aws/codebuild/amazonlinux2-x86_64-standard:5.0"
+    )
     privileged_mode             = false
     image_pull_credentials_type = "CODEBUILD"
 
@@ -211,13 +265,13 @@ resource "aws_codebuild_project" "lambda_layers_build" {
   logs_config {
     cloudwatch_logs {
       status     = "ENABLED"
-      group_name = aws_cloudwatch_log_group.codebuild_log_group.name
+      group_name = aws_cloudwatch_log_group.codebuild_log_group[0].name
     }
   }
 
   source {
     type      = "S3"
-    location  = "${local.lambda_layers_bucket_name}/${aws_s3_object.requirements_source.key}"
+    location  = "${local.lambda_layers_bucket_name}/${aws_s3_object.requirements_source[0].key}"
     buildspec = <<EOF
 version: 0.2
 phases:
@@ -245,7 +299,7 @@ phases:
 
           mkdir -p /tmp/$LAYER_NAME/python
 
-          # Strip local path refs (./...), inline comments, and blank lines
+          # Strip local path refs (./...), inline comments, and blank lines.
           CLEAN_REQ="/tmp/$${LAYER_NAME}_clean.txt"
           sed 's/#.*//' "$req_file" | grep -v '^\s*\.' | grep -v '^\s*$' > "$CLEAN_REQ" || true
           echo "Installable requirements:"
@@ -300,79 +354,111 @@ EOF
   }
 }
 
-# Note: CodeBuild triggering is now handled by Lambda function in lambda.tf
+# ----------------------------------------------------------------------------
+# Local-build path (lambda_local = true)
+# ----------------------------------------------------------------------------
 
-# Clean up local files after successful build
+module "local_build" {
+  count  = local.use_local_build ? 1 : 0
+  source = "../lambda-layer-local-build"
+
+  name_prefix              = var.name_prefix
+  requirements_files       = var.requirements_files
+  requirements_hash        = var.requirements_hash
+  force_rebuild            = var.force_rebuild
+  lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
+  lambda_tracing_mode      = var.lambda_tracing_mode
+
+  lambda_architecture = var.lambda_architecture
+  container_runtime   = var.container_runtime
+}
+
+# ----------------------------------------------------------------------------
+# Layer-version resources (mode-agnostic)
+# ----------------------------------------------------------------------------
+#
+# The S3 bucket is identical across modes (assets-bucket). The S3 key
+# differs by build path, but the produced layer name and ARN remain
+# stable so downstream consumers don't see a rename.
+
+locals {
+  # Coalesce S3 keys: local-build produces them via module.local_build,
+  # CodeBuild produces them via the buildspec (hard-coded path pattern).
+  layer_s3_keys = local.use_local_build ? (
+    length(module.local_build) > 0 ? module.local_build[0].layer_keys : {}
+    ) : {
+    for k, _ in local.non_empty_requirements :
+    k => "layers/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}/${k}.zip"
+  }
+}
+
+resource "aws_lambda_layer_version" "layers" {
+  for_each = local.non_empty_requirements
+
+  layer_name = "${var.name_prefix}-${each.key}"
+  s3_bucket  = local.lambda_layers_bucket_name
+  s3_key     = local.layer_s3_keys[each.key]
+
+  compatible_runtimes      = ["python3.12"]
+  compatible_architectures = [var.lambda_architecture]
+
+  source_code_hash = md5(each.value)
+
+  # Both paths must complete their upload before we can refer to the
+  # layer-zip object in Lambda.
+  depends_on = [
+    time_sleep.wait_for_s3_consistency,
+    module.local_build,
+  ]
+}
+
+# Wait for S3 consistency after CodeBuild completion (CodeBuild path only).
+resource "time_sleep" "wait_for_s3_consistency" {
+  count = local.use_local_build ? 0 : 1
+
+  depends_on = [aws_lambda_invocation.trigger_codebuild]
+
+  create_duration = "120s"
+}
+
+# Clean up local staging files after the CodeBuild path finishes uploading.
+# The local-build path does its own cleanup; no equivalent needed here.
 resource "null_resource" "cleanup_files" {
+  count = local.use_local_build ? 0 : 1
+
   depends_on = [
     aws_lambda_invocation.trigger_codebuild,
-    aws_s3_object.requirements_source
+    aws_s3_object.requirements_source,
   ]
 
   triggers = {
-    build_id = aws_lambda_invocation.trigger_codebuild.result
+    build_id = aws_lambda_invocation.trigger_codebuild[0].result
   }
 
   provisioner "local-exec" {
     command = <<EOF
       echo "Cleaning up temporary files directory..."
-      # Remove contents of requirements directory but keep the directory and .gitkeep file
       find "${path.module}/files/requirements" -mindepth 1 -not -name ".gitkeep" -exec rm -rf {} \; 2>/dev/null || true
-      # Clean up the build zip file
       rm -f "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip"
       echo "Cleanup completed"
     EOF
   }
 }
 
-# Filter out empty requirements files
-locals {
-  non_empty_requirements = {
-    for k, v in var.requirements_files : k => v if length(v) > 0
-  }
-}
-
-# Wait for S3 consistency after CodeBuild completion
-resource "time_sleep" "wait_for_s3_consistency" {
-  depends_on = [aws_lambda_invocation.trigger_codebuild]
-
-  create_duration = "120s"
-}
-
-# Create Lambda layers only for non-empty requirements
-resource "aws_lambda_layer_version" "layers" {
-  for_each = local.non_empty_requirements
-
-  layer_name = "${var.name_prefix}-${each.key}"
-  s3_bucket  = local.lambda_layers_bucket_name
-  s3_key     = "layers/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}/${each.key}.zip"
-
-  compatible_runtimes = ["python3.12"]
-
-  # Force layer recreation when requirements change
-  source_code_hash = md5(each.value)
-
-  depends_on = [time_sleep.wait_for_s3_consistency]
-}
-
-# Optional: Cleanup old build artifacts
 resource "null_resource" "cleanup_build_artifacts" {
-  depends_on = [
-    # This will be triggered after successful deployments
-    null_resource.cleanup_files
-  ]
+  count = local.use_local_build ? 0 : 1
+
+  depends_on = [null_resource.cleanup_files]
 
   provisioner "local-exec" {
     command = <<EOT
       echo "Cleaning up old build artifacts..."
-      # Remove build files older than 1 day but keep the directory
       find "${local.module_build_dir}" -name "*.zip" -mtime +1 -delete 2>/dev/null || true
       echo "Build artifact cleanup completed"
     EOT
   }
 
   triggers = {
-    # Run cleanup when build ID changes
     build_id = random_id.build_id.hex
   }
 }

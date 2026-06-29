@@ -1,0 +1,97 @@
+# Local-dev tfvars example for bedrock-llm-processor.
+#
+# Drops AWS CodeBuild from the apply path entirely. Every Lambda layer and
+# processor container image is built on YOUR machine using a container
+# runtime (Docker / Podman / Finch) -- typically seconds instead of the
+# 5-15 minutes CodeBuild needs.
+#
+# Use this when:
+#   * You are actively iterating on Lambda code (your apply cycle drops to
+#     ~30 seconds per change instead of multi-minute round-trips).
+#   * Your deploy host has Docker Desktop, Podman, or Finch installed.
+#   * You don't need CodeBuild's hermetic in-cloud build for compliance
+#     reasons.
+#
+# Do NOT use this for production / CI deployments unless you've explicitly
+# decided CodeBuild's value-add (hermeticity, audit trail) isn't worth its
+# cost. Stick with the default (terraform.tfvars.example) for those.
+#
+# Prerequisites checklist:
+#   1. Container runtime running on the deploy host. The wrapper auto-
+#      detects in this order: docker -> podman -> finch. Override with
+#      build.container_runtime = "podman" (or "finch") if needed.
+#   2. For cross-architecture builds (arm64 host -> x86_64 layer or vice
+#      versa) install Docker buildx + QEMU emulation. macOS Docker Desktop
+#      ships this; Linux requires the qemu-user-static package.
+#   3. AWS credentials configured (used by the inline `aws ecr
+#      get-login-password` step for ECR image pushes).
+#
+# See docs/content/deployment-guides/local-lambda-build.md for the full
+# troubleshooting guide.
+
+# AWS Configuration
+region = "us-east-1"
+prefix = "genai-idp-dev"
+
+# Administrator Configuration
+admin_email = "admin@example.com"
+
+# Logging Configuration
+log_level          = "INFO"
+log_retention_days = 7
+
+# Data Retention
+data_tracking_retention_days = 365
+
+# Model Configuration
+classification_model_id = "us.amazon.nova-2-lite-v1:0"
+extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
+summarization_model_id  = "us.amazon.nova-2-lite-v1:0"
+evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
+
+# Feature Toggles
+summarization_enabled = true
+enable_evaluation     = false
+enable_reporting      = false
+
+# API Configuration -- minimal for dev loop
+api = {
+  enabled = true
+  agent_analytics    = { enabled = false }
+  discovery          = { enabled = false }
+  chat_with_document = { enabled = false }
+  knowledge_base     = { enabled = false }
+  process_changes    = { enabled = false }
+}
+
+# Web UI Configuration -- on for end-to-end testing
+web_ui = {
+  enabled = true
+}
+
+# --- The interesting bit: opt into local builds. ---
+#
+# lambda_local = true
+#   * collapses all aws_codebuild_project, CodeBuild trigger Lambda, IAM
+#     role/policy, log group, and S3 buildspec object resources to count = 0
+#   * builds Lambda layer zips on the host inside the AWS SAM build image
+#   * builds & pushes processor container images via `docker buildx build --push`
+#
+# lambda_architecture = "x86_64" | "arm64"
+#   * propagates to compatible_architectures on layers, architectures on
+#     functions, and --platform on the docker build invocations.
+#
+# container_runtime = "auto" | "docker" | "podman" | "finch"
+#   * "auto" probes docker -> podman -> finch and picks the first one
+#     that responds; "podman"/"finch" disable fallback.
+build = {
+  lambda_local        = true
+  lambda_architecture = "x86_64"
+  container_runtime   = "auto"
+}
+
+# Tags
+tags = {
+  Environment = "dev-local"
+  Project     = "genai-idp-accelerator"
+}

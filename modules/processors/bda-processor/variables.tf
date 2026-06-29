@@ -201,3 +201,40 @@ variable "save_reporting_function_name" {
   type        = string
   default     = ""
 }
+
+#
+# Build strategy pass-through (see root var.build in variables.tf)
+#
+variable "lambda_local" {
+  description = "When true, build Lambda layers AND processor container image locally using a container runtime instead of via AWS CodeBuild."
+  type        = bool
+  default     = false
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64). Honored by both CodeBuild and local-build paths."
+  type        = string
+  default     = "x86_64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
+variable "container_runtime" {
+  description = "Container runtime for local builds (auto|docker|podman|finch). Ignored when lambda_local = false."
+  type        = string
+  default     = "auto"
+
+  validation {
+    condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
+    error_message = "container_runtime must be one of: auto, podman, docker, finch."
+  }
+}
+
+variable "docker_host" {
+  description = "Docker daemon socket to use when lambda_local = true. Resolved at the root by the build-runtime-check module; usually left as the empty default."
+  type        = string
+  default     = ""
+}

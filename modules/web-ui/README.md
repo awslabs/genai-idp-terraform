@@ -1,4 +1,3 @@
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -14,12 +13,12 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
-| <a name="provider_aws.us-east-1"></a> [aws.us-east-1](#provider\_aws.us-east-1) | 6.27.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
-| <a name="provider_time"></a> [time](#provider\_time) | 0.13.1 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.2.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
+| <a name="provider_aws.us-east-1"></a> [aws.us-east-1](#provider\_aws.us-east-1) | >= 5.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | >= 3.1.0 |
+| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9.0 |
 
 ## Modules
 
@@ -81,6 +80,7 @@ No modules.
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encryption | `string` | n/a | yes |
 | <a name="input_evaluation_baseline_bucket_name"></a> [evaluation\_baseline\_bucket\_name](#input\_evaluation\_baseline\_bucket\_name) | Name of the evaluation baseline S3 bucket (extracted from evaluation baseline bucket ARN) | `string` | `""` | no |
 | <a name="input_idp_pattern"></a> [idp\_pattern](#input\_idp\_pattern) | IDP processing pattern name (mapped from processor type) | `string` | `""` | no |
+| <a name="input_idp_version"></a> [idp\_version](#input\_idp\_version) | Upstream IDP version string surfaced in the Web UI Deployment Info panel. Should track the IDP\_VERSION file at the repo root. | `string` | n/a | yes |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket for input files | `string` | n/a | yes |
 | <a name="input_knowledge_base_enabled"></a> [knowledge\_base\_enabled](#input\_knowledge\_base\_enabled) | Whether Knowledge Base functionality is enabled | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
@@ -110,4 +110,3 @@ No modules.
 | <a name="output_distribution"></a> [distribution](#output\_distribution) | The CloudFront distribution that serves the web application (when create\_infrastructure is true) |
 | <a name="output_settings_parameter"></a> [settings\_parameter](#output\_settings\_parameter) | SSM Parameter for Web UI settings |
 | <a name="output_web_ui_test_env_file"></a> [web\_ui\_test\_env\_file](#output\_web\_ui\_test\_env\_file) | Environment file content for local UI development |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

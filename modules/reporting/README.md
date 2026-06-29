@@ -1,4 +1,3 @@
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
 | Name | Version |
@@ -13,10 +12,10 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.27.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.3.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
 
 ## Modules
 
@@ -91,4 +90,3 @@ No modules.
 | <a name="output_save_reporting_data_function_arn"></a> [save\_reporting\_data\_function\_arn](#output\_save\_reporting\_data\_function\_arn) | ARN of the save reporting data Lambda function |
 | <a name="output_save_reporting_data_function_name"></a> [save\_reporting\_data\_function\_name](#output\_save\_reporting\_data\_function\_name) | Name of the save reporting data Lambda function |
 | <a name="output_section_evaluations_table_name"></a> [section\_evaluations\_table\_name](#output\_section\_evaluations\_table\_name) | Name of the section evaluations Glue table |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
