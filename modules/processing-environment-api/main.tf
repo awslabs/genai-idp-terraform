@@ -51,6 +51,14 @@ locals {
   encryption_key_arn = var.encryption_key_arn
   encryption_key_id  = var.encryption_key_arn != null ? element(split("/", var.encryption_key_arn), 1) : null
 
+  # Effective ARN for KMS IAM policy Resource fields. When no customer-managed
+  # key is supplied, var/local.encryption_key_arn is null, which would render an
+  # invalid "Resource": null in a policy document (IAM rejects it). Fall back to
+  # a syntactically-valid placeholder key ARN so the policy is well-formed (and
+  # grants nothing usable, since the key does not exist). Mirrors the inline
+  # guard already used by the appsync_dynamodb_policy KMS statement.
+  kms_policy_resource_arn = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+
   # Knowledge Base - Extract ID from ARN
   knowledge_base_arn = var.knowledge_base.knowledge_base_arn
   knowledge_base_id  = var.knowledge_base.knowledge_base_arn != null ? element(split("/", var.knowledge_base.knowledge_base_arn), 1) : null
