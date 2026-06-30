@@ -1,49 +1,29 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Private Network Deployment wiring
+# Private network deployment wiring.
 #
-# VPC *placement* of the IDP Lambdas (and other VPC-capable resources) is already
-# threaded throughout main.tf via `var.vpc_subnet_ids` / `var.vpc_security_group_ids`
-# (each processor module + processing-environment + feature submodules receive the
-# same subnet/SG inputs). This file owns the second half of a private deployment:
-# instantiating `module.vpc_endpoints` so those VPC-placed Lambdas reach the AWS
-# services the *enabled* processors and features need over PrivateLink — without
-# public internet egress.
-#
-# Default-off: `module.vpc_endpoints` is created only when `var.private_network`
-# is set AND at least one private subnet is supplied. With the defaults
-# (private_network = null, empty subnet/SG lists) no endpoint resources exist and
-# the deployment behaves exactly as a public one.
+# VPC placement of the Lambdas is threaded through main.tf via
+# var.vpc_subnet_ids / var.vpc_security_group_ids. This file instantiates
+# module.vpc_endpoints so those Lambdas reach AWS services over PrivateLink.
+# Default-off: created only when var.private_network is set and at least one
+# subnet is supplied; otherwise no endpoints exist and the deployment is public.
 
 locals {
-  # A private-network deployment is active only when the operator has supplied a
-  # private_network config (with a vpc_id) and at least one subnet to place the
-  # interface ENIs in. Empty subnets ⇒ nothing to privately route ⇒ no module.
+  # Active only when a private_network config (with vpc_id) and at least one
+  # subnet are supplied.
   private_network_enabled = var.private_network != null && length(var.vpc_subnet_ids) > 0
 
-  # Whether the AppSync API is configured PRIVATE. PRIVATE requires the
-  # appsync-api interface endpoint so VPC clients can resolve/reach the GraphQL
-  # API.
+  # PRIVATE AppSync needs the appsync-api interface endpoint.
   appsync_visibility_private = try(var.api.visibility, "GLOBAL") == "PRIVATE"
 
-  # Interface endpoints required by the enabled processors and features.
-  # The map key doubles as the PrivateLink service suffix
-  # (com.amazonaws.<region>.<key>) so the set stays partition-portable.
-  #
-  # - Base operational services every IDP deployment's Lambdas need: SSM (config
-  #   + Session Manager), CloudWatch logs/metrics, KMS (encryption), STS
-  #   (credentials / assume-role), SQS (work queues), Step Functions (states),
-  #   Lambda (invoke), EventBridge (events), and CodeBuild (the layer-build
-  #   projects run inside the VPC when one is configured).
-  # - Bedrock + Bedrock runtime: any configured processor can call Bedrock
-  #   (classification/extraction/summarization), so enable whenever a processor
-  #   is set.
-  # - Textract: only the OCR-based processors (bedrock-llm, sagemaker-udop) call
-  #   Textract; BDA does its own document extraction.
-  # - Bedrock agent runtime: used by Knowledge Base / agent-analytics / chat
-  #   retrieval features.
-  # - appsync-api: only required when the API is PRIVATE.
+  # Interface endpoints required by the enabled processors/features. The map key
+  # is the PrivateLink service suffix (com.amazonaws.<region>.<key>).
+  #   - base: operational services every deployment's Lambdas need.
+  #   - bedrock: any processor can call Bedrock.
+  #   - textract: only the OCR processors (bedrock-llm, sagemaker-udop).
+  #   - bedrock-agent-runtime: Knowledge Base / agent-analytics / chat retrieval.
+  #   - appsync-api: only when the API is PRIVATE.
   _vpc_endpoint_base = {
     ssm         = true
     ssmmessages = true
@@ -85,10 +65,9 @@ locals {
   )
 }
 
-# Standalone VPC endpoints for the private deployment. Provisions exactly the
-# interface endpoints the enabled processors/features need (plus the free
-# S3/DynamoDB gateway endpoints), placed in the same private subnets/SGs as the
-# IDP Lambdas. Partition-aware service names live inside the module.
+# Standalone VPC endpoints for the private deployment: the interface endpoints
+# the enabled processors/features need plus the free S3/DynamoDB gateways,
+# placed in the same subnets/SGs as the Lambdas.
 module "vpc_endpoints" {
   source = "./modules/vpc-endpoints"
   count  = local.private_network_enabled ? 1 : 0
@@ -110,25 +89,16 @@ module "vpc_endpoints" {
 }
 
 # ---------------------------------------------------------------------------
-# Private-network endpoint-gap checks
+# Private-network endpoint-gap checks (plan-time).
 #
-# These surface, at *plan* time, a private deployment whose interface-endpoint
-# set does not cover what the chosen configuration needs — instead of letting
-# the gap show up only as a runtime connection timeout inside the VPC.
-#
-# "Provisioned" is read from the *keys* of the vpc-endpoints module output
-# (interface_endpoint_ids). Those keys come from the module's for_each enable
-# map and are known at plan time; the endpoint IDs themselves are
-# known-after-apply, so comparing keys (rather than `appsync_api_endpoint_id !=
-# null`) keeps these a plan-time gate rather than an apply-time one. The
-# `try(module.vpc_endpoints[0]..., {})` form makes the expression robust whether
-# or not the count-gated module is instantiated (count = 0 ⇒ {}).
+# "Provisioned" is read from the keys of the module's interface_endpoint_ids
+# output, which are known at plan time (the IDs themselves are not). The
+# try(module.vpc_endpoints[0]..., {}) form is robust whether or not the
+# count-gated module is instantiated.
 # ---------------------------------------------------------------------------
 
-# Validation: PRIVATE AppSync requires the appsync-api interface VPC endpoint.
-# When var.api.visibility = "PRIVATE" the GraphQL API is reachable only through
-# the appsync-api PrivateLink endpoint; without it, VPC clients cannot resolve or
-# reach the API at all. Passes on the default path (GLOBAL, or visibility unset).
+# PRIVATE AppSync requires the appsync-api interface endpoint. Passes on the
+# default path (GLOBAL or unset).
 #tfsec:ignore:*
 check "private_appsync_endpoint_present" {
   assert {
@@ -140,14 +110,9 @@ check "private_appsync_endpoint_present" {
   }
 }
 
-# Validation (best-effort): every interface endpoint the enabled processors and
-# features require is actually provisioned. This compares the required set
-# (local.required_interface_endpoints, derived from the enabled processor +
-# features) against the set module.vpc_endpoints actually provisions. By
-# construction the root wires required ⇒ enabled, so this normally holds; the
-# check guards against drift if that wiring is ever changed and gives the
-# operator a concrete list of missing endpoints rather than a runtime failure.
-# Skipped entirely when private networking is off (Lambdas use public egress).
+# Every interface endpoint the enabled processors/features require is actually
+# provisioned. Guards against drift in the required-vs-enabled wiring and lists
+# any missing endpoints. Skipped when private networking is off.
 #tfsec:ignore:*
 check "private_required_endpoints_present" {
   assert {
