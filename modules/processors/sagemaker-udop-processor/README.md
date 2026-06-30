@@ -11,9 +11,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.49.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | 0.14.0 |
 
 ## Modules
 
@@ -25,17 +23,7 @@
 
 | Name | Type |
 |------|------|
-| [aws_cloudwatch_log_group.sagemaker_hook](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
-| [aws_iam_role.sagemaker_hook](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
-| [aws_iam_role_policy.sagemaker_hook](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
-| [aws_iam_role_policy_attachment.sagemaker_hook_basic](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
-| [aws_iam_role_policy_attachment.sagemaker_hook_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
-| [aws_lambda_function.sagemaker_hook](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
-| [time_sleep.wait_for_iam_propagation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
-| [archive_file.sagemaker_hook](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
-| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 
 ## Inputs
 
@@ -44,11 +32,11 @@
 | <a name="input_api_arn"></a> [api\_arn](#input\_api\_arn) | ARN of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_graphql_url"></a> [api\_graphql\_url](#input\_api\_graphql\_url) | GraphQL URL of the API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_id"></a> [api\_id](#input\_api\_id) | ID of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
-| <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (v0.4.11+). Attached to the SageMaker classification-hook bridge Lambda and forwarded to the engine. | `string` | `null` | no |
-| <a name="input_classification_endpoint_arn"></a> [classification\_endpoint\_arn](#input\_classification\_endpoint\_arn) | ARN of the consumer-supplied SageMaker endpoint used for document classification. The façade provisions NO SageMaker hosting/training; it only grants the bridge Lambda sagemaker:InvokeEndpoint on this endpoint. | `string` | n/a | yes |
+| <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (v0.4.11+), forwarded to the engine. | `string` | `null` | no |
+| <a name="input_classification_endpoint_arn"></a> [classification\_endpoint\_arn](#input\_classification\_endpoint\_arn) | ARN of the consumer-supplied SageMaker endpoint used for document classification. The façade provisions NO SageMaker hosting/training; it grants the classification Lambda sagemaker:InvokeEndpoint on this endpoint and passes its name as SAGEMAKER\_ENDPOINT\_NAME. | `string` | n/a | yes |
 | <a name="input_classification_max_workers"></a> [classification\_max\_workers](#input\_classification\_max\_workers) | Maximum number of concurrent workers for classification processing | `number` | `20` | no |
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the DynamoDB table that manages concurrency limits for document processing | `string` | n/a | yes |
-| <a name="input_config"></a> [config](#input\_config) | Document processing configuration (from config\_library YAML). The façade injects classification.model\_lambda\_hook\_arn pointing at the bridge Lambda. | `any` | `null` | no |
+| <a name="input_config"></a> [config](#input\_config) | Document processing configuration (from config\_library YAML), forwarded to the engine. | `any` | `null` | no |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings | `string` | n/a | yes |
 | <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | Whether the API is enabled | `bool` | `false` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources | `string` | `null` | no |
@@ -78,18 +66,16 @@
 | Name | Description |
 |------|-------------|
 | <a name="output_classification_max_workers"></a> [classification\_max\_workers](#output\_classification\_max\_workers) | The maximum number of concurrent workers for document classification |
-| <a name="output_classification_model"></a> [classification\_model](#output\_classification\_model) | The classification model being used (forced to 'LambdaHook' by this façade) |
-| <a name="output_configuration"></a> [configuration](#output\_configuration) | Configuration for the SageMaker-UDOP processor (with the LambdaHook bridge ARN injected) |
+| <a name="output_classification_model"></a> [classification\_model](#output\_classification\_model) | The classification model being used (classification runs via the native SageMaker backend) |
+| <a name="output_configuration"></a> [configuration](#output\_configuration) | Configuration for the SageMaker-UDOP processor |
 | <a name="output_evaluation_enabled"></a> [evaluation\_enabled](#output\_evaluation\_enabled) | Whether extraction results evaluation is enabled |
 | <a name="output_evaluation_function_arn"></a> [evaluation\_function\_arn](#output\_evaluation\_function\_arn) | ARN of the evaluation Lambda function (used by the Step Functions state machine when evaluation is enabled). Null when evaluation is disabled. |
 | <a name="output_evaluation_model"></a> [evaluation\_model](#output\_evaluation\_model) | The evaluation model being used (from variable override or config.yaml) |
 | <a name="output_extraction_model"></a> [extraction\_model](#output\_extraction\_model) | The extraction model being used (from variable override or config.yaml) |
 | <a name="output_is_summarization_enabled"></a> [is\_summarization\_enabled](#output\_is\_summarization\_enabled) | Whether document summarization is enabled |
-| <a name="output_lambda_functions"></a> [lambda\_functions](#output\_lambda\_functions) | Lambda functions used by the processor (engine functions plus the SageMaker classification-hook bridge) |
+| <a name="output_lambda_functions"></a> [lambda\_functions](#output\_lambda\_functions) | Lambda functions used by the processor (engine functions) |
 | <a name="output_max_processing_concurrency"></a> [max\_processing\_concurrency](#output\_max\_processing\_concurrency) | Maximum number of concurrent document processing tasks |
 | <a name="output_ocr_max_workers"></a> [ocr\_max\_workers](#output\_ocr\_max\_workers) | The maximum number of concurrent workers for OCR processing |
-| <a name="output_sagemaker_hook_function_arn"></a> [sagemaker\_hook\_function\_arn](#output\_sagemaker\_hook\_function\_arn) | ARN of the SageMaker classification-hook bridge Lambda that invokes the consumer-supplied SageMaker endpoint. |
-| <a name="output_sagemaker_hook_function_name"></a> [sagemaker\_hook\_function\_name](#output\_sagemaker\_hook\_function\_name) | Name of the SageMaker classification-hook bridge Lambda (starts with 'GENAIIDP-'). |
 | <a name="output_schema_definition"></a> [schema\_definition](#output\_schema\_definition) | The JSON Schema definition for the processor configuration |
 | <a name="output_state_machine_arn"></a> [state\_machine\_arn](#output\_state\_machine\_arn) | ARN of the Step Functions state machine for document processing |
 | <a name="output_state_machine_name"></a> [state\_machine\_name](#output\_state\_machine\_name) | Name of the Step Functions state machine for document processing |

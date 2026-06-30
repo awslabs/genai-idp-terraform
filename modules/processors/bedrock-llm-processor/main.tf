@@ -68,6 +68,13 @@ module "engine" {
   lambda_hook_extraction     = var.lambda_hook_extraction
   lambda_hook_assessment     = var.lambda_hook_assessment
   lambda_hook_summarization  = var.lambda_hook_summarization
+  enable_hook_inference = length(compact([
+    var.lambda_hook_ocr,
+    var.lambda_hook_classification,
+    var.lambda_hook_extraction,
+    var.lambda_hook_assessment,
+    var.lambda_hook_summarization,
+  ])) > 0
 
   # Model configuration
   model_id                     = var.model_id

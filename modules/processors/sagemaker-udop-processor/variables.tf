@@ -4,8 +4,8 @@
 # Variables for the SageMaker-UDOP processor façade (Pattern 3 retained).
 #
 # This is the public input surface. Pattern-specific fields (the consumer-
-# supplied SageMaker endpoint) configure the classification-hook bridge Lambda;
-# all other fields are forwarded to the shared engine (`module.engine`).
+# supplied SageMaker endpoint) drive the engine's native SageMaker classification
+# backend; all other fields are forwarded to the shared engine (`module.engine`).
 
 variable "name" {
   description = "Name prefix for all resources"
@@ -17,7 +17,7 @@ variable "name" {
 # =============================================================================
 
 variable "classification_endpoint_arn" {
-  description = "ARN of the consumer-supplied SageMaker endpoint used for document classification. The façade provisions NO SageMaker hosting/training; it only grants the bridge Lambda sagemaker:InvokeEndpoint on this endpoint."
+  description = "ARN of the consumer-supplied SageMaker endpoint used for document classification. The façade provisions NO SageMaker hosting/training; it grants the classification Lambda sagemaker:InvokeEndpoint on this endpoint and passes its name as SAGEMAKER_ENDPOINT_NAME."
   type        = string
 }
 
@@ -154,7 +154,7 @@ variable "classification_max_workers" {
 }
 
 variable "config" {
-  description = "Document processing configuration (from config_library YAML). The façade injects classification.model_lambda_hook_arn pointing at the bridge Lambda."
+  description = "Document processing configuration (from config_library YAML), forwarded to the engine."
   type        = any
   default     = null
 }
@@ -165,7 +165,7 @@ variable "idp_common_layer_arn" {
 }
 
 variable "base_layer_arn" {
-  description = "ARN of the shared base Lambda layer (v0.4.11+). Attached to the SageMaker classification-hook bridge Lambda and forwarded to the engine."
+  description = "ARN of the shared base Lambda layer (v0.4.11+), forwarded to the engine."
   type        = string
   default     = null
 }

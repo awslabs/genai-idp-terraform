@@ -92,12 +92,49 @@ locals {
     for name in local.hook_function_names :
     "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${name}"
   ]
+
+  # Per-step Lambda roles that may invoke a LambdaHook at runtime. summarization
+  # is included only when its (conditionally-created) role exists.
+  hook_inference_role_ids = var.enable_hook_inference ? merge(
+    {
+      ocr            = aws_iam_role.ocr_lambda.id
+      classification = aws_iam_role.classification_lambda.id
+      extraction     = aws_iam_role.extraction_lambda.id
+      assessment     = aws_iam_role.assessment_lambda.id
+    },
+    var.is_summarization_enabled ? {
+      summarization = aws_iam_role.summarization_lambda[0].id
+    } : {}
+  ) : {}
 }
 
 resource "aws_iam_role_policy" "state_machine_hook_inference" {
-  count = length(local.hook_function_names) > 0 ? 1 : 0
+  count = var.enable_hook_inference ? 1 : 0
   name  = "${local.name_prefix}-state-machine-hook-inference-policy"
   role  = aws_iam_role.state_machine.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = local.hook_function_arns
+      }
+    ]
+  })
+}
+
+# The hook is invoked at runtime by the per-step processing Lambda (idp_common's
+# _invoke_lambda_hook), not just Step Functions. Mirror the CDK accelerator's
+# per-function grantInvoke on the LambdaHook bridge by granting each step's
+# Lambda role InvokeFunction on the configured hook ARN(s). for_each keys are
+# static so the gate stays plan-time-known.
+resource "aws_iam_role_policy" "lambda_hook_inference" {
+  for_each = local.hook_inference_role_ids
+
+  name = "${local.name_prefix}-${each.key}-hook-inference-policy"
+  role = each.value
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -245,6 +282,25 @@ resource "aws_iam_role" "classification_lambda" {
 resource "aws_iam_role_policy_attachment" "classification_lambda_basic" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   role       = aws_iam_role.classification_lambda.name
+}
+
+# SageMaker classification backend: allow the classification Lambda to invoke
+# the UDOP endpoint directly (idp_common's native classify_page_sagemaker path).
+resource "aws_iam_role_policy" "classification_lambda_sagemaker" {
+  count = var.classification_backend == "sagemaker" && var.classification_sagemaker_endpoint_arn != null ? 1 : 0
+  name  = "${local.name_prefix}-classification-lambda-sagemaker-policy"
+  role  = aws_iam_role.classification_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sagemaker:InvokeEndpoint"]
+        Resource = var.classification_sagemaker_endpoint_arn
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role_policy" "classification_lambda" {

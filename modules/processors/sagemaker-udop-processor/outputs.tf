@@ -4,8 +4,8 @@
 # Public outputs for the SageMaker-UDOP processor façade.
 #
 # Document-processing outputs are re-exposed from the shared engine
-# (module.engine); the façade owns only the SageMaker classification-hook bridge
-# Lambda, surfaced below for visibility/debugging.
+# (module.engine). Classification runs through idp_common's native SageMaker
+# backend against the consumer-supplied endpoint.
 
 output "state_machine_arn" {
   description = "ARN of the Step Functions state machine for document processing"
@@ -23,12 +23,12 @@ output "max_processing_concurrency" {
 }
 
 output "configuration" {
-  description = "Configuration for the SageMaker-UDOP processor (with the LambdaHook bridge ARN injected)"
+  description = "Configuration for the SageMaker-UDOP processor"
   value       = module.engine.configuration
 }
 
 output "classification_model" {
-  description = "The classification model being used (forced to 'LambdaHook' by this façade)"
+  description = "The classification model being used (classification runs via the native SageMaker backend)"
   value       = module.engine.classification_model
 }
 
@@ -53,16 +53,8 @@ output "schema_definition" {
 }
 
 output "lambda_functions" {
-  description = "Lambda functions used by the processor (engine functions plus the SageMaker classification-hook bridge)"
-  value = merge(
-    module.engine.lambda_functions,
-    {
-      sagemaker_hook = {
-        name = aws_lambda_function.sagemaker_hook.function_name
-        arn  = aws_lambda_function.sagemaker_hook.arn
-      }
-    }
-  )
+  description = "Lambda functions used by the processor (engine functions)"
+  value       = module.engine.lambda_functions
 }
 
 output "classification_max_workers" {
@@ -88,14 +80,4 @@ output "is_summarization_enabled" {
 output "evaluation_function_arn" {
   description = "ARN of the evaluation Lambda function (used by the Step Functions state machine when evaluation is enabled). Null when evaluation is disabled."
   value       = module.engine.evaluation_function_arn
-}
-
-output "sagemaker_hook_function_arn" {
-  description = "ARN of the SageMaker classification-hook bridge Lambda that invokes the consumer-supplied SageMaker endpoint."
-  value       = aws_lambda_function.sagemaker_hook.arn
-}
-
-output "sagemaker_hook_function_name" {
-  description = "Name of the SageMaker classification-hook bridge Lambda (starts with 'GENAIIDP-')."
-  value       = aws_lambda_function.sagemaker_hook.function_name
 }

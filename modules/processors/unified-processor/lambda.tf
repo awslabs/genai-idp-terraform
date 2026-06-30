@@ -74,7 +74,12 @@ resource "aws_lambda_function" "classification" {
       GUARDRAIL_ID_AND_VERSION = var.classification_guardrail != null ? var.classification_guardrail.guardrail_id : ""
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
-    }, local.bedrock_assume_role_env)
+      },
+      var.classification_backend == "sagemaker" ? {
+        SAGEMAKER_ENDPOINT_NAME = var.classification_sagemaker_endpoint_arn != null ? element(split("/", var.classification_sagemaker_endpoint_arn), 1) : ""
+      } : {},
+      local.bedrock_assume_role_env
+    )
   }
 
   dynamic "vpc_config" {
@@ -361,7 +366,7 @@ data "archive_file" "ocr_lambda" {
 
 data "archive_file" "classification_lambda" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/patterns/unified/src/classification_function"
+  source_dir  = var.classification_backend == "sagemaker" ? "${path.module}/src/sagemaker_classification_function" : "${path.module}/../../../sources/patterns/unified/src/classification_function"
   output_path = "${path.module}/classification_function.zip"
 
   depends_on = [null_resource.create_module_build_dir]

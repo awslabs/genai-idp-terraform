@@ -203,6 +203,28 @@ variable "lambda_hook_summarization" {
   }
 }
 
+variable "enable_hook_inference" {
+  description = "Whether any Lambda hook is wired. Gates the hook-inference IAM policy on a plan-time-known value (the hook function names can be derived from random_string and thus unknown at plan)."
+  type        = bool
+  default     = false
+}
+
+variable "classification_backend" {
+  description = "Classification backend: 'bedrock' (default) uses the vendored Bedrock classification function; 'sagemaker' uses idp_common's native SageMaker UDOP path (classify_page_sagemaker) against classification_sagemaker_endpoint_arn."
+  type        = string
+  default     = "bedrock"
+  validation {
+    condition     = contains(["bedrock", "sagemaker"], var.classification_backend)
+    error_message = "classification_backend must be 'bedrock' or 'sagemaker'."
+  }
+}
+
+variable "classification_sagemaker_endpoint_arn" {
+  description = "ARN of the SageMaker endpoint used for classification when classification_backend = 'sagemaker'. The classification Lambda is granted sagemaker:InvokeEndpoint on it and receives its name via SAGEMAKER_ENDPOINT_NAME."
+  type        = string
+  default     = null
+}
+
 variable "model_id" {
   description = "Default Bedrock model ID for all processing steps. Supports global./ us. prefixes and :flex/:priority/:standard suffixes. (v0.4.12+)"
   type        = string
