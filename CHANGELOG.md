@@ -109,6 +109,16 @@ To roll back, flip the flag back to `false` and apply again.
   docker provider) is preserved as a building block for future
   single-image consumers; the root provider declaration can land
   alongside the first such consumer.
+- Lambda layer local builds use **`null_resource + local-exec`** running
+  `scripts/build-layer.sh` (or `scripts/build-idp-layer.sh`) inside the
+  AWS SAM build image, rather than `terraform-aws-modules/lambda ~> 7.0`
+  with `build_in_docker = true` as originally proposed (design.md
+  Decision 2). Reason: the dispatcher pattern has the wrapper module
+  (`lambda-layer-codebuild`) owning the `aws_lambda_layer_version`
+  resource — we only need build+upload from the local-build module.
+  Hand-rolled HCL matches the existing CodeBuild module's style and
+  avoids adding a third-party module dependency. The SAM build image
+  produces the same hermetic environment either way.
 
 ---
 
