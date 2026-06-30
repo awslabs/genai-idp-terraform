@@ -85,7 +85,7 @@ resource "aws_iam_policy" "appsync_dynamodb_policy" {
             "kms:GenerateDataKey*"
           ]
           Effect   = "Allow"
-          Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+          Resource = local.kms_policy_resource_arn
         }
       ]
     )
@@ -247,7 +247,7 @@ resource "aws_iam_policy" "configuration_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = var.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
@@ -444,7 +444,7 @@ resource "aws_iam_policy" "copy_to_baseline_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
@@ -602,7 +602,7 @@ resource "aws_iam_policy" "delete_document_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
@@ -727,7 +727,7 @@ resource "aws_iam_policy" "get_file_contents_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
@@ -984,7 +984,7 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
@@ -1106,7 +1106,7 @@ resource "aws_iam_policy" "reprocess_document_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
@@ -1234,7 +1234,7 @@ resource "aws_iam_policy" "upload_resolver_kms_policy" {
           "kms:GenerateDataKey"
         ]
         Effect   = "Allow"
-        Resource = local.encryption_key_arn
+        Resource = local.kms_policy_resource_arn
       }
     ]
   })
