@@ -6,7 +6,7 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
-## [0.5.12-tf.2] - 2026-07-07
+## [0.5.12-tf.2] - 2026-06-30
 
 ### Summary
 
@@ -42,6 +42,29 @@ No file under `sources/` is modified.
   populates the new GSI attributes on items that predate the index. Gated by
   `var.tracking.enable_gsi_backfill` (default false), least privilege scoped, and
   never runs on `apply`: the operator starts it explicitly.
+
+### Fixed
+
+- **SageMaker UDOP classification.** The processor now classifies through
+  idp_common's native SageMaker backend, which calls the endpoint directly with
+  the `input_image` and `input_textract` payload the UDOP model expects. The
+  previous wiring routed classification through the generic sample Lambda hook,
+  which only sent a text payload and failed at the endpoint. A
+  `classification_backend` input was added to the unified processor (default
+  `bedrock`, so the BDA and Bedrock LLM processors are unaffected); the
+  SageMaker-UDOP façade sets it to `sagemaker` and the engine grants the
+  classification Lambda `sagemaker:InvokeEndpoint` on the supplied endpoint. The
+  standalone classification-hook bridge Lambda is removed.
+- **First apply count race.** Gated the hook-inference IAM policy on a
+  plan-time-known `enable_hook_inference` flag so a clean apply no longer aborts
+  with an "Invalid count argument" error when hook function names derive from a
+  not-yet-known random suffix.
+- **Chat with Document on empty system prompt.** Wrapped the system-prompt lookup
+  so an empty configured value falls back correctly instead of leaving the chat
+  request stuck behind queue state.
+- **BDA processor OCR layer.** The shared idp_common layer is now built with the
+  `ocr` extra on all processor paths, so the OCR step has `pypdfium2` available
+  instead of failing with a missing-module error.
 
 ### Approach
 
