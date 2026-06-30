@@ -2,18 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-# Unified Processor (shared internal engine)
-#
-# This is the shared internal engine that builds the unified document-processing
-# Lambdas and the single Step Functions state machine from
-# `sources/patterns/unified/`. It mirrors the CDK accelerator's
-# `UnifiedDocumentProcessor` (verified against cdklabs/genai-idp@main).
-#
-# It is NOT a public input surface: it is instantiated only by the three
-# per-pattern façade modules (bda-processor, bedrock-llm-processor,
-# sagemaker-udop-processor) as a nested `module "engine"`. The processing path is
-# selected by the façade via the `use_bda` delegation input (BDA branch when
-# true; pipeline branch when false). Derived from `bedrock-llm-processor`.
+# Unified Processor: shared internal engine that builds the document-processing
+# Lambdas and Step Functions state machine from sources/patterns/unified/
+# (mirrors CDK UnifiedDocumentProcessor). Not a public surface; instantiated only
+# by the per-pattern façade modules, which select the path via the use_bda
+# delegation input (BDA branch when true, pipeline branch when false).
 
 # Data sources
 data "aws_caller_identity" "current" {}
@@ -24,7 +17,6 @@ data "aws_region" "current" {}
 locals {
   name_prefix = var.name
 
-  # Use flat variables directly
   input_bucket_arn        = var.input_bucket_arn
   output_bucket_arn       = var.output_bucket_arn
   working_bucket_arn      = var.working_bucket_arn
@@ -42,12 +34,11 @@ locals {
   api_graphql_url         = var.api_graphql_url
 
   # Extract resource names from ARNs
-  # Format for S3 bucket ARN: arn:${data.aws_partition.current.partition}:s3:::bucket-name
   input_bucket_name   = element(split(":", local.input_bucket_arn), 5)
   output_bucket_name  = element(split(":", local.output_bucket_arn), 5)
   working_bucket_name = element(split(":", local.working_bucket_arn), 5)
 
-  # DynamoDB table names (format: arn:${data.aws_partition.current.partition}:dynamodb:region:account:table/table-name)
+  # DynamoDB table names from ARNs
   configuration_table_name = element(split("/", local.configuration_table_arn), 1)
   tracking_table_name      = element(split("/", local.tracking_table_arn), 1)
   concurrency_table_name   = element(split("/", local.concurrency_table_arn), 1)
@@ -66,7 +57,6 @@ locals {
   ]
 
   # Extract KMS key ID from ARN if provided
-  # Format for KMS key ARN: arn:${data.aws_partition.current.partition}:kms:region:account-id:key/key-id
   encryption_key_id = local.encryption_key_arn != null ? element(split("/", local.encryption_key_arn), 1) : null
 
   # Build directory and instance ID for Lambda functions
@@ -79,7 +69,7 @@ locals {
   })
 }
 
-# Create the configuration components using the processor-configuration module
+# Configuration components (processor-configuration module)
 module "processor_configuration" {
   source = "../../processor-configuration"
 
@@ -87,14 +77,11 @@ module "processor_configuration" {
   configuration_table_name = local.configuration_table_name
   encryption_key_arn       = var.encryption_key_arn
 
-  # Use the config passed from parent module (from config_library YAML files)
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
 
-  # Required for the seeder Lambda to merge user config with system
-  # defaults. Without these layers attached, the seeder will store the
-  # sparse user YAML and the runtime will crash with "No system_prompt
-  # found in classification configuration".
+  # Layers required so the seeder Lambda merges user config with system
+  # defaults; without them the runtime crashes with "No system_prompt found".
   base_layer_arn       = var.base_layer_arn
   idp_common_layer_arn = var.idp_common_layer_arn
 
@@ -103,15 +90,12 @@ module "processor_configuration" {
   tags                = var.tags
 }
 
-# Configuration logic (moved from configuration/main.tf)
+# Configuration logic
 locals {
-  # Use the config passed from parent module (from sources/config_library/)
   base_config = var.config
 
-  # Apply model overrides if provided, similar to CDK transforms.
-  # The base config can be sparse (e.g., samples that inherit everything from
-  # system defaults at runtime), so use try() to tolerate missing top-level
-  # sections rather than failing at plan time.
+  # Apply model overrides. base_config may be sparse, so try() tolerates
+  # missing sections rather than failing at plan time.
   config_with_overrides = merge(
     local.base_config,
     # Override classification model: per-step var → model_id default
@@ -206,20 +190,17 @@ locals {
     }
   ]
 
-  # The state after ProcessResultsStep / MarkHITLPending depends on whether summarization is enabled
+  # The state after process-results/HITL depends on whether summarization is enabled
   post_hitl_next = local.summ_enabled ? "SummarizationStep" : (local.eval_enabled ? "EvaluationStep" : "WorkflowComplete")
 
-  # The state after SummarizationStep depends on whether evaluation is enabled
+  # The state after summarization depends on whether evaluation is enabled
   post_summ_next = local.eval_enabled ? "EvaluationStep" : "WorkflowComplete"
 
-  # CheckHITLRequired default (when HITL not triggered) — same logic as post_hitl_next
+  # CheckHITLRequired default (HITL not triggered), same as post_hitl_next
   check_hitl_default = local.post_hitl_next
 
-  # HITL state map.
-  # v0.4.16: HITL is async — process_results marks the document
-  # HITL_IN_PROGRESS and the workflow continues without waiting; reviewers
-  # complete sections via AppSync mutations. Matches upstream CFN/CDK (no
-  # Lambda task states for HITL).
+  # HITL is async (v0.4.16): process_results marks the doc HITL_IN_PROGRESS and
+  # the workflow continues without waiting; reviewers complete via AppSync.
   hitl_states = local.hitl_enabled ? {
     MarkHITLPending = {
       Type    = "Pass"
@@ -257,18 +238,14 @@ locals {
     }
   } : {}
 
-  # BDA branch states — GATED on the façade-supplied `use_bda` flag. The
-  # pipeline branch (OCR → classify → extract → process-results) is ALWAYS
-  # present; the BDA branch is added only when use_bda = true, entered via the
-  # `RouteByProcessingMode` choice state that selects the branch at runtime from
-  # `$.document.use_bda`. Mirrors
-  # `sources/patterns/unified/statemachine/workflow.asl.json`.
-  #
-  # Built via the `merge([for …]…)` idiom rather than a `cond ? {…} : {}`
-  # ternary: the BDA states are heterogeneously shaped (Choice / Task / Fail),
-  # so a ternary against an empty object fails Terraform's type unification.
-  # The comprehension yields a 0- or 1-element list of objects that merge()
-  # folds into either {} or the populated map.
+  # BDA branch states, gated on use_bda. The pipeline branch is always present;
+  # the BDA branch is added only when use_bda = true, entered via the
+  # RouteByProcessingMode choice state that selects the branch from
+  # $.document.use_bda.
+  # Built via the merge([for ...]...) idiom not a ternary: the BDA states are
+  # heterogeneously shaped (Choice / Task / Fail), so a ternary against an empty
+  # object fails Terraform's type unification. The comprehension yields a 0- or
+  # 1-element list that merge() folds into {} or the populated map.
   bda_states = merge([
     for _ in(var.use_bda ? [1] : []) : {
       RouteByProcessingMode = {
@@ -508,13 +485,9 @@ locals {
   )
 }
 
-# Wait for the Step Functions IAM role + inline policy to propagate before
-# CreateStateMachine. Without this, AWS validates log-destination access
-# synchronously and fails with:
-#   AccessDeniedException: The state machine IAM Role is not authorized to
-#   access the Log Destination
-# Same convention used in sagemaker-udop-processor and the codebuild modules
-# (create_duration 30s per terraform-conventions.md).
+# Wait for the Step Functions IAM role + policy to propagate before
+# CreateStateMachine; otherwise AWS fails synchronously with AccessDeniedException
+# on the log destination. Same 30s guard as sagemaker-udop-processor/codebuild.
 resource "time_sleep" "wait_for_iam_propagation" {
   depends_on = [
     aws_iam_role.state_machine,
@@ -533,9 +506,8 @@ resource "aws_sfn_state_machine" "document_processing" {
   role_arn = aws_iam_role.state_machine.arn
 
   definition = jsonencode({
-    # When delegated from the bda-processor façade (use_bda = true) the workflow
-    # enters at the runtime router which selects BDA vs pipeline per document;
-    # otherwise (pipeline-branch façades) it starts directly at OCRStep.
+    # use_bda = true enters at the runtime router (BDA vs pipeline per document);
+    # otherwise starts directly at OCRStep.
     StartAt = var.use_bda ? "RouteByProcessingMode" : "OCRStep"
     States  = local.sfn_states
   })

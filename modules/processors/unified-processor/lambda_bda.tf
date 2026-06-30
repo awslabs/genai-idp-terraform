@@ -1,24 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# BDA branch Lambda functions for the unified engine.
-#
-# These functions implement the Bedrock Data Automation (BDA) processing branch
-# of the unified state machine. They are GATED on the façade-supplied `use_bda`
-# delegation flag: only the bda-processor façade (use_bda = true) instantiates
-# them. The bedrock-llm-processor / sagemaker-udop-processor façades
-# (use_bda = false) never create these resources — the pipeline branch is always
-# present, the BDA branch is added only on the BDA path.
-#
-# Mirrors the upstream `sources/patterns/unified/template.yaml`
-# InvokeBDAFunction / BDAProcessResultsFunction / BDACompletionFunction and the
-# `statemachine/workflow.asl.json` BDA branch states. Packaging follows the
-# engine's zip+layer convention (the rest of the engine Lambdas are zip-based),
-# not the upstream Image packaging.
+# BDA branch Lambda functions, gated on use_bda (only the bda-processor façade
+# instantiates them). Mirrors upstream template.yaml InvokeBDAFunction /
+# BDAProcessResultsFunction / BDACompletionFunction. Packaged zip+layer (the
+# engine convention), not the upstream Image packaging.
 
-# =============================================================================
 # Archive sources (gated on use_bda)
-# =============================================================================
 
 data "archive_file" "bda_invoke_lambda" {
   count = var.use_bda ? 1 : 0
@@ -50,12 +38,8 @@ data "archive_file" "bda_completion_lambda" {
   depends_on = [null_resource.create_module_build_dir]
 }
 
-# =============================================================================
-# BDA Invoke Function
-# Kicks off the async BDA job and registers the Step Functions task token so the
-# completion function can resume the workflow. Invoked from
-# BDA_InvokeDataAutomation via arn:...:states:::lambda:invoke.waitForTaskToken.
-# =============================================================================
+# BDA Invoke Function: kicks off the async BDA job and registers the Step
+# Functions task token so the completion function can resume the workflow.
 
 resource "aws_lambda_function" "bda_invoke" {
   count = var.use_bda ? 1 : 0
@@ -108,12 +92,8 @@ resource "aws_cloudwatch_log_group" "bda_invoke_lambda" {
   tags = local.common_tags
 }
 
-# =============================================================================
-# BDA Process Results Function
-# Copies BDA outputs into the output bucket and builds the Document sections.
-# Used by both BDA_ProcessResultsStep (after a fresh BDA job) and
-# BDA_ProcessResultsSkip (reprocessing path with existing data).
-# =============================================================================
+# BDA Process Results Function: copies BDA outputs into the output bucket and
+# builds the Document sections (used by both fresh-job and reprocessing paths).
 
 resource "aws_lambda_function" "bda_process_results" {
   count = var.use_bda ? 1 : 0
@@ -169,12 +149,8 @@ resource "aws_cloudwatch_log_group" "bda_process_results_lambda" {
   tags = local.common_tags
 }
 
-# =============================================================================
-# BDA Completion Function (async, EventBridge-driven)
-# Receives Bedrock Data Automation job-completion events, looks up the stored
-# Step Functions task token, and resumes the waiting BDA_InvokeDataAutomation
-# task via SendTaskSuccess / SendTaskFailure.
-# =============================================================================
+# BDA Completion Function (async, EventBridge-driven): receives BDA job-completion
+# events, looks up the stored task token, and resumes the waiting task.
 
 resource "aws_sqs_queue" "bda_completion_dlq" {
   count = var.use_bda ? 1 : 0

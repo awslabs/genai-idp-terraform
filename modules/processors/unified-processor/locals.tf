@@ -4,14 +4,9 @@
 # Local values for Bedrock LLM Processor
 
 locals {
-  # BedrockHubRoleArn cross-account assume-role (v0.5.12).
-  # When var.bedrock_hub_role_arn is non-empty, the Bedrock-calling processing
-  # Lambdas assume that hub-account role for Bedrock calls. The exact env keys
-  # below are read by sources/lib/idp_common_pkg/idp_common/bedrock/session.py:
-  #   BEDROCK_ASSUME_ROLE_ARN          -> os.environ["BEDROCK_ASSUME_ROLE_ARN"]
-  #   BEDROCK_ASSUME_ROLE_EXTERNAL_ID  -> os.environ["BEDROCK_ASSUME_ROLE_EXTERNAL_ID"]
-  # When unset, the map is empty so no env var is rendered (no diff on
-  # same-account deployments).
+  # BedrockHubRoleArn cross-account assume-role (v0.5.12). Env keys are read by
+  # idp_common/bedrock/session.py: BEDROCK_ASSUME_ROLE_ARN and
+  # BEDROCK_ASSUME_ROLE_EXTERNAL_ID. Unset renders an empty map (no diff).
   bedrock_hub_enabled = var.bedrock_hub_role_arn != ""
 
   bedrock_assume_role_env = local.bedrock_hub_enabled ? merge(
@@ -23,8 +18,7 @@ locals {
     } : {}
   ) : {}
 
-  # Helper function to generate model permissions for any model_id
-  # Precedence: per-step variable override → model_id default → config.yaml value
+  # Model permissions per step. Precedence: per-step override, model_id, config.yaml.
   bedrock_model_permissions = {
     for name, id in {
       classification = coalesce(var.classification_model_id, var.model_id)
@@ -34,7 +28,6 @@ locals {
       assessment     = var.assessment_model_id != null ? var.assessment_model_id : (can(local.config_with_overrides.assessment.model) ? local.config_with_overrides.assessment.model : var.model_id)
       } : name => id != null ? {
 
-      # Parse model information
       is_arn          = startswith(id, "arn:")
       is_cross_region = !startswith(id, "arn:") && can(regex("^(us|eu|apac)\\.", id))
       base_model_id   = can(regex("^(us|eu|apac)\\.", id)) ? replace(id, "/^(us|eu|apac)\\./", "") : id

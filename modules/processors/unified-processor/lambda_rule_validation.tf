@@ -4,9 +4,7 @@
 # Rule Validation Lambda Functions (v0.4.13+)
 # Conditional on var.enable_rule_validation
 
-# =============================================================================
 # Archive sources
-# =============================================================================
 
 data "archive_file" "rule_validation_lambda" {
   count = var.enable_rule_validation ? 1 : 0
@@ -28,9 +26,7 @@ data "archive_file" "rule_validation_orchestration_lambda" {
   depends_on = [null_resource.create_module_build_dir]
 }
 
-# =============================================================================
 # IAM Role and Policy
-# =============================================================================
 
 resource "aws_iam_role" "rule_validation_role" {
   count = var.enable_rule_validation ? 1 : 0
@@ -140,9 +136,7 @@ resource "aws_iam_role_policy" "rule_validation_kms" {
   })
 }
 
-# =============================================================================
 # Lambda Functions
-# =============================================================================
 
 resource "aws_lambda_function" "rule_validation_function" {
   count = var.enable_rule_validation ? 1 : 0
@@ -231,9 +225,7 @@ resource "aws_lambda_function" "rule_validation_orchestration_function" {
   tags = local.common_tags
 }
 
-# =============================================================================
 # CloudWatch Log Groups
-# =============================================================================
 
 resource "aws_cloudwatch_log_group" "rule_validation_lambda" {
   count = var.enable_rule_validation ? 1 : 0

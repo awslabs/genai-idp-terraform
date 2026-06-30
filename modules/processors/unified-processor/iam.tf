@@ -45,7 +45,7 @@ resource "aws_iam_role_policy" "state_machine" {
           var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : "",
           var.enable_rule_validation ? aws_lambda_function.rule_validation_function[0].arn : "",
           var.enable_rule_validation ? aws_lambda_function.rule_validation_orchestration_function[0].arn : "",
-          # BDA branch functions invoked by the state machine — gated on use_bda
+          # BDA branch functions invoked by the state machine, gated on use_bda
           # so the InvokeFunction grant only exists on the BDA path.
           var.use_bda ? aws_lambda_function.bda_invoke[0].arn : "",
           var.use_bda ? aws_lambda_function.bda_process_results[0].arn : ""
@@ -77,9 +77,8 @@ resource "aws_iam_role_policy" "state_machine" {
   })
 }
 
-# Hook inference Lambda permissions (conditional on any hook being configured)
-# Grants Step Functions InvokeFunction on the specific hook function ARNs.
-# Actual hook routing is stored in DynamoDB config (model_lambda_hook_arn field).
+# Hook inference Lambda permissions: grant Step Functions InvokeFunction on the
+# configured hook ARNs (routing stored in DynamoDB config model_lambda_hook_arn).
 locals {
   hook_function_names = compact([
     var.lambda_hook_ocr,
@@ -93,8 +92,8 @@ locals {
     "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${name}"
   ]
 
-  # Per-step Lambda roles that may invoke a LambdaHook at runtime. summarization
-  # is included only when its (conditionally-created) role exists.
+  # Per-step Lambda roles that may invoke a LambdaHook at runtime; summarization
+  # only when its conditional role exists.
   hook_inference_role_ids = var.enable_hook_inference ? merge(
     {
       ocr            = aws_iam_role.ocr_lambda.id
@@ -125,11 +124,9 @@ resource "aws_iam_role_policy" "state_machine_hook_inference" {
   })
 }
 
-# The hook is invoked at runtime by the per-step processing Lambda (idp_common's
-# _invoke_lambda_hook), not just Step Functions. Mirror the CDK accelerator's
-# per-function grantInvoke on the LambdaHook bridge by granting each step's
-# Lambda role InvokeFunction on the configured hook ARN(s). for_each keys are
-# static so the gate stays plan-time-known.
+# The hook is invoked at runtime by each per-step Lambda, not just Step
+# Functions, so grant each step's role InvokeFunction on the hook ARN(s).
+# for_each keys are static so the gate stays plan-time-known.
 resource "aws_iam_role_policy" "lambda_hook_inference" {
   for_each = local.hook_inference_role_ids
 
@@ -181,7 +178,7 @@ resource "aws_iam_role_policy" "ocr_lambda" {
     Version = "2012-10-17"
     Statement = [
       {
-        # AWS Textract does not support resource-level permissions - service limitation
+        # Textract has no resource-level permissions
         Effect = "Allow"
         Action = [
           "textract:DetectDocumentText",
@@ -231,7 +228,7 @@ resource "aws_iam_role_policy" "ocr_lambda" {
         ] : ["*"]
       },
       {
-        # CloudWatch PutMetricData requires wildcard resource but is constrained by namespace condition
+        # PutMetricData needs wildcard, constrained by namespace condition
         Effect = "Allow"
         Action = [
           "cloudwatch:PutMetricData"
@@ -535,7 +532,7 @@ resource "aws_iam_role_policy" "process_results_lambda" {
         Resource = local.s3_bucket_arns
       },
       {
-        # Configuration table always needed — process_results reads config via get_config()
+        # Configuration table always needed (process_results reads config)
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",

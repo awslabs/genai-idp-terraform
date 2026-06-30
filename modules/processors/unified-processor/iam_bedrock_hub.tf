@@ -1,20 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# BedrockHubRoleArn cross-account assume-role (v0.5.12).
-#
-# When var.bedrock_hub_role_arn is non-empty, the Bedrock-calling processing
-# Lambdas are granted sts:AssumeRole scoped to EXACTLY that ARN (and no other),
-# so idp_common.bedrock.session can assume a centralized "hub" account role for
-# Bedrock calls. The grant attaches in the shared unified-processor engine, so
-# all three façades (bda / bedrock-llm / sagemaker-udop) inherit it.
-#
-# When var.bedrock_hub_role_arn is empty/unset, NONE of these policies render
-# (count = 0) and no BEDROCK_ASSUME_ROLE_* env var is set on the Lambdas, so an
-# existing same-account deployment shows no diff.
-#
-# The Resource is scoped to exactly the supplied hub role ARN; tfsec passes on
-# the scoped statement.
+# BedrockHubRoleArn cross-account assume-role (v0.5.12). When
+# var.bedrock_hub_role_arn is non-empty, the Bedrock-calling Lambdas get
+# sts:AssumeRole scoped to exactly that ARN so idp_common can assume a hub
+# account role. Empty/unset renders nothing (count = 0), so same-account
+# deployments show no diff.
 
 resource "aws_iam_role_policy" "classification_bedrock_hub_assume" {
   count = local.bedrock_hub_enabled ? 1 : 0

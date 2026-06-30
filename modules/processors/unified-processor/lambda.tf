@@ -325,11 +325,6 @@ resource "aws_cloudwatch_log_group" "assessment_lambda" {
   tags = local.common_tags
 }
 
-# Lambda deployment packages
-# Generate unique build ID for this configuration
-
-# Create temporary directory for build artifacts
-
 # Create module-specific build directory
 resource "null_resource" "create_module_build_dir" {
   provisioner "local-exec" {
@@ -420,12 +415,9 @@ resource "aws_lambda_function" "evaluation_function" {
   filename         = data.archive_file.evaluation_lambda[0].output_path
   source_code_hash = data.archive_file.evaluation_lambda[0].output_base64sha256
 
-  # Evaluation Lambda needs the dedicated evaluation+docs_service layer
-  # (includes munkres/numpy for the Hungarian-algorithm comparator). Falls
-  # back to idp_common_layer_arn (which only includes evaluation deps when
-  # the layer extras list it explicitly), then base_layer_arn as a last
-  # resort. Matches CDK upstream which uses
-  # IdpPythonLayerVersion.getOrCreate(scope, "evaluation", "docs_service").
+  # Evaluation needs the dedicated evaluation+docs_service layer (munkres/numpy
+  # for the Hungarian-algorithm comparator), falling back to idp_common then
+  # base layer.
   layers = [
     coalesce(
       var.evaluation_layer_arn,

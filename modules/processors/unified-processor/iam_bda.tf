@@ -1,19 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# IAM for the BDA branch Lambda functions.
-#
-# All roles/policies here are GATED on the façade-supplied `use_bda` flag: they
-# only exist on the BDA path (bda-processor façade). The pipeline-branch façades
-# (use_bda = false) never render any of these BDA invoke permissions or
-# resources.
-#
-# Mirrors the upstream `sources/patterns/unified/template.yaml` SAM policies for
-# InvokeBDAFunction / BDAProcessResultsFunction / BDACompletionFunction.
+# IAM for the BDA branch Lambda functions, gated on use_bda (only the
+# bda-processor façade renders these). Mirrors upstream template.yaml policies
+# for InvokeBDAFunction / BDAProcessResultsFunction / BDACompletionFunction.
 
-# =============================================================================
 # BDA Invoke Lambda role
-# =============================================================================
 
 resource "aws_iam_role" "bda_invoke_lambda" {
   count = var.use_bda ? 1 : 0
@@ -89,8 +81,7 @@ resource "aws_iam_role_policy" "bda_invoke_lambda" {
           ]
         },
         {
-          # Start the asynchronous Bedrock Data Automation job. Scoped to the
-          # data-automation project/profile resources per upstream.
+          # Start the async BDA job, scoped to data-automation project/profile resources.
           Effect = "Allow"
           Action = [
             "bedrock:InvokeDataAutomationAsync"
@@ -131,9 +122,7 @@ resource "aws_iam_role_policy_attachment" "bda_invoke_lambda_vpc" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# =============================================================================
 # BDA Process Results Lambda role
-# =============================================================================
 
 resource "aws_iam_role" "bda_process_results_lambda" {
   count = var.use_bda ? 1 : 0
@@ -272,10 +261,8 @@ resource "aws_iam_role_policy_attachment" "bda_process_results_lambda_vpc" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# =============================================================================
 # BDA Completion Lambda role
 # Resumes the waiting Step Functions task via SendTaskSuccess/Failure.
-# =============================================================================
 
 resource "aws_iam_role" "bda_completion_lambda" {
   count = var.use_bda ? 1 : 0

@@ -6,13 +6,10 @@ variable "name" {
   default     = "unified-processor"
 }
 
-# =============================================================================
-# FAÇADE ↔ ENGINE DELEGATION INTERFACE
-# =============================================================================
-# The unified-processor engine is not a public input surface. These variables
-# form the contract by which the per-pattern façade modules (bda-processor,
-# bedrock-llm-processor, sagemaker-udop-processor) delegate document processing
-# to this shared engine. `use_bda` is set by which façade is instantiated.
+# Façade/engine delegation interface. These variables form the contract by which
+# the per-pattern façade modules (bda-processor, bedrock-llm-processor,
+# sagemaker-udop-processor) delegate processing to this shared engine; use_bda is
+# set by which façade is instantiated.
 
 variable "use_bda" {
   description = "Runtime processing-path selector set by the instantiating façade: true routes documents through the Bedrock Data Automation (BDA) branch; false routes through the Bedrock-LLM/SageMaker pipeline branch. Required — the engine is never instantiated without an explicit value."
@@ -145,13 +142,10 @@ variable "enable_rule_validation" {
   default     = false
 }
 
-# =============================================================================
-# LAMBDA HOOK INFERENCE VARIABLES (v0.4.15+)
-# =============================================================================
-# These variables pre-grant Step Functions InvokeFunction permissions for custom
-# Lambda hooks. The actual hook ARNs are stored in the DynamoDB configuration
-# table (model_lambda_hook_arn field) and referenced when model_id = "LambdaHook".
-# Function names must start with "GENAIIDP-" per the naming convention.
+# Lambda hook inference variables (v0.4.15+). Pre-grant Step Functions
+# InvokeFunction for custom hooks; ARNs are stored in DynamoDB config
+# (model_lambda_hook_arn) and used when model_id = "LambdaHook". Names must start
+# with "GENAIIDP-".
 
 variable "lambda_hook_ocr" {
   description = "ARN or name of custom Lambda for OCR step hook inference. Must start with 'GENAIIDP-'. (v0.4.15+)"
