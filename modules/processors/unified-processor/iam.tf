@@ -287,7 +287,12 @@ resource "aws_iam_role_policy_attachment" "classification_lambda_basic" {
 # SageMaker classification backend: allow the classification Lambda to invoke
 # the UDOP endpoint directly (idp_common's native classify_page_sagemaker path).
 resource "aws_iam_role_policy" "classification_lambda_sagemaker" {
-  count = var.classification_backend == "sagemaker" && var.classification_sagemaker_endpoint_arn != null ? 1 : 0
+  # Gate on the plan-time-known backend toggle only. When the backend is
+  # "sagemaker" the endpoint ARN is required (enforced by the root module
+  # validation), so it is always non-null here. Referencing the ARN itself in
+  # count breaks plan when it comes from a not-yet-created endpoint (the value
+  # is unknown until apply, and count cannot consume an unknown value).
+  count = var.classification_backend == "sagemaker" ? 1 : 0
   name  = "${local.name_prefix}-classification-lambda-sagemaker-policy"
   role  = aws_iam_role.classification_lambda.id
 
