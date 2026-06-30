@@ -9,6 +9,7 @@ output "user_identity" {
     user_pool_client = module.user_identity.user_pool_client
     identity_pool    = module.user_identity.identity_pool
   }
+  sensitive = true
 }
 
 # Individual Component Outputs
@@ -20,6 +21,7 @@ output "user_pool" {
 output "user_pool_client" {
   description = "Cognito User Pool Client details"
   value       = module.user_identity.user_pool_client
+  sensitive   = true
 }
 
 output "identity_pool" {

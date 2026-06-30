@@ -28,7 +28,7 @@ output "realtime_url" {
 
 output "api_key" {
   description = "The API key for the GraphQL API (if API key authentication is enabled)"
-  value       = var.authorization_config == null || try(var.authorization_config.default_authorization.authorization_type, "API_KEY") == "API_KEY" ? aws_appsync_api_key.api_key[0].key : null
+  value       = length(aws_appsync_api_key.api_key) > 0 ? aws_appsync_api_key.api_key[0].key : null
   sensitive   = true
 }
 
