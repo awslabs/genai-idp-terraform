@@ -135,6 +135,7 @@ resource "random_string" "suffix" {
 # available. When lambda_local = false the probe runs but is non-fatal.
 #
 module "build_runtime_check" {
+  count  = var.build.lambda_local ? 1 : 0
   source = "./modules/build-runtime-check"
 
   lambda_local      = var.build.lambda_local

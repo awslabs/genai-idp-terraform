@@ -37,12 +37,8 @@ resource "null_resource" "ecr_login" {
   count = var.lambda_local ? 1 : 0
 
   triggers = {
-    ecr_url  = aws_ecr_repository.udop_processor.repository_url
-    apply_id = uuid()
-  }
-
-  lifecycle {
-    ignore_changes = [triggers["apply_id"]]
+    ecr_url = aws_ecr_repository.udop_processor.repository_url
+    always  = timestamp()
   }
 
   provisioner "local-exec" {

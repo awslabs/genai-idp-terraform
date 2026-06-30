@@ -46,20 +46,17 @@ locals {
   ]))
 }
 
-# Authenticate the host's docker CLI to ECR once before any builds.
-# Uses aws cli, which the deploy host must have configured -- same
-# assumption the existing CodeBuild trigger makes.
+# Authenticate the host's docker CLI to ECR before each build.
+# Inlined into each build_push_image provisioner would be ideal, but
+# we keep a single login resource that ALWAYS re-runs (no ignore_changes)
+# so ECR tokens are refreshed on every apply. The triggers include a
+# timestamp to guarantee re-execution.
 resource "null_resource" "ecr_login" {
   count = var.lambda_local ? 1 : 0
 
   triggers = {
-    ecr_url = aws_ecr_repository.bda_processor.repository_url
-    # Refresh login every apply -- ECR auth tokens are short-lived.
-    apply_id = uuid()
-  }
-
-  lifecycle {
-    ignore_changes = [triggers["apply_id"]]
+    ecr_url  = aws_ecr_repository.bda_processor.repository_url
+    always   = timestamp()
   }
 
   provisioner "local-exec" {
