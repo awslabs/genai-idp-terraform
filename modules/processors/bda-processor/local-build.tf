@@ -55,8 +55,8 @@ resource "null_resource" "ecr_login" {
   count = var.lambda_local ? 1 : 0
 
   triggers = {
-    ecr_url  = aws_ecr_repository.bda_processor.repository_url
-    always   = timestamp()
+    ecr_url = aws_ecr_repository.bda_processor.repository_url
+    always  = timestamp()
   }
 
   provisioner "local-exec" {
