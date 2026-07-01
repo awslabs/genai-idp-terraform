@@ -27,35 +27,7 @@ if not KB_ID:
 KB_ACCOUNT_ID = os.environ.get("KB_ACCOUNT_ID")
 KB_REGION = os.environ.get("KB_REGION") or os.environ["AWS_REGION"]
 MODEL_ID = os.environ.get("MODEL_ID")
-
-
-def _build_model_arn(model_id, region, account_id):
-    """Resolve MODEL_ID to the ARN RetrieveAndGenerate expects.
-
-    Mirrors the IAM policy's model detection (see
-    modules/processing-environment-api/locals.tf knowledge_base_model_permissions):
-      * a full ARN is passed through unchanged
-      * a cross-region inference-profile id (us./eu./apac. prefix) becomes an
-        account-scoped inference-profile ARN
-      * a plain foundation-model id becomes a foundation-model ARN
-
-    Previously this always built an inference-profile ARN, so a plain
-    foundation-model id like ``amazon.nova-pro-v1:0`` produced
-    ``inference-profile/amazon.nova-pro-v1:0``. Bedrock then attempted
-    GetInferenceProfile on a non-existent profile and RetrieveAndGenerate
-    failed with AccessDeniedException. The README requires a plain
-    foundation-model id here, so foundation-model is the correct default.
-    """
-    if not model_id:
-        return ""
-    if model_id.startswith("arn:"):
-        return model_id
-    if re.match(r"^(us|eu|apac)\.", model_id):
-        return f"arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_id}"
-    return f"arn:aws:bedrock:{region}::foundation-model/{model_id}"
-
-
-MODEL_ARN = _build_model_arn(MODEL_ID, KB_REGION, KB_ACCOUNT_ID)
+MODEL_ARN = f"arn:aws:bedrock:{KB_REGION}:{KB_ACCOUNT_ID}:inference-profile/{MODEL_ID}"
 GUARDRAIL_ENV = os.environ.get("GUARDRAIL_ID_AND_VERSION", "")
 
 KB_CLIENT = (
