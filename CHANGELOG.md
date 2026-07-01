@@ -16,6 +16,11 @@ using Docker / Podman / Finch, replacing AWS CodeBuild for those steps.
 Non-breaking: defaults preserve the historical CodeBuild path
 bit-for-bit. Set `build.lambda_local = true` to opt in.
 
+Activates `build.ui_local` (previously reserved): when `true`, the web UI
+React/Vite build runs locally via `npm ci && npm run build` on the deploy
+host with direct S3 sync + CloudFront invalidation, eliminating the last
+CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
+
 ### Added
 
 - **`var.build` (root)** — new object with fields:
@@ -29,8 +34,11 @@ bit-for-bit. Set `build.lambda_local = true` to opt in.
   - `container_runtime` (string, default `"auto"`, validated against
     `["auto", "docker", "podman", "finch"]`) — runtime selector when
     `lambda_local = true`. `"auto"` probes docker → podman → finch.
-  - `ui_local` (bool, default `false`) — reserved for a follow-up UI
-    local-build change; no behavior in this release.
+  - `ui_local` (bool, default `false`) — when `true`, builds the web
+    UI locally on the deploy host via `npm ci && npm run build`,
+    syncs to S3, and invalidates CloudFront — eliminating the UI
+    CodeBuild project, trigger Lambda, and supporting IAM. Requires
+    Node.js >= 18.
 - **New modules**:
   - `modules/build-runtime-check` — probes the host for an available
     container runtime via a `data "external"` invocation of
@@ -54,6 +62,16 @@ bit-for-bit. Set `build.lambda_local = true` to opt in.
   showing a typical local-build dev-loop configuration.
 - **Detection script** `scripts/detect-container-runtime.sh` plus
   `tests/validate-build-runtime-check.sh` unit test.
+- **`modules/web-ui-build-check`** — probes the host for Node.js >= 18
+  via `scripts/detect-node-runtime.sh`; fails plan with per-OS install
+  instructions when `ui_local = true` and Node.js is missing or too old.
+- **Build script** `scripts/build-web-ui.sh` — runs `npm ci && npm run
+  build` in `sources/src/ui/`, syncs `build/` to S3, and invalidates
+  CloudFront.
+- **Detection script** `scripts/detect-node-runtime.sh` plus
+  `tests/validate-web-ui-build-check.sh` unit test.
+- **Documentation page** `docs/content/deployment-guides/local-web-ui-build.md`
+  covering Node.js prerequisites and the local UI build flow.
 
 ### Changed
 

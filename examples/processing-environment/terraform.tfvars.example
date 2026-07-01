@@ -48,4 +48,5 @@ build = {
   lambda_local        = false
   lambda_architecture = "x86_64"
   container_runtime   = "auto"
+  ui_local            = false
 }

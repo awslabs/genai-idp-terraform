@@ -498,8 +498,8 @@ variable "build" {
     # order: docker -> podman -> finch. Explicit values skip auto-detection.
     container_runtime = optional(string, "auto")
 
-    # Reserved for the follow-up UI local-build subtask. No behavior in this
-    # release; do not rely on it.
+    # When true, build the web UI locally on the deploy host via npm
+    # instead of using AWS CodeBuild. Requires Node.js >= 18.
     ui_local = optional(bool, false)
   })
 

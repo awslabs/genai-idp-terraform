@@ -142,6 +142,19 @@ module "build_runtime_check" {
   container_runtime = var.build.container_runtime
 }
 
+# Web UI build check
+#
+# Probes the deploy host for Node.js >= 18 when var.build.ui_local = true
+# and the web UI is enabled. The check {} block inside this module fails
+# plan with install instructions if Node.js is missing or too old.
+#
+module "web_ui_build_check" {
+  count  = var.build.ui_local && var.web_ui.enabled ? 1 : 0
+  source = "./modules/web-ui-build-check"
+
+  ui_local = var.build.ui_local
+}
+
 #
 # Shared Assets Bucket
 # Create a single S3 bucket for all application asset storage to reduce resource count
@@ -745,6 +758,9 @@ module "web_ui" {
 
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
+
+  # Build strategy
+  ui_local = var.build.ui_local
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

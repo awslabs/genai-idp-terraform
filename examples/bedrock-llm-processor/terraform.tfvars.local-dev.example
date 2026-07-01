@@ -25,6 +25,8 @@
 #      ships this; Linux requires the qemu-user-static package.
 #   3. AWS credentials configured (used by the inline `aws ecr
 #      get-login-password` step for ECR image pushes).
+#   4. Node.js >= 18 installed (required for ui_local = true). The wrapper
+#      runs `npm ci && npm run build` on the deploy host for the web UI.
 #
 # See docs/content/deployment-guides/local-lambda-build.md for the full
 # troubleshooting guide.
@@ -88,6 +90,7 @@ build = {
   lambda_local        = true
   lambda_architecture = "x86_64"
   container_runtime   = "auto"
+  ui_local            = true
 }
 
 # Tags

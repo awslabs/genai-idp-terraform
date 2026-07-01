@@ -1,9 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
+# UI CodeBuild trigger Lambda (CodeBuild path only).
+# All resources in this file are gated on var.ui_local = false.
 
 # Ensure build directory exists
 resource "null_resource" "create_lambda_build_dir" {
+  count = var.ui_local ? 0 : 1
+
   provisioner "local-exec" {
     command = "mkdir -p ${local.module_build_dir}"
   }
@@ -15,6 +19,7 @@ resource "null_resource" "create_lambda_build_dir" {
 
 # Package Lambda function for UI CodeBuild triggering
 data "archive_file" "ui_codebuild_trigger_lambda" {
+  count       = var.ui_local ? 0 : 1
   type        = "zip"
   source_dir  = "${path.module}/../../src/lambda/ui-codebuild-trigger"
   output_path = "${local.module_build_dir}/ui-codebuild-trigger-lambda.zip"
@@ -24,7 +29,8 @@ data "archive_file" "ui_codebuild_trigger_lambda" {
 
 # IAM role for Lambda function
 resource "aws_iam_role" "ui_codebuild_trigger_lambda_role" {
-  name = "${var.name_prefix}-ui-cb-trigger-${random_string.suffix.result}"
+  count = var.ui_local ? 0 : 1
+  name  = "${var.name_prefix}-ui-cb-trigger-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -44,8 +50,9 @@ resource "aws_iam_role" "ui_codebuild_trigger_lambda_role" {
 
 # IAM policy for Lambda function
 resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
-  name = "UICodeBuildTriggerLambdaPolicy"
-  role = aws_iam_role.ui_codebuild_trigger_lambda_role.id
+  count = var.ui_local ? 0 : 1
+  name  = "UICodeBuildTriggerLambdaPolicy"
+  role  = aws_iam_role.ui_codebuild_trigger_lambda_role[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -73,7 +80,7 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
           "codebuild:BatchGetBuilds"
         ]
         Resource = [
-          aws_codebuild_project.ui_build.arn
+          aws_codebuild_project.ui_build[0].arn
         ]
       },
       {
@@ -113,6 +120,7 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
 
 # CloudWatch log group for Lambda function
 resource "aws_cloudwatch_log_group" "ui_codebuild_trigger_lambda_logs" {
+  count             = var.ui_local ? 0 : 1
   name              = "/aws/lambda/${var.name_prefix}-ui-cb-trigger-${random_string.suffix.result}"
   retention_in_days = 14
 
@@ -123,15 +131,16 @@ resource "aws_cloudwatch_log_group" "ui_codebuild_trigger_lambda_logs" {
 
 # Lambda function for triggering UI CodeBuild
 resource "aws_lambda_function" "ui_codebuild_trigger" {
-  filename      = data.archive_file.ui_codebuild_trigger_lambda.output_path
+  count         = var.ui_local ? 0 : 1
+  filename      = data.archive_file.ui_codebuild_trigger_lambda[0].output_path
   function_name = "${var.name_prefix}-ui-cb-trigger-${random_string.suffix.result}"
-  role          = aws_iam_role.ui_codebuild_trigger_lambda_role.arn
+  role          = aws_iam_role.ui_codebuild_trigger_lambda_role[0].arn
   handler       = "index.lambda_handler"
   runtime       = "python3.12"
   timeout       = 900 # 15 minutes maximum for Lambda
   memory_size   = 256
 
-  source_code_hash = data.archive_file.ui_codebuild_trigger_lambda.output_base64sha256
+  source_code_hash = data.archive_file.ui_codebuild_trigger_lambda[0].output_base64sha256
 
   tracing_config {
     mode = var.lambda_tracing_mode
@@ -149,10 +158,11 @@ resource "aws_lambda_function" "ui_codebuild_trigger" {
 
 # Invoke Lambda function to trigger UI CodeBuild
 resource "aws_lambda_invocation" "trigger_ui_codebuild" {
-  function_name = aws_lambda_function.ui_codebuild_trigger.function_name
+  count         = var.ui_local ? 0 : 1
+  function_name = aws_lambda_function.ui_codebuild_trigger[0].function_name
 
   input = jsonencode({
-    codebuild_project_name     = aws_codebuild_project.ui_build.name
+    codebuild_project_name     = aws_codebuild_project.ui_build[0].name
     settings_parameter         = aws_ssm_parameter.web_ui_settings.name
     code_location              = "${local.web_app_bucket.bucket_name}/code/ui-source.zip"
     webapp_bucket              = local.web_app_bucket.bucket_name
@@ -169,7 +179,7 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
       idp_pattern                = var.idp_pattern
     }))
-    buildspec_hash   = md5(aws_codebuild_project.ui_build.source[0].buildspec)
+    buildspec_hash   = md5(aws_codebuild_project.ui_build[0].source[0].buildspec)
     source_code_hash = data.archive_file.ui_source.output_base64sha256
   })
 
@@ -188,11 +198,11 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       idp_pattern                = var.idp_pattern
     }))
     # Trigger when CodeBuild project changes
-    codebuild_project = aws_codebuild_project.ui_build.name
+    codebuild_project = aws_codebuild_project.ui_build[0].name
     # Trigger when source code changes
     source_code_hash = data.archive_file.ui_source.output_base64sha256
     # Trigger when buildspec changes
-    buildspec_hash = md5(aws_codebuild_project.ui_build.source[0].buildspec)
+    buildspec_hash = md5(aws_codebuild_project.ui_build[0].source[0].buildspec)
   }
 
   depends_on = [
@@ -204,10 +214,10 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
   ]
 }
 
-# Parse the Lambda invocation result
+# Parse the Lambda invocation result (CodeBuild path only)
 locals {
-  ui_build_result  = jsondecode(aws_lambda_invocation.trigger_ui_codebuild.result)
-  ui_build_success = local.ui_build_result.statusCode == 200
+  ui_build_result  = !var.ui_local ? jsondecode(aws_lambda_invocation.trigger_ui_codebuild[0].result) : { statusCode = 0 }
+  ui_build_success = !var.ui_local ? local.ui_build_result.statusCode == 200 : true
 }
 
 # Build artifact cleanup is handled in main.tf
