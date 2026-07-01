@@ -145,6 +145,12 @@ variable "chat_with_document_enabled" {
   default     = true
 }
 
+variable "create_discovery" {
+  description = "Enable the Discovery feature (Web UI 'Discovery' tab). Provisions the discovery S3 bucket, tracking table, SQS queue, upload/processor Lambdas, and AppSync resolvers, and populates the UI's DiscoveryBucket setting. Discovery uses Bedrock to auto-detect document classes/schemas from uploaded samples; with no discovery.* model configured it defaults to global.anthropic.claude-sonnet-4-6 (must be enabled in Bedrock for this region). Default on."
+  type        = bool
+  default     = true
+}
+
 variable "knowledge_base_model_id" {
   description = "Inference-profile id used by the Knowledge Base for RetrieveAndGenerate (query/generation). Use a cross-region inference-profile id (e.g. us.amazon.nova-pro-v1:0); the resolver builds the inference-profile ARN from it. nova-pro is only invokable via its cross-region profile, so the us. prefix is required."
   type        = string

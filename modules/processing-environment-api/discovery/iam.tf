@@ -220,7 +220,28 @@ resource "aws_iam_policy" "discovery_processor_policy" {
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+        # Foundation models plus cross-region inference profiles. ClassesDiscovery
+        # defaults to global.anthropic.claude-sonnet-4-6 (an inference profile) when
+        # the config has no discovery.* model_id, and callers commonly configure
+        # us./eu./global. profile ids. Invoking a profile requires InvokeModel on
+        # BOTH the account-scoped inference-profile ARN and the underlying
+        # foundation-model ARN, so grant both here (previously only foundation-model
+        # was allowed, which failed profile invocations with AccessDenied).
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:GetInferenceProfile",
+          "bedrock:GetFoundationModel"
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+        ]
       },
       {
         Effect = "Allow"

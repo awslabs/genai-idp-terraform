@@ -484,6 +484,11 @@ module "genai_idp_accelerator" {
       model_id           = var.knowledge_base_model_id
       embedding_model_id = var.knowledge_base_embedding_model_id
     }
+    # Discovery feature (Web UI "Discovery" tab). Enabling this provisions the
+    # discovery bucket + processing pipeline and populates the UI's
+    # DiscoveryBucket setting; leaving it off makes the tab show
+    # "Discovery bucket not configured".
+    discovery = { enabled = var.create_discovery }
   }
 
   # Web UI configuration
