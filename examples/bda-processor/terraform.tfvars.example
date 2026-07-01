@@ -3,10 +3,9 @@
 
 region      = "us-east-1"
 prefix      = "my-idp"
-admin_email = "admin@example.com"   # creates the initial Web UI admin user
+admin_email = "admin@example.com" # creates the initial Web UI admin user
 
 # ── Optional overrides (defaults shown; uncomment to change) ────────────────
-# create_knowledge_base  = true   # OpenSearch + Bedrock KB (Document KB / chat)
 # summarization_enabled  = true
 # summarization_model_id = "us.amazon.nova-pro-v1:0"
 # enable_evaluation      = false
@@ -14,6 +13,21 @@ admin_email = "admin@example.com"   # creates the initial Web UI admin user
 # web_ui  = { enabled = true }     # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
+
+# ── Knowledge Base (Document KB + chat) ─────────────────────────────────────
+# create_knowledge_base provisions the OpenSearch + Bedrock KB backend and
+# auto-wires it into the API. Default on.
+# create_knowledge_base = true
 #
-# Advanced API/feature toggles (agent analytics, discovery, MCP, HITL, KB
-# model ids, guardrails) live under the `api` object — see variables.tf.
+# The KB generation model MUST be a cross-region inference-profile id
+# (us./eu./apac. prefix) — RetrieveAndGenerate is invoked via the profile.
+# The embedding model is a plain foundation-model id.
+# api = {
+#   knowledge_base = {
+#     model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)
+#     embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)
+#   }
+# }
+#
+# Advanced API/feature toggles (agent analytics, discovery, MCP, HITL,
+# guardrails) also live under the `api` object — see variables.tf.

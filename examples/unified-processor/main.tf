@@ -71,8 +71,8 @@ locals {
   # Embedding model id used by knowledge-base.tf for the KB IAM policy and the
   # collection's embedding_model_arn. The query/generation model_id is passed to
   # the root api.knowledge_base wiring straight from var.knowledge_base_model_id
-  # and MUST be a plain foundation-model id (no us./eu. inference-profile prefix)
-  # because Bedrock KB RetrieveAndGenerate rejects inference-profile ARNs.
+  # and MUST be a cross-region inference-profile id (us./eu./apac. prefix): the
+  # KB query resolver builds an inference-profile ARN from it.
   knowledge_base_embedding_model_id = var.knowledge_base_embedding_model_id
 
   # DEFAULT (Bedrock-LLM) configuration version. The lending-package sample does
