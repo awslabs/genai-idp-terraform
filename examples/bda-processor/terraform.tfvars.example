@@ -1,97 +1,19 @@
-# Example configuration for BDA Processor
-# Copy this file to terraform.tfvars and update the values
+# BDA Processor — copy to terraform.tfvars and set the values below.
+# Everything else uses the defaults in variables.tf.
 
-# Basic configuration
-region = "us-east-1"
-prefix = "my-idp"
+region      = "us-east-1"
+prefix      = "my-idp"
+admin_email = "admin@example.com"   # creates the initial Web UI admin user
 
-# Admin user (optional)
-admin_email = "admin@example.com"
-
-# API Configuration
+# ── Optional overrides (defaults shown; uncomment to change) ────────────────
+# create_knowledge_base  = true   # OpenSearch + Bedrock KB (Document KB / chat)
+# summarization_enabled  = true
+# summarization_model_id = "us.amazon.nova-pro-v1:0"
+# enable_evaluation      = false
+# enable_reporting       = false
+# web_ui  = { enabled = true }     # set enabled = false to skip CloudFront/UI
+# additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
+# tags = { Environment = "dev" }
 #
-# Feature-plugin wiring (v0.5.12): the auxiliary features (MCP, Chat-with-Document,
-# HITL) are now self-contained feature submodules. The legacy `var.api.*` flags
-# below remain the supported way to turn them on (transition path) — setting them
-# drives the matching feature submodule under the hood:
-#   - enable_mcp                  -> module.mcp_integration
-#   - chat_with_document.enabled  -> module.chat_with_document
-#   - enable_hitl                 -> inline HITL feature-plugin model (complete_section_review)
-# Each feature stays default-off (HITL default-on per upstream) unless its flag is set.
-api = {
-  enabled = true
-
-  # v0.4.8 feature flags
-  enable_agent_companion_chat = false  # Multi-agent AI chat sessions
-  enable_test_studio          = false  # Automated dataset testing
-  enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
-  enable_error_analyzer       = false  # AI-powered error diagnostics
-  enable_mcp                  = false  # Forwarded to module.mcp_integration (Bedrock AgentCore Gateway, opt-in)
-
-  # v0.4.16 feature flags
-  enable_hitl                     = true   # Forwarded to the inline HITL feature-plugin (complete_section_review review)
-  enable_capacity_planning        = false  # Capacity planning calculator (Pattern 2 only)
-  enable_omni_ai_dataset          = false  # OmniAI OCR Benchmark dataset (requires enable_test_studio)
-  enable_docplit_poly_seq_dataset = false  # DocSplit RVL-CDIP-NMP dataset (requires enable_test_studio)
-
-  agent_analytics = {
-    enabled  = false
-    model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-  }
-
-  discovery = {
-    enabled = true  # Creates a dedicated discovery bucket and workflow
-  }
-
-  chat_with_document = {
-    enabled                  = false  # Forwarded to module.chat_with_document (streaming document Q&A)
-    guardrail_id_and_version = null
-  }
-
-  process_changes = {
-    enabled = false
-  }
-
-  # When enabled, the example creates an OpenSearch Serverless + Bedrock Knowledge Base automatically.
-  # Set chat_with_document.enabled = true together with this to enable document Q&A.
-  knowledge_base = {
-    enabled            = false
-    knowledge_base_arn = null  # Auto-wired by the example when enabled
-    model_id           = "amazon.nova-pro-v1:0"
-    embedding_model_id = "amazon.titan-embed-text-v2:0"
-  }
-}
-
-# Web UI Configuration
-web_ui = {
-  enabled               = true
-  create_infrastructure = true
-  logging_enabled       = false
-  enable_signup         = ""  # Set to "true" to allow user self-registration
-}
-
-# BDA Processor Configuration
-summarization_enabled  = true
-summarization_model_id = "us.amazon.nova-pro-v1:0"
-
-# Optional Features
-enable_evaluation = false
-enable_reporting  = false
-
-# Additional configuration versions (optional). Map of version_name => path to a
-# YAML config file (relative to this example dir or absolute). Each is seeded as
-# an editable, non-active version and appears in the UI Configuration Version
-# dropdown alongside the default. Drop YAML files in examples/config-catalog (or
-# anywhere) and list them here. Removing an entry stops Terraform managing it but
-# does not delete the already-seeded version; delete it from the UI.
-# additional_config_files = {
-#   invoices = "../config-catalog/invoices.yaml"
-#   receipts = "../config-catalog/receipts.yaml"
-# }
-
-# Tags
-tags = {
-  Environment = "development"
-  Project     = "genai-idp"
-  Owner       = "my-team"
-}
+# Advanced API/feature toggles (agent analytics, discovery, MCP, HITL, KB
+# model ids, guardrails) live under the `api` object — see variables.tf.

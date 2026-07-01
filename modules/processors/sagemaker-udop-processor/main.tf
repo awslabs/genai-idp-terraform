@@ -13,8 +13,10 @@
 # (classify_page_sagemaker), which invokes the endpoint directly with the
 # {input_image, input_textract} schema the UDOP model expects. The façade
 # delegates all document processing to the shared internal engine
-# (`modules/processors/unified-processor/`), routing down the non-BDA pipeline
-# branch (`use_bda = false`) with classification_backend = "sagemaker".
+# (`modules/processors/unified-processor/`) with classification_backend =
+# "sagemaker". The engine always deploys both the BDA branch and the pipeline
+# branch and routes each document at runtime by its config version's `use_bda`
+# flag; there is no deploy-time branch selector.
 
 data "aws_partition" "current" {}
 
@@ -33,18 +35,15 @@ locals {
 }
 
 # =============================================================================
-# Delegate document processing to the shared engine (non-BDA pipeline branch).
+# Delegate document processing to the shared engine. The engine always deploys
+# both branches and routes per document at runtime; classification is routed to
+# idp_common's native SageMaker backend.
 # =============================================================================
 
 module "engine" {
   source = "../unified-processor"
 
   name = var.name
-
-  # SageMaker-UDOP is the non-BDA pipeline branch with classification routed to
-  # idp_common's native SageMaker backend.
-  use_bda         = false
-  bda_project_arn = null
 
   classification_backend                = "sagemaker"
   classification_sagemaker_endpoint_arn = var.classification_endpoint_arn
@@ -102,6 +101,10 @@ module "engine" {
 
   # Extra non-active config versions seeded alongside the default
   additional_configurations = var.additional_configurations
+
+  # Optional fallback BDA project for use_bda:true additional versions; does not
+  # relink the default (stays pipeline).
+  bda_project_arn = var.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

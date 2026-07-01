@@ -216,6 +216,9 @@ variable "bedrock_llm_processor" {
     # Extra non-active, editable config versions seeded alongside the default
     # (version_name => config object). Shown in the UI version dropdown.
     additional_configurations = optional(any, {})
+    # Optional fallback BDA project for use_bda:true additional versions;
+    # does not relink the default configuration.
+    bda_project_arn = optional(string, null)
   })
   default = null
 
@@ -259,6 +262,9 @@ variable "sagemaker_udop_processor" {
     # Extra non-active, editable config versions seeded alongside the default
     # (version_name => config object). Shown in the UI version dropdown.
     additional_configurations = optional(any, {})
+    # Optional fallback BDA project for use_bda:true additional versions;
+    # does not relink the default configuration.
+    bda_project_arn = optional(string, null)
   })
   default = null
 }
@@ -384,11 +390,12 @@ variable "api" {
       enabled = optional(bool, false)
     }), { enabled = false })
 
-    # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
+    # Chat with Document (per-document Q&A via Bedrock; no Knowledge Base needed).
+    # Default-ON: enabled on every processor/example unless explicitly disabled.
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -436,7 +443,7 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
     knowledge_base     = { enabled = false }
   }

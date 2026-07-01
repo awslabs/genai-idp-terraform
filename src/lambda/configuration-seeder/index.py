@@ -162,6 +162,7 @@ def _put_config_default(
     description: str,
     is_active: bool = True,
     managed: bool = False,
+    bda_project_arn: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Write a versioned Config item to DynamoDB.
@@ -182,6 +183,13 @@ def _put_config_default(
     ``list_config_versions``). Rows flagged ``Managed=true`` are rejected by
     the upstream config-write path, making them non-editable through the
     normal config-edit operations.
+
+    ``bda_project_arn``, when non-empty, links this version to a BDA project by
+    stamping the top-level ``BdaProjectArn`` / ``BdaSyncStatus`` /
+    ``BdaLastSyncedAt`` metadata (mirroring upstream ``set_bda_project_arn``);
+    ``queue_processor`` reads it back and injects ``document.bda_project_arn`` so
+    a ``use_bda: true`` version routes to BDA. Absent leaves the item unchanged,
+    like the ``Managed`` marker.
     """
     now = _isoformat_now()
 
@@ -198,6 +206,14 @@ def _put_config_default(
     # byte-identical to the pre-B11 seeder output.
     if managed:
         item["Managed"] = True
+
+    # Stamp the BDA link only when supplied, so unlinked rows are unchanged.
+    # Mirrors upstream set_bda_project_arn (BdaProjectArn + BdaSyncStatus +
+    # BdaLastSyncedAt as top-level metadata).
+    if bda_project_arn:
+        item["BdaProjectArn"] = bda_project_arn
+        item["BdaSyncStatus"] = "synced"
+        item["BdaLastSyncedAt"] = now
 
     return table.put_item(Item=item)
 
@@ -250,6 +266,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     * ``Version``: version name to write under (defaults to ``"default"``).
     * ``Description``: free-text description stored on the item.
+    * ``BdaProjectArn``: when non-empty, links this version to a BDA project
+      (stamps ``BdaProjectArn`` / ``BdaSyncStatus`` / ``BdaLastSyncedAt``).
 
     Returns ``{"statusCode": 200, "body": json-string}`` on success or
     ``{"statusCode": 500, "body": json-string-with-error}`` on failure.
@@ -283,6 +301,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # rows. Default invocations keep the historical is_active=true behavior.
         managed = bool(event.get("Managed", False))
         is_active = bool(event.get("IsActive", not managed))
+        # Optional BDA project link (empty/absent leaves the item unchanged).
+        bda_project_arn = event.get("BdaProjectArn") or None
 
         if not isinstance(value, dict):
             raise ValueError(
@@ -303,6 +323,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             description,
             is_active=is_active,
             managed=managed,
+            bda_project_arn=bda_project_arn,
         )
 
         return {
@@ -314,6 +335,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     "version": version,
                     "managed": managed,
                     "isActive": is_active,
+                    "bdaProjectArn": bda_project_arn,
                     "merged_sections": sorted(merged.keys()),
                     "response": response,
                 },

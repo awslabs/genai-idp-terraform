@@ -258,3 +258,98 @@ def test_put_item_not_called_against_aws():
     _seed_default(table, _config_with_all_flags())
     # FakeTable captured the item; boto3 was never used for put_item.
     assert table.put_items, "put_item should have been invoked on the fake table"
+
+
+# ---------------------------------------------------------------------------
+# BDA project linking: `BdaProjectArn` set iff supplied, else the item is
+# unchanged from the no-arn seeder output.
+# ---------------------------------------------------------------------------
+_BDA_PROJECT_ARN = (
+    "arn:aws:bedrock:us-west-2:123456789012:data-automation-project/abc123"
+)
+
+# The three top-level metadata attributes upstream `set_bda_project_arn`
+# stamps together; the seeder mirrors that exact set.
+_BDA_KEYS = ("BdaProjectArn", "BdaSyncStatus", "BdaLastSyncedAt")
+
+
+def _seed_default_with_arn(table, value, bda_project_arn):
+    """Run a config through the seeder's item-construction path with an ARN."""
+    merged = seeder._merge_with_system_defaults(value)
+    seeder._put_config_default(
+        table,
+        version="default",
+        merged_config=merged,
+        description="Default IDP configuration",
+        bda_project_arn=bda_project_arn,
+    )
+    assert len(table.put_items) == 1, "expected exactly one put_item"
+    return table.put_items[0]
+
+
+def test_bda_project_arn_supplied_stamps_link_metadata():
+    """
+    With a non-empty `BdaProjectArn`, the constructed item carries
+    `BdaProjectArn` (equal to the input) plus the companion
+    `BdaSyncStatus = "synced"` and a `BdaLastSyncedAt` timestamp, mirroring
+    upstream `set_bda_project_arn`.
+    """
+    table = FakeTable()
+    item = _seed_default_with_arn(table, _config_without_flags(), _BDA_PROJECT_ARN)
+
+    assert item["BdaProjectArn"] == _BDA_PROJECT_ARN
+    assert item["BdaSyncStatus"] == "synced"
+    # Frozen clock — deterministic, ISO-8601 Z-suffixed timestamp.
+    assert item["BdaLastSyncedAt"] == "2026-06-01T00:00:00Z"
+
+
+def test_no_bda_project_arn_is_byte_identical_to_no_arn_output():
+    """
+    Without a `BdaProjectArn`, the item is byte-identical to the no-arn output
+    for the same input: the three BDA link attributes are purely additive and
+    never injected by default.
+    """
+    source = _config_without_flags()
+
+    # Pre-change output: the seeder called with no BDA arn.
+    baseline_table = FakeTable()
+    baseline_item = _seed_default(baseline_table, source)
+
+    # Same input, still no arn (empty / None short-circuits to no-op).
+    for empty in (None, ""):
+        table = FakeTable()
+        item = _seed_default_with_arn(table, source, empty)
+        assert item == baseline_item, (
+            f"BdaProjectArn={empty!r} must leave the item byte-identical to "
+            "the no-arn output"
+        )
+        for key in _BDA_KEYS:
+            assert key not in item, f"{key!r} injected when no arn supplied"
+
+
+def test_bda_link_item_equals_no_arn_item_without_bda_keys():
+    """
+    The arn-supplied item differs from the no-arn item by exactly the three
+    BDA link attributes: stripping those keys yields the byte-identical
+    pre-change item.
+    """
+    source = _config_without_flags()
+
+    baseline_table = FakeTable()
+    baseline_item = _seed_default(baseline_table, source)
+
+    linked_table = FakeTable()
+    linked_item = _seed_default_with_arn(linked_table, source, _BDA_PROJECT_ARN)
+
+    # The only difference is the additive BDA link block.
+    assert set(linked_item) - set(baseline_item) == set(_BDA_KEYS)
+
+    stripped = {k: v for k, v in linked_item.items() if k not in _BDA_KEYS}
+    assert stripped == baseline_item
+
+
+def test_bda_link_put_item_not_called_against_aws():
+    """The linked item is asserted offline; no real DynamoDB call occurs."""
+    table = FakeTable()
+    _seed_default_with_arn(table, _config_without_flags(), _BDA_PROJECT_ARN)
+    assert table.put_items, "put_item should have been invoked on the fake table"

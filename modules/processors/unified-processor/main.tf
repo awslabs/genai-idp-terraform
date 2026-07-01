@@ -5,8 +5,17 @@
 # Unified Processor: shared internal engine that builds the document-processing
 # Lambdas and Step Functions state machine from sources/patterns/unified/
 # (mirrors CDK UnifiedDocumentProcessor). Not a public surface; instantiated only
-# by the per-pattern façade modules, which select the path via the use_bda
-# delegation input (BDA branch when true, pipeline branch when false).
+# by the per-pattern façade modules.
+#
+# Dual-mode routing (how a document reaches BDA vs the pipeline):
+#   1. Upload tags the object with `config-version` S3 metadata.
+#   2. queue_sender resolves it; queue_processor loads that config version and
+#      injects its `use_bda` flag and linked `BdaProjectArn` as $.document.*.
+#   3. The state machine always starts at RouteByProcessingMode, which sends
+#      use_bda=true to the BDA branch and everything else to OCRStep (the
+#      Bedrock-LLM/SageMaker step-by-step pipeline).
+# Both branches are always deployed; the config version alone selects the path.
+# `BdaProjectArn` is written declaratively at seed time (see processor-configuration).
 
 # Data sources
 data "aws_caller_identity" "current" {}
@@ -82,6 +91,12 @@ module "processor_configuration" {
 
   # Extra non-active config versions seeded alongside the default.
   additional_configurations = var.additional_configurations
+
+  # BDA project links, seeding inputs only (they do not gate the always-on BDA
+  # branch): default_bda_project_arn links the `default` version; bda_project_arn
+  # is the fallback for use_bda:true additional versions and never relinks default.
+  default_bda_project_arn  = var.default_bda_project_arn
+  fallback_bda_project_arn = var.bda_project_arn
 
   # Layers required so the seeder Lambda merges user config with system
   # defaults; without them the runtime crashes with "No system_prompt found".
@@ -241,16 +256,12 @@ locals {
     }
   } : {}
 
-  # BDA branch states, gated on use_bda. The pipeline branch is always present;
-  # the BDA branch is added only when use_bda = true, entered via the
-  # RouteByProcessingMode choice state that selects the branch from
-  # $.document.use_bda.
-  # Built via the merge([for ...]...) idiom not a ternary: the BDA states are
-  # heterogeneously shaped (Choice / Task / Fail), so a ternary against an empty
-  # object fails Terraform's type unification. The comprehension yields a 0- or
-  # 1-element list that merge() folds into {} or the populated map.
+  # Both branches always render. merge([for ...]) rather than a ternary: the BDA
+  # states are heterogeneously shaped (Choice/Task/Fail), so a ternary against an
+  # empty object fails type unification; the single-element comprehension folds
+  # into the populated map.
   bda_states = merge([
-    for _ in(var.use_bda ? [1] : []) : {
+    for _ in [1] : {
       RouteByProcessingMode = {
         Type    = "Choice"
         Comment = "Route to BDA or step-by-step pipeline based on use_bda flag in document config"
@@ -509,9 +520,7 @@ resource "aws_sfn_state_machine" "document_processing" {
   role_arn = aws_iam_role.state_machine.arn
 
   definition = jsonencode({
-    # use_bda = true enters at the runtime router (BDA vs pipeline per document);
-    # otherwise starts directly at OCRStep.
-    StartAt = var.use_bda ? "RouteByProcessingMode" : "OCRStep"
+    StartAt = "RouteByProcessingMode"
     States  = local.sfn_states
   })
 

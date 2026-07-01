@@ -10,13 +10,17 @@ terraform {
       version               = ">= 5.0"
       configuration_aliases = [aws.us-east-1]
     }
+    awscc = {
+      source  = "hashicorp/awscc"
+      version = ">= 0.70.0"
+    }
     random = {
       source  = "hashicorp/random"
-      version = ">= 3.1"
+      version = ">= 3.0"
     }
     opensearch = {
       source  = "opensearch-project/opensearch"
-      version = "~> 2.2"
+      version = "2.2.0"
     }
   }
 }

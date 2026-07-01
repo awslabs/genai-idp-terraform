@@ -11,16 +11,15 @@ output "state_machine_name" {
   value       = aws_sfn_state_machine.document_processing.name
 }
 
-# Routing topology derived from var.use_bda and feature flags, exposed so
-# terraform test can assert routing at plan time (the full definition string is
-# unknown at plan because it interpolates computed ARNs).
+# Routing topology exposed so terraform test can assert routing at plan time (the
+# full definition string is unknown at plan because it interpolates computed ARNs).
 output "state_machine_start_at" {
-  description = "The StartAt state of the document-processing state machine: 'RouteByProcessingMode' on the BDA path (use_bda = true), 'OCRStep' on the pipeline path."
-  value       = var.use_bda ? "RouteByProcessingMode" : "OCRStep"
+  description = "The StartAt state of the document-processing state machine. Always 'RouteByProcessingMode'; documents route at runtime by their config version's use_bda flag."
+  value       = "RouteByProcessingMode"
 }
 
 output "state_machine_state_names" {
-  description = "The set of state names in the document-processing state machine definition. Includes the BDA-branch states only when use_bda = true."
+  description = "The set of state names in the document-processing state machine definition (both BDA-branch and pipeline-branch states)."
   value       = keys(local.sfn_states)
 }
 
@@ -82,19 +81,19 @@ output "lambda_functions" {
       name = aws_lambda_function.summarization[0].function_name
       arn  = aws_lambda_function.summarization[0].arn
     } : null
-    # BDA branch functions, present only on the BDA path (use_bda = true).
-    bda_invoke = var.use_bda ? {
+    # BDA branch functions, always deployed (count = 1).
+    bda_invoke = {
       name = aws_lambda_function.bda_invoke[0].function_name
       arn  = aws_lambda_function.bda_invoke[0].arn
-    } : null
-    bda_process_results = var.use_bda ? {
+    }
+    bda_process_results = {
       name = aws_lambda_function.bda_process_results[0].function_name
       arn  = aws_lambda_function.bda_process_results[0].arn
-    } : null
-    bda_completion = var.use_bda ? {
+    }
+    bda_completion = {
       name = aws_lambda_function.bda_completion[0].function_name
       arn  = aws_lambda_function.bda_completion[0].arn
-    } : null
+    }
   }
 }
 

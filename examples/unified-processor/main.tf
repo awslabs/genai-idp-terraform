@@ -2,11 +2,27 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 /**
- * # SageMaker UDOP Processor Example with Web UI
+ * # Unified Processor Example — dual-mode routing (BDA + Bedrock-LLM in one deployment)
  *
- * This example demonstrates how to use the SageMaker UDOP processor from the GenAI IDP Accelerator
- * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key,
- * and uses the top-level module to deploy the complete solution with the SageMaker UDOP processor.
+ * ONE processor, ONE Step Functions state machine, with both the Bedrock-LLM
+ * branch and the Bedrock Data Automation (BDA) branch always deployed.
+ * Each document routes at runtime by its configuration version's `use_bda` flag,
+ * selected per upload via the `config-version` S3 object metadata.
+ *
+ * Two configuration versions are seeded:
+ *   - `default` — Bedrock-LLM (`use_bda` absent). Documents tagged
+ *     `config-version=default` route RouteByProcessingMode -> OCRStep.
+ *   - `<bda_version_name>` (default `bda`) — `use_bda: true` plus a top-level
+ *     `bda_project_arn` linking it to a BDA project. Documents tagged with this
+ *     version route RouteByProcessingMode -> BDA_InvokeDataAutomation.
+ *
+ * The per-version `bda_project_arn` is lifted out of the config body by the
+ * `processor-configuration` module and seeded onto the version's DynamoDB row as
+ * `BdaProjectArn` (declarative replacement for a manual `update-item`). The
+ * default is never relinked.
+ *
+ * The BDA project: set `create_bda_project = true` to have this example create one
+ * (self-contained on a clean account), or pass an existing `bda_project_arn`.
  */
 
 provider "aws" {
@@ -23,8 +39,8 @@ provider "awscc" {
 }
 
 # OpenSearch provider for the optional Knowledge Base vector index. When the KB
-# is disabled, the collection isn't created, so point at a harmless placeholder
-# URL and skip the healthcheck (mirrors examples/unified-processor).
+# is disabled (default), the collection isn't created, so point at a harmless
+# placeholder URL and skip the healthcheck (mirrors examples/bda-processor).
 provider "opensearch" {
   url         = local.knowledge_base_enabled ? aws_opensearchserverless_collection.knowledge_base_collection[0].collection_endpoint : "https://placeholder.us-east-1.es.amazonaws.com"
   aws_region  = var.region
@@ -33,8 +49,8 @@ provider "opensearch" {
 
 # Data sources
 data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
 data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
 # Create a random string for unique resource names
 resource "random_string" "suffix" {
@@ -43,22 +59,61 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
-# Local values
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
 
-  # Knowledge Base backend (default on; see knowledge-base.tf). Gates the whole
-  # OpenSearch Serverless + Bedrock Knowledge Base stack.
+  # --------------------------------------------------------------------------
+  # Knowledge Base backend (default on; see knowledge-base.tf)
+  # --------------------------------------------------------------------------
+  # Gates the whole OpenSearch Serverless + Bedrock Knowledge Base stack.
   knowledge_base_enabled = var.create_knowledge_base
 
   # Embedding model id used by knowledge-base.tf for the KB IAM policy and the
-  # collection's embedding_model_arn. Must match the vector index dimension.
+  # collection's embedding_model_arn. The query/generation model_id is passed to
+  # the root api.knowledge_base wiring straight from var.knowledge_base_model_id
+  # and MUST be a plain foundation-model id (no us./eu. inference-profile prefix)
+  # because Bedrock KB RetrieveAndGenerate rejects inference-profile ARNs.
   knowledge_base_embedding_model_id = var.knowledge_base_embedding_model_id
+
+  # DEFAULT (Bedrock-LLM) configuration version. The lending-package sample does
+  # NOT set `use_bda`, so `config-version=default` routes through the Bedrock-LLM
+  # branch (RouteByProcessingMode -> OCRStep).
+  config = yamldecode(file(var.config_file_path))
+
+  # Effective BDA project ARN: the one this example creates (create_bda_project)
+  # or an existing ARN passed via var.bda_project_arn.
+  effective_bda_project_arn = var.create_bda_project ? awscc_bedrock_data_automation_project.bda_project[0].project_arn : var.bda_project_arn
+
+  # BDA-linked additional version. `use_bda: true` routes
+  # `config-version=<bda_version_name>` through the BDA branch. The top-level
+  # `bda_project_arn` is lifted out by processor-configuration and seeded as
+  # `BdaProjectArn`. When no ARN is available the key is omitted and the version
+  # degrades to the Bedrock-LLM branch at runtime.
+  bda_mode_config = merge(
+    {
+      use_bda = true
+      notes   = "Dual-mode demo: routes documents to the BDA branch."
+    },
+    local.effective_bda_project_arn != "" ? { bda_project_arn = local.effective_bda_project_arn } : {}
+  )
+
+  # Extra config versions from files (optional), plus the BDA-linked version.
+  # Paths are relative to this example dir (or absolute). tfvars cannot call
+  # yamldecode/file, so the decode happens here.
+  additional_configurations = merge(
+    {
+      for name, p in var.additional_config_files :
+      name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+    },
+    {
+      (var.bda_version_name) = local.bda_mode_config
+    }
+  )
 }
 
 # Create KMS key for encryption
 resource "aws_kms_key" "encryption_key" {
-  description             = "KMS key for IDP Processing Environment"
+  description             = "KMS key for IDP Unified Processor example"
   deletion_window_in_days = 7
   enable_key_rotation     = true
 
@@ -90,7 +145,7 @@ resource "aws_kms_key" "encryption_key" {
         Resource = "*"
         Condition = {
           ArnEquals = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       }
@@ -101,7 +156,7 @@ resource "aws_kms_key" "encryption_key" {
 }
 
 resource "aws_kms_alias" "encryption_key" {
-  name          = "alias/idp-sagemaker-udop-${random_string.suffix.result}"
+  name          = "alias/idp-unified-${random_string.suffix.result}"
   target_key_id = aws_kms_key.encryption_key.key_id
 }
 
@@ -124,7 +179,7 @@ resource "aws_s3_bucket" "working_bucket" {
   tags          = var.tags
 }
 
-# Optional buckets (created conditionally)
+# Optional logging bucket (created conditionally)
 resource "aws_s3_bucket" "logging_bucket" {
   count         = var.web_ui.logging_enabled ? 1 : 0
   bucket        = "${var.prefix}-logging-${random_string.suffix.result}"
@@ -132,26 +187,21 @@ resource "aws_s3_bucket" "logging_bucket" {
   tags          = var.tags
 }
 
-resource "aws_s3_bucket" "evaluation_baseline_bucket" {
-  count         = var.enable_evaluation ? 1 : 0
-  bucket        = "${var.prefix}-evaluation-baseline-${random_string.suffix.result}"
-  force_destroy = true
-  tags          = var.tags
+# CloudFront standard logging requires legacy ACLs on the destination bucket.
+resource "aws_s3_bucket_ownership_controls" "logging_bucket" {
+  count  = var.web_ui.logging_enabled ? 1 : 0
+  bucket = aws_s3_bucket.logging_bucket[0].id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
 }
 
-resource "aws_s3_bucket" "reporting_bucket" {
-  count         = var.enable_reporting ? 1 : 0
-  bucket        = "${var.prefix}-reporting-${random_string.suffix.result}"
-  force_destroy = true
-  tags          = var.tags
-}
-
-# Optional: Create Glue database for reporting if reporting is enabled
-resource "aws_glue_catalog_database" "reporting_database" {
-  count       = var.enable_reporting ? 1 : 0
-  name        = "${var.prefix}-reporting-database-${random_string.suffix.result}"
-  description = "Database containing tables for evaluation metrics and document processing analytics"
-  tags        = var.tags
+resource "aws_s3_bucket_acl" "logging_bucket" {
+  count      = var.web_ui.logging_enabled ? 1 : 0
+  bucket     = aws_s3_bucket.logging_bucket[0].id
+  acl        = "log-delivery-write"
+  depends_on = [aws_s3_bucket_ownership_controls.logging_bucket]
 }
 
 # Enable EventBridge notifications on input bucket (required for processor to work).
@@ -179,7 +229,6 @@ resource "aws_s3_bucket_notification" "input_bucket_notification" {
 # Cognito User Identity Resources
 #
 
-# Cognito User Pool
 resource "aws_cognito_user_pool" "user_pool" {
   name                     = "${local.name_prefix}-user-pool"
   auto_verified_attributes = ["email"]
@@ -226,7 +275,6 @@ resource "aws_cognito_user_pool" "user_pool" {
   }
 }
 
-# Cognito User Pool Client
 resource "aws_cognito_user_pool_client" "user_pool_client" {
   name         = "${local.name_prefix}-user-pool-client"
   user_pool_id = aws_cognito_user_pool.user_pool.id
@@ -259,7 +307,6 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   ]
 }
 
-# Cognito Identity Pool
 resource "aws_cognito_identity_pool" "identity_pool" {
   identity_pool_name               = "${local.name_prefix}-identity-pool"
   allow_unauthenticated_identities = false
@@ -275,7 +322,6 @@ resource "aws_cognito_identity_pool" "identity_pool" {
   }
 }
 
-# IAM role for authenticated users
 resource "aws_iam_role" "authenticated_role" {
   name = "${local.name_prefix}-authenticated-role"
 
@@ -305,7 +351,6 @@ resource "aws_iam_role" "authenticated_role" {
   }
 }
 
-# IAM role for unauthenticated users
 resource "aws_iam_role" "unauthenticated_role" {
   name = "${local.name_prefix}-unauthenticated-role"
 
@@ -335,7 +380,6 @@ resource "aws_iam_role" "unauthenticated_role" {
   }
 }
 
-# Attach roles to identity pool
 resource "aws_cognito_identity_pool_roles_attachment" "identity_pool_roles" {
   identity_pool_id = aws_cognito_identity_pool.identity_pool.id
 
@@ -345,7 +389,6 @@ resource "aws_cognito_identity_pool_roles_attachment" "identity_pool_roles" {
   }
 }
 
-# Admin user creation (optional, externalized from the module)
 resource "aws_cognito_user" "admin_user" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
@@ -360,9 +403,6 @@ resource "aws_cognito_user" "admin_user" {
     family_name    = "User"
   }
 
-  # Send invitation email with temporary password
-  # message_action = "SUPPRESS" # Removed to allow invitation email
-
   lifecycle {
     ignore_changes = [
       password,
@@ -371,7 +411,6 @@ resource "aws_cognito_user" "admin_user" {
   }
 }
 
-# Admin group creation (optional)
 resource "aws_cognito_user_group" "admin_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   name         = "Admin"
@@ -380,7 +419,6 @@ resource "aws_cognito_user_group" "admin_group" {
   precedence   = 0
 }
 
-# Add admin user to admin group
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
@@ -388,36 +426,11 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
   username     = aws_cognito_user.admin_user[0].username
 }
 
-# Create and train the SageMaker UDOP model
-module "sagemaker_model" {
-  source = "./sagemaker-model"
-
-  name_prefix   = local.name_prefix
-  kms_key_id    = aws_kms_key.encryption_key.key_id
-  max_epochs    = var.training_config.max_epochs
-  base_model    = var.training_config.base_model
-  retrain_model = var.training_config.retrain_model
-
-  tags = var.tags
-}
-
-# Read configuration from config library (pattern-3 for SageMaker UDOP processor)
-locals {
-  config_file_path = var.config_file_path
-  config_yaml      = file(local.config_file_path)
-  config           = yamldecode(local.config_yaml)
-
-  # Additional config versions, managed from terraform.tfvars as
-  # version_name => path-to-YAML. Each becomes an editable, non-active version
-  # in the UI. Paths are relative to this example dir (or absolute). tfvars
-  # cannot call yamldecode/file, so the decode happens here.
-  additional_configurations = {
-    for name, p in var.additional_config_files :
-    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
-  }
-}
-
-# Deploy the GenAI IDP Accelerator with SageMaker UDOP processor
+# Deploy the GenAI IDP Accelerator with the Bedrock-LLM processor façade.
+#
+# Both the Bedrock-LLM and BDA branches are always deployed by the shared engine.
+# The `default` config stays Bedrock-LLM; the BDA-linked version (carried in
+# `additional_configurations` with its own `bda_project_arn`) routes to BDA.
 module "genai_idp_accelerator" {
   source = "../.."
 
@@ -425,19 +438,21 @@ module "genai_idp_accelerator" {
     aws.us-east-1 = aws.us-east-1
   }
 
-  # Processor configuration
-  sagemaker_udop_processor = {
-    classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
-    extraction_model_id         = var.extraction_model_id
+  # Processor configuration (Bedrock-LLM default + BDA-linked additional version)
+  bedrock_llm_processor = {
+    classification_model_id = var.classification_model_id
+    extraction_model_id     = var.extraction_model_id
     summarization = {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config                    = local.config
+    config = local.config
+    # The BDA version carries its own per-version `bda_project_arn`, so no
+    # top-level fallback is needed here. The default is never relinked.
     additional_configurations = local.additional_configurations
   }
 
-  # Use external user identity instead of creating new one
+  # Use external user identity created above
   user_identity = {
     user_pool_arn          = aws_cognito_user_pool.user_pool.arn
     user_pool_client_id    = aws_cognito_user_pool_client.user_pool_client.id
@@ -451,28 +466,18 @@ module "genai_idp_accelerator" {
   working_bucket_arn = aws_s3_bucket.working_bucket.arn
   encryption_key_arn = aws_kms_key.encryption_key.arn
 
-  # Evaluation configuration
-  evaluation = var.enable_evaluation ? {
-    enabled             = true
-    model_id            = var.evaluation_model_id
-    baseline_bucket_arn = aws_s3_bucket.evaluation_baseline_bucket[0].arn
-  } : { enabled = false }
-
-  # Reporting configuration
-  reporting = var.enable_reporting ? {
-    enabled       = true
-    bucket_arn    = aws_s3_bucket.reporting_bucket[0].arn
-    database_name = aws_glue_catalog_database.reporting_database[0].name
-  } : { enabled = false }
-
   # API configuration.
   #
-  # The knowledge_base sub-block is wired from the example's create_knowledge_base
-  # toggle (see knowledge-base.tf): the created KB ARN is injected so the Web UI's
-  # "Document KB" tool can query ingested documents. chat_with_document is left to
-  # the root default (on), which pairs with the KB for retrieval-backed Q&A.
+  # chat_with_document + knowledge_base drive the Web UI's "Agent Companion Chat"
+  # / "Document KB" tools. chat_with_document is per-document Q&A. The
+  # knowledge_base backend (var.create_knowledge_base, default on) stands up an
+  # OpenSearch Serverless + Bedrock Knowledge Base that ingests uploaded docs from
+  # the input bucket; its ARN is wired in below. When create_knowledge_base is
+  # false the KB is not created and knowledge_base_arn is null, leaving
+  # chat-with-document to operate without a KB.
   api = {
-    enabled = true
+    enabled            = true
+    chat_with_document = { enabled = var.chat_with_document_enabled }
     knowledge_base = {
       enabled            = var.create_knowledge_base
       knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)
@@ -480,17 +485,6 @@ module "genai_idp_accelerator" {
       embedding_model_id = var.knowledge_base_embedding_model_id
     }
   }
-
-  # Feature flags (DEPRECATED - use api variable instead)
-  # These are kept for backward compatibility during migration
-  enable_api         = var.enable_api
-  agent_analytics    = var.agent_analytics
-  chat_with_document = var.chat_with_document
-  process_changes    = var.process_changes
-  discovery          = var.discovery
-
-  # Layer configuration
-  force_rebuild_layers = var.force_rebuild_layers
 
   # Web UI configuration
   web_ui = {
@@ -501,7 +495,7 @@ module "genai_idp_accelerator" {
     logging_enabled            = var.web_ui.logging_enabled
     logging_bucket_arn         = var.web_ui.logging_enabled ? aws_s3_bucket.logging_bucket[0].arn : null
     enable_signup              = var.web_ui.enable_signup
-    display_name               = "SageMaker UDOP Processor (${element(split("/", var.config_file_path), length(split("/", var.config_file_path)) - 2)})"
+    display_name               = "Unified Processor (dual-mode)"
   }
 
   # General configuration

@@ -24,10 +24,13 @@ provider "awscc" {
 
 # Local values for backward compatibility
 locals {
-  # Determine knowledge base configuration with backward compatibility
-  # New api.knowledge_base takes precedence over deprecated enable_knowledge_base
-  knowledge_base_enabled = var.api.knowledge_base.enabled != null ? var.api.knowledge_base.enabled : (
-    var.enable_knowledge_base != null ? var.enable_knowledge_base : var.api.knowledge_base.enabled
+  # KB enablement is driven by var.create_knowledge_base (default on) for parity
+  # with examples/unified-processor. The legacy api.knowledge_base.enabled /
+  # enable_knowledge_base opt-ins still force it on when set.
+  knowledge_base_enabled = var.create_knowledge_base || (
+    var.api.knowledge_base.enabled != null ? var.api.knowledge_base.enabled : (
+      var.enable_knowledge_base != null ? var.enable_knowledge_base : false
+    )
   )
 
   knowledge_base_model_id = var.api.knowledge_base.model_id != null ? var.api.knowledge_base.model_id : (
@@ -493,11 +496,11 @@ module "genai_idp_accelerator" {
     enable_capacity_planning        = var.api.enable_capacity_planning
     enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
     enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
-    knowledge_base = var.api.knowledge_base.enabled ? {
+    knowledge_base = local.knowledge_base_enabled ? {
       enabled            = true
-      knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
-      model_id           = var.api.knowledge_base.model_id
-      embedding_model_id = var.api.knowledge_base.embedding_model_id
+      knowledge_base_arn = aws_bedrockagent_knowledge_base.knowledge_base[0].arn
+      model_id           = local.knowledge_base_model_id
+      embedding_model_id = local.knowledge_base_embedding_model_id
       } : {
       enabled = false
     }

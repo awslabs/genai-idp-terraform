@@ -1,0 +1,5 @@
+# Never commit real values (BDA project ARN, admin email, etc.).
+# The repo-level .gitignore already ignores *.tfvars; this makes it explicit for
+# anyone working only inside this example directory.
+terraform.tfvars
+terraform.tfvars.json

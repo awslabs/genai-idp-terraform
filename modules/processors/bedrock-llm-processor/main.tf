@@ -8,24 +8,21 @@
 # cdklabs/genai-idp@main): a thin public façade that creates NO Bedrock Data
 # Automation (BDA) resources and NO document-processing engine resources of its
 # own. It delegates ALL document processing to the shared internal engine
-# (`modules/processors/unified-processor/`) via a nested `module "engine"`,
-# routing down the Bedrock-LLM/SageMaker pipeline branch (`use_bda = false`).
+# (`modules/processors/unified-processor/`) via a nested `module "engine"`. The
+# engine always deploys both the BDA branch and the step-by-step pipeline
+# branch; documents are routed at runtime by their config version's `use_bda`
+# flag, so a Bedrock-LLM deployment processes `use_bda: false` versions through
+# the pipeline branch by default while still being able to route BDA-linked
+# versions to the BDA branch.
 #
 # The façade owns no document-processing resources of its own; that all lives in
-# the shared engine (`module.engine.*`), routed down the Bedrock-LLM pipeline
-# branch (`use_bda = false`).
+# the shared engine (`module.engine.*`).
 
 module "engine" {
   source = "../unified-processor"
 
   # The engine resources adopt the façade's name.
   name = var.name
-
-  # ---------------------------------------------------------------------------
-  # Façade ↔ engine delegation: Bedrock-LLM is the non-BDA pipeline branch.
-  # ---------------------------------------------------------------------------
-  use_bda         = false
-  bda_project_arn = null
 
   # API wiring
   enable_api      = var.enable_api
@@ -114,6 +111,10 @@ module "engine" {
 
   # Extra non-active config versions seeded alongside the default
   additional_configurations = var.additional_configurations
+
+  # Optional fallback BDA project for use_bda:true additional versions; does not
+  # relink the default (stays pipeline).
+  bda_project_arn = var.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

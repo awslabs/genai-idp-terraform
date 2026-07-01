@@ -1,15 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# BDA branch Lambda functions, gated on use_bda (only the bda-processor façade
-# instantiates them). Mirrors upstream template.yaml InvokeBDAFunction /
-# BDAProcessResultsFunction / BDACompletionFunction. Packaged zip+layer (the
-# engine convention), not the upstream Image packaging.
+# BDA branch Lambda functions. Always deployed (count = 1) so both branches are
+# present on every façade; runtime routing selects the branch per document.
+# Mirrors upstream template.yaml InvokeBDAFunction / BDAProcessResultsFunction /
+# BDACompletionFunction. Packaged zip+layer (the engine convention), not the
+# upstream Image packaging.
 
-# Archive sources (gated on use_bda)
+# Archive sources (always rendered)
 
 data "archive_file" "bda_invoke_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/unified/src/bda_invoke_function"
@@ -19,7 +20,7 @@ data "archive_file" "bda_invoke_lambda" {
 }
 
 data "archive_file" "bda_process_results_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/unified/src/bda_processresults_function"
@@ -29,7 +30,7 @@ data "archive_file" "bda_process_results_lambda" {
 }
 
 data "archive_file" "bda_completion_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   type        = "zip"
   source_dir  = "${path.module}/../../../sources/patterns/unified/src/bda_completion_function"
@@ -42,7 +43,7 @@ data "archive_file" "bda_completion_lambda" {
 # Functions task token so the completion function can resume the workflow.
 
 resource "aws_lambda_function" "bda_invoke" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   function_name = "${local.name_prefix}-bda-invoke"
   role          = aws_iam_role.bda_invoke_lambda[0].arn
@@ -83,7 +84,7 @@ resource "aws_lambda_function" "bda_invoke" {
 }
 
 resource "aws_cloudwatch_log_group" "bda_invoke_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name              = "/aws/lambda/${aws_lambda_function.bda_invoke[0].function_name}"
   retention_in_days = local.log_retention_days
@@ -96,7 +97,7 @@ resource "aws_cloudwatch_log_group" "bda_invoke_lambda" {
 # builds the Document sections (used by both fresh-job and reprocessing paths).
 
 resource "aws_lambda_function" "bda_process_results" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   function_name = "${local.name_prefix}-bda-process-results"
   role          = aws_iam_role.bda_process_results_lambda[0].arn
@@ -140,7 +141,7 @@ resource "aws_lambda_function" "bda_process_results" {
 }
 
 resource "aws_cloudwatch_log_group" "bda_process_results_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name              = "/aws/lambda/${aws_lambda_function.bda_process_results[0].function_name}"
   retention_in_days = local.log_retention_days
@@ -153,7 +154,7 @@ resource "aws_cloudwatch_log_group" "bda_process_results_lambda" {
 # events, looks up the stored task token, and resumes the waiting task.
 
 resource "aws_sqs_queue" "bda_completion_dlq" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name                       = "${local.name_prefix}-bda-completion-dlq"
   kms_master_key_id          = local.encryption_key_id
@@ -164,7 +165,7 @@ resource "aws_sqs_queue" "bda_completion_dlq" {
 }
 
 resource "aws_sqs_queue_policy" "bda_completion_dlq" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   queue_url = aws_sqs_queue.bda_completion_dlq[0].id
 
@@ -183,7 +184,7 @@ resource "aws_sqs_queue_policy" "bda_completion_dlq" {
 }
 
 resource "aws_lambda_function" "bda_completion" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   function_name = "${local.name_prefix}-bda-completion"
   role          = aws_iam_role.bda_completion_lambda[0].arn
@@ -229,7 +230,7 @@ resource "aws_lambda_function" "bda_completion" {
 }
 
 resource "aws_cloudwatch_log_group" "bda_completion_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name              = "/aws/lambda/${aws_lambda_function.bda_completion[0].function_name}"
   retention_in_days = local.log_retention_days
@@ -240,7 +241,7 @@ resource "aws_cloudwatch_log_group" "bda_completion_lambda" {
 
 # EventBridge rule for BDA job-completion events -> completion function
 resource "aws_cloudwatch_event_rule" "bda_completion" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name        = "${local.name_prefix}-bda-completion"
   description = "Routes Bedrock Data Automation job-completion events to the BDA completion function"
@@ -258,7 +259,7 @@ resource "aws_cloudwatch_event_rule" "bda_completion" {
 }
 
 resource "aws_cloudwatch_event_target" "bda_completion" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   rule      = aws_cloudwatch_event_rule.bda_completion[0].name
   target_id = "BDACompletionFunction"
@@ -271,7 +272,7 @@ resource "aws_cloudwatch_event_target" "bda_completion" {
 }
 
 resource "aws_lambda_permission" "bda_completion_eventbridge" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   statement_id  = "AllowExecutionFromEventBridge"
   action        = "lambda:InvokeFunction"

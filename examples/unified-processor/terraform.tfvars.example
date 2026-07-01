@@ -1,0 +1,20 @@
+# Unified Processor — dual-mode routing (BDA + Bedrock-LLM in one deployment).
+# Copy to terraform.tfvars and set the values below; the rest uses variables.tf defaults.
+
+region      = "us-east-1"
+prefix      = "idp-unified"
+admin_email = "admin@example.com"
+
+# The BDA project the `bda` config version links to — pick ONE:
+create_bda_project = true                 # let this example create + link one
+# bda_project_arn  = "arn:aws:bedrock:us-east-1:111122223333:data-automation-project/abc123"
+
+# ── Optional overrides (defaults shown; uncomment to change) ────────────────
+# bda_version_name           = "bda"       # config-version that routes to BDA
+# create_knowledge_base      = true        # OpenSearch + Bedrock KB (Document KB / chat)
+# chat_with_document_enabled = true
+# classification_model_id    = "us.amazon.nova-2-lite-v1:0"
+# extraction_model_id        = "us.amazon.nova-2-lite-v1:0"
+# web_ui = { enabled = true }              # set enabled = false to skip CloudFront/UI
+# additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
+# tags = { Environment = "dev" }

@@ -485,6 +485,10 @@ module "bedrock_llm_processor" {
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.bedrock_llm_processor.additional_configurations
 
+  # Optional fallback BDA project for use_bda:true additional versions (does not
+  # relink the default)
+  bda_project_arn = var.bedrock_llm_processor.bda_project_arn
+
   # Feature flags
   is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
   enable_hitl              = var.bedrock_llm_processor.enable_hitl
@@ -551,6 +555,10 @@ module "sagemaker_udop_processor" {
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.sagemaker_udop_processor.additional_configurations
+
+  # Optional fallback BDA project for use_bda:true additional versions (does not
+  # relink the default)
+  bda_project_arn = var.sagemaker_udop_processor.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
