@@ -142,3 +142,44 @@ resource "aws_lambda_invocation" "seed_managed" {
     aws_iam_role_policy_attachment.kms_access
   ]
 }
+
+# ----------------------------------------------------------------------------
+# Additional customer configurations
+#
+# Code-supplied config versions seeded as non-active, EDITABLE Config#<name>
+# rows (Managed=false), so they show in the UI version dropdown next to the
+# default and can be customized like a UI "Save as Version" copy. Names that
+# collide with the reserved "default" version or a managed baseline are dropped
+# so they can never clobber those rows.
+# ----------------------------------------------------------------------------
+locals {
+  additional_configurations = {
+    for k, v in var.additional_configurations :
+    k => v if k != "default" && !contains(keys(local.managed_configs), k)
+  }
+}
+
+resource "aws_lambda_invocation" "seed_additional" {
+  for_each = local.additional_configurations
+
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key         = "Default"
+    Version     = each.key
+    Managed     = false
+    IsActive    = false
+    Description = try(each.value.description, "Configuration: ${each.key}")
+    Value       = each.value
+  })
+
+  triggers = {
+    configuration_hash = sha256(jsonencode(each.value))
+    seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}

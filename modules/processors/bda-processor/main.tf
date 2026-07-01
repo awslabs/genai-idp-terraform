@@ -118,6 +118,9 @@ module "engine" {
   config                     = var.config
   max_processing_concurrency = var.max_processing_concurrency
 
+  # Extra non-active config versions seeded alongside the default
+  additional_configurations = var.additional_configurations
+
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 

@@ -315,6 +315,15 @@ locals {
   config_yaml      = file(local.config_file_path)
   config           = yamldecode(local.config_yaml)
 
+  # Additional config versions, managed from terraform.tfvars as
+  # version_name => path-to-YAML. Each becomes an editable, non-active version
+  # in the UI. Paths are relative to this example dir (or absolute). tfvars
+  # cannot call yamldecode/file, so the decode happens here.
+  additional_configurations = {
+    for name, p in var.additional_config_files :
+    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+  }
+
   # Backward compatibility: merge old individual variables with new api structure
   # New api variable takes precedence when both are provided
   api_config = var.api.enabled || var.discovery != null || var.chat_with_document != null || var.process_changes != null ? {
@@ -393,7 +402,8 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config = local.config
+    config                    = local.config
+    additional_configurations = local.additional_configurations
   }
 
   # Resource ARNs

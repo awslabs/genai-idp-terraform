@@ -341,6 +341,12 @@ variable "config" {
   default     = null
 }
 
+variable "additional_configurations" {
+  description = "Extra non-active, editable configuration versions seeded alongside the default (version_name => config object). Shown in the UI version dropdown."
+  type        = any
+  default     = {}
+}
+
 
 
 variable "enable_hitl" {

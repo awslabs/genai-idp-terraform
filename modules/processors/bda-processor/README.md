@@ -30,6 +30,7 @@
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_additional_configurations"></a> [additional\_configurations](#input\_additional\_configurations) | Extra non-active, editable configuration versions seeded alongside the default (version\_name => config object). Shown in the UI version dropdown. | `any` | `{}` | no |
 | <a name="input_api_arn"></a> [api\_arn](#input\_api\_arn) | ARN of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_graphql_url"></a> [api\_graphql\_url](#input\_api\_graphql\_url) | GraphQL URL of the API that provides interfaces for querying document status and metadata | `string` | `null` | no |
 | <a name="input_api_id"></a> [api\_id](#input\_api\_id) | ID of the GraphQL API that provides interfaces for querying document status and metadata | `string` | `null` | no |
@@ -38,6 +39,8 @@
 | <a name="input_config"></a> [config](#input\_config) | Configuration values from config\_library YAML files | `any` | n/a | yes |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the DynamoDB table that stores configuration settings | `string` | n/a | yes |
 | <a name="input_data_automation_project_arn"></a> [data\_automation\_project\_arn](#input\_data\_automation\_project\_arn) | The ARN of the Bedrock Data Automation Project used for document processing. Consumer-supplied; forwarded to the shared engine as bda\_project\_arn (use\_bda = true). | `string` | n/a | yes |
+| <a name="input_enable_api"></a> [enable\_api](#input\_enable\_api) | Whether the API is enabled. Use this instead of checking api\_id != null to avoid unknown value issues in count. | `bool` | `false` | no |
+| <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in count. | `bool` | `false` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources in the document processing workflow | `string` | `null` | no |
 | <a name="input_evaluation_baseline_bucket_name"></a> [evaluation\_baseline\_bucket\_name](#input\_evaluation\_baseline\_bucket\_name) | Name of the S3 bucket containing baseline documents for evaluation. Leave empty to skip evaluation. | `string` | `""` | no |
 | <a name="input_evaluation_layer_arn"></a> [evaluation\_layer\_arn](#input\_evaluation\_layer\_arn) | ARN of the dedicated evaluation Lambda layer (idp\_common with evaluation extras). Forwarded to the engine; required by the engine when evaluation is enabled. | `string` | `null` | no |

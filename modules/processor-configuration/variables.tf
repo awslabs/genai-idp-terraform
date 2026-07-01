@@ -21,6 +21,12 @@ variable "configuration" {
   type        = any
 }
 
+variable "additional_configurations" {
+  description = "Extra non-active, editable configuration versions seeded as Config#<name> rows (version_name => config object). Unlike managed baselines these are Managed=false, so they remain editable in the UI."
+  type        = any
+  default     = {}
+}
+
 variable "vpc_config" {
   description = "VPC configuration for Lambda function"
   type = object({

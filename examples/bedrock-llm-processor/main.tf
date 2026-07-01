@@ -420,6 +420,15 @@ locals {
       local.demo_overlay_classes,
     )
   })
+
+  # Additional config versions, managed from terraform.tfvars as
+  # version_name => path-to-YAML. Each becomes an editable, non-active version
+  # in the UI. Paths are relative to this example dir (or absolute). tfvars
+  # cannot call yamldecode/file, so the decode happens here.
+  additional_configurations = {
+    for name, p in var.additional_config_files :
+    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+  }
 }
 
 # Deploy the GenAI IDP Accelerator with Bedrock LLM processor
@@ -446,6 +455,7 @@ module "genai_idp_accelerator" {
     lambda_hook_assessment     = var.lambda_hook_assessment != "" ? var.lambda_hook_assessment : null
     lambda_hook_summarization  = var.lambda_hook_summarization != "" ? var.lambda_hook_summarization : null
     config                     = local.config
+    additional_configurations  = local.additional_configurations
   }
 
   # Use external user identity instead of creating new one

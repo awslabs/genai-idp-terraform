@@ -80,6 +80,9 @@ module "processor_configuration" {
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
 
+  # Extra non-active config versions seeded alongside the default.
+  additional_configurations = var.additional_configurations
+
   # Layers required so the seeder Lambda merges user config with system
   # defaults; without them the runtime crashes with "No system_prompt found".
   base_layer_arn       = var.base_layer_arn

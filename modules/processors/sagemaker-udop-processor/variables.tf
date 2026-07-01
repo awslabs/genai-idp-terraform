@@ -199,3 +199,9 @@ variable "evaluation_baseline_bucket_name" {
   type        = string
   default     = ""
 }
+
+variable "additional_configurations" {
+  description = "Extra non-active, editable configuration versions seeded alongside the default (version_name => config object). Shown in the UI version dropdown."
+  type        = any
+  default     = {}
+}

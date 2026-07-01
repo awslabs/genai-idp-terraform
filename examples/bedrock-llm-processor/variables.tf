@@ -335,6 +335,12 @@ variable "config_file_path" {
   default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 }
 
+variable "additional_config_files" {
+  description = "Extra config versions to seed alongside the default, as version_name => path to a YAML file (relative to this example dir or absolute). Each shows in the UI version dropdown as an editable, non-active version. Manage this list from terraform.tfvars."
+  type        = map(string)
+  default     = {}
+}
+
 # When true, append the demonstration classes in
 # config-overlays/round3-x-aws-idp-flags.yaml (the config-shape `x-aws-idp-*`
 # flags) onto the seeded config's classes list so the flags travel through the

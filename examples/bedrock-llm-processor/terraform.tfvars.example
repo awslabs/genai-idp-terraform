@@ -15,6 +15,17 @@ data_tracking_retention_days = 365
 # Configuration File Path (optional - uses default lending package config)
 # config_file_path = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
+# Additional configuration versions (optional). Map of version_name => path to a
+# YAML config file (relative to this example dir or absolute). Each is seeded as
+# an editable, non-active version and appears in the UI Configuration Version
+# dropdown alongside the default. Drop YAML files in examples/config-catalog (or
+# anywhere) and list them here. Removing an entry stops Terraform managing it but
+# does not delete the already-seeded version; delete it from the UI.
+# additional_config_files = {
+#   invoices = "../config-catalog/invoices.yaml"
+#   receipts = "../config-catalog/receipts.yaml"
+# }
+
 # Optionally demonstrate the config-shape x-aws-idp-* schema flags by appending
 # the overlay classes in config-overlays/round3-x-aws-idp-flags.yaml onto the
 # seeded config. These flags are runtime-enforced upstream and pass through the

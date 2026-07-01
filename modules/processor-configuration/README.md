@@ -29,6 +29,7 @@ No modules.
 | [aws_iam_role_policy_attachment.lambda_basic_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.lambda_vpc_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_lambda_function.configuration_seeder](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
+| [aws_lambda_invocation.seed_additional](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_lambda_invocation.seed_default](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_lambda_invocation.seed_managed](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_lambda_invocation.seed_schema](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
@@ -41,6 +42,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_additional_configurations"></a> [additional\_configurations](#input\_additional\_configurations) | Extra non-active, editable configuration versions seeded as Config#<name> rows (version\_name => config object). Unlike managed baselines these are Managed=false, so they remain editable in the UI. | `any` | `{}` | no |
 | <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the IDPCommonBaseLayer Lambda layer. The seeder Lambda needs<br>`idp_common` available so it can call `merge_config_with_defaults`<br>when storing a `Default` configuration. Without this layer attached<br>the seeder still functions, but it skips the merge step and the<br>runtime classification/extraction Lambdas will fail with<br>`No system_prompt found in classification configuration`. | `string` | `null` | no |
 | <a name="input_configuration"></a> [configuration](#input\_configuration) | JSON configuration object to store under 'Default' key | `any` | n/a | yes |
 | <a name="input_configuration_table_name"></a> [configuration\_table\_name](#input\_configuration\_table\_name) | Name of the DynamoDB table to store configuration | `string` | n/a | yes |

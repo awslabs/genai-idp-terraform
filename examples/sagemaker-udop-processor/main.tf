@@ -374,6 +374,15 @@ locals {
   config_file_path = var.config_file_path
   config_yaml      = file(local.config_file_path)
   config           = yamldecode(local.config_yaml)
+
+  # Additional config versions, managed from terraform.tfvars as
+  # version_name => path-to-YAML. Each becomes an editable, non-active version
+  # in the UI. Paths are relative to this example dir (or absolute). tfvars
+  # cannot call yamldecode/file, so the decode happens here.
+  additional_configurations = {
+    for name, p in var.additional_config_files :
+    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+  }
 }
 
 # Deploy the GenAI IDP Accelerator with SageMaker UDOP processor
@@ -392,7 +401,8 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config = local.config
+    config                    = local.config
+    additional_configurations = local.additional_configurations
   }
 
   # Use external user identity instead of creating new one

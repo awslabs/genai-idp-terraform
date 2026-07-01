@@ -422,6 +422,9 @@ module "bda_processor" {
   # Optional: Document processing configuration
   config = var.bda_processor.config
 
+  # Optional: extra non-active config versions seeded alongside the default
+  additional_configurations = var.bda_processor.additional_configurations
+
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
@@ -478,6 +481,9 @@ module "bedrock_llm_processor" {
 
   # Optional: Document processing configuration
   config = var.bedrock_llm_processor.config
+
+  # Optional: extra non-active config versions seeded alongside the default
+  additional_configurations = var.bedrock_llm_processor.additional_configurations
 
   # Feature flags
   is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
@@ -542,6 +548,9 @@ module "sagemaker_udop_processor" {
 
   # Optional: Document processing configuration
   config = var.sagemaker_udop_processor.config
+
+  # Optional: extra non-active config versions seeded alongside the default
+  additional_configurations = var.sagemaker_udop_processor.additional_configurations
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

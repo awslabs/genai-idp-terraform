@@ -213,6 +213,9 @@ variable "bedrock_llm_processor" {
     }), { enabled = true, model_id = null })
     enable_hitl = optional(bool, false)
     config      = any
+    # Extra non-active, editable config versions seeded alongside the default
+    # (version_name => config object). Shown in the UI version dropdown.
+    additional_configurations = optional(any, {})
   })
   default = null
 
@@ -234,6 +237,9 @@ variable "bda_processor" {
       model_id = optional(string, null)
     }), { enabled = true, model_id = null })
     config = any
+    # Extra non-active, editable config versions seeded alongside the default
+    # (version_name => config object). Shown in the UI version dropdown.
+    additional_configurations = optional(any, {})
   })
   default = null
 }
@@ -250,6 +256,9 @@ variable "sagemaker_udop_processor" {
     ocr_max_workers            = optional(number, 20)
     classification_max_workers = optional(number, 20)
     config                     = any
+    # Extra non-active, editable config versions seeded alongside the default
+    # (version_name => config object). Shown in the UI version dropdown.
+    additional_configurations = optional(any, {})
   })
   default = null
 }
