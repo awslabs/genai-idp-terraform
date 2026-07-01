@@ -48,9 +48,7 @@ output "bda_config_version" {
 
 output "bda_project_arn" {
   description = "BDA project ARN linked to the BDA configuration version (empty if unlinked)."
-  # Effective ARN: the project this example created (create_bda_project = true)
-  # or the existing one passed via var.bda_project_arn. Using var.bda_project_arn
-  # directly reported "" whenever the example created the project itself.
+  # Created project (create_bda_project) or the passed-in var.bda_project_arn.
   value = local.effective_bda_project_arn
 }
 
