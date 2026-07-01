@@ -3,7 +3,7 @@
 
 region      = "us-east-1"
 prefix      = "genai-idp"
-admin_email = "admin@example.com"   # creates the initial Web UI admin user
+admin_email = "admin@example.com" # creates the initial Web UI admin user
 
 # ── Optional overrides (defaults shown; uncomment to change) ────────────────
 # classification_model_id = "us.amazon.nova-2-lite-v1:0"
@@ -16,8 +16,19 @@ admin_email = "admin@example.com"   # creates the initial Web UI admin user
 # config_file_path        = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
+
+# ── Knowledge Base (Document KB) + chat ─────────────────────────────────────
+# Enable the KB backend via the `api` object; it auto-wires OpenSearch + KB.
+# The KB generation model MUST be a cross-region inference-profile id
+# (us./eu./apac. prefix); the embedding model is a plain foundation-model id.
+# chat-with-document is on by default and does NOT require a KB.
+# api = {
+#   knowledge_base = {
+#     enabled            = true
+#     model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)
+#     embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)
+#   }
+# }
 #
-# Knowledge Base + chat: enable the KB backend via the `api` object
-#   api = { knowledge_base = { enabled = true } }   # auto-wires OpenSearch + KB
-# chat-with-document is on by default. Advanced toggles (agent analytics,
-# discovery, MCP, HITL, RBAC, IdP federation) — see variables.tf.
+# Advanced toggles (agent analytics, discovery, MCP, HITL, RBAC, IdP
+# federation) also live under the `api` object — see variables.tf.

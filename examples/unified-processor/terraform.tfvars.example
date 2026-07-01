@@ -6,15 +6,24 @@ prefix      = "idp-unified"
 admin_email = "admin@example.com"
 
 # The BDA project the `bda` config version links to — pick ONE:
-create_bda_project = true                 # let this example create + link one
+create_bda_project = true # let this example create + link one
 # bda_project_arn  = "arn:aws:bedrock:us-east-1:111122223333:data-automation-project/abc123"
 
 # ── Optional overrides (defaults shown; uncomment to change) ────────────────
 # bda_version_name           = "bda"       # config-version that routes to BDA
-# create_knowledge_base      = true        # OpenSearch + Bedrock KB (Document KB / chat)
-# chat_with_document_enabled = true
+# chat_with_document_enabled = true         # on by default; does NOT require a KB
 # classification_model_id    = "us.amazon.nova-2-lite-v1:0"
 # extraction_model_id        = "us.amazon.nova-2-lite-v1:0"
 # web_ui = { enabled = true }              # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
+
+# ── Knowledge Base (Document KB + chat) ─────────────────────────────────────
+# create_knowledge_base provisions the OpenSearch + Bedrock KB backend and
+# wires it into the API. Default off (keeps this a lightweight routing demo).
+# create_knowledge_base = true
+#
+# The KB generation model MUST be a cross-region inference-profile id
+# (us./eu./apac. prefix); the embedding model is a plain foundation-model id.
+# knowledge_base_model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)
+# knowledge_base_embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)
