@@ -62,6 +62,11 @@ locals {
   # Reconstruct the baseline bucket ARN expected by the engine from the bucket
   # name the root passes (S3 ARNs are partition-scoped, account-agnostic).
   evaluation_baseline_bucket_arn = local.evaluation_enabled ? "arn:${data.aws_partition.current.partition}:s3:::${var.evaluation_baseline_bucket_name}" : null
+
+  # Force the default config version onto the BDA branch: routing keys off
+  # `$.document.use_bda`, and linking BdaProjectArn alone does not set it. The
+  # shared lending sample ships `use_bda: false`, so this override must win.
+  config_with_bda = merge(var.config, { use_bda = true })
 }
 
 # =============================================================================
@@ -117,7 +122,7 @@ module "engine" {
   evaluation_baseline_bucket_arn = local.evaluation_baseline_bucket_arn
 
   # Document processing configuration
-  config                     = var.config
+  config                     = local.config_with_bda
   max_processing_concurrency = var.max_processing_concurrency
 
   # Extra non-active config versions seeded alongside the default
