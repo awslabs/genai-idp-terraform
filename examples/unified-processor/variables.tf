@@ -184,3 +184,20 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}

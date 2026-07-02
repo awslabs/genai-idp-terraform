@@ -59,6 +59,9 @@ resource "random_string" "suffix" {
 # Local values
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
+
+  rbac_enabled     = try(var.rbac.enabled, false)
+  admin_group_name = local.rbac_enabled ? try(module.genai_idp_accelerator.rbac_group_names["Admin"], "Admin") : one(aws_cognito_user_group.admin_group[*].name)
 }
 
 # Create KMS key for encryption
@@ -400,7 +403,7 @@ resource "aws_cognito_user" "admin_user" {
 
 # Admin group creation (optional)
 resource "aws_cognito_user_group" "admin_group" {
-  count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
+  count        = var.admin_email != null && var.admin_email != "" && !local.rbac_enabled ? 1 : 0
   name         = "Admin"
   user_pool_id = aws_cognito_user_pool.user_pool.id
   description  = "Administrators"
@@ -411,7 +414,7 @@ resource "aws_cognito_user_group" "admin_group" {
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
-  group_name   = aws_cognito_user_group.admin_group[0].name
+  group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
 }
 
@@ -513,6 +516,8 @@ module "genai_idp_accelerator" {
   discovery          = var.discovery
   chat_with_document = var.chat_with_document
   process_changes    = var.process_changes
+
+  rbac = var.rbac
   knowledge_base = var.enable_knowledge_base != null ? {
     enabled            = var.enable_knowledge_base
     knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
