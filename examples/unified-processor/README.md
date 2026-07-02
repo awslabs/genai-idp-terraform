@@ -178,13 +178,13 @@ Chat** / **Document KB** tools, both **enabled by default**:
   one notification per bucket). The KB ARN is wired into the root module's
   `api.knowledge_base`.
 
-> **The KB generation model must be a foundation-model ARN.**
-> `knowledge_base_model_id` (default `amazon.nova-pro-v1:0`) feeds the KB's
-> `RetrieveAndGenerate` call, which **rejects inference-profile ARNs**. Use a
-> plain foundation-model id — `amazon.nova-pro-v1:0`, **not**
-> `us.amazon.nova-pro-v1:0`. `knowledge_base_embedding_model_id`
-> (default `amazon.titan-embed-text-v1`) is the model used to index documents.
-> (The Bedrock-LLM branch models above are unrelated and may keep their `us.`
+> **The KB generation model must be a cross-region inference-profile id.**
+> `knowledge_base_model_id` (default `us.amazon.nova-pro-v1:0`) feeds the KB's
+> `RetrieveAndGenerate` call; the query resolver builds an inference-profile ARN
+> from it, so use a `us.`/`eu.`/`apac.`-prefixed id — `us.amazon.nova-pro-v1:0`,
+> **not** the bare `amazon.nova-pro-v1:0`. `knowledge_base_embedding_model_id`
+> (default `amazon.titan-embed-text-v1`) is the plain foundation-model id used to
+> index documents. (The Bedrock-LLM branch models above use the same `us.`
 > inference-profile prefixes.)
 
 Set `create_knowledge_base = false` to drop the OpenSearch/KB backend entirely
@@ -196,7 +196,7 @@ first `apply`.
 # terraform.tfvars (these are the defaults)
 create_knowledge_base      = true
 chat_with_document_enabled = true
-knowledge_base_model_id    = "amazon.nova-pro-v1:0"
+knowledge_base_model_id    = "us.amazon.nova-pro-v1:0"
 ```
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -261,7 +261,6 @@ knowledge_base_model_id    = "amazon.nova-pro-v1:0"
 | [aws_s3_bucket.working_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket_acl.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_acl) | resource |
 | [aws_s3_bucket_notification.input_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) | resource |
-| [aws_s3_bucket_notification.output_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) | resource |
 | [aws_s3_bucket_ownership_controls.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_ownership_controls) | resource |
 | [awscc_bedrock_data_automation_project.bda_project](https://registry.terraform.io/providers/hashicorp/awscc/latest/docs/resources/bedrock_data_automation_project) | resource |
 | [opensearch_index.knowledge_base_index](https://registry.terraform.io/providers/opensearch-project/opensearch/2.2.0/docs/resources/index) | resource |
@@ -281,19 +280,20 @@ knowledge_base_model_id    = "amazon.nova-pro-v1:0"
 | <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Optional email address for the admin user. If provided, an admin user will be created in the Cognito User Pool. | `string` | `null` | no |
 | <a name="input_bda_project_arn"></a> [bda\_project\_arn](#input\_bda\_project\_arn) | ARN of an existing Bedrock Data Automation project to link to the BDA configuration version. Ignored when create\_bda\_project = true. Leave empty to seed the BDA version unlinked (it degrades to the Bedrock-LLM branch until a project is linked). | `string` | `""` | no |
 | <a name="input_bda_version_name"></a> [bda\_version\_name](#input\_bda\_version\_name) | Name of the BDA-linked configuration version seeded alongside the Bedrock-LLM default. Upload a document with S3 object metadata config-version=<this value> to route it through the BDA branch. | `string` | `"bda"` | no |
-| <a name="input_chat_with_document_enabled"></a> [chat\_with\_document\_enabled](#input\_chat\_with\_document\_enabled) | Enable the chat-with-document API feature (per-document Q&A using Bedrock, optionally augmented by the Knowledge Base). Default on. | `bool` | `true` | no |
+| <a name="input_chat_with_document_enabled"></a> [chat\_with\_document\_enabled](#input\_chat\_with\_document\_enabled) | Enable the per-document Q&A 'chat with document' feature in the API/Web UI. Does not require a Knowledge Base (calls Bedrock directly). | `bool` | `true` | no |
 | <a name="input_classification_model_id"></a> [classification\_model\_id](#input\_classification\_model\_id) | Model ID for document classification (Bedrock-LLM branch) | `string` | `"us.amazon.nova-2-lite-v1:0"` | no |
 | <a name="input_config_file_path"></a> [config\_file\_path](#input\_config\_file\_path) | Path to the default (Bedrock-LLM) configuration YAML file. The lending package sample does not set use\_bda, so the default version routes through the Bedrock-LLM branch. | `string` | `"../../sources/config_library/unified/lending-package-sample/config.yaml"` | no |
 | <a name="input_create_bda_project"></a> [create\_bda\_project](#input\_create\_bda\_project) | Create a Bedrock Data Automation project in this example (self-contained on a clean account) and link it to the BDA config version. When false, supply an existing project via bda\_project\_arn. | `bool` | `false` | no |
-| <a name="input_create_knowledge_base"></a> [create\_knowledge\_base](#input\_create\_knowledge\_base) | Creates a Bedrock Knowledge Base backend (OpenSearch Serverless collection, vector index, KB + S3 data source ingesting from the input bucket, and ingestion Lambda) and enables the KB query tool by wiring its ARN into the API. Default on. | `bool` | `true` | no |
+| <a name="input_create_discovery"></a> [create\_discovery](#input\_create\_discovery) | Enable the Discovery feature (Web UI 'Discovery' tab). Provisions the discovery S3 bucket, tracking table, SQS queue, upload/processor Lambdas, and AppSync resolvers, and populates the UI's DiscoveryBucket setting. Discovery uses Bedrock to auto-detect document classes/schemas from uploaded samples; with no discovery.* model configured it defaults to global.anthropic.claude-sonnet-4-6 (must be enabled in Bedrock for this region). Default on. | `bool` | `true` | no |
+| <a name="input_create_knowledge_base"></a> [create\_knowledge\_base](#input\_create\_knowledge\_base) | Create the optional Bedrock Knowledge Base backend (OpenSearch Serverless collection, vector index, KB + S3 data source ingesting from the output bucket, and ingestion Lambda) and wire its ARN into the API's knowledge\_base feature. Default on. | `bool` | `true` | no |
 | <a name="input_data_tracking_retention_days"></a> [data\_tracking\_retention\_days](#input\_data\_tracking\_retention\_days) | The retention period for document tracking data in days | `number` | `365` | no |
-| <a name="input_enable_chat_with_document"></a> [enable\_chat\_with\_document](#input\_enable\_chat\_with\_document) | Enable the API's chat-with-document (Document Q&A) feature. Enabled by default; the Knowledge Base backend it queries is provisioned separately via create\_knowledge\_base. | `bool` | `true` | no |
 | <a name="input_extraction_model_id"></a> [extraction\_model\_id](#input\_extraction\_model\_id) | Model ID for information extraction (Bedrock-LLM branch) | `string` | `"us.amazon.nova-2-lite-v1:0"` | no |
-| <a name="input_knowledge_base_embedding_model_id"></a> [knowledge\_base\_embedding\_model\_id](#input\_knowledge\_base\_embedding\_model\_id) | Foundation-model id used to embed documents into the Knowledge Base vector index. | `string` | `"amazon.titan-embed-text-v1"` | no |
-| <a name="input_knowledge_base_model_id"></a> [knowledge\_base\_model\_id](#input\_knowledge\_base\_model\_id) | Foundation-model id used by the Knowledge Base for RetrieveAndGenerate (query/generation). MUST be a plain foundation-model id WITHOUT an inference-profile prefix (no us./eu.) — Bedrock KB RetrieveAndGenerate rejects inference-profile ARNs. | `string` | `"amazon.nova-pro-v1:0"` | no |
+| <a name="input_knowledge_base_embedding_model_id"></a> [knowledge\_base\_embedding\_model\_id](#input\_knowledge\_base\_embedding\_model\_id) | Foundation-model id used to embed documents into the Knowledge Base vector index. Must match the vector index dimension (titan-embed-text-v2:0 => 1024, as configured in knowledge-base.tf). | `string` | `"amazon.titan-embed-text-v2:0"` | no |
+| <a name="input_knowledge_base_model_id"></a> [knowledge\_base\_model\_id](#input\_knowledge\_base\_model\_id) | Inference-profile id used by the Knowledge Base for RetrieveAndGenerate (query/generation). Use a cross-region inference-profile id (e.g. us.amazon.nova-pro-v1:0); the resolver builds the inference-profile ARN from it. nova-pro is only invokable via its cross-region profile, so the us. prefix is required. | `string` | `"us.amazon.nova-pro-v1:0"` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | The log level for the document processing components | `string` | `"INFO"` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The retention period for CloudWatch logs generated by the document processing components in days | `number` | `7` | no |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix to add to resource names | `string` | `"idp-unified"` | no |
+| <a name="input_rbac"></a> [rbac](#input\_rbac) | Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path. | <pre>object({<br>    enabled = optional(bool, false)<br>    group_names = optional(object({<br>      admin    = optional(string, "Admin")<br>      author   = optional(string, "Author")<br>      reviewer = optional(string, "Reviewer")<br>      viewer   = optional(string, "Viewer")<br>    }), {})<br>    allowed_signup_email_domains = optional(string, "")<br>  })</pre> | <pre>{<br>  "enabled": false<br>}</pre> | no |
 | <a name="input_region"></a> [region](#input\_region) | AWS region to deploy resources | `string` | `"us-east-1"` | no |
 | <a name="input_summarization_enabled"></a> [summarization\_enabled](#input\_summarization\_enabled) | Enable document summarization for the Bedrock-LLM branch | `bool` | `false` | no |
 | <a name="input_summarization_model_id"></a> [summarization\_model\_id](#input\_summarization\_model\_id) | Model ID for document summarization | `string` | `"us.amazon.nova-2-lite-v1:0"` | no |

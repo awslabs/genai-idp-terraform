@@ -48,7 +48,8 @@ output "bda_config_version" {
 
 output "bda_project_arn" {
   description = "BDA project ARN linked to the BDA configuration version (empty if unlinked)."
-  value       = var.bda_project_arn
+  # Created project (create_bda_project) or the passed-in var.bda_project_arn.
+  value = local.effective_bda_project_arn
 }
 
 output "knowledge_base_id" {

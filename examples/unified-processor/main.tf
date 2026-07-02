@@ -62,6 +62,9 @@ resource "random_string" "suffix" {
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
 
+  rbac_enabled     = try(var.rbac.enabled, false)
+  admin_group_name = local.rbac_enabled ? try(module.genai_idp_accelerator.rbac_group_names["Admin"], "Admin") : one(aws_cognito_user_group.admin_group[*].name)
+
   # --------------------------------------------------------------------------
   # Knowledge Base backend (default on; see knowledge-base.tf)
   # --------------------------------------------------------------------------
@@ -71,8 +74,8 @@ locals {
   # Embedding model id used by knowledge-base.tf for the KB IAM policy and the
   # collection's embedding_model_arn. The query/generation model_id is passed to
   # the root api.knowledge_base wiring straight from var.knowledge_base_model_id
-  # and MUST be a plain foundation-model id (no us./eu. inference-profile prefix)
-  # because Bedrock KB RetrieveAndGenerate rejects inference-profile ARNs.
+  # and MUST be a cross-region inference-profile id (us./eu./apac. prefix): the
+  # KB query resolver builds an inference-profile ARN from it.
   knowledge_base_embedding_model_id = var.knowledge_base_embedding_model_id
 
   # DEFAULT (Bedrock-LLM) configuration version. The lending-package sample does
@@ -412,7 +415,7 @@ resource "aws_cognito_user" "admin_user" {
 }
 
 resource "aws_cognito_user_group" "admin_group" {
-  count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
+  count        = var.admin_email != null && var.admin_email != "" && !local.rbac_enabled ? 1 : 0
   name         = "Admin"
   user_pool_id = aws_cognito_user_pool.user_pool.id
   description  = "Administrators"
@@ -422,7 +425,7 @@ resource "aws_cognito_user_group" "admin_group" {
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
-  group_name   = aws_cognito_user_group.admin_group[0].name
+  group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
 }
 
@@ -484,7 +487,11 @@ module "genai_idp_accelerator" {
       model_id           = var.knowledge_base_model_id
       embedding_model_id = var.knowledge_base_embedding_model_id
     }
+    # Discovery feature (Web UI "Discovery" tab); provisions the discovery pipeline.
+    discovery = { enabled = var.create_discovery }
   }
+
+  rbac = var.rbac
 
   # Web UI configuration
   web_ui = {
@@ -500,6 +507,7 @@ module "genai_idp_accelerator" {
 
   # General configuration
   prefix                       = var.prefix
+  seed_managed_configs         = var.seed_managed_configs
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days

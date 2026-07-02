@@ -121,6 +121,7 @@ locals {
   managed_configs = {
     for f in local.managed_config_files :
     dirname(f) => yamldecode(file("${local.managed_config_dir}/${f}"))
+    if var.seed_managed_configs
   }
 }
 

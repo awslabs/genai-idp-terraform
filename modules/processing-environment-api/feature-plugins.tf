@@ -28,6 +28,35 @@ locals {
   feature_env = length(var.enabled_feature_contracts) == 0 ? {} : merge([
     for k, c in var.enabled_feature_contracts : try(c.environment, {})
   ]...)
+
+  feature_data_sources = length(var.enabled_feature_contracts) == 0 ? {} : merge([
+    for k, c in var.enabled_feature_contracts : try(c.data_sources, {})
+  ]...)
+}
+
+resource "aws_appsync_datasource" "feature" {
+  for_each = local.feature_data_sources
+
+  api_id           = aws_appsync_graphql_api.api.id
+  name             = each.key
+  type             = "AWS_LAMBDA"
+  service_role_arn = aws_iam_role.appsync_lambda_role.arn
+  lambda_config { function_arn = each.value }
+}
+
+resource "aws_iam_role_policy" "feature_datasource_invoke" {
+  count = var.has_feature_iam ? 1 : 0
+  name  = "FeatureDataSourceInvoke-${random_string.suffix.result}"
+  role  = aws_iam_role.appsync_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = values(local.feature_data_sources)
+    }]
+  })
 }
 
 # =============================================================================
@@ -40,7 +69,8 @@ locals {
 # they differ. Lambda-backed templates fall back to the module's standard
 # Invoke/passthrough VTL when a contract omits them.
 resource "aws_appsync_resolver" "feature" {
-  for_each = local.feature_resolvers
+  for_each   = local.feature_resolvers
+  depends_on = [aws_appsync_datasource.feature]
 
   api_id      = aws_appsync_graphql_api.api.id
   type        = try(each.value.type, "Query")
@@ -58,7 +88,7 @@ resource "aws_appsync_resolver" "feature" {
 # AppSync Lambda role (the role AppSync assumes to invoke resolver Lambdas).
 # Guarded by count so nothing is created when no feature contributes statements.
 resource "aws_iam_role_policy" "feature_contracts" {
-  count = length(local.feature_iam) > 0 ? 1 : 0
+  count = var.has_feature_iam ? 1 : 0
   name  = "FeatureContractsPolicy-${random_string.suffix.result}"
   role  = aws_iam_role.appsync_lambda_role.id
 

@@ -207,6 +207,7 @@ output "contract" {
   value = {
     enabled          = var.enabled
     resolvers        = local.user_management_resolvers
+    data_sources     = { (local.user_management_data_source_name) = aws_lambda_function.user_management.arn }
     iam_statements   = local.reviewer_filtering_iam_statements
     environment      = local.reviewer_filtering_environment
     schema_additions = null

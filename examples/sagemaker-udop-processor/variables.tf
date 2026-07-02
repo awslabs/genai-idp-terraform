@@ -67,9 +67,9 @@ variable "api" {
 
     # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -102,7 +102,7 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
     knowledge_base     = { enabled = false }
   }
@@ -337,6 +337,29 @@ variable "tags" {
 
 variable "force_rebuild_layers" {
   description = "Force rebuild of Lambda layers regardless of requirements changes"
+  type        = bool
+  default     = false
+}
+
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
   type        = bool
   default     = false
 }

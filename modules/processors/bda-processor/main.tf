@@ -127,6 +127,7 @@ module "engine" {
 
   # Extra non-active config versions seeded alongside the default
   additional_configurations = var.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
 
   # Link the `default` config version to the BDA project so this façade routes
   # to BDA out of the box; also the fallback for its own use_bda:true versions.

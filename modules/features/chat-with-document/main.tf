@@ -175,6 +175,28 @@ resource "aws_iam_role_policy" "chat_processor" {
   })
 }
 
+# ENI permissions for VPC-attached processor Lambda (only when vpc_subnet_ids set).
+resource "aws_iam_role_policy" "chat_processor_vpc" {
+  #checkov:skip=CKV_AWS_355:ENI ops require wildcard resource (ENIs created dynamically)
+  #checkov:skip=CKV_AWS_290:ENI ops require wildcard resource (ENIs created dynamically)
+  count = length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  name  = "chat-with-document-processor-vpc-policy"
+  role  = aws_iam_role.chat_processor.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ec2:CreateNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DeleteNetworkInterface"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "chat_processor" {
   name              = "/aws/lambda/${var.name_prefix}-cwd-processor-${local.suffix}"
   retention_in_days = var.log_retention_days
@@ -261,6 +283,28 @@ resource "aws_iam_role_policy" "chat_resolver" {
   policy = jsonencode({
     Version   = "2012-10-17"
     Statement = local.resolver_iam_statements
+  })
+}
+
+# ENI permissions for VPC-attached resolver Lambda (only when vpc_subnet_ids set).
+resource "aws_iam_role_policy" "chat_resolver_vpc" {
+  #checkov:skip=CKV_AWS_355:ENI ops require wildcard resource (ENIs created dynamically)
+  #checkov:skip=CKV_AWS_290:ENI ops require wildcard resource (ENIs created dynamically)
+  count = length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  name  = "send-chat-document-message-resolver-vpc-policy"
+  role  = aws_iam_role.chat_resolver.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ec2:CreateNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DeleteNetworkInterface"
+      ]
+      Resource = "*"
+    }]
   })
 }
 

@@ -66,9 +66,9 @@ variable "api" {
 
     # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -77,11 +77,11 @@ variable "api" {
 
     # Knowledge Base (external dependency for chat feature)
     knowledge_base = optional(object({
-      enabled            = optional(bool, false)
+      enabled            = optional(bool, true)
       knowledge_base_arn = optional(string)
       model_id           = optional(string, "us.amazon.nova-pro-v1:0")
       embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
-    }), { enabled = false })
+    }), { enabled = true })
 
     # v0.4.8 feature flags
     enable_agent_companion_chat = optional(bool, false)
@@ -108,9 +108,9 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
-    knowledge_base     = { enabled = false }
+    knowledge_base     = { enabled = true }
   }
 
   # Note: We intentionally do not validate that knowledge_base_arn is non-null
@@ -356,4 +356,10 @@ variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
+  type        = bool
+  default     = false
 }

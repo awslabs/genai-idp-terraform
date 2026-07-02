@@ -134,13 +134,19 @@ variable "summarization_model_id" {
 # example stays a lightweight dual-mode routing demo.
 
 variable "create_knowledge_base" {
-  description = "Create the optional Bedrock Knowledge Base backend (OpenSearch Serverless collection, vector index, KB + S3 data source ingesting from the output bucket, and ingestion Lambda) and wire its ARN into the API's knowledge_base feature. Default off."
+  description = "Create the optional Bedrock Knowledge Base backend (OpenSearch Serverless collection, vector index, KB + S3 data source ingesting from the output bucket, and ingestion Lambda) and wire its ARN into the API's knowledge_base feature. Default on."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "chat_with_document_enabled" {
   description = "Enable the per-document Q&A 'chat with document' feature in the API/Web UI. Does not require a Knowledge Base (calls Bedrock directly)."
+  type        = bool
+  default     = true
+}
+
+variable "create_discovery" {
+  description = "Enable the Discovery feature (Web UI 'Discovery' tab). Provisions the discovery S3 bucket, tracking table, SQS queue, upload/processor Lambdas, and AppSync resolvers, and populates the UI's DiscoveryBucket setting. Discovery uses Bedrock to auto-detect document classes/schemas from uploaded samples; with no discovery.* model configured it defaults to global.anthropic.claude-sonnet-4-6 (must be enabled in Bedrock for this region). Default on."
   type        = bool
   default     = true
 }
@@ -177,4 +183,27 @@ variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
+  type        = bool
+  default     = false
 }

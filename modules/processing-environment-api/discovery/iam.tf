@@ -220,7 +220,22 @@ resource "aws_iam_policy" "discovery_processor_policy" {
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+        # Profile invocation needs both the inference-profile and foundation-model ARNs.
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:GetInferenceProfile",
+          "bedrock:GetFoundationModel"
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+        ]
       },
       {
         Effect = "Allow"

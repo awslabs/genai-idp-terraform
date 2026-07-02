@@ -91,6 +91,7 @@ module "processor_configuration" {
 
   # Extra non-active config versions seeded alongside the default.
   additional_configurations = var.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
 
   # BDA project links, seeding inputs only (they do not gate the always-on BDA
   # branch): default_bda_project_arn links the `default` version; bda_project_arn

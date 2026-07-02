@@ -596,3 +596,9 @@ variable "idp_federation" {
     enabled = false
   }
 }
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (sources/config_library/managed_config) as non-active, non-editable reference rows. Set false to skip them."
+  type        = bool
+  default     = true
+}

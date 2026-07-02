@@ -111,3 +111,8 @@ output "processing_environment" {
     workflow_tracker_arn    = module.processing_environment.workflow_tracker_function_arn
   }
 }
+
+output "rbac_group_names" {
+  description = "Resolved RBAC Cognito group names keyed by role, or null when RBAC is disabled."
+  value       = local.feature_enable.rbac ? module.rbac[0].group_names : null
+}

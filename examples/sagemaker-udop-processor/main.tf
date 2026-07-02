@@ -47,6 +47,9 @@ resource "random_string" "suffix" {
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
 
+  rbac_enabled     = try(var.rbac.enabled, false)
+  admin_group_name = local.rbac_enabled ? try(module.genai_idp_accelerator.rbac_group_names["Admin"], "Admin") : one(aws_cognito_user_group.admin_group[*].name)
+
   # Knowledge Base backend (default on; see knowledge-base.tf). Gates the whole
   # OpenSearch Serverless + Bedrock Knowledge Base stack.
   knowledge_base_enabled = var.create_knowledge_base
@@ -373,7 +376,7 @@ resource "aws_cognito_user" "admin_user" {
 
 # Admin group creation (optional)
 resource "aws_cognito_user_group" "admin_group" {
-  count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
+  count        = var.admin_email != null && var.admin_email != "" && !local.rbac_enabled ? 1 : 0
   name         = "Admin"
   user_pool_id = aws_cognito_user_pool.user_pool.id
   description  = "Administrators"
@@ -384,7 +387,7 @@ resource "aws_cognito_user_group" "admin_group" {
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
-  group_name   = aws_cognito_user_group.admin_group[0].name
+  group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
 }
 
@@ -489,6 +492,8 @@ module "genai_idp_accelerator" {
   process_changes    = var.process_changes
   discovery          = var.discovery
 
+  rbac = var.rbac
+
   # Layer configuration
   force_rebuild_layers = var.force_rebuild_layers
 
@@ -506,6 +511,7 @@ module "genai_idp_accelerator" {
 
   # General configuration
   prefix                       = var.prefix
+  seed_managed_configs         = var.seed_managed_configs
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days

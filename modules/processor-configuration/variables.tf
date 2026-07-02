@@ -100,3 +100,9 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions from sources/config_library/managed_config as non-active reference rows."
+  type        = bool
+  default     = true
+}
