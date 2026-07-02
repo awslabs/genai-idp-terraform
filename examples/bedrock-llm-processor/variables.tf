@@ -357,3 +357,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
+  type        = bool
+  default     = false
+}

@@ -111,6 +111,7 @@ module "engine" {
 
   # Extra non-active config versions seeded alongside the default
   additional_configurations = var.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
 
   # Optional fallback BDA project for use_bda:true additional versions; does not
   # relink the default (stays pipeline).

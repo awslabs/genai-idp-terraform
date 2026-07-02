@@ -217,3 +217,9 @@ variable "bda_project_arn" {
   type        = string
   default     = null
 }
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions as non-active reference rows."
+  type        = bool
+  default     = true
+}

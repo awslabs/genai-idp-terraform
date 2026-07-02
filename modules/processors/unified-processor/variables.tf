@@ -416,3 +416,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions as non-active reference rows."
+  type        = bool
+  default     = true
+}
