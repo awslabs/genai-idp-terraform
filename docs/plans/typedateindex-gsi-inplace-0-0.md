@@ -9,7 +9,7 @@ offline constraint, so this single artifact serves both.
 plan, not the presence of the GSI block, is the merge gate), 7.1 / 7.2 (the GSI
 is an additive in-place table update, never a replacement).
 **Breaking change:** Migration guide
-the Breaking Changes section of the `[0.5.12-tf.2]` entry in [CHANGELOG.md](../../CHANGELOG.md)
+the Breaking Changes section of the `[0.5.12-tf.0]` entry in [CHANGELOG.md](../../CHANGELOG.md)
 **Module under test:** `modules/tracking-table/`
 
 ---
