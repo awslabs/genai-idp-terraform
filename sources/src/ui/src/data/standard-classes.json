@@ -1,0 +1,4859 @@
+{
+  "version": "1.0",
+  "generatedAt": "2026-03-09T21:26:11.522362+00:00",
+  "region": "us-east-1",
+  "description": "Standard document class definitions derived from AWS BDA standard blueprints. Regenerate with: make classes-from-bda",
+  "classes": [
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-941",
+        "x-aws-idp-document-type": "Form-941",
+        "type": "object",
+        "description": "This is a blueprint of Form 941",
+        "$defs": {
+          "Designee_Details": {
+            "properties": {
+              "is_designee_assigned": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "designee_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "designee_pin": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "designee_phone number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Signature": {
+            "properties": {
+              "Print name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Print title": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Signature date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Daytime phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "taxes": {
+            "properties": {
+              "total_social_security_taxes": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "tax_due_unreported_tips": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_taxes_before_adjustments": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "adjustment_fractions_of_cents": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "adjustment_sick_pay": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "adjustment_tips_life_insurance": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_taxes_after_adjustments": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_non_refundable_credits": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_taxes_after_adj_nonref_credits": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_deposit_this_quarter": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "balance_due": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "overpayment": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Preparer details": {
+            "properties": {
+              "Preparer name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Firm Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer_full_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Part_I_wage_table_row": {
+            "properties": {
+              "field_index": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "col1_value": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "col2_value": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Employer_details": {
+            "properties": {
+              "Employer_ID": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_trade_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_Full_Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_foreign_country_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_foreign_country_city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_foreign_country_postalcode": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Tax liability schedule": {
+            "properties": {
+              "Month 1": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Month 2": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Month 3": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Total for quarter": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "report_quarter": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "number_employees": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "wages_tips_other_comp": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "federal_tax_withheld": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_total_tax_liability_valid": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "is_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "is_preparer_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Part_I_wage_table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Part_I_wage_table_row"
+            }
+          },
+          "Designee_Details": {
+            "$ref": "#/$defs/Designee_Details"
+          },
+          "Signature": {
+            "$ref": "#/$defs/Signature"
+          },
+          "taxes": {
+            "$ref": "#/$defs/taxes"
+          },
+          "Preparer details": {
+            "$ref": "#/$defs/Preparer%20details"
+          },
+          "Employer_details": {
+            "$ref": "#/$defs/Employer_details"
+          },
+          "Tax liability schedule": {
+            "$ref": "#/$defs/Tax%20liability%20schedule"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-941",
+        "blueprintName": "Form-941",
+        "description": "This is a blueprint of Form 941",
+        "attributeCount": 14,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-1040",
+        "x-aws-idp-document-type": "Form-1040",
+        "type": "object",
+        "description": "The form 1040 is a tax form from the US administration for filing income.",
+        "$defs": {
+          "PersonalInformation": {
+            "properties": {
+              "first_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "middle_initial": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "last_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "social_security_number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_first_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_last_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_middle_initial": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "home_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "state": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "zip_code": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "foreign_country_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "foreign_province": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "foreign_postal_code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "is_dependent": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "is_spouse_dependent": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "is_born_before_jan_1958": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "is_blind": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "is_spouse_blind": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_ssn": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Dependent": {
+            "properties": {
+              "first_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "last_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "relationship": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ssn": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "has_child_tax_credit": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "has_credit_for_other_dependents": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "FilingItem": {
+            "properties": {
+              "number_item": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "amount_value": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "checkbox_value": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "text_value": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "SignatureInformation": {
+            "properties": {
+              "has_primary_taxpayer_signature": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "primary_taxpayer_date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "primary_taxpayer_occupation": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "primary_taxpayer_identity_protection_pin": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "has_spouse_signed": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_signed_date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_occupation": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "spouse_identity_protection_pin": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "PreparerInformation": {
+            "properties": {
+              "preparer_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "preparer_firm_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "preparer_phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "preparer_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "preparer_ein": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "preparer_ptin": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "filing_status": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "personal_information": {
+            "$ref": "#/$defs/PersonalInformation"
+          },
+          "digital_asset": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "dependents_table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Dependent"
+            }
+          },
+          "more_than_four_dependents": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "filing_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/FilingItem"
+            }
+          },
+          "total_payments": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "total_refund": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "total_owed": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "signature_information": {
+            "$ref": "#/$defs/SignatureInformation"
+          },
+          "preparer_information": {
+            "$ref": "#/$defs/PreparerInformation"
+          },
+          "is_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-1040",
+        "blueprintName": "Form-1040",
+        "description": "The form 1040 is a tax form from the US administration for filing income.",
+        "attributeCount": 12,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-1040-Schedule-C",
+        "x-aws-idp-document-type": "Form-1040-Schedule-C",
+        "type": "object",
+        "description": "This is a blueprint of Form 1040 Schedule C",
+        "$defs": {
+          "Part IV: Information on Your Vehicle": {
+            "properties": {
+              "VehicleUtilizationStartDate": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VehicleBusinessUtilizationMileage": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VehicleCommutingUtilizationMileage": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VehicleOtherUtilizationMileage": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VehiclePersonalUtilization": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AdditionalVehiclePersonalUse": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EvidenceForDeduction": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EvidenceWritten": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Part I: Income": {
+            "properties": {
+              "Sales": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ReturnsAllowances": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "COGS": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "GrossProfit": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "OtherIncome": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "GrossIncome": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Part V: OtherExpenses": {
+            "properties": {
+              "OtherExpenses": {
+                "type": "array",
+                "x-aws-idp-inference-type": "explicit",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "TotalOtherExpenses": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Part III: Cost of Goods Sold": {
+            "properties": {
+              "COGSInventoryClosingMethod": {
+                "type": "array",
+                "x-aws-idp-inference-type": "explicit",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "InventoryChange": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BeginningYearInventory": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "WithdrawnForPersonalUse": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "LaborCost": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MaterialsandSupplies": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "OtherCost": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EndingYearInventory": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "COGS": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Part II: Expense Summary": {
+            "properties": {
+              "TotalExpenses": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "TentativeProfitOrLoss": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "HomeSquareFootage": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PercentageHomeForBusiness": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ExpensesForBusinessUseOfHome": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "NetProfitOrLoss": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AllInvestmentatRisk": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "SomeInvestmentNotatRisk": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Part II: Expense Table Row": {
+            "properties": {
+              "ExpenseName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ExpenseIndex": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ExpenseValue": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "ProprietorInformation": {
+            "properties": {
+              "ProprietorName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "SSN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PrincipalBusinessProfession": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PrincipalBusinessProfessionActivityCode": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BusinessName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BusinessAddress": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BusinessAddress2": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Accounting method": {
+                "type": "array",
+                "x-aws-idp-inference-type": "explicit",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "MaterialParticipation": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BusinessAcquisition": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Form1099Required": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Form1099Filed": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Part IV: Information on Your Vehicle": {
+            "$ref": "#/$defs/Part%20IV%3A%20Information%20on%20Your%20Vehicle"
+          },
+          "Part I: Income": {
+            "$ref": "#/$defs/Part%20I%3A%20Income"
+          },
+          "Part V: OtherExpenses": {
+            "$ref": "#/$defs/Part%20V%3A%20OtherExpenses"
+          },
+          "Part III: Cost of Goods Sold": {
+            "$ref": "#/$defs/Part%20III%3A%20Cost%20of%20Goods%20Sold"
+          },
+          "Part II: Expense Summary": {
+            "$ref": "#/$defs/Part%20II%3A%20Expense%20Summary"
+          },
+          "Part II: Expense Table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Part%20II%3A%20Expense%20Table%20Row"
+            }
+          },
+          "ProprietorInformation": {
+            "$ref": "#/$defs/ProprietorInformation"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-1040-schedule-c",
+        "blueprintName": "Form-1040-Schedule-C",
+        "description": "This is a blueprint of Form 1040 Schedule C",
+        "attributeCount": 7,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "US-drivers-licenses",
+        "x-aws-idp-document-type": "US-drivers-licenses",
+        "type": "object",
+        "description": "This document is for US driving license from any US state",
+        "$defs": {
+          "Address": {
+            "properties": {
+              "STREET_ADDRESS": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CITY": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ZIP_CODE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "STATE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "NameDetails": {
+            "properties": {
+              "FIRST_NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MIDDLE_NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "LAST_NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "SUFFIX": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "PersonalDetails": {
+            "properties": {
+              "SEX": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "HEIGHT": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "WEIGHT": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "HAIR_COLOR": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "EYE_COLOR": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "NAME_DETAILS": {
+            "$ref": "#/$defs/NameDetails"
+          },
+          "ADDRESS_DETAILS": {
+            "$ref": "#/$defs/Address"
+          },
+          "COUNTY": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ID_NUMBER": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "EXPIRATION_DATE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "DATE_OF_BIRTH": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "STATE_NAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "DATE_OF_ISSUE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "CLASS": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RESTRICTIONS": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ENDORSEMENTS": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "PERSONAL_DETAILS": {
+            "$ref": "#/$defs/PersonalDetails"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-driver-license",
+        "blueprintName": "US-Driver-License",
+        "description": "This document is for US driving license from any US state",
+        "attributeCount": 12,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Water-and-Sewer-Bill",
+        "x-aws-idp-document-type": "Water-and-Sewer-Bill",
+        "type": "object",
+        "description": "This is a blueprint of Water and sewer bill 2",
+        "$defs": {
+          "Service_Address": {
+            "properties": {
+              "Building_Line 1": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Street": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "City": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "State": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Zip_Code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Dates": {
+            "properties": {
+              "Bill_From_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Bill_To_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Billing_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Due_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          },
+          "Account_Info": {
+            "properties": {
+              "Acct_No": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Acct_Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Meter_Number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Line_Items_LineItem": {
+            "properties": {
+              "LineItemDescription": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Amount or Value": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Provider Name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Prev_Meter_Reading": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Curr_Meter_Reading": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Tot_Amt": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Prev_Bal": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Total_Current_Charges": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_total_amount_greater_than_equal_to_current_charges": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Service_Address": {
+            "$ref": "#/$defs/Service_Address"
+          },
+          "Dates": {
+            "$ref": "#/$defs/Dates"
+          },
+          "Account_Info": {
+            "$ref": "#/$defs/Account_Info"
+          },
+          "Line_Items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Line_Items_LineItem"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-water-and-sewer-bill",
+        "blueprintName": "Water-And-Sewer-Bill",
+        "description": "This is a blueprint of Water and sewer bill 2",
+        "attributeCount": 11,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "US-College-ID-cards",
+        "x-aws-idp-document-type": "US-College-ID-cards",
+        "type": "object",
+        "description": "ID card issued to students by a college or University",
+        "properties": {
+          "university_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "school_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "student_first_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "student_last_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "issue_date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "expiry_date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "id_type": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "id_number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "dob": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-college-id",
+        "blueprintName": "US-College-ID",
+        "description": "ID card issued to students by a college or University",
+        "attributeCount": 9,
+        "hasListTypes": false,
+        "hasNestedTypes": false
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Payslip",
+        "x-aws-idp-document-type": "Payslip",
+        "type": "object",
+        "description": "This document issued by an employer to an employee contains wages received by an employee for a given period. It usually contains the breakdown of each of the income and tax deductions items.",
+        "$defs": {
+          "Name": {
+            "properties": {
+              "FirstName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MiddleName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "LastName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "SuffixName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Address": {
+            "properties": {
+              "Line1": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Line2": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "State": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "City": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ZipCode": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Item": {
+            "properties": {
+              "ItemDescription": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "YTD": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Period": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "PayPeriodStartDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "PayPeriodEndDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "PayDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "EmployeeName": {
+            "$ref": "#/$defs/Name"
+          },
+          "EmployeeAddress": {
+            "$ref": "#/$defs/Address"
+          },
+          "CompanyAddress": {
+            "$ref": "#/$defs/Address"
+          },
+          "FederalFilingStatus": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "StateFilingStatus": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "CurrentGrossPay": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "YTDGrossPay": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "CurrentNetPay": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "YTDNetPay": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RegularHourlyRate": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "HolidayHourlyRate": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "YTDFederalTax": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "YTDStateTax": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_ytd_gross_pay_highest": {
+            "type": "boolean"
+          },
+          "FederalTaxes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "StateTaxes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "EmployeeNumber": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "PayrollNumber": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "CityTaxes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "YTDCityTax": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "CurrentTotalDeductions": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "YTDTotalDeductions": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_gross_pay_valid": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "are_field_names_sufficient": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "currency": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-payslip",
+        "blueprintName": "Payslip",
+        "description": "This document issued by an employer to an employee contains wages received by an employee for a given period. It usually contains the breakdown of each of the income and tax deductions items.",
+        "attributeCount": 28,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Bank-checks",
+        "x-aws-idp-document-type": "Bank-checks",
+        "type": "object",
+        "description": "This is a bank check, used to pay money to people or business",
+        "properties": {
+          "check_number": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "bank_routing_number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "amount_in_words": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "dollar_amount": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "payee_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "account_holder_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "memo": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "bank_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "routing_number_valid": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-bank-check",
+        "blueprintName": "US-Bank-Check",
+        "description": "This is a bank check, used to pay money to people or business",
+        "attributeCount": 11,
+        "hasListTypes": false,
+        "hasNestedTypes": false
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Prescription-labels",
+        "x-aws-idp-document-type": "Prescription-labels",
+        "type": "object",
+        "description": "This is a blueprint of prescription labels",
+        "$defs": {
+          "prescrription_details": {
+            "properties": {
+              "prescribed_by": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "prescribed_medication": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "intake_fequency": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "intake_method": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "allows_refills": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "needs_dr_authorization_for_refills": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "expiration_date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "prescription_quantity": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "pharmacy_details": {
+            "properties": {
+              "pharmacy_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "pharmacy_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "pharmacy_phone_no": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Rx_number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "customer_details": {
+            "properties": {
+              "customer_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "customer_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "prescription_details": {
+            "properties": {
+              "prescription_date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Is the prescription date > expiration date?": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Is the dosage frequency mentioned?": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Is the dosage quantity mentioned?": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Is the prescribing physician's name present?": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "prescrription_details": {
+            "$ref": "#/$defs/prescrription_details"
+          },
+          "pharmacy_details": {
+            "$ref": "#/$defs/pharmacy_details"
+          },
+          "customer_details": {
+            "$ref": "#/$defs/customer_details"
+          },
+          "prescription_details": {
+            "$ref": "#/$defs/prescription_details"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-prescription-label",
+        "blueprintName": "Prescription-Label",
+        "description": "This is a blueprint of prescription labels",
+        "attributeCount": 8,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Credit-Card-Statement",
+        "x-aws-idp-document-type": "Credit-Card-Statement",
+        "type": "object",
+        "description": "This is a blueprint of credit card statement",
+        "$defs": {
+          "bank_details": {
+            "properties": {
+              "bank_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "bank_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "bank_city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "bank_state": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "bank_zip": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "bank_phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "statement_details": {
+            "properties": {
+              "Statement date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Statement_period": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Statement_starting_balance": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Statement_ending_balance": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Statement_min_balance_due": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Statement_balance": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Statement_due_date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          },
+          "customer_details": {
+            "properties": {
+              "customer_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "customer_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "customer_city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "customer_state": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "customer_zip": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "customer_phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "account_no": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "credit_card_limit": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_overdue": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "bank_details": {
+            "$ref": "#/$defs/bank_details"
+          },
+          "statement_details": {
+            "$ref": "#/$defs/statement_details"
+          },
+          "customer_details": {
+            "$ref": "#/$defs/customer_details"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-credit-card-statement",
+        "blueprintName": "Credit-Card-Statement",
+        "description": "This is a blueprint of credit card statement",
+        "attributeCount": 5,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Receipts",
+        "x-aws-idp-document-type": "Receipts",
+        "type": "object",
+        "description": "A document acknowledging that a person has received money or property in payment following a sale or other transfer of goods or provision of a service. All receipts must have the date of purchase on them.",
+        "$defs": {
+          "VENDORDETAILS": {
+            "properties": {
+              "VENDORNAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VENDORADDRESS": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VENDORPHONE": {
+                "type": "string"
+              }
+            }
+          },
+          "PAYMENTDETAILS": {
+            "properties": {
+              "SUBTOTAL": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "TAX": {
+                "type": "array",
+                "x-aws-idp-inference-type": "explicit",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "TOTAL": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AMOUNTPAID": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "LINEITEMS": {
+            "properties": {
+              "QTY": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AMT": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PRODUCT_CODE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "VENDORDETAILS": {
+            "$ref": "#/$defs/VENDORDETAILS"
+          },
+          "PAYMENTDETAILS": {
+            "$ref": "#/$defs/PAYMENTDETAILS"
+          },
+          "RECEIPT_DATE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RECEIPT_ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "LINEITEMS": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/LINEITEMS"
+            }
+          },
+          "expire": {
+            "type": "boolean"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-receipt",
+        "blueprintName": "Receipt",
+        "description": "A document acknowledging that a person has received money or property in payment following a sale or other transfer of goods or provision of a service. All receipts must have the date of purchase on them.",
+        "attributeCount": 6,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Vehicle-titles",
+        "x-aws-idp-document-type": "Vehicle-titles",
+        "type": "object",
+        "description": "This is a blueprint of Vehicle_Title",
+        "$defs": {
+          "Vehicle_Details": {
+            "properties": {
+              "Title_Num": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "VIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Odometer_Reading": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Year": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Make": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Model": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Body Type": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Fuel Type": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Condition": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Purchase Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Prev_Title Number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Owner Details": {
+            "properties": {
+              "Owner Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Owner Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Second_Owner_Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Second_Owner Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Lienholder details": {
+            "properties": {
+              "First Lienholder Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "First Lienholder Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "First Lien Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Second Lienholder Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Second Lienholder Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Second Lien Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          }
+        },
+        "properties": {
+          "State": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Issue Date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Title Type": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Signing Authority": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "is_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Vehicle_Details": {
+            "$ref": "#/$defs/Vehicle_Details"
+          },
+          "Owner Details": {
+            "$ref": "#/$defs/Owner%20Details"
+          },
+          "Lienholder details": {
+            "$ref": "#/$defs/Lienholder%20details"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-vehicle-title-document",
+        "blueprintName": "US-Vehicle-Title-Document",
+        "description": "This is a blueprint of Vehicle_Title",
+        "attributeCount": 8,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Dental-insurance-cards",
+        "x-aws-idp-document-type": "Dental-insurance-cards",
+        "type": "object",
+        "description": "This is a blueprint of dental insurance",
+        "$defs": {
+          "Rx_Info": {
+            "properties": {
+              "RxBIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RxPCN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RxGRP": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "MEMBER_NAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "MEMBER_ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ISSUER_ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "PLAN_BENEFIT": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "PLAN_NAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "PAYOR_NAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Rx_INFO": {
+            "$ref": "#/$defs/Rx_Info"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-dental-insurance-card",
+        "blueprintName": "Dental-Insurance-Card",
+        "description": "This is a blueprint of dental insurance",
+        "attributeCount": 7,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Demographic-addendum",
+        "x-aws-idp-document-type": "Demographic-addendum",
+        "type": "object",
+        "description": "A demographic addendum is a document that provides expanded fields to allow the borrower to provide more detailed information regarding their ethnicity and race should they choose to do so and replaces \"Section X Information for Government Monitoring Purposes\" on page 4 of the 1003.",
+        "$defs": {
+          "ETHNICITY": {
+            "properties": {
+              "BORROWER HMDA ETHNICITY ORIGIN TYPE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA ETHNICITY ORIGIN TYPE OTHER DESCRIPTION": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA ETHNICITY REFUSAL INDICATOR": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA ETHNICITY COLLECTED INDICATOR": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "GENDER": {
+            "properties": {
+              "BORROWER HMDA GENDER TYPE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA GENDER REFUSAL INDICATOR": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA GENDER COLLECTED INDICATOR": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "RACE": {
+            "properties": {
+              "BORROWER HMDA RACE TYPE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA RACE DESIGNATION TYPE ASIAN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA RACE DESIGNATION TYPE OTHER DESCRIPTION ASIAN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA RACE DESIGNATION TYPE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA RACE DESIGNATION TYPE OTHER ": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA RACE REFUSAL INDICATOR": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BORROWER HMDA RACE COLLECTEDVISUAL OBSERVATION OR NAME": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "INFORMATION COLLECTION CHANNEL": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ethnicity": {
+            "$ref": "#/$defs/ETHNICITY"
+          },
+          "gender": {
+            "$ref": "#/$defs/GENDER"
+          },
+          "race": {
+            "$ref": "#/$defs/RACE"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-demographic-addendum",
+        "blueprintName": "Demographic-Addendum",
+        "description": "A demographic addendum is a document that provides expanded fields to allow the borrower to provide more detailed information regarding their ethnicity and race should they choose to do so and replaces \"Section X Information for Government Monitoring Purposes\" on page 4 of the 1003.",
+        "attributeCount": 4,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-1005",
+        "x-aws-idp-document-type": "Form-1005",
+        "type": "object",
+        "description": "This is blueprint of Form 1005",
+        "$defs": {
+          "CurrentEmploymentVerification": {
+            "properties": {
+              "CurrentHireDate": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CurrentPosition": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CurrentSalary": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "PreviousEmploymentVerification": {
+            "properties": {
+              "PreviousHireDate": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PreviousTerminationDate": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PreviousSalary": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PreviousPosition": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "GrossEarningsTableLineItem": {
+            "properties": {
+              "TotalYTD": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BonusYTD": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BasePayYTD": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "OvertimeYTD": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CommissionsYTD": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "TotalPreviousYear": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BonusPreviousYear": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BasePaypreviousYear": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "OvertimePreviousYear": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CommissionsPreviousYear": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "EmployerNameAddress": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ApplicantNameAddress": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ApplicationDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "CurrentEmploymentVerification": {
+            "$ref": "#/$defs/CurrentEmploymentVerification"
+          },
+          "PreviousEmploymentVerification": {
+            "$ref": "#/$defs/PreviousEmploymentVerification"
+          },
+          "GrossEarningsTable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/GrossEarningsTableLineItem"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-1005",
+        "blueprintName": "Form-1005",
+        "description": "This is blueprint of Form 1005",
+        "attributeCount": 6,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Bank-Statement",
+        "x-aws-idp-document-type": "Bank-Statement",
+        "type": "object",
+        "description": "A financial statement for a bank account listing transaction summaries for a specific duration",
+        "$defs": {
+          "SummaryItem": {
+            "properties": {
+              "summary_desc": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "summary_amount": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "TransactionItem": {
+            "properties": {
+              "date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "description": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "withdrawals": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "deposits": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "balance": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "branch_transit_number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "account_summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SummaryItem"
+            }
+          },
+          "account_holder_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "account_holder_address": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "bank_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "account_type": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "transaction_details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TransactionItem"
+            }
+          },
+          "statement_start_date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "statement_end_date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-bank-statement",
+        "blueprintName": "Bank-Statement",
+        "description": "A financial statement for a bank account listing transaction summaries for a specific duration",
+        "attributeCount": 10,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Invoices",
+        "x-aws-idp-document-type": "Invoices",
+        "type": "object",
+        "description": "An invoice is a document that contains the list of service rendered or items purchased from a company by a person or another company. It contains details such as when the payment is due and how much is owed.",
+        "$defs": {
+          "LINEITEM": {
+            "properties": {
+              "quantity": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "unit price": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "amount": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "product name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "product description": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "SERVICES_TABLE": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/LINEITEM"
+            }
+          },
+          "ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "DATE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "PO": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "SUBTOTAL": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "TAX": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "number"
+            }
+          },
+          "TOTAL": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "VENDORNAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "VENDORADDRESS": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RECIPIENTNAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RECIPIENTADDRESS": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "VALIDATION": {
+            "type": "boolean"
+          },
+          "VENDOR_TAX_ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RECEIVER_TAX_ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-invoice",
+        "blueprintName": "Invoice",
+        "description": "An invoice is a document that contains the list of service rendered or items purchased from a company by a person or another company. It contains details such as when the payment is due and how much is owed.",
+        "attributeCount": 14,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-1099-INT",
+        "x-aws-idp-document-type": "Form-1099-INT",
+        "type": "object",
+        "description": "This is a blueprint of Form 1099 INT",
+        "$defs": {
+          "InterestIncomeReporting": {
+            "properties": {
+              "InterestIncome": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FixedIncomeInterest": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "InvestmentExpenses": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FederalTaxWithheld": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ForeignTaxPaid": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "StateofPosession": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "TaxExemptInterest": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "TaxExemptCUSIP": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "StateTaxWithheld": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "State": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "StateID": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "GeneralInformation": {
+            "properties": {
+              "PayerTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RecipientTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AccountNumber": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CalendarYear": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "InterestIncomeReporting": {
+            "$ref": "#/$defs/InterestIncomeReporting"
+          },
+          "GeneralInformation": {
+            "$ref": "#/$defs/GeneralInformation"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-1099-int",
+        "blueprintName": "Form-1099-INT",
+        "description": "This is a blueprint of Form 1099 INT",
+        "attributeCount": 2,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-940",
+        "x-aws-idp-document-type": "Form-940",
+        "type": "object",
+        "description": "This is a blueprint of Form_940",
+        "$defs": {
+          "FUTA Tax liability": {
+            "properties": {
+              "1st quarter": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "2nd quarter": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "3rd quarter": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "4th quarter": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Total": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Employer_details": {
+            "properties": {
+              "Employer_ID": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_trade_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_state": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_zip": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_foreign_country_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_foreign_country_city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Employer_foreign_country_postalcode": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "is_multistate_employer": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Preparer details": {
+            "properties": {
+              "Preparer name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Firm Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer state": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Preparer zip code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "FUTA_Tax_details": {
+            "properties": {
+              "qualify_for_credit_reduction": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_payment_to_all_employees": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Payments_exempt_FUTA": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "total_FUTA_tax_taxable": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FUTA_tax_pre_adjustments": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FUTA_tax_post_adjustments": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FUTA_tax_deposited": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FUTA_tax_balance_due": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FUTA_tax_overpayment": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Designee_Details": {
+            "properties": {
+              "is_designee_assigned": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "designee_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "designee_pin": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "designee_phone number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Type_of_return": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "is_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "is_preparer_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "FUTA Tax liability": {
+            "$ref": "#/$defs/FUTA%20Tax%20liability"
+          },
+          "Employer_details": {
+            "$ref": "#/$defs/Employer_details"
+          },
+          "Preparer details": {
+            "$ref": "#/$defs/Preparer%20details"
+          },
+          "FUTA_Tax_details": {
+            "$ref": "#/$defs/FUTA_Tax_details"
+          },
+          "Designee_Details": {
+            "$ref": "#/$defs/Designee_Details"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-940",
+        "blueprintName": "Form-940",
+        "description": "This is a blueprint of Form_940",
+        "attributeCount": 8,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Canada Driving-licenses",
+        "x-aws-idp-document-type": "Canada Driving-licenses",
+        "type": "object",
+        "description": "This is a driving license issued in Canada. It can be from any of the provinces",
+        "$defs": {
+          "PII": {
+            "properties": {
+              "LastName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FirstName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateofBirth": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EyeColor": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "HairColor": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Sex": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Height": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Weight": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "ADDRESS_DETAILS": {
+            "properties": {
+              "DLAddressStreet": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DLAddressCity": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DLAddressProvince": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DLZip": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "DriverNumber": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "RestrictionsEndorsements": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "PIIData": {
+            "$ref": "#/$defs/PII"
+          },
+          "IssueDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ExpiryDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Address": {
+            "$ref": "#/$defs/ADDRESS_DETAILS"
+          },
+          "Class": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "LicenseeIsSignaturePresent": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-canada-driver-license",
+        "blueprintName": "Canada-Driver-License",
+        "description": "This is a driving license issued in Canada. It can be from any of the provinces",
+        "attributeCount": 8,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-1098",
+        "x-aws-idp-document-type": "Form-1098",
+        "type": "object",
+        "description": "This is a blueprint of Form 1098",
+        "$defs": {
+          "Payer's Information": {
+            "properties": {
+              "BorrowerTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BorrowerName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BorrowerStreetAddress ": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "MortgageInformation": {
+            "properties": {
+              "InterestReceived": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "OutstandingMortgage": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MortgageOriginationDate": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RefundAmount": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "InsurancePremiums": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PointsPaid": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MortgageAcquisitionDate ": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AccountNumber": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "PropertyInformation": {
+            "properties": {
+              "PropertyAddress": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PropertyCount": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Lender's Information": {
+            "properties": {
+              "LenderInformation": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "LenderTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Other": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Payer's Information": {
+            "$ref": "#/$defs/Payer%27s%20Information"
+          },
+          "MortgageInformation": {
+            "$ref": "#/$defs/MortgageInformation"
+          },
+          "PropertyInformation": {
+            "$ref": "#/$defs/PropertyInformation"
+          },
+          "Lender's Information": {
+            "$ref": "#/$defs/Lender%27s%20Information"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-1098",
+        "blueprintName": "Form-1098",
+        "description": "This is a blueprint of Form 1098",
+        "attributeCount": 5,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "W2",
+        "x-aws-idp-document-type": "W2",
+        "type": "object",
+        "description": "This is a tax form to file personal income received from an employer in a fiscal year",
+        "$defs": {
+          "EmployerInfo": {
+            "properties": {
+              "ein": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employer_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employer_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employer_zip_code": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "control_number": {
+                "type": "string"
+              }
+            }
+          },
+          "EmployeeInfo": {
+            "properties": {
+              "ssn": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "first_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employee_last_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employee_name_suffix": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employee_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employee_zip_code": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "FederalWageInfo": {
+            "properties": {
+              "wages_tips_other_compensation": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "social_security_wages": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "medicare_wages_tips": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "social_security_tips": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "FederalTaxInfo": {
+            "properties": {
+              "federal_income_tax": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "social_security_tax": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "medicare_tax": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "allocated_tips": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "StateTaxInfo": {
+            "properties": {
+              "state_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "employer_state_id_number": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "state_wages_and_tips": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "state_income_tax": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "local_wages_tips": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "local_income_tax": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "locality_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "CodeAmount": {
+            "properties": {
+              "code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "amount": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "FilingInfo": {
+            "properties": {
+              "omb_number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "verification_code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "employer_info": {
+            "$ref": "#/$defs/EmployerInfo"
+          },
+          "employee_general_info": {
+            "$ref": "#/$defs/EmployeeInfo"
+          },
+          "federal_tax_info": {
+            "$ref": "#/$defs/FederalTaxInfo"
+          },
+          "federal_wage_info": {
+            "$ref": "#/$defs/FederalWageInfo"
+          },
+          "filing_info": {
+            "$ref": "#/$defs/FilingInfo"
+          },
+          "state_taxes_table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/StateTaxInfo"
+            }
+          },
+          "codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CodeAmount"
+            }
+          },
+          "nonqualified_plans_incom": {
+            "type": "number",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "other": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-w2-form",
+        "blueprintName": "W2-Form",
+        "description": "This is a tax form to file personal income received from an employer in a fiscal year",
+        "attributeCount": 9,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Property-Tax-Statement",
+        "x-aws-idp-document-type": "Property-Tax-Statement",
+        "type": "object",
+        "description": "This is a blueprint of Property_Tax_Statement",
+        "$defs": {
+          "Property Address": {
+            "properties": {
+              "Building": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Street": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "City": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "State": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Zip code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Dates": {
+            "properties": {
+              "Start_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "End_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Pay_Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          },
+          "Proprty_value_table_LineItem": {
+            "properties": {
+              "Value Description": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Current Year Amount 1": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Current Year Amount 2": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Current Year Amount 3": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Current Year Amount 4": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Previous Year Total Amount": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Tax_Line_items_LineItem": {
+            "properties": {
+              "Line item description": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Tax value": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Property_Desc": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "ACT_Number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "State": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Property_Owner_Names": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Total_Tax_pre_Discount": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Total_Tax_post_Discount": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Prop_Tax_This_Year": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "General_Government_Tax_This_Year": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Valid_Start_Date": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Property_Tax_Higher": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Property_Address": {
+            "$ref": "#/$defs/Property%20Address"
+          },
+          "Dates": {
+            "$ref": "#/$defs/Dates"
+          },
+          "Proprty_Value_Table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Proprty_value_table_LineItem"
+            }
+          },
+          "Tax_Line_Items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Tax_Line_items_LineItem"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-property-tax-statement",
+        "blueprintName": "Property_Tax_Statement",
+        "description": "This is a blueprint of Property_Tax_Statement",
+        "attributeCount": 14,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Cable-Bill",
+        "x-aws-idp-document-type": "Cable-Bill",
+        "type": "object",
+        "description": "This is a blueprint of Cable_Bill_2",
+        "$defs": {
+          "Summary_table_LineItem": {
+            "properties": {
+              "Description": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Amount": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Line_Item_table_LineItem": {
+            "properties": {
+              "Line item": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Amount": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Account_Number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Service_Address": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Start_Date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "End_Date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Balance_DueDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Billing_Date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "BillingDateBeforeDueDate": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Summary_table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Summary_table_LineItem"
+            }
+          },
+          "Line_Item_table": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Line_Item_table_LineItem"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-cable-bill",
+        "blueprintName": "Cable-Bill",
+        "description": "This is a blueprint of Cable_Bill_2",
+        "attributeCount": 9,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "W9",
+        "x-aws-idp-document-type": "W9",
+        "type": "object",
+        "description": "This is a W9 form used when a person or entity is required to report certain types of income.",
+        "$defs": {
+          "ADDRESS_DETAILS": {
+            "properties": {
+              "ADDRESS": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "STREET": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "APT OR SUITE NO": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CITY": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "STATE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ZIP CODE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "REQUESTER_DETAILS": {
+            "properties": {
+              "REQUESTER NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "REQUESTER ADDRESS": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "TIN": {
+            "properties": {
+              "SSN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "BusinessName": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "FederalTaxClassification": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "AddressDetails": {
+            "$ref": "#/$defs/ADDRESS_DETAILS"
+          },
+          "AccountNumbers": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "number"
+            }
+          },
+          "RequesterDetails": {
+            "$ref": "#/$defs/REQUESTER_DETAILS"
+          },
+          "TIN": {
+            "$ref": "#/$defs/TIN"
+          },
+          "ExemptionCodes": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Date": {
+            "type": "string"
+          },
+          "Is there a SSN or EIN provided?": {
+            "type": "boolean"
+          },
+          "Is the form signed?": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-w9",
+        "blueprintName": "Form-W9",
+        "description": "This is a W9 form used when a person or entity is required to report certain types of income.",
+        "attributeCount": 11,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "HOA-statement",
+        "x-aws-idp-document-type": "HOA-statement",
+        "type": "object",
+        "description": "An invoice is a document that contains the list of service rendered or items purchased from a company by a person or another company. It contains details such as when the payment is due and how much is owed.",
+        "$defs": {
+          "ResidentDetails": {
+            "properties": {
+              "RESIDENT_NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RESIDENT_ADDRESS": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RESIDENT_STREET": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RESIDENT_CITY": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RESIDENT_STATE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RESIDENT_ZIP_CODE": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "ChargeDetails": {
+            "properties": {
+              "Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "ITEM Desc": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AMT": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "RESIDENT_DETAILS": {
+            "$ref": "#/$defs/ResidentDetails"
+          },
+          "PERIOD_START_DATE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "PERIOD_END_DATE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "AMOUNT_DUE_DATE": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "TOTAL_AMOUNT_DUE": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "HOA_NAME": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "CHARGES_TABLE": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ChargeDetails"
+            }
+          },
+          "TOTAL_VALIDATION": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-hoa-statement",
+        "blueprintName": "HOA-Statement",
+        "description": "An invoice is a document that contains the list of service rendered or items purchased from a company by a person or another company. It contains details such as when the payment is due and how much is owed.",
+        "attributeCount": 8,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Covid-vaccination-cards",
+        "x-aws-idp-document-type": "Covid-vaccination-cards",
+        "type": "object",
+        "description": "This is a paper card that contains details about the covid vaccine dose received by a patient",
+        "$defs": {
+          "Dose": {
+            "properties": {
+              "date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "dose_number": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "product_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "lot_number": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "clinic_site": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "last_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "middle_initial": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "patient_number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "doses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Dose"
+            }
+          },
+          "has_at_least_two_doses": {
+            "type": "boolean"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-covid-vaccination-card",
+        "blueprintName": "Covid-Vaccination-Card",
+        "description": "This is a paper card that contains details about the covid vaccine dose received by a patient",
+        "attributeCount": 7,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Medical-insurance-cards",
+        "x-aws-idp-document-type": "Medical-insurance-cards",
+        "type": "object",
+        "description": "This a card that contains key information with respect to a US medical insurance plan coverage, such as plan number and dependents",
+        "$defs": {
+          "InsuranceDetails": {
+            "properties": {
+              "INSURANCE_PROVIDER": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PLAN_TYPE": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "GROUP_NUMBER": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PLAN_NUMBER": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PLAN_NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RxBIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RxPCN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RxGRP": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PAYER_ID": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "MemberDetails": {
+            "properties": {
+              "MEMBER_NAME": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MEMBER_ID": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DATE_OF_BIRTH": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DEPENDENTS": {
+                "type": "array",
+                "x-aws-idp-inference-type": "explicit",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "CopayAmounts": {
+            "properties": {
+              "PCP_IN_NETWORK": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "URGENT_CARE_IN_NETWORK": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "SPECIALIST_VISIT_IN_NETWORK": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "EMERGENCY_ROOM_IN_NETWORK": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "INSURANCE_DETAILS": {
+            "$ref": "#/$defs/InsuranceDetails"
+          },
+          "MEMBER_DETAILS": {
+            "$ref": "#/$defs/MemberDetails"
+          },
+          "COPAY_AMOUNTS": {
+            "$ref": "#/$defs/CopayAmounts"
+          },
+          "DEDUCTIBLE_OUT_OF_NETWORK": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "OUT_OF_POCKET_MAXIMUM_OUT_OF_NETWORK": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "DEDUCTIBLE_IN_NETWORK": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "OUT_OF_POCKET_MAXIMUM_IN_NETWORK": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-medical-insurance-card",
+        "blueprintName": "US-Medical-Insurance-Card",
+        "description": "This a card that contains key information with respect to a US medical insurance plan coverage, such as plan number and dependents",
+        "attributeCount": 7,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Marriage-certifaces",
+        "x-aws-idp-document-type": "Marriage-certifaces",
+        "type": "object",
+        "description": "This document is an official document that officialize the marriage of two persons, usually co-signed by an officer and witnesses.",
+        "$defs": {
+          "PersonalDetails": {
+            "properties": {
+              "first_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "middle_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "last_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "last_name_at_birth": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "date_of_birth": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "street_address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "city": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "state": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "zip_code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "has_signed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "WitnessDetails": {
+            "properties": {
+              "name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "has_signed": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          }
+        },
+        "properties": {
+          "first_person": {
+            "$ref": "#/$defs/PersonalDetails"
+          },
+          "second_person": {
+            "$ref": "#/$defs/PersonalDetails"
+          },
+          "witnesses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/WitnessDetails"
+            }
+          },
+          "date_of_marriage": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "state_of_marriage": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "city_of_marraige": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "officer_name": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "officer_signed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "license_no": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-marriage-certificate",
+        "blueprintName": "US-Marriage-Certificate",
+        "description": "This document is an official document that officialize the marriage of two persons, usually co-signed by an officer and witnesses.",
+        "attributeCount": 9,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "US-passports",
+        "x-aws-idp-document-type": "US-passports",
+        "type": "object",
+        "description": "This is a passport from the United States of America for American citizens",
+        "$defs": {
+          "NameDetails": {
+            "properties": {
+              "given_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "last_name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/NameDetails"
+          },
+          "document_number": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "expiration_date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "date_of_issue": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "sex": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "place_of_birth": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "passport_type": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "authority": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "mrz_code": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-us-passport",
+        "blueprintName": "US-Passport",
+        "description": "This is a passport from the United States of America for American citizens",
+        "attributeCount": 10,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Form-1099-Misc",
+        "x-aws-idp-document-type": "Form-1099-Misc",
+        "type": "object",
+        "description": "This is a blueprint of Form 1099 Misc",
+        "$defs": {
+          "StateIncome": {
+            "properties": {
+              "Box18Row0": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box18Row1": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "GeneralInformation": {
+            "properties": {
+              "PayerTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "RecipientTIN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AccountNumber": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "MiscellaneousIncome": {
+            "properties": {
+              "Box1": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box2": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box3": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box4": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box5": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box6": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box7": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box8": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box9": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box10": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box11": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box12": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box13": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box14": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box15": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "StatePayerStateNo": {
+            "properties": {
+              "Box17Row0": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box17Row1": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "StateTaxWithheld": {
+            "properties": {
+              "Box16Row0": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Box16Row1": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "StateIncome": {
+            "$ref": "#/$defs/StateIncome"
+          },
+          "GeneralInformation": {
+            "$ref": "#/$defs/GeneralInformation"
+          },
+          "MiscellaneousIncome": {
+            "$ref": "#/$defs/MiscellaneousIncome"
+          },
+          "StatePayerStateNo": {
+            "$ref": "#/$defs/StatePayerStateNo"
+          },
+          "StateTaxWithheld": {
+            "$ref": "#/$defs/StateTaxWithheld"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-form-1099-misc",
+        "blueprintName": "Form-1099-MISC",
+        "description": "This is a blueprint of Form 1099 Misc",
+        "attributeCount": 5,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Birth-certificates",
+        "x-aws-idp-document-type": "Birth-certificates",
+        "type": "object",
+        "description": "The birth certificate record of a person",
+        "$defs": {
+          "CertificateInfo": {
+            "properties": {
+              "BirthNum": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BirthPlace": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifierName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifierAddress": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifierCity": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifierPO": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifierState": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifierDateSigned": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "CertifiedTime": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateIssued": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "StateRegistrarName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "MotherInfo": {
+            "properties": {
+              "MotherResidenceState": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherResidenceCountry": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherResidenceCity": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherResidenceStreetAddress": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherResidenceInsideCityLimit": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherResidenceFarm": {
+                "type": "boolean",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherFirstName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherMiddleName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherLastName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherRace": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherAge": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MotherBirthPlace": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "ChildInfo": {
+            "properties": {
+              "ChildFirstName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ChildMiddleName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ChildLastName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "ChildSex": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BirthType": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "BirthOrder": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateOfBirthMonth": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateOfBirthDay": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateOfBirthYear": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "FatherInfo": {
+            "properties": {
+              "FatherFirstName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FatherMiddleName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FatherLastName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FatherRace": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FatherAge": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FatherBirthplace": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FatherOccupation": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "PreviousChildInfo": {
+            "properties": {
+              "PreviousChildLiving": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PreviousChildDead": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "PreviousChildStillborn": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Informant": {
+            "properties": {
+              "InformantName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "InformantType": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "CertificateInfo": {
+            "$ref": "#/$defs/CertificateInfo"
+          },
+          "MotherInfo": {
+            "$ref": "#/$defs/MotherInfo"
+          },
+          "ChildInfo": {
+            "$ref": "#/$defs/ChildInfo"
+          },
+          "FatherInfo": {
+            "$ref": "#/$defs/FatherInfo"
+          },
+          "PreviousChildInfo": {
+            "$ref": "#/$defs/PreviousChildInfo"
+          },
+          "Informant": {
+            "$ref": "#/$defs/Informant"
+          },
+          "StateRegistrarSigned": {
+            "type": "boolean"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-birth-certificate",
+        "blueprintName": "Birth-Certificate",
+        "description": "The birth certificate record of a person",
+        "attributeCount": 7,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Workers-Compensation-Form",
+        "x-aws-idp-document-type": "Workers-Compensation-Form",
+        "type": "object",
+        "description": "This is a blueprint of Workers_Compensation_Form",
+        "$defs": {
+          "Doctor Info": {
+            "properties": {
+              "Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "HCN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Employer Info": {
+            "properties": {
+              "Emp_Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Emp_Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Supervisor name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Claimant Info": {
+            "properties": {
+              "Claimant Name": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Claimant FN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Claimant MN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Claimant LN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Claimant SSN": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Claimant Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Claimant Phone": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Claimnat DOB": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          },
+          "Injury Info": {
+            "properties": {
+              "Injury Date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Injury report date": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              },
+              "Cause of Injury": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Body Part Injured": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Claim ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Carrier Claim ID": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Reasons for Denial": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "was_injury_reported_after_1_month": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Doctor Info": {
+            "$ref": "#/$defs/Doctor%20Info"
+          },
+          "Employer Info": {
+            "$ref": "#/$defs/Employer%20Info"
+          },
+          "Claimant Info": {
+            "$ref": "#/$defs/Claimant%20Info"
+          },
+          "Injury Info": {
+            "$ref": "#/$defs/Injury%20Info"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-workers-compensation-form",
+        "blueprintName": "Workers-Compensation-Form",
+        "description": "This is a blueprint of Workers_Compensation_Form",
+        "attributeCount": 8,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Death-Certificates",
+        "x-aws-idp-document-type": "Death-Certificates",
+        "type": "object",
+        "description": "This is a blueprint of death certificate",
+        "$defs": {
+          "ParentInfo": {
+            "properties": {
+              "NameofFather": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MothersMaidenName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "CertificateInfo": {
+            "properties": {
+              "CertNo": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FullName": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FuneralDirector": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "FuneralAddress": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "EventInfo": {
+            "properties": {
+              "CityofDeath": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "NameOfHospital": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AddressofPlaceofDeath": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateofDeath": {
+                "type": "string",
+                "x-aws-idp-inference-type": "inferred"
+              }
+            }
+          },
+          "PersonInfo": {
+            "properties": {
+              "Sex": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Age": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "SurvivingSpouse": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "MaritalStatus": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "DateofBirth": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "AgeatLastBirthday": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Occupation": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Citizen": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "Is name present?": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "ParentInfo": {
+            "$ref": "#/$defs/ParentInfo"
+          },
+          "CertificateInfo": {
+            "$ref": "#/$defs/CertificateInfo"
+          },
+          "EventInfo": {
+            "$ref": "#/$defs/EventInfo"
+          },
+          "PersonInfo": {
+            "$ref": "#/$defs/PersonInfo"
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-death-certificate",
+        "blueprintName": "Death-Certificate",
+        "description": "This is a blueprint of death certificate",
+        "attributeCount": 5,
+        "hasListTypes": false,
+        "hasNestedTypes": true
+      }
+    },
+    {
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "Electricity-Bill",
+        "x-aws-idp-document-type": "Electricity-Bill",
+        "type": "object",
+        "description": "This is a blueprint of Electricity_Bill_1",
+        "$defs": {
+          "Address": {
+            "properties": {
+              "Service Address": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Service address pin code": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Line_Item_Charges_LineItem": {
+            "properties": {
+              "Line item Description": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Charge": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "MeterRead_LineItem": {
+            "properties": {
+              "Previous value": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Current value": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Delta or Metered value": {
+                "type": "number",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Usage Unit": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "Meter ID": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          },
+          "Usage_LineItem": {
+            "properties": {
+              "usage": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              },
+              "power factor": {
+                "type": "string",
+                "x-aws-idp-inference-type": "explicit"
+              }
+            }
+          }
+        },
+        "properties": {
+          "StartDate": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "End Date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "BalanceDue Date": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Total Balance Due": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Current Balance": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Previous Balance": {
+            "type": "number",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Account Number": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Category": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Meter Number": {
+            "type": "array",
+            "x-aws-idp-inference-type": "explicit",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Provider": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "UsageMult": {
+            "type": "string",
+            "x-aws-idp-inference-type": "explicit"
+          },
+          "Is_NumMeterIDsListed": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "CountMeterIDs": {
+            "type": "string",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "BalanceGreaterCheck": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Is_PrevGreaterThanCurr": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Is_ValidState": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Is_ValidPinCode": {
+            "type": "boolean",
+            "x-aws-idp-inference-type": "inferred"
+          },
+          "Address": {
+            "$ref": "#/$defs/Address"
+          },
+          "Line_Item_Charges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Line_Item_Charges_LineItem"
+            }
+          },
+          "MeterRead": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MeterRead_LineItem"
+            }
+          },
+          "Usage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Usage_LineItem"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "source": "bda-standard-blueprint",
+        "blueprintArn": "arn:aws:bedrock:us-east-1:aws:blueprint/bedrock-data-automation-public-electricity-bill",
+        "blueprintName": "Electricity-Bill",
+        "description": "This is a blueprint of Electricity_Bill_1",
+        "attributeCount": 21,
+        "hasListTypes": true,
+        "hasNestedTypes": true
+      }
+    }
+  ]
+}

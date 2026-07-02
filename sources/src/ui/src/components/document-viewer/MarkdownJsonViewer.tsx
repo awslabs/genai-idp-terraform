@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-/* eslint-disable react/destructuring-assignment, no-nested-ternary, no-use-before-define */
 import React, { useState, useEffect } from 'react';
 import type { SegmentedControlProps, ToggleProps } from '@cloudscape-design/components';
 import { Box, SpaceBetween, Button, Toggle, Alert, SegmentedControl } from '@cloudscape-design/components';
@@ -9,8 +8,7 @@ import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Editor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
-import getFileContents from '../../graphql/queries/getFileContents';
-import uploadDocument from '../../graphql/queries/uploadDocument';
+import { getFileContents, uploadDocument } from '../../graphql/generated';
 import MarkdownViewer from './MarkdownViewer';
 
 interface TextEditorViewProps {
@@ -89,7 +87,7 @@ const TextEditorView = ({ fileContent, onChange, isReadOnly, fileType }: TextEdi
 
     // Observe the editor's container
     const container = editor.getContainerDomNode();
-    if (container) {
+    if (container?.parentElement) {
       resizeObserver.observe(container.parentElement);
     }
   };
@@ -105,7 +103,11 @@ const TextEditorView = ({ fileContent, onChange, isReadOnly, fileType }: TextEdi
         <Editor
           height="100%"
           defaultLanguage={fileType === 'json' ? 'json' : fileType}
-          value={fileType === 'json' && typeof fileContent === 'string' ? JSON.stringify(JSON.parse(fileContent), null, 2) : fileContent}
+          value={
+            fileType === 'json' && typeof fileContent === 'string'
+              ? JSON.stringify(JSON.parse(fileContent), null, 2)
+              : (fileContent ?? undefined)
+          }
           onChange={onChange}
           onMount={handleEditorDidMount}
           options={{
@@ -160,17 +162,17 @@ const FileEditorView = ({
   const handleTextEditorChange = (value: string | undefined) => {
     if (fileType === 'json') {
       try {
-        const parsed = JSON.parse(value);
+        const parsed = JSON.parse(value ?? '');
         setJsonData(parsed);
         setIsValid(true);
-        if (onChange) {
+        if (onChange && value !== undefined) {
           onChange(value);
         }
       } catch (error) {
         setIsValid(false);
         logger.error('Invalid JSON:', error);
       }
-    } else if (onChange) {
+    } else if (onChange && value !== undefined) {
       onChange(value);
     }
   };
@@ -267,13 +269,16 @@ const MarkdownJsonViewer = ({
       logger.info('Fetching content:', uriToFetch);
 
       const response = await client.graphql({
-        query: getFileContents as unknown as string,
-        variables: { s3Uri: uriToFetch },
+        query: getFileContents,
+        variables: { s3Uri: uriToFetch as string },
       });
 
       // Handle the updated response structure
-      const result = (response as { data: { getFileContents: { content: string; contentType: string; isBinary: boolean } } }).data
-        .getFileContents;
+      const result = response.data.getFileContents;
+      if (!result) {
+        setError('No content returned from server.');
+        return;
+      }
       const fetchedContent = result.content;
       logger.debug('Received content type:', result.contentType);
       logger.debug('Binary content?', result.isBinary);
@@ -281,9 +286,9 @@ const MarkdownJsonViewer = ({
         setError('This file contains binary content that cannot be viewed in the Markdown viewer.');
         return;
       }
-      logger.debug('Received content:', `${fetchedContent.substring(0, 100)}...`);
-      setFileContent(fetchedContent);
-      setLoadedUri(uriToFetch);
+      logger.debug('Received content:', `${fetchedContent?.substring(0, 100)}...`);
+      setFileContent(fetchedContent ?? null);
+      setLoadedUri(uriToFetch as string);
     } catch (err) {
       logger.error('Error fetching content:', err);
       setError(`Failed to load ${fileType} content. Please try again.`);
@@ -314,12 +319,12 @@ const MarkdownJsonViewer = ({
       }
 
       const [, bucket, fullPath] = s3UriMatch;
-      const fileName = fullPath.split('/').pop();
+      const fileName = fullPath.split('/').pop() ?? fullPath;
       const prefix = fullPath.substring(0, fullPath.lastIndexOf('/'));
 
       // Get presigned URL
       const response = await client.graphql({
-        query: uploadDocument as unknown as string,
+        query: uploadDocument,
         variables: {
           fileName,
           contentType: 'application/json',
@@ -328,10 +333,10 @@ const MarkdownJsonViewer = ({
         },
       });
 
-      const { presignedUrl, usePostMethod } = (response as { data: { uploadDocument: { presignedUrl: string; usePostMethod: boolean } } })
-        .data.uploadDocument;
+      const { presignedUrl, usePostMethod } = response.data.uploadDocument;
+      const usePost = usePostMethod?.toLowerCase() === 'true';
 
-      if (!usePostMethod) {
+      if (!usePost) {
         throw new Error('Server returned PUT method which is not supported');
       }
 
@@ -347,7 +352,7 @@ const MarkdownJsonViewer = ({
       });
 
       // Create a Blob from the JSON content and append it as a file
-      const blob = new Blob([editedContent], { type: 'application/json' });
+      const blob = new Blob([editedContent ?? ''], { type: 'application/json' });
       formData.append('file', blob, fileName);
 
       // Upload to S3

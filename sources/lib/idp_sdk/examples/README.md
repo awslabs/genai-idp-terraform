@@ -27,17 +27,12 @@ python basic_processing.py \
     --directory ./samples \
     --output-dir /tmp/results
 
-# Process from S3
+# Limit files for testing
 python basic_processing.py \
     --stack-name idp-stack-01 \
-    --s3-uri s3://my-bucket/documents/ \
-    --output-dir /tmp/results
-
-# Process from manifest
-python basic_processing.py \
-    --stack-name idp-stack-01 \
-    --manifest ./my-manifest.csv \
-    --output-dir /tmp/results
+    --directory ./samples \
+    --output-dir /tmp/results \
+    --number-of-files 5
 ```
 
 ### 2. Manifest Operations (`manifest_operations.py`)
@@ -70,24 +65,33 @@ Demonstrates configuration creation, validation, download, and upload.
 # Create minimal configuration template
 python config_operations.py create --features min --pattern pattern-2
 
-# Create config with all features
+# Create config with all features and save to file
 python config_operations.py create --features all --output my-config.yaml
 
 # Validate a configuration file
 python config_operations.py validate my-config.yaml --pattern pattern-2
 
-# Download config from deployed stack
-python config_operations.py download --stack-name idp-stack-01 --output current-config.yaml
+# Download config from deployed stack (minimal diff format)
+python config_operations.py download --stack-name idp-stack-01 --format minimal --output current-config.yaml
 
-# Upload config to deployed stack
-python config_operations.py upload my-config.yaml --stack-name idp-stack-01
+# Download a specific version
+python config_operations.py download --stack-name idp-stack-01 --config-version v2 --output v2-config.yaml
+
+# Upload config to deployed stack (creates version if it doesn't exist)
+python config_operations.py upload my-config.yaml --stack-name idp-stack-01 --config-version default
+
+# Upload as a new named version with description
+python config_operations.py upload my-config.yaml \
+    --stack-name idp-stack-01 \
+    --config-version v2 \
+    --description "Updated extraction rules"
 ```
 
 ### 4. Workflow Control (`workflow_control.py`)
 
 **Requires: Deployed IDP stack**
 
-Demonstrates workflow management: listing batches, getting status, rerunning documents, stopping workflows.
+Demonstrates workflow management: listing batches, getting status, reprocessing documents, stopping workflows.
 
 ```bash
 # List recent batches
@@ -99,11 +103,19 @@ python workflow_control.py --stack-name idp-stack-01 status --batch-id my-batch-
 # Get single document status
 python workflow_control.py --stack-name idp-stack-01 status --document-id "batch/doc.pdf"
 
-# Rerun a batch from extraction step
+# Reprocess a batch from extraction step
 python workflow_control.py --stack-name idp-stack-01 rerun --batch-id my-batch-123 --step extraction
+
+# Reprocess specific documents
+python workflow_control.py --stack-name idp-stack-01 rerun \
+    --document-ids "batch/doc1.pdf" "batch/doc2.pdf" \
+    --step classification
 
 # Stop all running workflows
 python workflow_control.py --stack-name idp-stack-01 stop
+
+# Stop without purging the SQS queue
+python workflow_control.py --stack-name idp-stack-01 stop --skip-purge
 
 # Show stack resources
 python workflow_control.py --stack-name idp-stack-01 resources
@@ -111,9 +123,10 @@ python workflow_control.py --stack-name idp-stack-01 resources
 
 ### 5. Lambda Function (`lambda_function.py`)
 
-Example Lambda function that uses the SDK for document processing automation.
+Example Lambda function that uses the SDK for document processing automation. See
+`deploy_lambda_example.py` for a script that packages, deploys, and tests the function.
 
-See the file for deployment instructions and IAM requirements.
+See `lambda_function.py` for full deployment instructions and IAM requirements.
 
 ## SDK Quick Reference
 
@@ -127,11 +140,11 @@ client = IDPClient(stack_name="my-stack", region="us-west-2")
 client = IDPClient()
 
 # Batch operations (require stack)
-result = client.batch.run(source="./documents/")
+result = client.batch.process(source="./documents/")
 status = client.batch.get_status(batch_id=result.batch_id)
 client.batch.download_results(batch_id=result.batch_id, output_dir="./results")
 
-# Config operations (no stack required)
+# Config operations (no stack required for create/validate)
 config = client.config.create(features="min")
 validation = client.config.validate(config_file="my-config.yaml")
 
@@ -148,17 +161,17 @@ import time
 from idp_sdk import IDPClient
 
 client = IDPClient(stack_name="my-stack")
-result = client.batch.run(source="./documents/")
+result = client.batch.process(source="./documents/")
 
 # Poll until complete
 while True:
     status = client.batch.get_status(batch_id=result.batch_id)
     print(f"Progress: {status.completed}/{status.total}")
-    
+
     if status.all_complete:
         print(f"Done! Success rate: {status.success_rate:.1%}")
         break
-    
+
     time.sleep(10)
 
 # Download results
@@ -172,28 +185,31 @@ from idp_sdk import IDPClient
 
 client = IDPClient(stack_name="my-stack")
 
-# Upload custom config first
-client.config.upload(config_file="my-config.yaml")
+# Upload custom config to a named version
+client.config.upload(config_file="my-config.yaml", config_version="v2")
 
-# Then process documents (they will use the uploaded config)
-result = client.batch.run(directory="./documents/")
+# Activate the version so the pipeline uses it
+client.config.activate("v2")
+
+# Then process documents (they will use the activated config)
+result = client.batch.process(directory="./documents/")
 ```
 
 ### Error Handling
 
 ```python
 from idp_sdk import (
-    IDPClient, 
+    IDPClient,
     IDPConfigurationError,
     IDPProcessingError,
     IDPStackError,
-    IDPResourceNotFoundError
+    IDPResourceNotFoundError,
 )
 
 client = IDPClient(stack_name="my-stack")
 
 try:
-    result = client.batch.run(source="./documents/")
+    result = client.batch.process(source="./documents/")
 except IDPConfigurationError as e:
     print(f"Configuration error: {e}")
 except IDPProcessingError as e:
@@ -208,27 +224,68 @@ except IDPResourceNotFoundError as e:
 
 | Method | Requires Stack | Description |
 |--------|----------------|-------------|
-| `batch.run()` | Yes | Submit documents for processing |
-| `batch.get_status()` | Yes | Get batch/document status |
+| **Batch** | | |
+| `batch.process()` | Yes | Submit documents for processing (directory, manifest, S3, or test set) |
+| `batch.get_status()` | Yes | Get processing status for all documents in a batch |
+| `batch.get_document_ids()` | Yes | Get all document IDs in a batch |
+| `batch.get_results()` | Yes | Get extracted metadata for all documents in a batch (paginated) |
+| `batch.get_confidence()` | Yes | Get confidence scores for all documents in a batch (paginated) |
 | `batch.list()` | Yes | List recent batch jobs |
-| `batch.download_results()` | Yes | Download processing results |
-| `batch.rerun()` | Yes | Rerun documents from a step |
-| `batch.stop_workflows()` | Yes | Stop all running workflows |
-| `document.get_status()` | Yes | Get single document status |
-| `document.get_metadata()` | Yes | Get document metadata |
-| `document.delete()` | Yes | Delete document and data |
-| `stack.get_resources()` | Yes | Get stack resource details |
-| `stack.deploy()` | Optional* | Deploy/update stack |
-| `stack.delete()` | Yes | Delete stack |
-| `config.create()` | No | Create config template |
-| `config.validate()` | No | Validate config file |
-| `config.download()` | Yes | Download configuration |
-| `config.upload()` | Yes | Upload configuration |
-| `manifest.generate()` | No | Generate manifest from files |
-| `manifest.validate()` | No | Validate manifest file |
-| `search.query()` | Yes | Query knowledge base |
-| `evaluation.run()` | Yes | Run evaluation against baselines |
-| `assessment.get_confidence()` | Yes | Get extraction confidence |
-| `testing.load_test()` | Yes | Run load test |
+| `batch.download_results()` | Yes | Download processing results from OutputBucket |
+| `batch.download_sources()` | Yes | Download original source files from InputBucket |
+| `batch.reprocess()` | Yes | Reprocess documents from a pipeline step |
+| `batch.delete_documents()` | Yes | Permanently delete all documents in a batch |
+| `batch.stop_workflows()` | Yes | Stop all running Step Functions and purge SQS queue |
+| **Document** | | |
+| `document.process()` | Yes | Upload and queue a single document |
+| `document.get_status()` | Yes | Get processing status for a single document |
+| `document.get_metadata()` | Yes | Get extracted fields and metadata for a document |
+| `document.list()` | Yes | List processed documents with pagination |
+| `document.download_results()` | Yes | Download processing results for a single document |
+| `document.download_source()` | Yes | Download original source file for a document |
+| `document.reprocess()` | Yes | Reprocess a single document from a pipeline step |
+| `document.delete()` | Yes | Delete a document and all associated data |
+| **Stack** | | |
+| `stack.deploy()` | No* | Deploy or update a CloudFormation stack |
+| `stack.delete()` | Yes | Delete a CloudFormation stack |
+| `stack.get_resources()` | Yes | Get stack resource details (buckets, queues, etc.) |
+| `stack.exists()` | Yes | Check whether a stack exists |
+| `stack.get_status()` | Yes | Get current CloudFormation stack status |
+| `stack.check_in_progress()` | Yes | Check if a stack operation is in progress |
+| `stack.monitor()` | Yes | Monitor a stack operation until terminal state |
+| `stack.cancel_update()` | Yes | Cancel an in-progress stack update |
+| `stack.wait_for_stable_state()` | Yes | Wait for stack to reach a stable state |
+| `stack.get_failure_analysis()` | Yes | Analyze a CloudFormation deployment failure |
+| `stack.cleanup_orphaned()` | No | Remove orphaned resources from deleted stacks |
+| `stack.get_bucket_info()` | Yes | Get S3 bucket sizes and object counts |
+| **Configuration** | | |
+| `config.create()` | No | Generate a configuration template |
+| `config.validate()` | No | Validate a configuration file |
+| `config.download()` | Yes | Download active (or versioned) configuration |
+| `config.upload()` | Yes | Upload configuration to a version |
+| `config.list()` | Yes | List all configuration versions |
+| `config.activate()` | Yes | Activate a configuration version |
+| `config.delete()` | Yes | Delete a configuration version |
+| **Discovery** | | |
+| `discovery.run()` | No† | Analyze a document and generate a JSON Schema |
+| `discovery.run_batch()` | No† | Run discovery on multiple documents |
+| **Evaluation** | | |
+| `evaluation.create_baseline()` | Yes | Create evaluation baseline for a document |
+| `evaluation.get_report()` | Yes | Get accuracy report comparing results to baseline |
+| `evaluation.get_metrics()` | Yes | Get aggregated evaluation metrics |
+| `evaluation.list_baselines()` | Yes | List evaluation baselines with pagination |
+| `evaluation.delete_baseline()` | Yes | Delete an evaluation baseline |
+| **Assessment** | | |
+| `assessment.get_confidence()` | Yes | Get per-field confidence scores |
+| `assessment.get_geometry()` | Yes | Get bounding box coordinates for extracted fields |
+| `assessment.get_metrics()` | Yes | Get aggregated quality metrics |
+| **Search** | | |
+| `search.query()` | Yes | Query knowledge base with natural language |
+| **Manifest** | | |
+| `manifest.generate()` | No | Generate a manifest from a directory or S3 URI |
+| `manifest.validate()` | No | Validate a manifest file |
+| **Testing** | | |
+| `testing.load_test()` | Yes | Run a load test against the pipeline |
 
-*Deploy can create a new stack (no existing stack required)
+\* `stack.deploy()` does not require an existing stack (creates new one).  
+† `discovery.run()` and `discovery.run_batch()` operate in **local mode** (no stack, uses Bedrock directly) when no `stack_name` is set, or in **stack-connected mode** (saves schema to config) when a stack is available.

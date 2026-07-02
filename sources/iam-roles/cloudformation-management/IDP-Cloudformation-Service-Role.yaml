@@ -8,10 +8,36 @@ Description: >
   service role to CloudFormation. The iam:PassRole policy must be attached to
   the user or role that will be using the CloudFormation Service Role in order
   to successfully pass the role.
-
 Resources:
   CloudFormationServiceRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "Broad permissions required for non-admin users to deploy IDP stacks via delegated CloudFormation service role"
+          - id: W28
+            reason: "Explicit role name required for consistent cross-stack references in delegated deployment model"
+          - id: F38
+            reason: "Resource wildcard needed with broad permissions required for non-admin users to deploy IDP stacks via delegated CloudFormation service role"
+          - id: W76
+            reason: "Suppressing W76: SPCM for IAM policy document is higher than 25"
+          - id: F3
+            reason: "Suppressing F3: wildcard action on named services required for cloudformation service role, to allow CRUD on stack respources"
+          - id: AwsSolutions-IAM5
+            reason: "Broad permissions required for non-admin users to deploy IDP stacks via delegated CloudFormation service role"
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            reason: "CloudFormation service role requires broad permissions to deploy and manage the full IDP application stack. Assumable only by cloudformation.amazonaws.com. All operations logged in CloudTrail."
+          - id: AwsSolutions-IAM4
+            reason: "AWS managed policies not used. All policies are inline and custom-scoped."
+    # checkov:skip=CKV_AWS_110: "CloudFormation service role requires IAM permissions to create Lambda execution roles and service-linked roles during stack deployment. Trust policy restricts to cloudformation.amazonaws.com service principal."
+    # checkov:skip=CKV_AWS_109: "CloudFormation service role requires IAM policy management permissions to attach policies to created roles during infrastructure deployment. Constrained by trust policy."
+    # checkov:skip=CKV_AWS_108: "CloudFormation service role requires S3/KMS permissions to create and configure encrypted data buckets for the IDP solution. All buckets use customer-managed KMS encryption."
+    # checkov:skip=CKV_AWS_111: "CloudFormation service role requires write permissions across AWS services to deploy complete IDP infrastructure. Trust policy limits to CloudFormation service. Use in conjunction with CloudTrail auditing."
+    # checkov:skip=CKV_AWS_107: "CloudFormation service role may need to create/configure secrets for service integrations. Actual secret values are provided via parameters, not embedded in templates."
+    # cdk-nag:skip=AwsSolutions-IAM5: CloudFormation service role requires broad permissions for IDP stack deployment. Constrained by trust policy to cloudformation.amazonaws.com service principal.
     Properties:
       RoleName: !Sub '${AWS::StackName}-CFServiceRole'
       AssumeRolePolicyDocument:
@@ -36,24 +62,34 @@ Resources:
                   - iam:DeleteRole
                   - iam:UpdateRole
                   - iam:GetRole
+                  - iam:GetRolePolicy
                   - iam:ListRoles
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRoleTags
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:PassRole
+                  - iam:CreateServiceLinkedRole
+                  - iam:DeleteServiceLinkedRole
+                Resource: '*'
+              - Effect: Allow
+                Action:
                   - iam:CreatePolicy
                   - iam:DeletePolicy
                   - iam:GetPolicy
+                  - iam:GetPolicyVersion
                   - iam:ListPolicies
-                  - iam:AttachRolePolicy
-                  - iam:DetachRolePolicy
-                  - iam:PutRolePolicy
-                  - iam:DeleteRolePolicy
-                  - iam:GetRolePolicy
-                  - iam:ListRolePolicies
-                  - iam:ListAttachedRolePolicies
-                  - iam:CreateServiceLinkedRole
-                  - iam:DeleteServiceLinkedRole
-                  - iam:TagRole
-                  - iam:UntagRole
-                  - iam:ListRoleTags
-                  - iam:PassRole
+                  - iam:ListPolicyVersions
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                  - iam:SetDefaultPolicyVersion
+                  - iam:TagPolicy
+                  - iam:UntagPolicy
                 Resource: '*'
         - PolicyName: IDPAcceleratorPermissions
           PolicyDocument:
@@ -87,27 +123,16 @@ Resources:
                   - codebuild:*
                   - application-autoscaling:*
                   - scheduler:*
-                  - ec2:CreateVpc
-                  - ec2:DeleteVpc
-                  - ec2:DescribeVpcs
-                  - ec2:CreateSubnet
-                  - ec2:DeleteSubnet
-                  - ec2:DescribeSubnets
-                  - ec2:CreateSecurityGroup
-                  - ec2:DeleteSecurityGroup
-                  - ec2:DescribeSecurityGroups
-                  - ec2:AuthorizeSecurityGroupIngress
-                  - ec2:AuthorizeSecurityGroupEgress
-                  - ec2:RevokeSecurityGroupIngress
-                  - ec2:RevokeSecurityGroupEgress
-                  - ec2:CreateTags
-                  - ec2:DeleteTags
-                  - ec2:DescribeTags
-                  - ec2:DescribeAvailabilityZones
+                  - ec2:*
+                  - ecr:*
                 Resource: '*'
-
   PassRolePolicy:
     Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit role name required for consistent cross-stack references in delegated deployment model"
     Properties:
       ManagedPolicyName: !Sub '${AWS::StackName}-PassRolePolicy'
       Description: Policy to allow passing the IDP CloudFormation service role

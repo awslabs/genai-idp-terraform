@@ -87,9 +87,7 @@ MODEL_MAPPINGS = {
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "us.anthropic.claude-sonnet-4-20250514-v1:0": "eu.anthropic.claude-sonnet-4-20250514-v1:0",
-    "us.anthropic.claude-sonnet-4-20250514-v1:0:1m": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "us.anthropic.claude-sonnet-4-5-20250929-v1:0:1m": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m",
     "us.anthropic.claude-sonnet-4-6": "eu.anthropic.claude-sonnet-4-6",
     "us.anthropic.claude-sonnet-4-6:1m": "eu.anthropic.claude-sonnet-4-6:1m",
     "us.anthropic.claude-opus-4-20250514-v1:0": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -97,6 +95,11 @@ MODEL_MAPPINGS = {
     "us.anthropic.claude-opus-4-5-20251101-v1:0": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "us.anthropic.claude-opus-4-6-v1": "eu.anthropic.claude-opus-4-6-v1",
     "us.anthropic.claude-opus-4-6-v1:1m": "eu.anthropic.claude-opus-4-6-v1:1m",
+    "us.anthropic.claude-opus-4-7": "eu.anthropic.claude-opus-4-7",
+    "us.anthropic.claude-opus-4-7:1m": "eu.anthropic.claude-opus-4-7:1m",
+    # Third-party models (US-only, no EU equivalent - fall back to themselves)
+    "us.meta.llama4-maverick-17b-instruct-v1:0": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "us.meta.llama4-scout-17b-instruct-v1:0": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
 }
 
 def get_current_region() -> str:
@@ -218,15 +221,13 @@ def detect_pattern_from_config(config: Dict[str, Any]) -> str:
         config: Configuration dictionary
         
     Returns:
-        Pattern name (pattern-1, pattern-2, or pattern-3)
+        Pattern name (pattern-1 or pattern-2)
     """
     # Check classification method
     classification_method = config.get("classification", {}).get("classificationMethod", "")
     
     if classification_method == "bda":
         return "pattern-1"
-    elif classification_method == "udop":
-        return "pattern-3"
     else:
         # Default to pattern-2 (most common - Textract + Bedrock LLM)
         return "pattern-2"
@@ -282,7 +283,7 @@ def save_configuration_bypass_manager(config_type: str, config_data: Any, versio
     Used when ConfigurationManager is unreliable (e.g., after migration from legacy format).
     """
     import boto3
-    from idp_common.config.models import SchemaConfig, IDPConfig, PricingConfig
+    from idp_common.config.models import IDPConfig, PricingConfig, SchemaConfig
     
     # Get table name from environment
     table_name = os.environ.get('CONFIGURATION_TABLE_NAME')
@@ -575,7 +576,8 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                 "DefaultPricing", 
                 "ConfigLibraryHash",
                 "CustomClassificationModelARN",
-                "CustomExtractionModelARN"
+                "CustomExtractionModelARN",
+                "PreviousIDPPattern",
             }
             
             for prop_name, prop_value in properties.items():
@@ -631,7 +633,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                         existing_config = None
                         try:
                             existing_config = manager.get_configuration("Config", version)
-                        except:
+                        except Exception:
                             pass
                         if existing_config:
                             manager.save_configuration("Config", config, version=version)
@@ -666,6 +668,39 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                 except Exception as e:
                     logger.error(f"Error activating version during create, error: {e}")
                     
+            # Auto-enable BDA on ALL config versions when upgrading from a Pattern-1 stack
+            previous_idp_pattern = properties.get("PreviousIDPPattern", "").strip()
+            if previous_idp_pattern and "pattern" in previous_idp_pattern.lower() and "1" in previous_idp_pattern:
+                logger.info(f"Detected former Pattern-1 stack (PreviousIDPPattern={previous_idp_pattern}) — auto-enabling BDA on all config versions")
+                try:
+                    all_versions = manager.list_config_versions()
+                    for ver in all_versions:
+                        ver_name = ver.get("versionName", "")
+                        try:
+                            ver_config = manager.get_configuration("Config", ver_name)
+                            if ver_config:
+                                # Convert Pydantic model to dict if needed
+                                if hasattr(ver_config, 'model_dump'):
+                                    ver_config_dict = ver_config.model_dump()
+                                elif isinstance(ver_config, dict):
+                                    ver_config_dict = ver_config
+                                else:
+                                    ver_config_dict = dict(ver_config)
+                                if not ver_config_dict.get("use_bda"):
+                                    ver_config_dict["use_bda"] = True
+                                    manager.save_configuration("Config", ver_config_dict, version=ver_name)
+                                    logger.info(f"Set use_bda=true on config version '{ver_name}'")
+                                # Also set bdaSyncStatus to needs-sync
+                                try:
+                                    manager.set_bda_project_arn(ver_name, sync_status="needs-sync")
+                                    logger.info(f"Set bdaSyncStatus=needs-sync on config version '{ver_name}'")
+                                except Exception as sync_err:
+                                    logger.warning(f"Failed to set bdaSyncStatus on version '{ver_name}': {sync_err}")
+                        except Exception as ve:
+                            logger.warning(f"Failed to auto-enable BDA on version '{ver_name}': {ve}")
+                except Exception as e:
+                    logger.warning(f"Failed to enumerate config versions for BDA auto-enable: {e}")
+
             cfnresponse.send(
                 event,
                 context,

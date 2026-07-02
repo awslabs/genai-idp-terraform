@@ -1,86 +1,37 @@
-# AWS Configuration
-region = "us-east-1"
-prefix = "genai-idp-vpc"
+# Bedrock-LLM Processor (VPC) — copy to terraform.tfvars and set the values below.
+# Everything else uses the defaults in variables.tf.
 
-# Administrator email for notifications
-admin_email = "your-email@example.com"
+region      = "us-east-1"
+prefix      = "genai-idp-vpc"
+admin_email = "admin@example.com"
 
-# VPC Configuration
+# Networking: create a new VPC (default) …
 vpc_cidr = "10.0.0.0/16"
-
-# Alternative: Use existing VPC (comment out vpc_cidr above and uncomment below)
+# … or reuse an existing one (comment out vpc_cidr above):
 # vpc = {
 #   vpc_id                 = "vpc-12345678"
-#   vpc_subnet_ids         = ["subnet-12345678", "subnet-87654321"]
+#   vpc_subnet_ids         = ["subnet-aaaa", "subnet-bbbb"]
 #   vpc_security_group_ids = ["sg-12345678"]
 # }
 
-# Logging Configuration
-log_level           = "INFO"
-log_retention_days  = 7
+# ── Optional overrides (defaults shown; uncomment to change) ────────────────
+# classification_model_id = "us.amazon.nova-pro-v1:0"
+# extraction_model_id     = "us.amazon.nova-pro-v1:0"
+# summarization_enabled   = true
+# tags = { Environment = "dev" }
 
-# Data Retention
-data_tracking_retention_days = 365
-
-# Configuration File Path (optional - uses default lending package config)
-# config_file_path = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
-
-# Model Configuration
-classification_model_id = "us.amazon.nova-pro-v1:0"
-extraction_model_id     = "us.amazon.nova-pro-v1:0"
-summarization_model_id  = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
-
-# Feature Toggles
-summarization_enabled = true
-enable_evaluation     = false
-enable_reporting      = false
-
-# API Configuration
-api = {
-  enabled = true
-
-  # AppSync API visibility. Set to "PRIVATE" together with the
-  # `appsync-api` interface VPC endpoint (provisioned in main.tf) to
-  # keep the GraphQL endpoint reachable only from inside the VPC.
-  # Default "GLOBAL" exposes the API on the public internet (still
-  # protected by the configured authorization mode).
-  visibility = "PRIVATE"
-
-  # Agent Analytics (requires reporting to be enabled)
-  agent_analytics = {
-    enabled  = false
-    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-  }
-
-  # Discovery Configuration
-  discovery = {
-    enabled = false
-  }
-
-  # Chat with Document Configuration
-  chat_with_document = {
-    enabled = false
-    # Optional: requires knowledge_base.enabled = true
-    # guardrail_id_and_version = "your-guardrail-id:1"
-  }
-
-  # Knowledge Base Configuration (optional: enables Bedrock Knowledge Base retrieval in chat)
-  knowledge_base = {
-    enabled = false
-    # knowledge_base_arn = "arn:aws:bedrock:us-east-1:123456789012:knowledge-base/XXXXXXXXXX"
-    model_id           = "us.amazon.nova-pro-v1:0"
-    embedding_model_id = "amazon.titan-embed-text-v2:0"
-  }
-
-  # Process Changes Configuration
-  process_changes = {
-    enabled = false
-  }
-}
-
-# Tags
-tags = {
-  Environment = "dev"
-  Project     = "genai-idp-accelerator-vpc"
-}
+# ── API visibility + Knowledge Base ─────────────────────────────────────────
+# Keep the GraphQL API private inside the VPC, and/or enable the KB backend.
+# The KB generation model MUST be a cross-region inference-profile id
+# (us./eu./apac. prefix); the embedding model is a plain foundation-model id.
+# chat-with-document is on by default.
+# api = {
+#   visibility = "PRIVATE"
+#   knowledge_base = {
+#     enabled            = true
+#     model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)
+#     embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)
+#   }
+# }
+#
+# Advanced feature toggles also live under the `api` object — see variables.tf.

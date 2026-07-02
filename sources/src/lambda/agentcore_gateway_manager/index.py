@@ -7,7 +7,6 @@ import cfnresponse
 import time
 import logging
 import os
-from typing import Any, Dict
 from bedrock_agentcore_starter_toolkit.operations.gateway.client import GatewayClient
 
 logger = logging.getLogger()
@@ -24,8 +23,12 @@ def handler(event, context):
         request_type = event['RequestType']
 
         if request_type == 'Delete':
-            delete_gateway(props, gateway_name)
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId=gateway_name)
+            try:
+                delete_gateway(props, gateway_name)
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId=gateway_name)
+            except Exception as e:
+                logger.error(f"Delete failed: {e}", exc_info=True)
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId=gateway_name, reason=str(e))
             return
 
         # Create or Update
@@ -56,53 +59,167 @@ def handler(event, context):
 def create_or_update_gateway(props, gateway_name):
     """Create or update AgentCore Gateway using existing Cognito resources"""
     region = props['Region']
-    
-    # Initialize gateway client
-    client = GatewayClient(region_name=region)
-    
-    # Check if gateway already exists
+    lambda_arn = props['LambdaArn']  # The expected (new) Lambda ARN from CloudFormation
+
+    # Check if gateway already exists — paginate through ALL gateways to avoid
+    # a ConflictException when the account has more than 10 gateways and the
+    # target gateway is not in the first page of list_gateways results.
     try:
         control_client = boto3.client("bedrock-agentcore-control", region_name=region)
-        resp = control_client.list_gateways(maxResults=10)
-        existing_gateways = [g for g in resp.get("items", []) if g.get("name") == gateway_name]
-        
+        all_gateways = []
+        paginator = control_client.get_paginator("list_gateways")
+        for page in paginator.paginate():
+            all_gateways.extend(page.get("items", []))
+        existing_gateways = [g for g in all_gateways if g.get("name") == gateway_name]
+
         if existing_gateways:
             existing_gateway = existing_gateways[0]
             gateway_id = existing_gateway.get('gatewayId')
-            
+
             if gateway_id:
+                # Gateway is confirmed to exist — never fall through to create from here.
+                # If get_gateway fails transiently, return basic info from list_gateways
+                # rather than attempting a CreateGateway that would conflict.
                 try:
                     gateway_details = control_client.get_gateway(gatewayIdentifier=gateway_id)
                     if gateway_details and gateway_details.get('gatewayUrl'):
+                        # Check if the Lambda target ARN needs updating (e.g. after a stack update
+                        # that replaced the Lambda function due to a logical resource ID rename)
+                        update_result = update_gateway_target_if_needed(
+                            control_client, gateway_id, lambda_arn
+                        )
+                        if update_result:
+                            logger.info(f"Updated gateway target to new Lambda ARN: {lambda_arn}")
+
                         return {
                             'gateway_url': gateway_details.get('gatewayUrl'),
                             'gateway_id': gateway_details.get('gatewayId'),
                             'gateway_arn': gateway_details.get('gatewayArn')
                         }
+                    else:
+                        # Gateway exists but gatewayUrl not available yet (e.g. still initializing).
+                        # Return what we have from list_gateways — do NOT attempt to re-create.
+                        logger.warning(
+                            f"Gateway {gateway_id} exists but gatewayUrl is not yet available. "
+                            f"Returning partial details."
+                        )
+                        return {
+                            'gateway_url': 'N/A - Gateway initializing',
+                            'gateway_id': gateway_id,
+                            'gateway_arn': existing_gateway.get('gatewayArn', 'N/A')
+                        }
                 except Exception as e:
-                    logger.warning(f"Error getting gateway details: {e}")
+                    # get_gateway failed transiently. The gateway is known to exist so we must
+                    # NOT fall through to create. Return what list_gateways already gave us.
+                    logger.warning(
+                        f"Error getting gateway details for {gateway_id}: {e}. "
+                        f"Returning partial details from list."
+                    )
+                    return {
+                        'gateway_url': 'N/A - Error retrieving details',
+                        'gateway_id': gateway_id,
+                        'gateway_arn': existing_gateway.get('gatewayArn', 'N/A')
+                    }
 
     except Exception as e:
         logger.warning(f"Error checking for existing gateway: {e}")
-    
-    # Gateway doesn't exist, create it
+
+    # Gateway does not exist — create it now.
     logger.info(f"Gateway {gateway_name} does not exist, creating new one")
+    # GatewayClient is only initialized when we actually need to create a new gateway.
+    client = GatewayClient(region_name=region)
     return create_gateway(props, gateway_name, client)
 
 
-def create_gateway(props, gateway_name, client):
+def update_gateway_target_if_needed(control_client, gateway_id, expected_lambda_arn):
+    """
+    Check if any gateway target's Lambda ARN differs from expected_lambda_arn.
+    If so, update it. Returns True if an update was performed.
+
+    This is needed when the Lambda function is replaced during a stack update (e.g. due to
+    a CloudFormation logical resource ID rename), which creates a new Lambda with a new ARN
+    while the gateway target still points to the old deleted Lambda's ARN.
+    """
+    try:
+        response = control_client.list_gateway_targets(gatewayIdentifier=gateway_id)
+        targets = response.get("items", [])
+
+        for target in targets:
+            target_id = target.get("targetId")
+            target_name = target.get("name", "")
+
+            # Get full target details to check Lambda ARN
+            try:
+                target_details = control_client.get_gateway_target(
+                    gatewayIdentifier=gateway_id,
+                    targetId=target_id
+                )
+                # Navigate response structure to find the Lambda ARN.
+                # Confirmed API response path: targetConfiguration.mcp.lambda.lambdaArn
+                target_config = target_details.get("targetConfiguration", {})
+                mcp_lambda = target_config.get("mcp", {}).get("lambda", {})
+                current_lambda_arn = mcp_lambda.get("lambdaArn", "")
+
+                if current_lambda_arn and current_lambda_arn != expected_lambda_arn:
+                    logger.info(
+                        f"Target {target_name} ({target_id}) has stale Lambda ARN: "
+                        f"{current_lambda_arn} -> {expected_lambda_arn}. Updating..."
+                    )
+                    # Preserve existing toolSchema and credentialProviderConfigurations —
+                    # both are required fields for update_gateway_target.
+                    existing_tool_schema = mcp_lambda.get("toolSchema", {})
+                    existing_credential_configs = target_details.get(
+                        "credentialProviderConfigurations", []
+                    )
+                    update_kwargs = dict(
+                        gatewayIdentifier=gateway_id,
+                        targetId=target_id,
+                        name=target_name,
+                        targetConfiguration={
+                            "mcp": {
+                                "lambda": {
+                                    "lambdaArn": expected_lambda_arn,
+                                    "toolSchema": existing_tool_schema,
+                                }
+                            }
+                        },
+                    )
+                    if existing_credential_configs:
+                        update_kwargs["credentialProviderConfigurations"] = existing_credential_configs
+                    control_client.update_gateway_target(**update_kwargs)
+                    logger.info(f"Successfully updated target {target_id} Lambda ARN")
+                    return True
+                else:
+                    logger.info(f"Target {target_name} Lambda ARN is current, no update needed")
+
+            except Exception as e:
+                logger.warning(f"Could not get/update target {target_id}: {e}")
+
+    except Exception as e:
+        logger.warning(f"Could not list gateway targets for update check: {e}")
+
+    return False
+
+
+def create_gateway(props, gateway_name, client: GatewayClient):
     """Create new AgentCore Gateway"""
     region = props['Region']
     lambda_arn = props['LambdaArn']
     user_pool_id = props['UserPoolId']
     client_id = props['ClientId']
     execution_role_arn = props['ExecutionRoleArn']
+    connector_client_id = props.get('ConnectorClientId')
+
+    # Build allowed clients list — include MCP connector client if provided
+    allowed_clients = [client_id]
+    if connector_client_id:
+        allowed_clients.append(connector_client_id)
 
     # Create JWT authorizer config using existing Cognito resources
     authorizer_config = {
         "customJWTAuthorizer": {
             "discoveryUrl": f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/openid-configuration",
-            "allowedClients": [client_id]
+            "allowedClients": allowed_clients
         }
     }
 
@@ -229,6 +346,32 @@ def create_gateway(props, gateway_name, client):
                             },
                             "required": ["batch_id"]
                         }
+                    },
+                    {
+                        "name": "get_results",
+                        "description": "Retrieve processing results and extracted metadata for all documents in a batch. Use this tool when users ask for batch results, metadata, extracted fields, or processing outcomes. Returns document classification, extracted fields with values, field-level confidence scores, page counts, and processing status for each document. Includes batch-level summary with average confidence and document class distribution. Supports pagination for large batches.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "batch_id": {
+                                    "type": "string",
+                                    "description": "Batch identifier (e.g., 'mcp-batch-20250124-143022'). Required to identify which batch to retrieve metadata from."
+                                },
+                                "section_id": {
+                                    "type": "integer",
+                                    "description": "Section number within documents (default: 1). Use for multi-section documents like healthcare packages. Section 1 contains primary extraction, sections 2+ contain additional document types within the same file."
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "description": "Maximum documents to return per page (default: 10, max: 100). Use lower values for faster responses, higher values to retrieve more documents in one call."
+                                },
+                                "next_token": {
+                                    "type": "string",
+                                    "description": "Pagination token from previous request for retrieving next page of results. Omit for first page."
+                                }
+                            },
+                            "required": ["batch_id"]
+                        }
                     }
                 ]
             },
@@ -246,59 +389,55 @@ def create_gateway(props, gateway_name, client):
 
 def delete_gateway(props, gateway_name):
     """Delete AgentCore Gateway using toolkit"""
+    region = props['Region']
+    client = boto3.client("bedrock-agentcore-control", region_name=region)
+    
+    # Paginate through all gateways
+    all_gateways = []
+    paginator = client.get_paginator("list_gateways")
+    for page in paginator.paginate():
+        all_gateways.extend(page.get("items", []))
+    
+    items = [g for g in all_gateways if g.get("name") == gateway_name]
+    
+    if not items:
+        logger.info(f"Gateway {gateway_name} not found")
+        return
+    
+    gateway_id = items[0].get("gatewayId")
+    logger.info(f"Deleting gateway: {gateway_id}")
+    
+    # Delete all targets first (typically only one target per gateway)
+    response = client.list_gateway_targets(gatewayIdentifier=gateway_id)
+    targets = response.get("items", [])
+    logger.info(f"Found {len(targets)} targets to delete")
+    
+    deletion_errors = []
+    for target in targets:
+        target_id = target["targetId"]
+        logger.info(f"Deleting target: {target_id}")
+        try:
+            client.delete_gateway_target(gatewayIdentifier=gateway_id, targetId=target_id)
+            time.sleep(2)
+        except Exception as e:
+            error_msg = f"target {target_id}: {str(e)}"
+            logger.warning(f"Failed to delete {error_msg}")
+            deletion_errors.append(error_msg)
+    
+    # Wait for targets to be fully deleted
+    time.sleep(10)
+    
+    # Delete gateway
     try:
-        region = props['Region']
-        client = boto3.client(
-            "bedrock-agentcore-control",
-            region_name=region
-        )
-        name: str = gateway_name
-        gateway_id = None
-        kwargs: Dict[str, Any] = {"maxResults": 10}
-        resp = client.list_gateways(**kwargs)
-        items = [g for g in resp.get("items", []) if g.get("name") == name]
-
-        if len(items) > 0:
-            gateway_id = items[0].get("gatewayId")
-
-        if gateway_id:
-            logger.info(f"Attempting to delete gateway by ID: {gateway_id}")
-            # Step 1: List and delete all targets
-            logger.info("Finding targets for gateway: %s", gateway_id)
-            try:
-                response = client.list_gateway_targets(gatewayIdentifier=gateway_id)
-                # API returns targets in 'items' field
-                targets = response.get("items", [])
-                logger.info("Found %s targets to delete", len(targets))
-                for target in targets:
-                    target_id = target["targetId"]
-                    logger.info("Deleting target: %s", target_id)
-                    try:
-                        client.delete_gateway_target(gatewayIdentifier=gateway_id, targetId=target_id)
-                        logger.info("Target deletion initiated: %s", target_id)
-                        # Wait for deletion to complete
-                        time.sleep(5)
-                    except Exception as e:
-                        logger.warning("Error deleting target %s: %s", target_id, str(e))
-
-                # Verify all targets are deleted
-                logger.info("Verifying targets deletion...")
-                time.sleep(5)  # Additional wait
-                verify_response = client.list_gateway_targets(gatewayIdentifier=gateway_id)
-                remaining_targets = verify_response.get("items", [])
-                if remaining_targets:
-                    logger.warning("%s targets still remain", len(remaining_targets))
-                else:
-                    logger.info("All targets deleted")
-            except Exception as e:
-                logger.warning("Error managing targets: %s", str(e))
-
-            client.delete_gateway(gatewayIdentifier=gateway_id)
-            logger.info("Gateway deleted successfully using ID")
-
-        else:
-            logger.info("Gateway not found")
-
+        client.delete_gateway(gatewayIdentifier=gateway_id)
+        logger.info(f"Gateway deleted: {gateway_id}")
     except Exception as e:
-        logger.error(f"Gateway deletion failed: {e}")
-
+        error_msg = f"gateway: {str(e)}"
+        logger.warning(f"Failed to delete {error_msg}")
+        deletion_errors.append(error_msg)
+    
+    # Wait for gateway deletion to complete
+    time.sleep(5)
+    
+    if deletion_errors:
+        raise Exception(f"Partial deletion errors: {'; '.join(deletion_errors)}")

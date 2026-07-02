@@ -10,7 +10,7 @@ import DOMPurify from 'dompurify';
 import useSettingsContext from '../../contexts/settings';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import useAppContext from '../../contexts/app';
-import getFileContents from '../../graphql/queries/getFileContents';
+import { getFileContents } from '../../graphql/generated';
 
 interface FileViewerProps {
   objectKey: string;
@@ -54,7 +54,7 @@ const detectFileType = (objectKey: string, contentType: string | null): string =
   }
   // Fallback to checking file extension
   if (objectKey) {
-    const extension = objectKey.split('.').pop()?.toLowerCase();
+    const extension = objectKey.split('.').pop()?.toLowerCase() ?? '';
     if (extension === 'pdf') return 'pdf';
     if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) return 'image';
     if (extension === 'html' || extension === 'htm') return 'html';
@@ -83,7 +83,7 @@ const FileViewer = ({ objectKey }: FileViewerProps): React.JSX.Element => {
     try {
       logger.info('Fetching file contents via GraphQL for:', s3Url);
       const response = await client.graphql({
-        query: getFileContents as unknown as string,
+        query: getFileContents,
         variables: { s3Uri: s3Url },
       });
 
@@ -109,7 +109,7 @@ const FileViewer = ({ objectKey }: FileViewerProps): React.JSX.Element => {
       setContentType(result.contentType);
 
       // Determine view method based on content type and binary flag
-      let selectedViewMethod;
+      let selectedViewMethod: 'content' | 'presigned';
       if (
         fileType === 'pdf' ||
         fileType === 'excel' ||
@@ -145,8 +145,11 @@ const FileViewer = ({ objectKey }: FileViewerProps): React.JSX.Element => {
         throw new Error('Input bucket not configured');
       }
 
-      const region = import.meta.env.VITE_AWS_REGION;
-      const s3Url = `https://${(settings as Record<string, unknown>).InputBucket}.s3.${region}.amazonaws.com/${objectKey}`;
+      // Use s3:// URI scheme (matches what every other file viewer in the app does).
+      // Avoids dependence on the VITE_AWS_REGION build-time env var (which, if missing,
+      // produces an invalid URL like https://<bucket>.s3.undefined.amazonaws.com/<key>),
+      // and sidesteps S3 HTTPS URL encoding issues for keys with special characters.
+      const s3Url = `s3://${(settings as Record<string, unknown>).InputBucket}/${objectKey}`;
 
       // First fetch the content via GraphQL to determine content type
       const result = await fetchFileContents(s3Url);
@@ -240,18 +243,35 @@ const FileViewer = ({ objectKey }: FileViewerProps): React.JSX.Element => {
     logger.info('Presigned URL:', presignedUrl);
 
     if (isPdf) {
-      // Special handling for PDFs - use object tag instead of iframe for better PDF support
+      // Render PDFs in an iframe rather than <object> to comply with the hardened
+      // CloudFront Content-Security-Policy (`object-src 'none'`, introduced in v0.5.9).
+      // Modern browsers render PDFs natively inside iframes using their built-in
+      // viewer (Chrome's PDFium, Firefox's pdf.js, Safari's WebKit PDF viewer).
+      //
+      // Intentionally no `sandbox` attribute on this iframe: Chrome's built-in PDF
+      // viewer relies on its own internal scripts and is blocked by Chromium when
+      // loaded inside a sandboxed iframe ("This page has been blocked by Chrome").
+      // The content is an S3 presigned URL to a file in a bucket owned by this stack
+      // and served as `Content-Type: application/pdf` with `Content-Disposition: inline`,
+      // so there is no HTML/JS execution risk from the iframe source itself.
+      //
+      // A visible "Open PDF in a new tab" link is included as a fallback for browsers
+      // that have their built-in PDF viewer disabled.
       return (
         <Box className="document-container" padding={{ top: 's' }}>
-          <object data={presignedUrl} type="application/pdf" width="100%" height="800px" className="h-full w-full">
-            <p>
-              It appears your browser does not support embedded PDFs. You can{' '}
-              <a href={presignedUrl} target="_blank" rel="noopener noreferrer">
-                download the PDF
-              </a>{' '}
-              instead.
-            </p>
-          </object>
+          <iframe
+            src={presignedUrl}
+            title="PDF Viewer"
+            width="100%"
+            height="800px"
+            className="h-full w-full"
+            referrerPolicy="no-referrer"
+          />
+          <Box padding={{ top: 'xs' }}>
+            <a href={presignedUrl} target="_blank" rel="noopener noreferrer">
+              Open PDF in a new tab
+            </a>
+          </Box>
         </Box>
       );
     }

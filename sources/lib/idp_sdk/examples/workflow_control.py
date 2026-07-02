@@ -124,7 +124,7 @@ def main():
             print(f"Getting status for document: {args.document_id}")
             status = client.document.get_status(document_id=args.document_id)
             # Convert single document status to batch-like format for display
-            from idp_sdk.models import BatchStatus
+            from idp_sdk import BatchStatus
 
             status = BatchStatus(
                 batch_id="single-doc",
@@ -175,7 +175,7 @@ def main():
         else:
             print(f"  Documents: {len(args.document_ids)}")
 
-        result = client.batch.rerun(
+        result = client.batch.reprocess(
             step=RerunStep(args.step),
             batch_id=args.batch_id,
             document_ids=args.document_ids,

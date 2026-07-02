@@ -17,21 +17,23 @@ dynamodb = boto3.resource('dynamodb')
 def handler(event, context):
     """Process test set file copy jobs from SQS"""
     logger.info(f"Test set file copier invoked with {len(event['Records'])} messages")
-    
+
     for record in event['Records']:
         try:
             message = json.loads(record['body'])
-            
+
             test_set_id = message['testSetId']
             file_pattern = message['filePattern']
             bucket_type = message['bucketType']
             tracking_table = message['trackingTable']
-            
+            mode = message.get('mode', 'create')
+            modified_after = message.get('modifiedAfter')
+
             # Get environment variables
             input_bucket = os.environ['INPUT_BUCKET']
             test_set_bucket = os.environ['TEST_SET_BUCKET']
             baseline_bucket = os.environ['BASELINE_BUCKET']
-            
+
             # Determine source bucket based on bucket type
             if bucket_type == 'input':
                 source_bucket = input_bucket
@@ -39,28 +41,27 @@ def handler(event, context):
                 source_bucket = test_set_bucket
             else:
                 raise ValueError(f"Invalid bucket type: {bucket_type}")
-            
-            logger.info(f"Processing test set {test_set_id} with pattern '{file_pattern}' from {bucket_type} bucket")
-            
+
+            logger.info(f"Processing test set {test_set_id} (mode={mode}) with pattern '{file_pattern}' from {bucket_type} bucket")
+
             # Find matching files in source bucket
-            matching_files = find_matching_files(source_bucket, file_pattern)
-            
+            matching_files = find_matching_files(source_bucket, file_pattern, modified_after=modified_after)
+
             if not matching_files:
                 raise ValueError(f"No files found matching pattern: {file_pattern}")
-            
+
             logger.info(f"Found {len(matching_files)} files matching pattern, matching files {matching_files}")
-            
+
             # Validate baseline folders exist for all input files before copying anything
             missing_baselines = []
             for file_key in matching_files:
                 try:
                     if bucket_type == 'testset':
                         # For testset bucket, baseline is in the same bucket under baseline/ path
-                        # Extract test set name from file path (assuming format: test_set_name/input/file)
                         path_parts = file_key.split('/')
                         if len(path_parts) >= 3 and path_parts[1] == 'input':
                             test_set_name = path_parts[0]
-                            file_name = '/'.join(path_parts[2:])  # Get full path after 'input/'
+                            file_name = '/'.join(path_parts[2:])
                             baseline_prefix = f"{test_set_name}/baseline/{file_name}/"
                             baseline_check_bucket = source_bucket
                         else:
@@ -70,47 +71,72 @@ def handler(event, context):
                         # For input bucket, baseline is in separate baseline bucket
                         baseline_prefix = f"{file_key}/"
                         baseline_check_bucket = baseline_bucket
-                    
+
                     # Check if baseline folder exists by listing objects with prefix
                     response = s3.list_objects_v2(Bucket=baseline_check_bucket, Prefix=baseline_prefix, MaxKeys=1)
-                    
+
                     if 'Contents' not in response or len(response['Contents']) == 0:
                         missing_baselines.append(file_key)
-                        
+
                 except Exception as e:
                     logger.error(f"Error checking baseline folder {file_key}: {e}")
                     missing_baselines.append(file_key)
-            
+
+            # Handle missing baselines based on bucket type
+            total_matched = len(matching_files)
             if missing_baselines:
-                raise ValueError(f"Missing baseline folders for: {', '.join(missing_baselines)}")
-            
+                if bucket_type == 'input':
+                    # Input bucket: skip files without baselines (partial ground truth is expected)
+                    files_to_copy = [f for f in matching_files if f not in set(missing_baselines)]
+                    if not files_to_copy:
+                        raise ValueError(f"None of the {total_matched} matching files have baseline data")
+                    logger.info(f"Skipping {len(missing_baselines)} files without baselines, copying {len(files_to_copy)} files")
+                else:
+                    # Test set bucket: strict validation
+                    raise ValueError(f"Missing baseline folders for: {', '.join(missing_baselines)}")
+            else:
+                files_to_copy = matching_files
+
             # Update status to COPYING before starting file operations
-            _update_test_set_status(tracking_table, test_set_id, 'COPYING')
-            
+            if mode == 'create':
+                _update_test_set_status(tracking_table, test_set_id, 'COPYING')
+
             # Copy input files to test set bucket
             if bucket_type == 'testset':
-                _copy_input_files_from_test_set_bucket(test_set_id, matching_files)
+                _copy_input_files_from_test_set_bucket(test_set_id, files_to_copy)
             else:
-                _copy_input_files_from_input_bucket(test_set_id, matching_files)
-            
+                _copy_input_files_from_input_bucket(test_set_id, files_to_copy)
+
             # Copy baseline folders to test set bucket
             if bucket_type == 'testset':
-                _copy_baseline_from_testset(test_set_id, matching_files)
+                _copy_baseline_from_testset(test_set_id, files_to_copy)
             else:
-                _copy_baseline_from_baseline_bucket(test_set_id, matching_files)
-            
-            logger.info(f"Copied {len(matching_files)} input files and {len(matching_files)} baseline folders")
-            
-            # Update test set record with completion status
-            _update_test_set_status(tracking_table, test_set_id, 'COMPLETED')
-            
-            logger.info(f"Test set {test_set_id} file copying completed successfully: {len(matching_files)} files")
-            
+                _copy_baseline_from_baseline_bucket(test_set_id, files_to_copy)
+
+            logger.info(f"Copied {len(files_to_copy)} input files and {len(files_to_copy)} baseline folders")
+
+            # Recount total files in test set for accurate fileCount
+            file_count = _count_test_set_files(test_set_id)
+
+            # Build result message
+            skipped_count = len(missing_baselines)
+            last_add_result = None
+            if skipped_count > 0:
+                action = "Added" if mode == "append" else "Created with"
+                last_add_result = f"{action} {len(files_to_copy)} of {total_matched} files ({skipped_count} excluded - no baseline data)"
+            elif mode == "append":
+                last_add_result = f"Added {len(files_to_copy)} files"
+
+            # Update test set record with completion status and file count
+            _update_test_set_status(tracking_table, test_set_id, 'COMPLETED', file_count=file_count, last_add_result=last_add_result)
+
+            logger.info(f"Test set {test_set_id} file copying completed successfully: {len(files_to_copy)} files (total: {file_count})")
+
         except Exception as e:
             logger.error(f"Error processing test set {test_set_id}: {str(e)}")
             if 'test_set_id' in locals() and 'tracking_table' in locals():
-                _update_test_set_status(tracking_table, test_set_id, 'FAILED', str(e))
-    
+                _update_test_set_status(tracking_table, test_set_id, 'FAILED', error=str(e))
+
     return {'statusCode': 200}
 
 def _copy_input_files_from_input_bucket(test_set_id, files):
@@ -214,28 +240,59 @@ def _copy_baseline_from_testset(test_set_id, files):
         else:
             logger.warning(f"Unexpected file path format for testset baseline: {file_key}")
 
-def _update_test_set_status(tracking_table, test_set_id, status, error=None):
+def _count_test_set_files(test_set_id):
+    """Count total input files in a test set by listing S3 objects"""
+    test_set_bucket = os.environ['TEST_SET_BUCKET']
+    prefix = f"{test_set_id}/input/"
+    count = 0
+
+    paginator = s3.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=test_set_bucket, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            if not obj['Key'].endswith('/'):
+                count += 1
+
+    logger.info(f"Counted {count} total input files in test set {test_set_id}")
+    return count
+
+
+def _update_test_set_status(tracking_table, test_set_id, status, error=None, file_count=None, last_add_result=None):
     """Update test set status in tracking table"""
     table = dynamodb.Table(tracking_table)  # type: ignore
-    
+
     try:
         update_expression = 'SET #status = :status'
         expression_values = {':status': status}
         expression_names = {'#status': 'status'}
-        
+        remove_attrs = []
+
         if error:
             update_expression += ', #error = :error'
             expression_values[':error'] = error
             expression_names['#error'] = 'error'
-        
+
+        if file_count is not None:
+            update_expression += ', fileCount = :count'
+            expression_values[':count'] = file_count
+
+        if last_add_result:
+            update_expression += ', lastAddResult = :lastAddResult'
+            expression_values[':lastAddResult'] = last_add_result
+        else:
+            remove_attrs.append('lastAddResult')
+
+        if remove_attrs:
+            update_expression += ' REMOVE ' + ', '.join(remove_attrs)
+
         table.update_item(
             Key={'PK': f'testset#{test_set_id}', 'SK': 'metadata'},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_names,
             ExpressionAttributeValues=expression_values
         )
-        
-        logger.info(f"Updated test set {test_set_id} status to {status}")
-        
+
+        logger.info(f"Updated test set {test_set_id} status to {status}" +
+                    (f" with {file_count} files" if file_count else ""))
+
     except Exception as e:
         logger.error(f"Failed to update test set status for {test_set_id}: {e}")

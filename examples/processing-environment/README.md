@@ -75,7 +75,7 @@ You can configure which dependencies to include in the layer:
 
 - `"core"` - Only core dependencies (boto3)
 - `"image"` - Image handling (Pillow)
-- `"ocr"` - OCR capabilities (Pillow, PyMuPDF, amazon-textract-textractor)
+- `"ocr"` - OCR capabilities (Pillow, pypdfium2, amazon-textract-textractor)
 - `"classification"` - Document classification (Pillow)
 - `"extraction"` - Data extraction (Pillow)
 - `"evaluation"` - Evaluation utilities (munkres, numpy)

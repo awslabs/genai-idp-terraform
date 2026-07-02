@@ -1,0 +1,10 @@
+mutation UpdateUser($userId: ID!, $allowedConfigVersions: [String]) {
+  updateUser(userId: $userId, allowedConfigVersions: $allowedConfigVersions) {
+    userId
+    email
+    persona
+    status
+    createdAt
+    allowedConfigVersions
+  }
+}

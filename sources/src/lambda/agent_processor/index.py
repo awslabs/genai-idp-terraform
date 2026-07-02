@@ -183,7 +183,7 @@ def process_agent_query(query: str, agent_ids: list, job_id: str = None, user_id
         raise
 
 
-def update_job_status_in_appsync(job_id, status, user_id, result=None):
+def update_job_status_in_appsync(job_id, status, user_id, result=None, error=None):
     """
     Update the job status in AppSync via GraphQL mutation.
     
@@ -217,8 +217,8 @@ def update_job_status_in_appsync(job_id, status, user_id, result=None):
     try:
         # Prepare the simplified mutation
         mutation = """
-        mutation UpdateAgentJobStatus($jobId: ID!, $status: String!, $userId: String!, $result: String) {
-            updateAgentJobStatus(jobId: $jobId, status: $status, userId: $userId, result: $result)
+        mutation UpdateAgentJobStatus($jobId: ID!, $status: String!, $userId: String!, $result: String, $error: String) {
+            updateAgentJobStatus(jobId: $jobId, status: $status, userId: $userId, result: $result, error: $error)
         }
         """
         
@@ -237,6 +237,10 @@ def update_job_status_in_appsync(job_id, status, user_id, result=None):
                 variables["result"] = result
             else:
                 variables["result"] = json.dumps(result)
+
+        # Include error message if provided
+        if error:
+            variables["error"] = error if isinstance(error, str) else str(error)
         
         # Set up AWS authentication
         region = session.region_name or os.environ.get('AWS_REGION', 'us-east-1')
@@ -442,9 +446,10 @@ def handler(event, context):
             # Update the job status to FAILED via AppSync
             # This will handle DynamoDB update, completedAt timestamp, and subscription notification
             success = update_job_status_in_appsync(
-                job_id=job_id, 
-                status="FAILED", 
-                user_id=user_id
+                job_id=job_id,
+                status="FAILED",
+                user_id=user_id,
+                error=error_msg
             )
             
             if success:

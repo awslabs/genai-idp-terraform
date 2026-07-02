@@ -18,44 +18,63 @@ import {
   FormField,
   Input,
   Select,
-  CollectionPreferences,
   ExpandableSection,
   RadioGroup,
+  Pagination,
+  TextFilter,
+  CollectionPreferences,
 } from '@cloudscape-design/components';
-// eslint-disable-next-line import/no-extraneous-dependencies
+import { useCollection } from '@cloudscape-design/collection-hooks';
+
 import yaml from 'js-yaml';
 import { generateClient } from 'aws-amplify/api';
-import GET_TEST_RUN from '../../graphql/queries/getTestResults';
-import START_TEST_RUN from '../../graphql/queries/startTestRun';
+import { getTestRun, startTestRun, getTestSets } from '../../graphql/generated';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
-import GET_TEST_SETS from '../../graphql/queries/getTestSets';
 import TestStudioHeader from './TestStudioHeader';
 import useAppContext from '../../contexts/app';
 import { formatConfigVersionLink } from './utils/configVersionUtils';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type GqlResult = { data: Record<string, any> };
+import {
+  parseCostBreakdown,
+  calculateAvgCostPerPage,
+  parseAccuracyBreakdown,
+  parseSplitClassificationMetrics,
+  parseFieldMetrics,
+  parseConfusionMatrix,
+  parseWeightedOverallScores,
+  parseTestRunConfig,
+} from '../../graphql/awsjson-parsers';
+import type { SelectProps } from '@cloudscape-design/components';
 
 const client = generateClient();
+
+interface CostItem {
+  context: string;
+  serviceApi: string;
+  unit: string;
+  value: string;
+  unitCost: string;
+  estimatedCost: string;
+  isTotal?: boolean;
+  isSubtotal?: boolean;
+  sortOrder: number;
+}
 
 interface ComprehensiveBreakdownProps {
   costBreakdown: Record<string, Record<string, Record<string, unknown>>> | null;
   accuracyBreakdown: Record<string, number> | null;
   splitClassificationMetrics: Record<string, unknown> | null;
+  fieldMetrics: Record<string, unknown> | null;
   averageWeightedScore: number | null;
-  preferences: { wrapLines: boolean };
-  setPreferences: (prefs: { wrapLines: boolean }) => void;
 }
 
 const ComprehensiveBreakdown = ({
   costBreakdown,
   accuracyBreakdown,
   splitClassificationMetrics,
+  fieldMetrics,
   averageWeightedScore,
-  preferences,
-  setPreferences,
 }: ComprehensiveBreakdownProps): React.JSX.Element => {
-  if (!costBreakdown && !accuracyBreakdown && !splitClassificationMetrics) {
+  if (!costBreakdown && !accuracyBreakdown && !splitClassificationMetrics && !fieldMetrics) {
     return <Box>No breakdown data available</Box>;
   }
 
@@ -63,18 +82,11 @@ const ComprehensiveBreakdown = ({
     <SpaceBetween direction="vertical" size="l">
       {/* Combined Accuracy and Split Classification Metrics */}
       {(accuracyBreakdown || splitClassificationMetrics) && (
-        <Container
-          header={<Header variant="h3">Average Accuracy and Split Metrics</Header>}
-          {...({
-            preferences: <TestResultsPreferences preferences={preferences} setPreferences={setPreferences} />,
-          } as Record<string, unknown>)}
-        >
+        <Container header={<Header variant="h3">Average Accuracy and Split Metrics</Header>}>
           <SpaceBetween direction="vertical" size="m">
             {/* Main metrics */}
             <Table
               resizableColumns
-              wrapLines={preferences.wrapLines}
-              preferences={<TestResultsPreferences preferences={preferences} setPreferences={setPreferences} />}
               items={(() => {
                 const mainItems = [];
 
@@ -135,8 +147,6 @@ const ComprehensiveBreakdown = ({
               <Container>
                 <Table
                   resizableColumns
-                  wrapLines={preferences.wrapLines}
-                  preferences={<div />}
                   items={[
                     // All accuracy breakdown metrics
                     ...(accuracyBreakdown
@@ -165,8 +175,8 @@ const ComprehensiveBreakdown = ({
                               typeof value === 'number' && key.includes('accuracy')
                                 ? value.toFixed(3)
                                 : value !== null && value !== undefined
-                                ? value.toString()
-                                : '0',
+                                  ? value.toString()
+                                  : '0',
                           }))
                       : []),
                   ]}
@@ -182,16 +192,254 @@ const ComprehensiveBreakdown = ({
         </Container>
       )}
 
+      {/* Field Metrics */}
+      {fieldMetrics &&
+        Object.keys(fieldMetrics).length > 0 &&
+        (() => {
+          // Initialize with all object fields expanded
+          const initialExpanded = new Set<string>();
+          Object.keys(fieldMetrics).forEach((fieldName) => {
+            // Check if this field has children
+            if (Object.keys(fieldMetrics).some((f) => f.startsWith(fieldName + '.'))) {
+              initialExpanded.add(fieldName);
+            }
+          });
+
+          const [expandedFields, setExpandedFields] = React.useState<Set<string>>(initialExpanded);
+          const [fieldMetricsPageSize, setFieldMetricsPageSize] = React.useState(10);
+          const [fieldMetricsVisibleColumns, setFieldMetricsVisibleColumns] = React.useState([
+            'fieldName',
+            'accuracy',
+            'precision',
+            'recall',
+            'tp',
+            'fp',
+            'tn',
+            'fn',
+          ]);
+
+          // Build hierarchical structure
+          const allItems = Object.entries(fieldMetrics).map(([fieldName, metrics]) => {
+            const m = metrics as { tp?: number; fp?: number; tn?: number; fn?: number };
+            const tp = m.tp ?? 0;
+            const fp = m.fp ?? 0;
+            const tn = m.tn ?? 0;
+            const fn = m.fn ?? 0;
+            const total = tp + fp + tn + fn;
+            return {
+              fieldName,
+              tp,
+              fp,
+              tn,
+              fn,
+              accuracy: total > 0 ? ((tp + tn) / total).toFixed(3) : 'N/A',
+              precision: tp + fp > 0 ? (tp / (tp + fp)).toFixed(3) : 'N/A',
+              recall: tp + fn > 0 ? (tp / (tp + fn)).toFixed(3) : 'N/A',
+              depth: (fieldName.match(/\./g) || []).length,
+            };
+          });
+
+          // Check if a field has children
+          const hasChildren = (fieldName: string) =>
+            allItems.some((item) => item.fieldName.startsWith(fieldName + '.') && item.depth === (fieldName.match(/\./g) || []).length + 1);
+
+          // Get parent field name
+          const getParent = (fieldName: string) => {
+            const parts = fieldName.split('.');
+            return parts.length > 1 ? parts.slice(0, -1).join('.') : null;
+          };
+
+          // Check if field should be visible
+          const isVisible = (item: { fieldName: string }) => {
+            let parent = getParent(item.fieldName);
+            while (parent) {
+              if (!expandedFields.has(parent)) return false;
+              parent = getParent(parent);
+            }
+            return true;
+          };
+
+          // Build display items
+          const displayItems = allItems.filter(isVisible).map((item) => ({
+            ...item,
+            hasChildren: hasChildren(item.fieldName),
+            isExpanded: expandedFields.has(item.fieldName),
+          }));
+
+          const toggleExpand = (fieldName: string) => {
+            setExpandedFields((prev) => {
+              const next = new Set(prev);
+              if (next.has(fieldName)) {
+                next.delete(fieldName);
+              } else {
+                next.add(fieldName);
+              }
+              return next;
+            });
+          };
+
+          const expandAll = () => {
+            const allParents = new Set<string>();
+            allItems.forEach((item) => {
+              if (hasChildren(item.fieldName)) allParents.add(item.fieldName);
+            });
+            setExpandedFields(allParents);
+          };
+
+          const collapseAll = () => {
+            setExpandedFields(new Set<string>());
+          };
+
+          const allExpanded = allItems.filter((item) => hasChildren(item.fieldName)).every((item) => expandedFields.has(item.fieldName));
+
+          const { items, collectionProps, paginationProps, filterProps } = useCollection(displayItems, {
+            filtering: {
+              empty: 'No field metrics found',
+              noMatch: 'No fields match the filter',
+            },
+            pagination: { pageSize: fieldMetricsPageSize },
+            sorting: { defaultState: { sortingColumn: { sortingField: 'fieldName' }, isDescending: false } },
+          });
+
+          const allColumnDefinitions = [
+            {
+              id: 'fieldName',
+              header: 'Field Name',
+              cell: (item: (typeof displayItems)[0]) => {
+                const indent = item.depth * 20;
+                return (
+                  <span
+                    role={item.hasChildren ? 'button' : undefined}
+                    tabIndex={item.hasChildren ? 0 : undefined}
+                    style={{
+                      cursor: item.hasChildren ? 'pointer' : 'default',
+                      paddingLeft: `${indent}px`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                    onClick={() => item.hasChildren && toggleExpand(item.fieldName)}
+                    onKeyDown={(e) => {
+                      if (item.hasChildren && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        toggleExpand(item.fieldName);
+                      }
+                    }}
+                  >
+                    <span style={{ display: 'inline-block', width: '16px', flexShrink: 0 }}>
+                      {item.hasChildren ? (item.isExpanded ? '▼' : '▶') : ''}
+                    </span>
+                    {item.fieldName}
+                  </span>
+                );
+              },
+              sortingField: 'fieldName',
+            },
+            { id: 'accuracy', header: 'Accuracy', cell: (item: (typeof displayItems)[0]) => item.accuracy, sortingField: 'accuracy' },
+            {
+              id: 'precision',
+              header: 'Precision',
+              cell: (item: (typeof displayItems)[0]) => item.precision,
+              sortingField: 'precision',
+            },
+            { id: 'recall', header: 'Recall', cell: (item: (typeof displayItems)[0]) => item.recall, sortingField: 'recall' },
+            { id: 'tp', header: 'TP', cell: (item: (typeof displayItems)[0]) => item.tp, sortingField: 'tp' },
+            { id: 'fp', header: 'FP', cell: (item: (typeof displayItems)[0]) => item.fp, sortingField: 'fp' },
+            { id: 'tn', header: 'TN', cell: (item: (typeof displayItems)[0]) => item.tn, sortingField: 'tn' },
+            { id: 'fn', header: 'FN', cell: (item: (typeof displayItems)[0]) => item.fn, sortingField: 'fn' },
+          ];
+
+          return (
+            <Container header={<Header variant="h3">Field Level Metrics</Header>}>
+              <ExpandableSection headerText="View Details" defaultExpanded={false}>
+                <Table
+                  {...collectionProps}
+                  resizableColumns
+                  visibleColumns={fieldMetricsVisibleColumns}
+                  filter={
+                    <TextFilter
+                      filteringText={filterProps.filteringText}
+                      onChange={filterProps.onChange}
+                      filteringAriaLabel="Filter field metrics"
+                      filteringPlaceholder="Search fields..."
+                    />
+                  }
+                  items={items}
+                  columnDefinitions={allColumnDefinitions}
+                  pagination={
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Pagination
+                        currentPageIndex={paginationProps.currentPageIndex}
+                        pagesCount={paginationProps.pagesCount}
+                        onChange={paginationProps.onChange}
+                      />
+                    </SpaceBetween>
+                  }
+                  preferences={
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        variant="icon"
+                        iconName={allExpanded ? 'treeview-collapse' : 'treeview-expand'}
+                        onClick={allExpanded ? collapseAll : expandAll}
+                        ariaLabel={allExpanded ? 'Collapse all' : 'Expand all'}
+                      />
+                      <CollectionPreferences
+                        title="Preferences"
+                        confirmLabel="Confirm"
+                        cancelLabel="Cancel"
+                        preferences={{
+                          pageSize: fieldMetricsPageSize,
+                          visibleContent: fieldMetricsVisibleColumns,
+                        }}
+                        onConfirm={({ detail }) => {
+                          if (detail.pageSize) setFieldMetricsPageSize(detail.pageSize);
+                          if (detail.visibleContent) setFieldMetricsVisibleColumns([...detail.visibleContent]);
+                        }}
+                        pageSizePreference={{
+                          title: 'Page size',
+                          options: [
+                            { value: 10, label: '10 fields' },
+                            { value: 25, label: '25 fields' },
+                            { value: 50, label: '50 fields' },
+                            { value: 100, label: '100 fields' },
+                          ],
+                        }}
+                        visibleContentPreference={{
+                          title: 'Visible columns',
+                          options: [
+                            {
+                              label: 'Field metrics columns',
+                              options: [
+                                { id: 'fieldName', label: 'Field Name', editable: false },
+                                { id: 'accuracy', label: 'Accuracy' },
+                                { id: 'precision', label: 'Precision' },
+                                { id: 'recall', label: 'Recall' },
+                                { id: 'tp', label: 'TP' },
+                                { id: 'fp', label: 'FP' },
+                                { id: 'tn', label: 'TN' },
+                                { id: 'fn', label: 'FN' },
+                              ],
+                            },
+                          ],
+                        }}
+                      />
+                    </SpaceBetween>
+                  }
+                  variant="embedded"
+                />
+              </ExpandableSection>
+            </Container>
+          );
+        })()}
+
       {/* Cost breakdown */}
       {costBreakdown && (
         <Container header={<Header variant="h3">Estimated Cost</Header>}>
           <Table
             resizableColumns
-            wrapLines={preferences.wrapLines}
             items={(() => {
-              const costItems = [];
+              const costItems: CostItem[] = [];
               let totalCost = 0;
-              const contextTotals = {};
+              const contextTotals: Record<string, number> = {};
 
               // First pass: collect all items and calculate context totals
               Object.entries(costBreakdown).forEach(([context, services]) => {
@@ -202,7 +450,8 @@ const ComprehensiveBreakdown = ({
                   const lastUnderscoreIndex = serviceUnit.lastIndexOf('_');
                   const serviceApi = serviceUnit.substring(0, lastUnderscoreIndex);
                   const unit = serviceUnit.substring(lastUnderscoreIndex + 1);
-                  const [service, api] = serviceApi.split('/');
+                  const [service, ...apiParts] = serviceApi.split('/');
+                  const api = apiParts.join('/');
 
                   const cost = (details.estimated_cost as number) || 0;
                   contextSubtotal += cost;
@@ -231,8 +480,8 @@ const ComprehensiveBreakdown = ({
               });
 
               // Second pass: insert subtotal rows after each context group
-              const finalItems = [];
-              const _currentContext = null;
+              const finalItems: CostItem[] = [];
+              const _currentContext: string | null = null;
 
               costItems.forEach((item, index) => {
                 // Add the regular item
@@ -336,25 +585,6 @@ const ComprehensiveBreakdown = ({
   );
 };
 
-interface TestResultsPreferencesProps {
-  preferences: { wrapLines: boolean };
-  setPreferences: (prefs: { wrapLines: boolean }) => void;
-}
-
-const TestResultsPreferences = ({ preferences, setPreferences }: TestResultsPreferencesProps): React.JSX.Element => (
-  <CollectionPreferences
-    title="Preferences"
-    confirmLabel="Confirm"
-    cancelLabel="Cancel"
-    preferences={preferences}
-    onConfirm={({ detail }) => setPreferences(detail as { wrapLines: boolean })}
-    wrapLinesPreference={{
-      label: 'Wrap lines',
-      description: 'Check to see all the text and wrap the lines',
-    }}
-  />
-);
-
 interface TestResultsProps {
   testRunId: string;
   setSelectedTestRunId?: ((id: string | null) => void) | null;
@@ -371,19 +601,11 @@ interface SelectedRange {
 }
 
 const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): React.JSX.Element => {
-  const { addTestRun: addTestRunRaw } = useAppContext();
-  const addTestRun = addTestRunRaw as (
-    testRunId: string,
-    testSetName: string,
-    context: string,
-    filesCount: number,
-    configVersion?: string,
-  ) => void;
+  const { addTestRun } = useAppContext();
   const { versions } = useConfigurationVersions();
   const [results, setResults] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentAttempt, setCurrentAttempt] = useState(1);
   const [reRunLoading, setReRunLoading] = useState(false);
   const [showReRunModal, setShowReRunModal] = useState(false);
   const [reRunContext, setReRunContext] = useState('');
@@ -391,43 +613,31 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
   const [testSetFileCount, setTestSetFileCount] = useState<number | null>(null);
   const [testSetStatus, setTestSetStatus] = useState<string | null>(null);
   const [testSetFilePattern, setTestSetFilePattern] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [chartType, setChartType] = useState<any>({ label: 'Bar Chart', value: 'bar' });
-  const [retryMessage, setRetryMessage] = useState('');
-  const [preferences, setPreferences] = useState({ wrapLines: false });
+  const [chartType, setChartType] = useState<SelectProps.Option>({ label: 'Bar Chart', value: 'bar' });
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [selectedRangeData, setSelectedRangeData] = useState<SelectedRange | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [lowestScoreCount, setLowestScoreCount] = useState<any>({ label: '5', value: 5 });
+  const [lowestScoreCount, setLowestScoreCount] = useState<SelectProps.Option>({ label: '5', value: '5' });
 
   // Config export modal state
   const [showConfigExportModal, setShowConfigExportModal] = useState(false);
   const [configExportFormat, setConfigExportFormat] = useState('json');
   const [configExportFileName, setConfigExportFileName] = useState('');
 
-  const getProgressMessage = (progressLevel: number): string => {
-    if (progressLevel <= 1) return 'Initializing test results...';
-    if (progressLevel <= 2) return 'Processing evaluation data...';
-    if (progressLevel <= 3) return 'Calculating accuracy metrics...';
-    if (progressLevel <= 4) return 'Generating cost analysis...';
-    return 'Finalizing results...';
-  };
-
   const checkTestSetStatus = async () => {
     if (!results?.testSetId) return;
 
     try {
-      const testSetsResult = (await client.graphql({
-        query: GET_TEST_SETS,
-      })) as GqlResult;
+      const testSetsResult = await client.graphql({
+        query: getTestSets,
+      });
 
       const testSets = testSetsResult.data.getTestSets || [];
-      const testSet = testSets.find((ts) => ts.id === results.testSetId);
+      const testSet = testSets.find((ts) => ts?.id === results.testSetId);
 
       if (testSet) {
-        setTestSetStatus(testSet.status);
-        setTestSetFileCount(testSet.fileCount);
-        setTestSetFilePattern(testSet.filePattern);
+        setTestSetStatus(testSet.status ?? null);
+        setTestSetFileCount(testSet.fileCount ?? null);
+        setTestSetFilePattern(testSet.filePattern ?? null);
       } else {
         setTestSetStatus('NOT_FOUND');
         setTestSetFileCount(0);
@@ -442,121 +652,26 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
 
   useEffect(() => {
     let isCancelled = false;
-    const timeouts = []; // Track all timeouts to clear them
 
     const fetchResults = async () => {
       if (isCancelled) return;
 
-      // Clear any existing timeouts
-      const clearAllTimeouts = () => {
-        timeouts.forEach(clearTimeout);
-        timeouts.length = 0;
-      };
-
       try {
-        let result;
-        let attempt = 1;
-        const maxRetries = 5;
+        const result = await client.graphql({
+          query: getTestRun,
+          variables: { testRunId },
+        });
 
-        while (attempt <= maxRetries && !isCancelled) {
-          try {
-            console.log(`GET_TEST_RUN attempt ${attempt} starting...`);
-            if (attempt === 1) {
-              setCurrentAttempt(1);
-              setRetryMessage('Getting results from cache...');
+        if (isCancelled) return;
 
-              // Show cache miss progression after 1 second for first attempt
-              timeouts.push(
-                setTimeout(() => {
-                  if (!isCancelled) {
-                    setRetryMessage('No cache found, generating results...');
-                    setCurrentAttempt(2);
-                  }
-                }, 1000),
-              );
-
-              timeouts.push(
-                setTimeout(() => {
-                  if (!isCancelled) {
-                    setRetryMessage(getProgressMessage(2));
-                    setCurrentAttempt(3);
-                  }
-                }, 2000),
-              );
-
-              timeouts.push(
-                setTimeout(() => {
-                  if (!isCancelled) {
-                    setRetryMessage(getProgressMessage(3));
-                    setCurrentAttempt(4);
-                  }
-                }, 4000),
-              );
-            }
-
-            if (isCancelled) return;
-
-            result = (await client.graphql({
-              query: GET_TEST_RUN,
-              variables: { testRunId },
-            })) as GqlResult;
-
-            if (isCancelled) return;
-
-            console.log('GET_TEST_RUN result:', result);
-            clearAllTimeouts(); // Clear timeouts on success
-            setCurrentAttempt(10); // Set to 100% before completing
-            await new Promise((resolve) => setTimeout(resolve, 500)); // Brief pause to show 100%
-            break;
-          } catch (retryError) {
-            if (isCancelled) return;
-
-            console.log('GET_TEST_RUN error caught:', {
-              message: retryError.message,
-              code: retryError.code,
-              name: retryError.name,
-              error: retryError,
-            });
-            const isTimeout =
-              retryError.message?.toLowerCase().includes('timeout') ||
-              retryError.code === 'TIMEOUT' ||
-              retryError.message?.includes('Request failed with status code 504') ||
-              retryError.name === 'TimeoutError' ||
-              retryError.code === 'NetworkError' ||
-              retryError.errors?.some(
-                (err) => err.errorType === 'Lambda:ExecutionTimeoutException' || err.message?.toLowerCase().includes('timeout'),
-              );
-            if (isTimeout && attempt < maxRetries) {
-              console.log(`GET_TEST_RUN attempt ${attempt} failed, retrying...`, retryError.message);
-
-              clearAllTimeouts(); // Clear any running timeouts
-
-              // Always move progress forward, never backwards
-              setCurrentAttempt((currentProgress) => {
-                const targetProgress = Math.min(currentProgress + 1, 9); // Move forward by 1 step, cap at 90%
-                return Math.max(currentProgress, targetProgress);
-              });
-
-              attempt++;
-              const waitTime = Math.max(2000, 5000 - attempt * 1000); // 5s, 4s, 3s, 2s min
-
-              setRetryMessage(getProgressMessage(Math.min(attempt + 1, 5)));
-
-              await new Promise((resolve) => setTimeout(resolve, waitTime));
-              continue;
-            }
-            throw retryError;
-          }
-        }
-
-        if (!isCancelled) {
-          const testRun = result.data.getTestRun;
-          console.log('Test results:', testRun);
-          setResults(testRun);
-        }
+        const testRun = result.data.getTestRun;
+        console.log('Test results:', testRun);
+        setResults(testRun as Record<string, unknown> | null);
       } catch (err) {
         if (!isCancelled) {
-          setError(err.message);
+          const typedErr = err as { errors?: Array<{ message: string }> };
+          const errorMsg = typedErr.errors?.[0]?.message || (err as Error).message || 'Unknown error';
+          setError(errorMsg);
         }
       } finally {
         if (!isCancelled) {
@@ -567,10 +682,8 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
 
     fetchResults();
 
-    // Cleanup function
     return () => {
       isCancelled = true;
-      timeouts.forEach(clearTimeout);
     };
   }, [testRunId]);
 
@@ -580,8 +693,31 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
     }
   }, [results]);
 
-  if (loading) return <ProgressBar status="in-progress" label={retryMessage || 'Loading test results...'} value={currentAttempt * 10} />;
-  if (error) return <Box>Error loading test results: {error}</Box>;
+  if (loading) return <ProgressBar status="in-progress" label="Loading test results..." />;
+
+  if (error) {
+    const handleBackClick = () => {
+      if (setSelectedTestRunId) {
+        setSelectedTestRunId(null);
+      } else {
+        window.location.replace('#/test-studio?tab=executions');
+      }
+    };
+
+    // Determine if this is a processing state or actual error
+    const isProcessing =
+      error.includes('evaluating results') || error.includes('not complete') || error.includes('QUEUED') || error.includes('RUNNING');
+
+    return (
+      <Container header={<Header variant="h1">Test Results: {testRunId}</Header>}>
+        <SpaceBetween size="m">
+          <Alert type={isProcessing ? 'info' : 'error'}>{error}</Alert>
+          <Button onClick={handleBackClick}>Back to Test Results</Button>
+        </SpaceBetween>
+      </Container>
+    );
+  }
+
   if (!results) {
     const handleBackClick = () => {
       if (setSelectedTestRunId) {
@@ -609,53 +745,40 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
   // Calculate average weighted overall score
   const averageWeightedScore = (() => {
     if (!results.weightedOverallScores) return null;
-    const scores =
-      typeof results.weightedOverallScores === 'string' ? JSON.parse(results.weightedOverallScores) : results.weightedOverallScores;
+    const scores = parseWeightedOverallScores(results.weightedOverallScores as string);
     const values = Object.values(scores) as number[];
     return values.length > 0 ? values.reduce((sum, score) => sum + score, 0) / values.length : null;
   })();
 
-  let costBreakdown = null;
-  let accuracyBreakdown = null;
-  let splitClassificationMetrics = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const costBreakdown: any = results.costBreakdown ? parseCostBreakdown(results.costBreakdown as string) : null;
 
-  try {
-    if (results.costBreakdown) {
-      costBreakdown = typeof results.costBreakdown === 'string' ? JSON.parse(results.costBreakdown) : results.costBreakdown;
-    }
-    if (results.accuracyBreakdown) {
-      accuracyBreakdown = typeof results.accuracyBreakdown === 'string' ? JSON.parse(results.accuracyBreakdown) : results.accuracyBreakdown;
-    }
-    if (results.splitClassificationMetrics) {
-      splitClassificationMetrics =
-        typeof results.splitClassificationMetrics === 'string'
-          ? JSON.parse(results.splitClassificationMetrics)
-          : results.splitClassificationMetrics;
-    }
-  } catch (e) {
-    console.error('Error parsing breakdown data:', e);
-  }
+  // Calculate avg cost per page from costBreakdown page counts
+  const avgCostPerPage = calculateAvgCostPerPage(results.totalCost as number, costBreakdown);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const accuracyBreakdown: any = results.accuracyBreakdown ? parseAccuracyBreakdown(results.accuracyBreakdown as string) : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const splitClassificationMetrics: any = results.splitClassificationMetrics
+    ? parseSplitClassificationMetrics(results.splitClassificationMetrics as string)
+    : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fieldMetrics: any = results.fieldMetrics ? parseFieldMetrics(results.fieldMetrics as string) : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const _confusionMatrix: any = results.confusionMatrix ? parseConfusionMatrix(results.confusionMatrix as string) : null;
 
   // Helper function to get merged config from results.config
   // The config may be stored as a JSON string (possibly double-stringified) with {Default: {...}, Custom: {...}} or already merged
   const getMergedConfig = (config: unknown): Record<string, unknown> | null => {
     if (!config) return null;
 
-    // Parse if it's a string (may be double-stringified)
-    let parsedConfig = config;
-    while (typeof parsedConfig === 'string') {
-      try {
-        parsedConfig = JSON.parse(parsedConfig);
-      } catch (e) {
-        console.error('Failed to parse config string:', e);
-        return null;
-      }
-    }
+    // Parse if it's a string (may be double-stringified) using typed parser
+    let parsedConfig: Record<string, unknown> | null =
+      typeof config === 'string' ? parseTestRunConfig(config) : (config as Record<string, unknown>);
+    if (!parsedConfig) return null;
 
     // If config is wrapped in a "Config" object, extract it
-    const configObj = parsedConfig as Record<string, unknown>;
-    if (configObj && configObj.Config && typeof configObj.Config === 'object') {
-      parsedConfig = configObj.Config;
+    if (parsedConfig.Config && typeof parsedConfig.Config === 'object') {
+      parsedConfig = parsedConfig.Config as Record<string, unknown>;
     }
 
     // Deep merge helper function
@@ -762,7 +885,7 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
         console.error('Invalid numberOfFiles value');
         return;
       }
-      if (numFiles > testSetFileCount) {
+      if (testSetFileCount !== null && numFiles > testSetFileCount) {
         console.error(`numberOfFiles (${numFiles}) exceeds test set file count (${testSetFileCount})`);
         return;
       }
@@ -771,18 +894,18 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
     setReRunLoading(true);
 
     try {
-      const input = {
-        testSetId: testSetId,
+      const input: { testSetId: string; context?: string; numberOfFiles?: number; configVersion?: string } = {
+        testSetId: testSetId as string,
         ...(reRunContext && { context: reRunContext }),
         ...(reRunNumberOfFiles.trim() && { numberOfFiles: parseInt(reRunNumberOfFiles.trim(), 10) }),
       };
 
       console.log('About to call GraphQL with input:', input);
 
-      const result = (await client.graphql({
-        query: START_TEST_RUN,
+      const result = await client.graphql({
+        query: startTestRun,
         variables: { input },
-      })) as GqlResult;
+      });
 
       console.log('GraphQL call completed, result:', result);
 
@@ -790,7 +913,13 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
         console.log('Success! Closing modal and redirecting...');
         const newTestRun = result.data.startTestRun;
         // Add to active test runs
-        addTestRun(newTestRun.testRunId as string, newTestRun.testSetName as string, reRunContext, newTestRun.filesCount as number);
+        addTestRun(
+          newTestRun.testRunId as string,
+          newTestRun.testSetName as string,
+          reRunContext,
+          newTestRun.filesCount as number,
+          newTestRun.configVersion || '',
+        );
         setShowReRunModal(false);
         setReRunContext('');
         setReRunNumberOfFiles('');
@@ -801,8 +930,9 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
       }
     } catch (err) {
       console.error('GraphQL call failed:', err);
-      if (err.errors) {
-        err.errors.forEach((errorItem, index) => {
+      const typedErr = err as { errors?: Array<{ message: string }> };
+      if (typedErr.errors) {
+        typedErr.errors.forEach((errorItem: { message: string }, index: number) => {
           console.error(`Error ${index}:`, errorItem.message);
         });
       }
@@ -887,6 +1017,10 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
             </Box>
           </Box>
           <Box>
+            <Box variant="awsui-key-label">Avg Cost/Page</Box>
+            <Box fontSize="heading-l">{avgCostPerPage !== null ? `$${avgCostPerPage.toFixed(4)}` : 'N/A'}</Box>
+          </Box>
+          <Box>
             <Box variant="awsui-key-label">Avg Confidence</Box>
             <Box fontSize="heading-l">
               {results.averageConfidence !== null && results.averageConfidence !== undefined
@@ -919,7 +1053,7 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
                 : 'N/A'}
             </Box>
           </Box>
-          {results.configVersion && (
+          {Boolean(results.configVersion) && (
             <Box>
               <Box variant="awsui-key-label">Config Version</Box>
               <Box fontSize="heading-l">{formatConfigVersionLink(results.configVersion as string, versions)}</Box>
@@ -953,11 +1087,11 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
               const generateChartData = () => {
                 const scores =
                   typeof results.weightedOverallScores === 'string'
-                    ? JSON.parse(results.weightedOverallScores)
+                    ? parseWeightedOverallScores(results.weightedOverallScores)
                     : results.weightedOverallScores;
 
                 // Create score range buckets
-                const buckets = {
+                const buckets: Record<string, { count: number; docs: RangeDoc[] }> = {
                   '0.0-0.1': { count: 0, docs: [] },
                   '0.1-0.2': { count: 0, docs: [] },
                   '0.2-0.3': { count: 0, docs: [] },
@@ -1086,10 +1220,11 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
                         activeDot={{
                           r: 6,
                           cursor: 'pointer',
-                          onClick: (data) => {
-                            const range = data.payload.range;
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          onClick: (data: any) => {
+                            const range = data.payload.range as string;
                             if (range && buckets[range] && buckets[range].docs.length > 0) {
-                              const docs = buckets[range].docs.sort((a, b) => b.score - a.score);
+                              const docs = buckets[range].docs.sort((a: RangeDoc, b: RangeDoc) => b.score - a.score);
                               setSelectedRangeData({ range, docs });
                               setTimeout(() => {
                                 setShowDocumentsModal(true);
@@ -1132,7 +1267,7 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
             {(() => {
               const scores =
                 typeof results.weightedOverallScores === 'string'
-                  ? JSON.parse(results.weightedOverallScores)
+                  ? parseWeightedOverallScores(results.weightedOverallScores)
                   : results.weightedOverallScores;
 
               const sortedDocs = Object.entries(scores as Record<string, number>)
@@ -1143,7 +1278,6 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
               return (
                 <Table
                   resizableColumns
-                  wrapLines={preferences.wrapLines}
                   items={sortedDocs}
                   columnDefinitions={[
                     {
@@ -1176,14 +1310,13 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
         )}
 
         {/* Breakdown Tables */}
-        {(costBreakdown || accuracyBreakdown || splitClassificationMetrics) && (
+        {(costBreakdown || accuracyBreakdown || splitClassificationMetrics || fieldMetrics) && (
           <ComprehensiveBreakdown
             costBreakdown={costBreakdown}
             accuracyBreakdown={accuracyBreakdown}
             splitClassificationMetrics={splitClassificationMetrics}
+            fieldMetrics={fieldMetrics}
             averageWeightedScore={averageWeightedScore}
-            preferences={preferences}
-            setPreferences={setPreferences}
           />
         )}
       </SpaceBetween>
@@ -1272,10 +1405,9 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
         size="medium"
       >
         <Box>
-          {selectedRangeData?.docs?.length > 0 ? (
+          {selectedRangeData && selectedRangeData.docs?.length > 0 ? (
             <Table
               resizableColumns
-              wrapLines={preferences.wrapLines}
               items={selectedRangeData.docs}
               columnDefinitions={[
                 {

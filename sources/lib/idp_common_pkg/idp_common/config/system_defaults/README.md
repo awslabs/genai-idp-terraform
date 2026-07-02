@@ -22,7 +22,6 @@ system_defaults/
    base-discovery.yaml         # Schema discovery
    pattern-1.yaml              # BDA pattern (selective inheritance)
    pattern-2.yaml              # Bedrock LLM pattern (full inheritance)
-   pattern-3.yaml              # UDOP pattern (selective inheritance)
    README.md
 ```
 
@@ -67,39 +66,21 @@ _inherits:
 
 BDA handles OCR, classification, and extraction internally, so it doesn't inherit those modules.
 
-### Selective Inheritance (Pattern-3 - UDOP)
-```yaml
-# Pattern-3 (UDOP) - includes OCR and extraction, excludes classification only
-_inherits:
-  - base-notes.yaml
-  - base-classes.yaml
-  - base-ocr.yaml
-  - base-extraction.yaml
-  - base-assessment.yaml
-  - base-summarization.yaml
-  - base-evaluation.yaml
-  - base-criteria-validation.yaml
-  - base-agents.yaml
-  - base-discovery.yaml
-```
-
-UDOP uses Textract for OCR, LLM for extraction, and its own fine-tuned model for classification only.
-
 ## Module Contents
 
 | Module | Section | Description | Used By |
 |--------|---------|-------------|---------|
-| `base-notes.yaml` | `notes` | Configuration description | All patterns |
-| `base-classes.yaml` | `classes` | Document class definitions | All patterns |
-| `base-ocr.yaml` | `ocr` | Textract OCR | Pattern-2, Pattern-3 |
-| `base-classification.yaml` | `classification` | LLM classification | Pattern-2 only |
-| `base-extraction.yaml` | `extraction` | LLM extraction | Pattern-2, Pattern-3 |
-| `base-assessment.yaml` | `assessment` | Confidence scoring | All patterns |
-| `base-summarization.yaml` | `summarization` | Doc summarization | All patterns |
-| `base-evaluation.yaml` | `evaluation` | Testing/evaluation | All patterns |
-| `base-criteria-validation.yaml` | `criteria_validation` | Criteria checks | All patterns |
-| `base-agents.yaml` | `agents` | Error analyzer, chat | All patterns |
-| `base-discovery.yaml` | `discovery` | Schema discovery | All patterns |
+| `base-notes.yaml` | `notes` | Configuration description | Both modes |
+| `base-classes.yaml` | `classes` | Document class definitions | Both modes |
+| `base-ocr.yaml` | `ocr` | Textract OCR | Pipeline mode |
+| `base-classification.yaml` | `classification` | LLM classification | Pipeline mode |
+| `base-extraction.yaml` | `extraction` | LLM extraction | Pipeline mode |
+| `base-assessment.yaml` | `assessment` | Confidence scoring | Both modes |
+| `base-summarization.yaml` | `summarization` | Doc summarization | Both modes |
+| `base-evaluation.yaml` | `evaluation` | Testing/evaluation | Both modes |
+| `base-criteria-validation.yaml` | `criteria_validation` | Criteria checks | Both modes |
+| `base-agents.yaml` | `agents` | Error analyzer, chat | Both modes |
+| `base-discovery.yaml` | `discovery` | Schema discovery | Both modes |
 
 ## Merge Priority
 

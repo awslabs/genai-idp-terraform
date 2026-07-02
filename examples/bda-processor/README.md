@@ -259,7 +259,7 @@ aws logs tail /aws/lambda/{function-name} --follow
 |----------|---------|--------------|
 | `invoke_bda` | Initiates BDA jobs | boto3, idp_common |
 | `bda_completion` | Handles BDA events | boto3, idp_common |
-| `process_results` | Processes extraction results | PyMuPDF, boto3, idp_common |
+| `process_results` | Processes extraction results | pypdfium2, boto3, idp_common |
 | `summarization` | Document summarization | idp_common |
 | `evaluation` | Baseline comparison | idp_common |
 

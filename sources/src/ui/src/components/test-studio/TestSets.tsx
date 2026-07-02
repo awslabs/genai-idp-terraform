@@ -17,17 +17,21 @@ import {
   Badge,
   ExpandableSection,
   Select,
+  DatePicker,
+  TimeInput,
 } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
-import ADD_TEST_SET from '../../graphql/queries/addTestSet';
-import ADD_TEST_SET_FROM_UPLOAD from '../../graphql/queries/addTestSetFromUpload';
-import DELETE_TEST_SETS from '../../graphql/queries/deleteTestSets';
-import GET_TEST_SETS from '../../graphql/queries/getTestSets';
-import LIST_BUCKET_FILES from '../../graphql/queries/listBucketFiles';
-import VALIDATE_TEST_FILE_NAME from '../../graphql/queries/checkTestSetFiles';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type GqlResult = { data: Record<string, any> };
+import {
+  addTestSet,
+  addTestSetFromUpload,
+  addDocumentsToTestSet,
+  addDocumentsToTestSetFromUpload,
+  deleteTestSets,
+  getTestSets,
+  listBucketFiles,
+  validateTestFileName,
+} from '../../graphql/generated';
+import { getErrorMessage } from '../../utils/errorUtils';
 
 const client = generateClient();
 
@@ -39,15 +43,26 @@ const BUCKET_OPTIONS: SelectProps.Option[] = [
   { label: 'Test Set Bucket', value: 'testset' },
 ];
 
+const TIME_FILTER_OPTIONS: SelectProps.Option[] = [
+  { label: 'No filter', value: '' },
+  { label: 'Last 1 hour', value: '1' },
+  { label: 'Last 4 hours', value: '4' },
+  { label: 'Last 24 hours', value: '24' },
+  { label: 'Last 7 days', value: '168' },
+  { label: 'Last 30 days', value: '720' },
+  { label: 'Custom date/time', value: 'custom' },
+];
+
 interface TestSetItem {
   id: string;
   name: string;
-  description?: string;
+  description?: string | null;
   filePattern?: string | null;
-  fileCount: number | null;
-  status: string;
+  fileCount?: number | null;
+  status?: string | null;
   createdAt: string;
-  error?: string;
+  error?: string | null;
+  lastAddResult?: string | null;
 }
 
 const TestSets = (): React.JSX.Element => {
@@ -74,28 +89,36 @@ const TestSets = (): React.JSX.Element => {
   const [showFileStructure, setShowFileStructure] = useState(() => {
     return localStorage.getItem('testset-show-file-structure') !== 'false';
   });
+  const [showAddDocsPatternModal, setShowAddDocsPatternModal] = useState(false);
+  const [showAddDocsUploadModal, setShowAddDocsUploadModal] = useState(false);
+  const [selectedTimeFilter, setSelectedTimeFilter] = useState(TIME_FILTER_OPTIONS[0]);
+  const [customDate, setCustomDate] = useState('');
+  const [customTime, setCustomTime] = useState('00:00:00');
+  const [addDocsZipFile, setAddDocsZipFile] = useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const addDocsFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const loadTestSets = async () => {
     try {
       console.log('TestSets: Loading test sets...');
-      const result = (await client.graphql({ query: GET_TEST_SETS })) as GqlResult;
+      const result = await client.graphql({ query: getTestSets });
       console.log('TestSets: GraphQL result:', result);
       const backendTestSets = result.data.getTestSets || [];
 
       // Upsert: merge backend data with existing UI state, deduplicating by id
       setTestSets((prevTestSets) => {
-        const backendIds = new Set(backendTestSets.map((ts) => ts.id));
+        const nonNullBackendTestSets = backendTestSets.filter((ts): ts is NonNullable<typeof ts> => ts !== null);
+        const backendIds = new Set(nonNullBackendTestSets.map((ts) => ts.id));
 
         // Keep UI test sets that don't exist in backend (active processing)
         const uiOnlyTestSets = prevTestSets.filter((ts) => !backendIds.has(ts.id) && ts.status !== 'COMPLETED' && ts.status !== 'FAILED');
 
         // Combine backend test sets (always win) with UI-only active test sets
-        return [...backendTestSets, ...uiOnlyTestSets];
+        return [...nonNullBackendTestSets, ...uiOnlyTestSets];
       });
     } catch (err) {
       console.error('TestSets: Failed to load test sets:', err);
-      setError(`Failed to load test sets: ${err.message || 'Unknown error'}`);
+      setError(`Failed to load test sets: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -149,26 +172,38 @@ const TestSets = (): React.JSX.Element => {
     };
   }, []); // No dependencies - always runs
 
+  const getModifiedAfterTimestamp = (): string | undefined => {
+    const filterValue = selectedTimeFilter.value;
+    if (!filterValue) return undefined;
+    if (filterValue === 'custom') {
+      if (!customDate) return undefined;
+      return `${customDate}T${customTime || '00:00:00'}.000Z`;
+    }
+    const date = new Date(Date.now() - parseInt(filterValue) * 60 * 60 * 1000);
+    return date.toISOString();
+  };
+
   // Cleanup polling on unmount
   const handleCheckFiles = async () => {
     if (!filePattern.trim()) return;
 
     setLoading(true);
     try {
-      const result = (await client.graphql({
-        query: LIST_BUCKET_FILES,
+      const result = await client.graphql({
+        query: listBucketFiles,
         variables: {
-          bucketType: selectedBucket.value,
+          bucketType: selectedBucket.value ?? '',
           filePattern: filePattern.trim(),
+          modifiedAfter: getModifiedAfterTimestamp(),
         },
-      })) as GqlResult;
+      });
 
-      const files = result.data.listBucketFiles || [];
+      const files = (result.data.listBucketFiles || []).filter((f): f is string => f !== null);
       setMatchingFiles(files);
       setFileCount(files.length);
       setShowFilesModal(true);
     } catch (err) {
-      const errorMessage = err.message || err.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to check files: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -202,12 +237,12 @@ const TestSets = (): React.JSX.Element => {
       return;
     }
 
-    // 2. Backend validation using VALIDATE_TEST_FILE_NAME
+    // 2. Backend validation using validateTestFileName
     try {
-      const validationResult = (await client.graphql({
-        query: VALIDATE_TEST_FILE_NAME,
+      const validationResult = await client.graphql({
+        query: validateTestFileName,
         variables: { fileName: newTestSetName.trim() },
-      })) as GqlResult;
+      });
 
       const validation = validationResult.data.validateTestFileName;
       if (validation && validation.exists) {
@@ -225,23 +260,24 @@ const TestSets = (): React.JSX.Element => {
       }
     } catch (err) {
       console.error('Error validating test set name:', err);
-      const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to validate test set name: ${errorMessage}`);
       return;
     }
 
     setLoading(true);
     try {
-      const result = (await client.graphql({
-        query: ADD_TEST_SET,
+      const result = await client.graphql({
+        query: addTestSet,
         variables: {
           name: newTestSetName.trim(),
           description: newTestSetDescription.trim(),
           filePattern: filePattern.trim(),
-          bucketType: selectedBucket.value,
+          bucketType: selectedBucket.value ?? '',
           fileCount,
+          modifiedAfter: getModifiedAfterTimestamp(),
         },
-      })) as GqlResult;
+      });
 
       console.log('GraphQL result:', result);
       const newTestSet = result.data.addTestSet;
@@ -265,6 +301,9 @@ const TestSets = (): React.JSX.Element => {
         setNewTestSetDescription('');
         setFilePattern('');
         setSelectedBucket(BUCKET_OPTIONS[0]);
+        setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+        setCustomDate('');
+        setCustomTime('00:00:00');
         setFileCount(0);
         setShowAddPatternModal(false);
         setError('');
@@ -275,7 +314,7 @@ const TestSets = (): React.JSX.Element => {
       }
     } catch (err) {
       console.error('Error adding test set:', err);
-      const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to add test set: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -300,10 +339,10 @@ const TestSets = (): React.JSX.Element => {
     }
 
     try {
-      const validationResult = (await client.graphql({
-        query: VALIDATE_TEST_FILE_NAME,
+      const validationResult = await client.graphql({
+        query: validateTestFileName,
         variables: { fileName: newTestSetName.trim() },
-      })) as GqlResult;
+      });
 
       const validation = validationResult.data.validateTestFileName;
       if (validation && validation.exists) {
@@ -321,7 +360,7 @@ const TestSets = (): React.JSX.Element => {
       }
     } catch (err) {
       console.error('Error validating test set name:', err);
-      const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to validate test set name: ${errorMessage}`);
       return;
     }
@@ -333,8 +372,8 @@ const TestSets = (): React.JSX.Element => {
 
     setLoading(true);
     try {
-      const result = (await client.graphql({
-        query: ADD_TEST_SET_FROM_UPLOAD,
+      const result = await client.graphql({
+        query: addTestSetFromUpload,
         variables: {
           input: {
             fileName: zipFile.name,
@@ -342,7 +381,7 @@ const TestSets = (): React.JSX.Element => {
             description: newTestSetDescription.trim(),
           },
         },
-      })) as GqlResult;
+      });
 
       const response = result.data.addTestSetFromUpload;
 
@@ -367,7 +406,7 @@ const TestSets = (): React.JSX.Element => {
         throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
       }
 
-      const newTestSet = {
+      const newTestSet: TestSetItem = {
         id: response.testSetId,
         name: newTestSetName.trim(),
         description: newTestSetDescription.trim(),
@@ -402,7 +441,7 @@ const TestSets = (): React.JSX.Element => {
       }
     } catch (err) {
       console.error('Error creating test set:', err);
-      const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to create test set: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -415,11 +454,11 @@ const TestSets = (): React.JSX.Element => {
     setWarningMessage('');
     setSuccessMessage('');
     try {
-      const result = (await client.graphql({ query: GET_TEST_SETS })) as GqlResult;
-      setTestSets(result.data.getTestSets || []);
+      const result = await client.graphql({ query: getTestSets });
+      setTestSets((result.data.getTestSets || []).filter((ts): ts is NonNullable<typeof ts> => ts !== null));
     } catch (err) {
       console.error('Error refreshing test sets:', err);
-      const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to refresh test sets: ${errorMessage}`);
     } finally {
       setRefreshing(false);
@@ -433,7 +472,7 @@ const TestSets = (): React.JSX.Element => {
     setLoading(true);
     try {
       await client.graphql({
-        query: DELETE_TEST_SETS,
+        query: deleteTestSets,
         variables: { testSetIds },
       });
       setTestSets(testSets.filter((testSet) => !testSetIds.includes(testSet.id)));
@@ -442,8 +481,135 @@ const TestSets = (): React.JSX.Element => {
       setError('');
     } catch (err) {
       console.error('Error deleting test sets:', err);
-      const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+      const errorMessage = getErrorMessage(err);
       setError(`Failed to delete test sets: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDocuments = async () => {
+    if (!filePattern.trim()) {
+      setError('File pattern is required');
+      return;
+    }
+
+    const targetTestSet = selectedItems[0];
+    if (!targetTestSet) return;
+
+    setLoading(true);
+    try {
+      const result = await client.graphql({
+        query: addDocumentsToTestSet,
+        variables: {
+          testSetId: targetTestSet.id,
+          filePattern: filePattern.trim(),
+          bucketType: selectedBucket.value ?? '',
+          fileCount,
+          modifiedAfter: getModifiedAfterTimestamp(),
+        },
+      });
+
+      const updatedTestSet = result.data.addDocumentsToTestSet;
+
+      if (updatedTestSet) {
+        setTestSets((prev) => {
+          const idx = prev.findIndex((ts) => ts.id === updatedTestSet.id);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = updatedTestSet;
+            return updated;
+          }
+          return prev;
+        });
+        setFilePattern('');
+        setSelectedBucket(BUCKET_OPTIONS[0]);
+        setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+        setCustomDate('');
+        setCustomTime('00:00:00');
+        setFileCount(0);
+        setShowAddDocsPatternModal(false);
+        setError('');
+        setSuccessMessage(`Adding documents to test set "${targetTestSet.name}"...`);
+      } else {
+        setError('Failed to add documents - no data returned');
+      }
+    } catch (err) {
+      console.error('Error adding documents to test set:', err);
+      const errorMessage = getErrorMessage(err);
+      setError(`Failed to add documents: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDocumentsUpload = async () => {
+    const targetTestSet = selectedItems[0];
+    if (!targetTestSet) return;
+
+    if (!addDocsZipFile) {
+      setError('Zip file is required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await client.graphql({
+        query: addDocumentsToTestSetFromUpload,
+        variables: {
+          input: {
+            testSetId: targetTestSet.id,
+            fileName: addDocsZipFile.name,
+            fileSize: addDocsZipFile.size,
+          },
+        },
+      });
+
+      const response = result.data.addDocumentsToTestSetFromUpload;
+
+      if (!response || !response.presignedUrl) {
+        throw new Error('Failed to get upload URL from server');
+      }
+
+      const presignedPostData = JSON.parse(response.presignedUrl);
+      const formData = new FormData();
+
+      Object.entries(presignedPostData.fields).forEach(([key, value]) => {
+        formData.append(key, value as string);
+      });
+      formData.append('file', addDocsZipFile);
+
+      const uploadResponse = await fetch(presignedPostData.url, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+      }
+
+      // Update the test set status in UI
+      setTestSets((prev) => {
+        const idx = prev.findIndex((ts) => ts.id === targetTestSet.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], status: 'UPDATING' };
+          return updated;
+        }
+        return prev;
+      });
+
+      setSuccessMessage(`Uploading documents to test set "${targetTestSet.name}". Zip file is being processed.`);
+      setError('');
+      setShowAddDocsUploadModal(false);
+      setAddDocsZipFile(null);
+      if (addDocsFileInputRef.current) {
+        addDocsFileInputRef.current.value = '';
+      }
+    } catch (err) {
+      console.error('Error adding documents from upload:', err);
+      const errorMessage = getErrorMessage(err);
+      setError(`Failed to add documents: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -458,37 +624,41 @@ const TestSets = (): React.JSX.Element => {
     {
       id: 'name',
       header: 'Test Set Name',
-      cell: (item) => item.name,
+      cell: (item: TestSetItem) => item.name,
       sortingField: 'name',
     },
     {
       id: 'id',
       header: 'Test Set ID',
-      cell: (item) => item.id,
+      cell: (item: TestSetItem) => item.id,
       sortingField: 'id',
     },
     {
       id: 'description',
       header: 'Description',
-      cell: (item) => item.description || '-',
+      cell: (item: TestSetItem) => item.description || '-',
       width: 200,
       minWidth: 120,
     },
     {
       id: 'filePattern',
       header: 'File Pattern',
-      cell: (item) => item.filePattern,
+      cell: (item: TestSetItem) => item.filePattern,
     },
     {
       id: 'fileCount',
       header: 'Files',
-      cell: (item) => item.fileCount,
+      cell: (item: TestSetItem) => item.fileCount,
     },
     {
       id: 'status',
       header: 'Status',
-      cell: (item) => {
+      cell: (item: TestSetItem) => {
         const status = item.status || '-';
+
+        if (status === 'UPDATING') {
+          return <Badge color="blue">Updating...</Badge>;
+        }
 
         if (status === 'FAILED' && item.error) {
           const truncatedError = item.error.length > 15 ? `${item.error.substring(0, 15)}...` : item.error;
@@ -521,7 +691,7 @@ const TestSets = (): React.JSX.Element => {
     {
       id: 'createdAt',
       header: 'Created',
-      cell: (item) => new Date(item.createdAt).toLocaleDateString(),
+      cell: (item: TestSetItem) => new Date(item.createdAt).toLocaleDateString(),
       sortingField: 'createdAt',
     },
   ];
@@ -538,6 +708,31 @@ const TestSets = (): React.JSX.Element => {
                 Refresh
               </Button>
               <Button iconName="remove" disabled={selectedItems.length === 0 || loading} onClick={() => setShowDeleteModal(true)} />
+              <ButtonDropdown
+                items={[
+                  { id: 'docs-pattern', text: 'From Existing Files' },
+                  { id: 'docs-upload', text: 'From Upload' },
+                ]}
+                disabled={selectedItems.length !== 1 || selectedItems[0]?.status !== 'COMPLETED' || loading}
+                onItemClick={({ detail }) => {
+                  if (detail.id === 'docs-pattern') {
+                    setFilePattern(selectedItems[0]?.filePattern || '');
+                    setSelectedBucket(BUCKET_OPTIONS[0]);
+                    setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+                    setCustomDate('');
+                    setCustomTime('00:00:00');
+                    setFileCount(0);
+                    setError('');
+                    setShowAddDocsPatternModal(true);
+                  } else if (detail.id === 'docs-upload') {
+                    setAddDocsZipFile(null);
+                    setError('');
+                    setShowAddDocsUploadModal(true);
+                  }
+                }}
+              >
+                Add Documents
+              </ButtonDropdown>
               <ButtonDropdown
                 variant="primary"
                 items={[
@@ -573,6 +768,21 @@ const TestSets = (): React.JSX.Element => {
         </Alert>
       )}
 
+      {testSets
+        .filter((ts) => ts.lastAddResult && ts.status === 'COMPLETED')
+        .map((ts) => (
+          <Alert
+            key={ts.id}
+            type="info"
+            dismissible
+            onDismiss={() => {
+              setTestSets((prev) => prev.map((t) => (t.id === ts.id ? { ...t, lastAddResult: null } : t)));
+            }}
+          >
+            <strong>{ts.name}:</strong> {ts.lastAddResult}
+          </Alert>
+        ))}
+
       <Table
         resizableColumns
         wrapLines
@@ -599,6 +809,9 @@ const TestSets = (): React.JSX.Element => {
           setConfirmReplacement(false);
           setWarningMessage('');
           setSelectedBucket(BUCKET_OPTIONS[0]);
+          setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+          setCustomDate('');
+          setCustomTime('00:00:00');
           setNewTestSetDescription('');
         }}
         header="Add Test Set from Pattern"
@@ -612,6 +825,9 @@ const TestSets = (): React.JSX.Element => {
                   setConfirmReplacement(false);
                   setWarningMessage('');
                   setSelectedBucket(BUCKET_OPTIONS[0]);
+                  setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+                  setCustomDate('');
+                  setCustomTime('00:00:00');
                   setNewTestSetDescription('');
                 }}
               >
@@ -644,7 +860,7 @@ const TestSets = (): React.JSX.Element => {
                 setWarningMessage('');
               }}
               placeholder="e.g., lending-package-v1"
-              invalid={newTestSetName && !validateTestSetName(newTestSetName)}
+              invalid={!!newTestSetName && !validateTestSetName(newTestSetName)}
             />
           </FormField>
 
@@ -659,7 +875,7 @@ const TestSets = (): React.JSX.Element => {
               value={newTestSetDescription}
               onChange={({ detail }) => setNewTestSetDescription(detail.value)}
               placeholder="Test set description"
-              invalid={newTestSetDescription && !validateDescription(newTestSetDescription)}
+              invalid={!!newTestSetDescription && !validateDescription(newTestSetDescription)}
             />
           </FormField>
 
@@ -759,6 +975,46 @@ const TestSets = (): React.JSX.Element => {
             </SpaceBetween>
           </FormField>
 
+          {selectedBucket.value === 'input' && (
+            <FormField label="Modified after" description="Optional: only include files modified within this time period">
+              <SpaceBetween size="xs">
+                <Select
+                  selectedOption={selectedTimeFilter}
+                  onChange={({ detail }) => {
+                    setSelectedTimeFilter(detail.selectedOption);
+                    setFileCount(0);
+                  }}
+                  options={TIME_FILTER_OPTIONS}
+                />
+                {selectedTimeFilter.value === 'custom' && (
+                  <SpaceBetween size="xs" direction="horizontal">
+                    <DatePicker
+                      value={customDate}
+                      onChange={({ detail }) => {
+                        setCustomDate(detail.value);
+                        setFileCount(0);
+                      }}
+                      placeholder="YYYY/MM/DD"
+                      openCalendarAriaLabel={(selectedDate) => `Choose date${selectedDate ? `, selected date is ${selectedDate}` : ''}`}
+                    />
+                    <TimeInput
+                      value={customTime}
+                      onChange={({ detail }) => {
+                        setCustomTime(detail.value);
+                        setFileCount(0);
+                      }}
+                      format="hh:mm:ss"
+                      placeholder="HH:mm:ss"
+                    />
+                    <Box variant="small" padding={{ top: 'xs' }}>
+                      UTC
+                    </Box>
+                  </SpaceBetween>
+                )}
+              </SpaceBetween>
+            </FormField>
+          )}
+
           {fileCount > 0 && (
             <Box>
               <Badge color="green">
@@ -826,7 +1082,7 @@ const TestSets = (): React.JSX.Element => {
               value={newTestSetDescription}
               onChange={({ detail }) => setNewTestSetDescription(detail.value)}
               placeholder="Test set description"
-              invalid={newTestSetDescription && !validateDescription(newTestSetDescription)}
+              invalid={!!newTestSetDescription && !validateDescription(newTestSetDescription)}
             />
           </FormField>
 
@@ -877,7 +1133,7 @@ const TestSets = (): React.JSX.Element => {
               type="file"
               accept=".zip"
               onChange={async (e) => {
-                const file = e.target.files[0];
+                const file = e.target.files?.[0];
                 if (file) {
                   setZipFile(file);
 
@@ -900,10 +1156,10 @@ const TestSets = (): React.JSX.Element => {
 
                   // Check if test set already exists
                   try {
-                    const validationResult = (await client.graphql({
-                      query: VALIDATE_TEST_FILE_NAME,
+                    const validationResult = await client.graphql({
+                      query: validateTestFileName,
                       variables: { fileName },
-                    })) as GqlResult;
+                    });
 
                     const validation = validationResult.data.validateTestFileName;
                     if (validation && validation.exists) {
@@ -913,7 +1169,7 @@ const TestSets = (): React.JSX.Element => {
                     }
                   } catch (err) {
                     console.error('Error validating test set name:', err);
-                    const errorMessage = err?.message || err?.errors?.[0]?.message || JSON.stringify(err) || 'Unknown error';
+                    const errorMessage = getErrorMessage(err);
                     setError(`Failed to validate test set name: ${errorMessage}`);
                     setNewTestSetName('');
                     return;
@@ -932,6 +1188,241 @@ const TestSets = (): React.JSX.Element => {
             {zipFile && (
               <Box margin={{ top: 'xs' }}>
                 <Badge color="blue">Test Set Name: {zipFile.name.replace(/\.[^.]*$/g, '').replace(/\.[^.]*$/g, '')}</Badge>
+              </Box>
+            )}
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={showAddDocsPatternModal}
+        onDismiss={() => {
+          setShowAddDocsPatternModal(false);
+          setSelectedBucket(BUCKET_OPTIONS[0]);
+          setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+          setCustomDate('');
+          setCustomTime('00:00:00');
+          setFileCount(0);
+          setFilePattern('');
+          setError('');
+        }}
+        header={`Add Documents to "${selectedItems[0]?.name ?? ''}"`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => {
+                  setShowAddDocsPatternModal(false);
+                  setSelectedBucket(BUCKET_OPTIONS[0]);
+                  setSelectedTimeFilter(TIME_FILTER_OPTIONS[0]);
+                  setCustomDate('');
+                  setCustomTime('00:00:00');
+                  setFileCount(0);
+                  setFilePattern('');
+                  setError('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="primary" loading={loading} onClick={handleAddDocuments} disabled={fileCount === 0}>
+                Add Documents
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          {error && <Alert type="error">{error}</Alert>}
+
+          <FormField label="Source Bucket" description="Select the bucket to search for files">
+            <Select
+              selectedOption={selectedBucket}
+              onChange={({ detail }) => {
+                setSelectedBucket(detail.selectedOption);
+                setFileCount(0);
+              }}
+              options={BUCKET_OPTIONS}
+            />
+          </FormField>
+
+          <FormField
+            label="File Pattern"
+            description={
+              selectedBucket.value === 'testset'
+                ? 'Use * for wildcards. Examples: test-set-name/input/*, test-set-prefix*/input/file-prefix*'
+                : 'Use * for wildcards. Examples: prefix*, folder-name/*, folder-name/prefix*, folder-prefix*/file-prefix*'
+            }
+          >
+            <SpaceBetween direction="horizontal" size="xs">
+              <Input
+                value={filePattern}
+                onChange={({ detail }) => {
+                  setFilePattern(detail.value);
+                  setFileCount(0);
+                }}
+                placeholder={selectedBucket.value === 'testset' ? 'test-set-prefix*/input/*' : 'prefix*/*'}
+              />
+              <Button disabled={!filePattern.trim()} loading={loading} onClick={handleCheckFiles}>
+                Check Files
+              </Button>
+            </SpaceBetween>
+          </FormField>
+
+          {selectedBucket.value === 'input' && (
+            <FormField label="Modified after" description="Optional: only include files modified within this time period">
+              <SpaceBetween size="xs">
+                <Select
+                  selectedOption={selectedTimeFilter}
+                  onChange={({ detail }) => {
+                    setSelectedTimeFilter(detail.selectedOption);
+                    setFileCount(0);
+                  }}
+                  options={TIME_FILTER_OPTIONS}
+                />
+                {selectedTimeFilter.value === 'custom' && (
+                  <SpaceBetween size="xs" direction="horizontal">
+                    <DatePicker
+                      value={customDate}
+                      onChange={({ detail }) => {
+                        setCustomDate(detail.value);
+                        setFileCount(0);
+                      }}
+                      placeholder="YYYY/MM/DD"
+                      openCalendarAriaLabel={(selectedDate) => `Choose date${selectedDate ? `, selected date is ${selectedDate}` : ''}`}
+                    />
+                    <TimeInput
+                      value={customTime}
+                      onChange={({ detail }) => {
+                        setCustomTime(detail.value);
+                        setFileCount(0);
+                      }}
+                      format="hh:mm:ss"
+                      placeholder="HH:mm:ss"
+                    />
+                    <Box variant="small" padding={{ top: 'xs' }}>
+                      UTC
+                    </Box>
+                  </SpaceBetween>
+                )}
+              </SpaceBetween>
+            </FormField>
+          )}
+
+          {fileCount > 0 && (
+            <Box>
+              <Badge color="green">
+                {fileCount} {fileCount === 1 ? 'file' : 'files'} found
+              </Badge>
+            </Box>
+          )}
+
+          {selectedBucket.value === 'input' && (
+            <Alert type="info">Files without matching baseline data in the evaluation bucket will be automatically excluded.</Alert>
+          )}
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={showAddDocsUploadModal}
+        onDismiss={() => {
+          setShowAddDocsUploadModal(false);
+          setAddDocsZipFile(null);
+          setError('');
+          if (addDocsFileInputRef.current) {
+            addDocsFileInputRef.current.value = '';
+          }
+        }}
+        header={`Add Documents to "${selectedItems[0]?.name ?? ''}" from Upload`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => {
+                  setShowAddDocsUploadModal(false);
+                  setAddDocsZipFile(null);
+                  setError('');
+                  if (addDocsFileInputRef.current) {
+                    addDocsFileInputRef.current.value = '';
+                  }
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="primary" loading={loading} onClick={handleAddDocumentsUpload} disabled={!addDocsZipFile}>
+                Upload and Add Documents
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          {error && <Alert type="error">{error}</Alert>}
+
+          <FormField label="Zip File" description="Select a zip file containing documents and baseline data to add">
+            <ExpandableSection
+              headerText="View required file structure"
+              variant="footer"
+              expanded={showFileStructure}
+              onChange={({ detail }) => {
+                setShowFileStructure(detail.expanded);
+                localStorage.setItem('testset-show-file-structure', detail.expanded.toString());
+              }}
+            >
+              <Box margin={{ bottom: 's' }}>
+                <pre
+                  style={{
+                    backgroundColor: '#f8f9fa',
+                    padding: '12px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    overflow: 'auto',
+                  }}
+                >
+                  {`documents.zip
+└── documents/
+    ├── input/
+    │   ├── document1.pdf
+    │   └── document2.pdf
+    └── baseline/
+        ├── document1.pdf/
+        │   └── sections/
+        │       └── 1/
+        │           └── result.json
+        └── document2.pdf/
+            └── sections/
+                └── 1/
+                    └── result.json`}
+                </pre>
+              </Box>
+              <Alert type="info">Each input file must have a corresponding baseline folder with the same name.</Alert>
+            </ExpandableSection>
+            <input
+              ref={addDocsFileInputRef}
+              type="file"
+              accept=".zip"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  if (file.size > MAX_ZIP_SIZE_BYTES) {
+                    setError(`Zip file size (${(file.size / 1024 / 1024 / 1024).toFixed(2)} GB) exceeds maximum limit of 1 GB`);
+                    setAddDocsZipFile(null);
+                    return;
+                  }
+                  setAddDocsZipFile(file);
+                  setError('');
+                } else {
+                  setAddDocsZipFile(null);
+                }
+              }}
+              style={{ width: '100%', padding: '8px' }}
+            />
+            {addDocsZipFile && (
+              <Box margin={{ top: 'xs' }}>
+                <Badge color="blue">
+                  {addDocsZipFile.name} ({(addDocsZipFile.size / 1024 / 1024).toFixed(1)} MB)
+                </Badge>
               </Box>
             )}
           </FormField>

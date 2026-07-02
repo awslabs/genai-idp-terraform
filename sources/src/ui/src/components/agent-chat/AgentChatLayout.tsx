@@ -14,9 +14,8 @@ import {
   Checkbox,
 } from '@cloudscape-design/components';
 import { SupportPromptGroup, LoadingBar } from '@cloudscape-design/chat-components';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
+import SafeMarkdown from '../common/SafeMarkdown';
+
 import useAgentChat from '../../hooks/use-agent-chat';
 import useAppContext from '../../contexts/app';
 import { useAgentChatContext } from '../../contexts/agentChat';
@@ -65,12 +64,11 @@ const AgentChatLayout = ({
   const { messages, isLoading, waitingForResponse, error, sendMessage, clearError, clearChat, loadChatSession } = useAgentChat(
     agentConfig as Record<string, unknown>,
   );
-  const appContext = useAppContext() || ({} as Record<string, unknown>);
-  const user = (appContext as Record<string, unknown>).user as Record<string, unknown> | undefined;
+  const { user } = useAppContext();
 
   const userInitial = useMemo(() => {
-    if (!(user as Record<string, unknown>)?.username) return 'U';
-    return ((user as Record<string, unknown>).username as string).charAt(0).toUpperCase();
+    if (!user?.username) return 'U';
+    return user.username.charAt(0).toUpperCase();
   }, [user]);
 
   useEffect(() => {
@@ -265,9 +263,7 @@ const AgentChatLayout = ({
                                 padding={{ right: 's', top: 's', bottom: 'n' }}
                                 {...({ backgroundColor: 'background-container-content' } as Record<string, unknown>)}
                               >
-                                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                                  {sessionMsg.content as string}
-                                </ReactMarkdown>
+                                <SafeMarkdown>{sessionMsg.content as string}</SafeMarkdown>
                               </Box>
                             );
                           }
@@ -352,11 +348,7 @@ const AgentChatLayout = ({
                 if (message.parsedData) {
                   return (
                     <SpaceBetween size="m">
-                      {message.parsedData.textContent && (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                          {message.parsedData.textContent}
-                        </ReactMarkdown>
-                      )}
+                      {message.parsedData.textContent && <SafeMarkdown>{message.parsedData.textContent}</SafeMarkdown>}
 
                       {message.parsedData.responseType === 'plotData' && (
                         <PlotDisplay plotData={message.parsedData.data as Record<string, unknown>} />
@@ -370,11 +362,7 @@ const AgentChatLayout = ({
                 }
 
                 // Handle regular text messages (preserve existing functionality)
-                return (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                    {contentText}
-                  </ReactMarkdown>
-                );
+                return <SafeMarkdown>{contentText}</SafeMarkdown>;
               })()}
             </div>
           </div>

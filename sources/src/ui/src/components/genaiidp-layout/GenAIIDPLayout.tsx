@@ -7,6 +7,7 @@ import { AppLayout, Flashbar } from '@cloudscape-design/components';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import { DocumentsContext } from '../../contexts/documents';
+import { Document } from '../../types/documents';
 
 import useNotifications from '../../hooks/use-notifications';
 import useSplitPanel from '../../hooks/use-split-panel';
@@ -18,7 +19,8 @@ import DocumentDetails from '../document-details';
 import DocumentsQueryLayout from '../document-kb-query-layout';
 import DocumentsAgentsLayout from '../document-agents-layout/DocumentsAgentsLayout';
 import UploadDocumentPanel from '../upload-document';
-import DiscoveryPanel from '../discovery/DiscoveryPanel';
+import DiscoveryPage from '../discovery/DiscoveryPage';
+import DiscoveryJobDetails from '../discovery/DiscoveryJobDetails';
 import UserManagementLayout from '../user-management/UserManagementLayout';
 import { appLayoutLabels } from '../common/labels';
 
@@ -29,6 +31,8 @@ import SplitPanel from './documents-split-panel';
 import ConfigurationLayout from '../configuration-layout';
 import PricingLayout from '../pricing-layout';
 import CapacityPlanningLayout from '../capacity-planning/CapacityPlanningLayout';
+import CustomModelsLayout from '../custom-models/CustomModelsLayout';
+import { FinetuningJobDetail } from '../custom-models';
 
 import { DOCUMENT_LIST_SHARDS_PER_DAY, PERIODS_TO_LOAD_STORAGE_KEY } from '../document-list/documents-table-config';
 
@@ -43,13 +47,13 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
 
   const notifications = useNotifications();
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [selectedItems, setSelectedItems] = useState([]);
+  const [selectedItems, setSelectedItems] = useState<Document[]>([]);
 
   const getInitialPeriodsToLoad = () => {
     // default to 2 hours - half of one (4hr) shard period
     let periods = 0.5;
     try {
-      const periodsFromStorage = Math.abs(JSON.parse(localStorage.getItem(PERIODS_TO_LOAD_STORAGE_KEY)));
+      const periodsFromStorage = Math.abs(JSON.parse(localStorage.getItem(PERIODS_TO_LOAD_STORAGE_KEY) ?? '0'));
       // prettier-ignore
       if (
         !Number.isFinite(periodsFromStorage)
@@ -73,6 +77,7 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
     documents,
     getDocumentDetailsFromIds,
     isDocumentsListLoading,
+    hasListBeenLoaded,
     periodsToLoad,
     setIsDocumentsListLoading,
     setPeriodsToLoad,
@@ -83,14 +88,13 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
     abortWorkflows,
   } = useGraphQlApi({ initialPeriodsToLoad });
 
-  // eslint-disable-next-line prettier/prettier
   const { splitPanelOpen, onSplitPanelToggle, splitPanelSize, onSplitPanelResize } = useSplitPanel(selectedItems);
 
-  // eslint-disable-next-line react/jsx-no-constructed-context-values
   const documentsContextValue = {
     documents,
     getDocumentDetailsFromIds,
     isDocumentsListLoading,
+    hasListBeenLoaded,
     selectedItems,
     setIsDocumentsListLoading,
     setPeriodsToLoad,
@@ -110,8 +114,8 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
       <AppLayout
         headerSelector="#top-navigation"
         navigation={<Navigation />}
-        navigationOpen={navigationOpen as boolean}
-        onNavigationChange={({ detail }) => (setNavigationOpen as (open: boolean) => void)(detail.open)}
+        navigationOpen={navigationOpen}
+        onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
         breadcrumbs={<Breadcrumbs />}
         notifications={<Flashbar items={notifications as import('@cloudscape-design/components').FlashbarProps.MessageDefinition[]} />}
         tools={<ToolsPanel />}
@@ -131,8 +135,11 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
               <Route path="config" element={<ConfigurationLayout />} />
               <Route path="pricing" element={<PricingLayout />} />
               <Route path="capacity-planning" element={<CapacityPlanningLayout />} />
+              <Route path="custom-models" element={<CustomModelsLayout />} />
+              <Route path="custom-models/:jobId" element={<FinetuningJobDetail />} />
               <Route path="upload" element={<UploadDocumentPanel />} />
-              <Route path="discovery" element={<DiscoveryPanel />} />
+              <Route path="discovery" element={<DiscoveryPage />} />
+              <Route path="discovery/job/:jobId" element={<DiscoveryJobDetails />} />
               <Route path="users" element={<UserManagementLayout />} />
               <Route path="*" element={<DocumentDetails />} />
             </Routes>

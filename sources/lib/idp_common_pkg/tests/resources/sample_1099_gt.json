@@ -1,0 +1,65 @@
+{
+  "Header": {
+    "1096": true,
+    "ID_1": "1",
+    "VOID": true,
+    "CORR_G": true,
+    "CORR_C": null,
+    "Efile": true,
+    "Printed": true
+  },
+  "PayerInformation": {
+    "payers_name": "INTEGRATED DATA MANAGEMENT SYSTEMS, INC",
+    "street_address": "555 BROADHOLLOW ROAD SUITE 273",
+    "city": "MELVILLE",
+    "state": "NY",
+    "ZIP_code": "11747-5001",
+    "telephone_number": "631-249-7744"
+  },
+  "AccountInformation": {
+    "account_number": "D8923484923448",
+    "2nd_TIN": true,
+    "CFSP": "NJ",
+    "USPS_DP": "28",
+    "Foreign": null,
+    "CUSIP_number": "F449538294323",
+    "FATCA": true
+  },
+  "RecipientInformation": {
+    "recipients_name": "JOHN DOE",
+    "street_address": "33 EAST 17 STREET UNIT 2101",
+    "city": "NEW YORK",
+    "state": "NY",
+    "zip_code": "10003",
+    "zip_ext": "2005"
+  },
+  "TransactionDetails": {
+    "description_of_property": "22500 OF 34500 SHARE ABC XYZ",
+    "date_acquired": "03/14/2017",
+    "date_sold_or_disposed": "05/23/2023",
+    "proceeds": "$472,525.00",
+    "cost_or_other_basis": "$132,588.00",
+    "accrued_market_discount": "$0.00",
+    "wash_sale_loss_disallowed": "$0.00",
+    "short_term_gain_or_loss": false,
+    "long_term_gain_or_loss": true,
+    "ordinary" : true,
+    "federal_income_tax_withheld": "$0.00",
+    "noncovered_security": true,
+    "loss_not_allowed_based_on_amount_in_box_1d": null,
+    "reported_to_IRS_gross_proceeds": null,
+    "reported_to_IRS_net_proceeds": null,
+    "profit_or_loss_realized_in_2024_on_closed_contracts": "($2,336.28)",
+    "unrealized_profit_or_loss_on_open_contracts_12312023": "$0.00",
+    "unrealized_profit_or_loss_on_open_contracts_12312024": "$0.00",
+    "aggregate_profit_or_loss_on_contracts": "$0.00",
+    "barter_exchange": "$0.00",
+    "basis_reported_to_IRS": null,
+    "state1" : "NY",
+    "state1_id_number": "13-3249958",
+    "state1_tax_withheld" : "$69,780.00",
+    "state2" : "NJ",
+    "state2_id_number" : "12-9255681001",
+    "state2_tax_withheld" : "$35.00"
+  }
+}

@@ -56,7 +56,7 @@ variable "api" {
     # Agent Analytics (GraphQL resolvers for agent functionality)
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
-      model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+      model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     }), { enabled = false })
 
     # Discovery (Document discovery and classification workflow)
@@ -66,9 +66,9 @@ variable "api" {
 
     # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -101,9 +101,11 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
-    knowledge_base     = { enabled = true } # Enable by default for BDA example
+    # KB enablement is driven by var.create_knowledge_base (default true); this
+    # legacy flag stays off so the two paths do not fight.
+    knowledge_base = { enabled = false }
   }
 
   validation {
@@ -184,7 +186,7 @@ variable "agent_analytics" {
   description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
   type = object({
     enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
   })
   default = null
 }
@@ -218,7 +220,28 @@ variable "process_changes" {
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-1/lending-package-sample/config.yaml"
+  default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+}
+
+variable "additional_config_files" {
+  description = "Extra config versions to seed alongside the default, as version_name => path to a YAML file (relative to this example dir or absolute). Each shows in the UI version dropdown as an editable, non-active version. Manage this list from terraform.tfvars."
+  type        = map(string)
+  default     = {}
+}
+
+# --------------------------------------------------------------------------
+# Optional Knowledge Base backend
+# --------------------------------------------------------------------------
+#
+# When create_knowledge_base = true, this example stands up an OpenSearch
+# Serverless vector collection + Bedrock Knowledge Base that ingests processed
+# documents from the OUTPUT bucket, and wires its ARN into the API's
+# knowledge_base feature. Together with api.chat_with_document this makes the
+# Web UI's document Q&A tools work end-to-end. Mirrors examples/unified-processor.
+variable "create_knowledge_base" {
+  description = "Create the optional Bedrock Knowledge Base backend (OpenSearch Serverless collection, vector index, KB + S3 data source ingesting from the output bucket, and ingestion Lambda) and wire its ARN into the API's knowledge_base feature. Default on."
+  type        = bool
+  default     = true
 }
 
 # DEPRECATED: Knowledge Base variables (use 'api.knowledge_base' instead)
@@ -248,6 +271,29 @@ variable "tags" {
 
 variable "force_layer_rebuild" {
   description = "Force rebuild of Lambda layers regardless of requirements changes"
+  type        = bool
+  default     = false
+}
+
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
   type        = bool
   default     = false
 }

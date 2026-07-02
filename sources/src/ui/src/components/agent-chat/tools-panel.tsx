@@ -15,7 +15,7 @@ import {
   Modal,
   Header,
 } from '@cloudscape-design/components';
-import listAvailableAgents from '../../graphql/queries/listAvailableAgents';
+import { listAvailableAgents } from '../../graphql/generated';
 
 const client = generateClient();
 const logger = new ConsoleLogger('AgentChatToolsPanel');
@@ -39,7 +39,7 @@ const ToolsPanel = (): React.JSX.Element => {
       try {
         setLoading(true);
         const response = await client.graphql({
-          query: listAvailableAgents as unknown as string,
+          query: listAvailableAgents,
         });
 
         const agentsList = ((response as { data: Record<string, unknown> })?.data?.listAvailableAgents as Agent[]) || [];
@@ -150,11 +150,29 @@ const ToolsPanel = (): React.JSX.Element => {
           <ul>
             <li>
               <a
-                href="https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md"
+                href="https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/agent-companion-chat/"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                GenAI IDP Accelerator Documentation
+                Agent Companion Chat
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/custom-MCP-agent/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Custom MCP Agents
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/mcp-server/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                MCP Server
               </a>
             </li>
           </ul>

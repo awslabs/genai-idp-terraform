@@ -15,7 +15,12 @@ Usage:
 """
 
 import argparse
+import sys
 import time
+from pathlib import Path
+
+# Add parent to path for development
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from idp_sdk import IDPClient
 
@@ -46,7 +51,7 @@ def main():
     print(f"Processing documents from: {args.directory}")
 
     # Submit batch for processing
-    batch_result = client.batch.run(
+    batch_result = client.batch.process(
         source=args.directory,
         batch_prefix="sdk-example",
         file_pattern="*.pdf",

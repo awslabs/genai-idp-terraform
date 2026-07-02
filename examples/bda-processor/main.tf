@@ -24,10 +24,13 @@ provider "awscc" {
 
 # Local values for backward compatibility
 locals {
-  # Determine knowledge base configuration with backward compatibility
-  # New api.knowledge_base takes precedence over deprecated enable_knowledge_base
-  knowledge_base_enabled = var.api.knowledge_base.enabled != null ? var.api.knowledge_base.enabled : (
-    var.enable_knowledge_base != null ? var.enable_knowledge_base : var.api.knowledge_base.enabled
+  # KB enablement is driven by var.create_knowledge_base (default on) for parity
+  # with examples/unified-processor. The legacy api.knowledge_base.enabled /
+  # enable_knowledge_base opt-ins still force it on when set.
+  knowledge_base_enabled = var.create_knowledge_base || (
+    var.api.knowledge_base.enabled != null ? var.api.knowledge_base.enabled : (
+      var.enable_knowledge_base != null ? var.enable_knowledge_base : false
+    )
   )
 
   knowledge_base_model_id = var.api.knowledge_base.model_id != null ? var.api.knowledge_base.model_id : (
@@ -56,6 +59,9 @@ resource "random_string" "suffix" {
 # Local values
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
+
+  rbac_enabled     = try(var.rbac.enabled, false)
+  admin_group_name = local.rbac_enabled ? try(module.genai_idp_accelerator.rbac_group_names["Admin"], "Admin") : one(aws_cognito_user_group.admin_group[*].name)
 }
 
 # Create KMS key for encryption
@@ -397,7 +403,7 @@ resource "aws_cognito_user" "admin_user" {
 
 # Admin group creation (optional)
 resource "aws_cognito_user_group" "admin_group" {
-  count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
+  count        = var.admin_email != null && var.admin_email != "" && !local.rbac_enabled ? 1 : 0
   name         = "Admin"
   user_pool_id = aws_cognito_user_pool.user_pool.id
   description  = "Administrators"
@@ -408,7 +414,7 @@ resource "aws_cognito_user_group" "admin_group" {
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
-  group_name   = aws_cognito_user_group.admin_group[0].name
+  group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
 }
 
@@ -417,6 +423,15 @@ locals {
   config_file_path = var.config_file_path
   config_yaml      = file(local.config_file_path)
   config           = yamldecode(local.config_yaml)
+
+  # Additional config versions, managed from terraform.tfvars as
+  # version_name => path-to-YAML. Each becomes an editable, non-active version
+  # in the UI. Paths are relative to this example dir (or absolute). tfvars
+  # cannot call yamldecode/file, so the decode happens here.
+  additional_configurations = {
+    for name, p in var.additional_config_files :
+    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+  }
 }
 
 # Deploy the GenAI IDP Accelerator with BDA processor
@@ -434,7 +449,8 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config = local.config
+    config                    = local.config
+    additional_configurations = local.additional_configurations
   }
 
   # Use external user identity instead of creating new one
@@ -483,11 +499,11 @@ module "genai_idp_accelerator" {
     enable_capacity_planning        = var.api.enable_capacity_planning
     enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
     enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
-    knowledge_base = var.api.knowledge_base.enabled ? {
+    knowledge_base = local.knowledge_base_enabled ? {
       enabled            = true
-      knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
-      model_id           = var.api.knowledge_base.model_id
-      embedding_model_id = var.api.knowledge_base.embedding_model_id
+      knowledge_base_arn = aws_bedrockagent_knowledge_base.knowledge_base[0].arn
+      model_id           = local.knowledge_base_model_id
+      embedding_model_id = local.knowledge_base_embedding_model_id
       } : {
       enabled = false
     }
@@ -500,6 +516,8 @@ module "genai_idp_accelerator" {
   discovery          = var.discovery
   chat_with_document = var.chat_with_document
   process_changes    = var.process_changes
+
+  rbac = var.rbac
   knowledge_base = var.enable_knowledge_base != null ? {
     enabled            = var.enable_knowledge_base
     knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
@@ -523,6 +541,7 @@ module "genai_idp_accelerator" {
 
   # General configuration
   prefix                       = var.prefix
+  seed_managed_configs         = var.seed_managed_configs
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days

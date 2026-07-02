@@ -1,0 +1,28 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+query GetFinetuningJob($jobId: ID!) {
+  getFinetuningJob(jobId: $jobId) {
+    jobId
+    jobName
+    status
+    baseModelId
+    customModelName
+    customModelArn
+    testSetId
+    testSetName
+    createdAt
+    updatedAt
+    completedAt
+    errorMessage
+    trainingMetrics
+    hyperparameters
+    trainingDataConfig
+    validationDataConfig
+    outputDataConfig
+    deploymentId
+    deploymentStatus
+    deploymentEndpoint
+    provisionedModelArn
+  }
+}

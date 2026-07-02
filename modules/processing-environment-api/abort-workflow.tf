@@ -3,7 +3,7 @@
 #
 # Abort Workflow sub-feature (v0.4.10+)
 # Always-on (no feature flag) — abortWorkflow is a core API operation.
-# Sourced from CDK nested appsync tree (DEC-007).
+# Sourced from the CDK nested appsync tree.
 
 # =============================================================================
 # IAM Role: abort_workflow
@@ -73,7 +73,7 @@ resource "aws_cloudwatch_log_group" "abort_workflow" {
 
 data "archive_file" "abort_workflow" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/abort_workflow_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/abort_workflow_resolver"
   output_path = "${path.module}/../../.terraform/archives/abort_workflow.zip"
 }
 

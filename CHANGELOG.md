@@ -6,6 +6,295 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.5.12-tf.0] - 2026-07-02
+
+### Summary
+
+Upgrade from `0.4.16-tf.2` to the upstream IDP v0.5.12 line. The
+vendored `sources/` snapshot is refreshed to v0.5.12 and the three version markers
+are realigned (`IDP_VERSION` → `0.5.12`, `sources/VERSION` → `0.5.12`, `VERSION` →
+`0.5.12-tf.0`).
+
+The headline change is the **per-pattern processor façade** model: a single shared
+internal engine (`modules/processors/unified-processor`) with three thin public
+façades (`bda-processor`, `bedrock-llm-processor`, `sagemaker-udop-processor`) that
+delegate to it, mirroring the CDK accelerator's `UnifiedDocumentProcessor` plus
+per-pattern processor constructs. Auxiliary features are restructured as
+**feature-plugins** wired through an `enabled_feature_contracts` contract, with the
+legacy `var.api.*` flags still forwarded for a transition window. On top of that,
+this release adds the production-readiness subsystems (RBAC, external SAML/OIDC
+federation, private-network VPC endpoints) and a batch of additive parity drop-ins
+(inference-profile IAM, reporting column, model enablement, MCP rename,
+chat-with-document streaming, Python 3.12 runtimes, config-shape schema flags,
+version-check resolver, W2 dataset deployer, tracking-table GSI).
+
+This release carries breaking changes to module internal addresses (processor façade
+refactor, MCP rename) and a VPC-endpoints example refactor, all of which ship
+`moved {}` blocks so a normal upgrade plans **0 destroy / 0 create** for preservable
+resources; see [Breaking Changes](#breaking-changes) and the migration notes below.
+Per-subsystem defaults are documented under each feature below; some subsystems
+(Chat-with-Document, Knowledge Base, discovery, managed-config seeding) default on at
+the module level, while others (RBAC, IdP federation, private networking, the
+version-check resolver, the W2 deployer, and the GSI backfill) default off.
+
+No file under `sources/` is modified outside the snapshot refresh.
+
+### New Features & Changes
+
+#### Processor façades over a shared engine
+
+- New internal engine `modules/processors/unified-processor/` wires all Lambda
+  archives, state machine, and config from `sources/patterns/unified/...`. It is
+  not a public input surface — façades instantiate it as a nested
+  `module "engine"` and route on a required `use_bda` input (BDA invoke/completion
+  steps gated on `use_bda = true`; the LLM pipeline branch is always present).
+- `bda-processor`, `bedrock-llm-processor`, and `sagemaker-udop-processor` are now
+  thin façades delegating to the engine:
+  - `bda-processor` creates BDA Blueprints + Data Automation Project and delegates
+    with `use_bda = true` + `bda_project_arn`.
+  - `bedrock-llm-processor` creates no BDA resources and delegates with
+    `use_bda = false`.
+  - `sagemaker-udop-processor` (Pattern 3 **retained**) delegates with
+    `use_bda = false` and bridges classification to a consumer-supplied SageMaker
+    endpoint via the native SageMaker classification backend
+    (`classification_backend = "sagemaker"`); it creates no SageMaker
+    hosting/training.
+- Root wiring instantiates the three façades count-gated from
+  `var.bda_processor` / `var.bedrock_llm_processor` / `var.sagemaker_udop_processor`,
+  with an exactly-one-façade validation replacing the old
+  `check "single_processor_required"`.
+
+#### Feature-plugin wiring
+
+- Self-contained feature submodules — `modules/features/mcp-integration`,
+  `modules/features/chat-with-document`, and `modules/features/hitl` — are composed
+  into `processing-environment-api` via an `enabled_feature_contracts` contract
+  (resolvers, IAM statement fragments, env wiring, optional GraphQL SDL) using
+  `for_each`. This mirrors the CDK `api.enable(feature)` idiom.
+- Legacy `var.api.*` flags (`enable_mcp`, the chat flag, `enable_hitl`, …) are
+  forwarded via root `locals` to enable the matching feature submodule; `var.api.*`
+  is still accepted as a transition path.
+
+#### RBAC + `Users` table feature-plugin submodule
+
+- New self-contained feature-plugin submodule `modules/features/rbac/` (composed
+  into `processing-environment-api` via the feature-plugin contract — mirrors the
+  CDK `api.enable(userManagement)` idiom).
+- Provisions the four Cognito user-pool groups (`Admin`, `Author`, `Reviewer`,
+  `Viewer`) with default-or-override names, a `Users` DynamoDB table (KMS-encrypted
+  via `encryption_key_arn`, point-in-time recovery enabled) storing user id, email,
+  persona, status, timestamps, and `allowedConfigVersions`, and a least-privilege
+  user-management Lambda.
+- Server-side **Reviewer document filtering** and **`allowedConfigVersions` scoping**
+  are enforced in the resolver/Lambda layer (not the web UI), so the restriction
+  cannot be bypassed by a direct API call; the profile query exposes
+  `allowedConfigVersions`.
+- The user-management role grants only `dynamodb:{GetItem,PutItem,UpdateItem,DeleteItem,
+  Query,Scan}` on the `Users` table (+ its KMS key) and the Cognito admin actions
+  required for group membership, scoped to the user-pool ARN.
+- Default-off: with `var.rbac` unset, no RBAC resources are created and the
+  pre-existing single-tenant Cognito authorization behavior is preserved.
+
+#### External SAML/OIDC IdP federation feature-plugin submodule
+
+- New self-contained feature-plugin submodule `modules/features/idp-federation/`
+  (composed through the same contract as RBAC).
+- Configures the Cognito identity provider (SAML via metadata URL/file, OIDC via
+  issuer + client) on the user pool, additively appending the external provider to
+  the user-pool client's `supported_identity_providers` while keeping `COGNITO`.
+- **OIDC client-secret resolver**: the secret is supplied only as a reference
+  (Secrets Manager ARN / SSM name), resolved at apply time and passed solely into
+  `provider_details.client_secret` — never stored as a plaintext module input or a
+  non-sensitive output.
+- Provisions a **group-mapping trigger Lambda** that maps external IdP groups/claims
+  to the four RBAC group names at sign-in.
+- Default-off: with `var.idp_federation` unset, no federation resources are created
+  and the user pool stays configured for direct Cognito authentication.
+
+#### Private Network Deployment + standalone `vpc-endpoints` module
+
+- New standalone module `modules/vpc-endpoints/` provisioning ~16 interface
+  endpoints (ssm, ssmmessages, ec2messages, logs, monitoring, kms, sts, sqs, states,
+  bedrock, bedrock-runtime, bedrock-agent-runtime, appsync-api, codebuild, lambda,
+  events, textract) plus the S3 and DynamoDB gateway endpoints. Each endpoint is
+  **individually toggleable**, and `service_name` is built from the current region
+  (`com.amazonaws.${region}.${service}`) so the module is **partition-aware**
+  (incl. `us-gov-*`).
+- Root **private-network wiring**: `var.vpc_subnet_ids` / `var.vpc_security_group_ids`
+  thread VPC-capable resources into the supplied private subnets/SGs and instantiate
+  `module.vpc_endpoints` for the services the enabled processors/features need.
+- Root **PRIVATE endpoint-gap `check {}`**: fails the plan when
+  `var.api.visibility == "PRIVATE"` and the `appsync-api` interface endpoint is not
+  provisioned, plus a companion best-effort check surfacing an enabled feature's
+  missing required endpoint with a remediation pointer.
+
+#### Additive parity drop-ins
+
+- **Bedrock inference-profile IAM.** `bedrock:GetInferenceProfile` +
+  `application-inference-profile/*` added to the unified engine IAM.
+- **Glue reporting `config_version` column.** Additive column on the reporting table.
+- **Default extraction model bump.** Off the retired Claude 3.5 Sonnet to
+  `us.anthropic.claude-sonnet-4-5-20250929-v1:0` across modules and examples.
+- **Claude Opus 4.7 enablement.** Added to model picklists/validation/pricing, plus
+  an Opus 4.7 sample tfvars.
+- **MCP integration submodule.** Renames `agentcore_analytics_processor` →
+  `agentcore_mcp_handler`, provisions the OAuth resource server, preserves the
+  GovCloud guard, and stays default-off.
+- **Chat-with-Document async streaming resolver(s).** Honors a `chat:` config block
+  with `summarization.*` fallback and default `us.anthropic.claude-opus-4-7:1m`.
+- **Python 3.12 runtimes.** Lambda runtimes moved to Python 3.12; layer builds use
+  pypdfium2 (PyMuPDF removed) via buildspec-only changes (no `sources/` edits).
+- **`AppSyncVisibility` at the root API layer.** `var.api.visibility`
+  (`GLOBAL` / `PRIVATE`) is threaded into `processing-environment-api`, which sets
+  `aws_appsync_graphql_api.visibility` and validates the value. Unset defaults to
+  `GLOBAL`.
+- **`BedrockHubRoleArn` cross-account assume-role.** Optional assume-role for a
+  centralized Bedrock "hub" account, added on the unified-processor engine execution
+  role(s) so all three façades inherit it; scoped to exactly `var.bedrock_hub_role_arn`
+  when set, fully additive when unset.
+- **`managed_config` baselines seeded as `managed: true` rows.** The configuration
+  seeder seeds the baselines under `sources/config_library/managed_config/*/config.yaml`
+  as rows carrying `Managed = true`. Additive: new managed rows only — consumer-authored
+  rows are never overwritten or deleted.
+- **Per attribute / per section schema flags.** `x-aws-idp-extraction-model`,
+  `x-aws-idp-exclude-from-processing` (with optional reason), and
+  `x-aws-idp-page-types` / `x-aws-idp-source-page-types` are carried through the
+  configuration seeder unchanged (runtime enforces them; no new resources).
+- **Version check resolver.** A `getLatestPublishedVersion` AppSync query backed by a
+  Lambda that reads the latest published IDP version from a public artifacts S3
+  bucket, so the web UI can show an "update available" indicator. Gated on
+  `var.api.public_artifacts_bucket` (default empty), with a least-privilege read role
+  scoped to exactly that bucket.
+- **W2 dataset deployer.** A Test Studio dataset deployer mirroring the FCC deployer,
+  gated by `var.api.enable_w2_dataset` (default false) and only when Test Studio is
+  enabled.
+- **`TypeDateIndex` GSI on the tracking table.** Lets the list resolvers query
+  documents, test runs, and test sets by type and time range instead of scanning the
+  whole table. Created by default; new and updated items populate it automatically.
+- **Tracking GSI backfill.** An operator-triggered Step Functions backfill that
+  populates the new GSI attributes on items predating the index. Gated by
+  `var.tracking.enable_gsi_backfill` (default false), least-privilege scoped, and
+  never runs on `apply`.
+
+### Fixed
+
+- **SageMaker UDOP classification.** The processor classifies through idp_common's
+  native SageMaker backend, which calls the endpoint directly with the `input_image`
+  and `input_textract` payload the UDOP model expects. A `classification_backend`
+  input was added to the unified processor (default `bedrock`, so BDA and Bedrock-LLM
+  are unaffected); the SageMaker-UDOP façade sets it to `sagemaker` and the engine
+  grants the classification Lambda `sagemaker:InvokeEndpoint` on the supplied endpoint.
+- **First-apply count race.** Gated feature IAM policies (hook-inference,
+  composed-feature IAM) on plan-time-known flags so a clean apply no longer aborts
+  with an "Invalid count argument" error when names derive from a not-yet-known random
+  suffix.
+- **Chat-with-Document on empty system prompt.** The system-prompt lookup falls back
+  correctly when the configured value is empty instead of leaving the chat request
+  stuck behind queue state.
+- **Processor OCR layer.** The shared idp_common layer is built with the `ocr` extra
+  on all processor paths, so the OCR step has `pypdfium2` available.
+- **BDA routing default.** The BDA façade forces `use_bda = true` onto its seeded
+  default config so it routes to the BDA branch out of the box; a consumer config that
+  already sets `use_bda` still wins.
+
+### Tooling
+
+- **`make security` (tfsec) reworked to a per-module scan.** tfsec 1.28.x cannot
+  parse Terraform 1.5+ `check {}` / `removed {}` blocks — such a block anywhere in a
+  scanned root module is a fatal parse abort before result filtering, so the previous
+  `tfsec . --exclude-path main.tf` invocation never actually skipped those files. The
+  target now scans each module directory individually (the only exclusion form that
+  works in 1.28.x), skipping directories whose `.tf` files carry `check {}`/`removed {}`
+  glue. `make all` now completes green.
+- The new modules pass tfsec strictly (`rbac`, `idp-federation`, `vpc-endpoints`,
+  `processor-configuration`). Pre-existing findings are scanned with `--soft-fail`
+  (printed, non-blocking) for a fixed allowlist of modules that carried findings before
+  the v0.5.12 work; every module not on that allowlist is scanned strictly.
+
+### Breaking Changes
+
+- **Processor façade refactor (module internal address change).** Per-pattern
+  processor internals now live under `module.<facade>[0].module.engine.*`. `moved {}`
+  blocks remap the old `module.bda_processor.*` / `module.bedrock_llm_processor.*` /
+  `module.sagemaker_udop_processor.*` addresses into the new façade→engine nested
+  addresses (SQS, DDB, ECR, CloudWatch) — target **0 destroy / 0 create** for the
+  moved resources. Some BDA/UDOP-only resources (ECR/CodeBuild and other
+  pattern-specific resources) are unavoidable recreates.
+- **Pattern 3 monolith replaced.** The former monolithic SageMaker-UDOP module is
+  replaced by the new `sagemaker-udop-processor` façade over the shared engine.
+- **MCP Lambda rename.** `agentcore_analytics_processor` → `agentcore_mcp_handler`.
+  A `moved {}` block preserves the resource (and its `function_name`) into the
+  feature-submodule address.
+- **`var.api` flags object → feature-plugin wiring.** Auxiliary features are now
+  enabled through the feature-plugin contract. `var.api.*` flags are still forwarded
+  during the transition window.
+- **Removed orphaned `pattern2-hitl` trio.** The
+  `pattern2-hitl-{process,wait,status-update}` handlers in `modules/human-review/`
+  referenced `sources/` paths that never existed upstream; they are removed (HITL is
+  the feature-plugin submodule + `complete_section_review`).
+- **Removed legacy synchronous chat module.** The in-API
+  `modules/processing-environment-api/chat-with-document/` submodule is removed and
+  replaced by the self-contained `modules/features/chat-with-document/` feature-plugin
+  (async streaming, composed via `enabled_feature_contracts`).
+- **Removed standalone Error Analyzer Lambdas.** The `error_analyzer` and
+  `error_analyzer_resolver` Lambdas (and their IAM roles, log groups, VPC attachments,
+  and AppSync datasource) were removed upstream at v0.5.12. Error analysis is now
+  provided by the unified agents framework (`Error-Analyzer-Agent`), surfaced via the
+  generic agent resolvers. `removed {}` blocks (with `destroy = false`) drop the
+  orphaned resources from state without destroying real infrastructure;
+  `var.enable_error_analyzer` is retained as a deprecated no-op.
+- **`vpc-endpoints` example refactor (module internal address change).** The
+  `bedrock-llm-processor-vpc` example consumes `modules/vpc-endpoints/` in place of its
+  inline `aws_vpc_endpoint.*` resources, and sets `AppSyncVisibility = "PRIVATE"`. The
+  change ships `moved {}` blocks mapping each old inline endpoint address into the
+  module, so a normal plan shows **0 destroy / 0 create** for the moved endpoints.
+- **Tracking table `TypeDateIndex` GSI added in place.** Adding the GSI (and its
+  `ItemType` / `InitialEventTime` attributes) is a non-destructive in-place update in
+  the AWS provider — no resource is replaced and no `moved {}` block is needed. Still,
+  confirm the table reports 0 destroy / 0 create before applying.
+
+### Migration
+
+New root variables `var.rbac`, `var.idp_federation`, `var.private_network`,
+`var.api.visibility`, `var.bedrock_hub_role_arn`, and `var.tracking` are introduced.
+These default off, so leaving them unset does not enable those subsystems. Note that
+some other subsystems (Chat-with-Document, Knowledge Base, discovery, and
+managed-config seeding) default on at the module level; review the per-feature
+defaults above and set the corresponding variables if you want the previous behavior.
+
+Key steps:
+
+1. **Upgrade the module** and run `terraform plan`. The bundled `moved {}` blocks
+   remap the per-pattern processor internals into the new façade→engine addresses
+   (`module.<facade>[0].module.engine.*`), the renamed MCP Lambda
+   (`agentcore_analytics_processor` → `agentcore_mcp_handler`), and the VPC-endpoints
+   example addresses automatically — no manual `terraform state mv` is required for the
+   preservable resources.
+2. **Confirm the move is non-destructive.** The moved resources (SQS, DynamoDB wiring,
+   ECR repo, CloudWatch resources, MCP Lambda, VPC endpoints) MUST report **0 destroy /
+   0 create** before you apply. If they show destroy/create, stop and re-check the
+   `moved {}` mapping against your state addresses. Back up state first:
+   `terraform state pull > backup.tfstate`.
+3. **Accept the unavoidable recreates.** Some BDA/UDOP-only resources (ECR/CodeBuild
+   and other pattern-specific resources) are recreated.
+4. **`TypeDateIndex` GSI backfill (optional).** For items that predate the GSI to
+   appear in `TypeDateIndex` queries, opt in and run the backfill; `apply` provisions
+   the machinery but never starts a run:
+
+   ```bash
+   # tfvars:  tracking = { enable_gsi_backfill = true }
+   terraform apply
+   aws stepfunctions start-execution \
+     --state-machine-arn <state_machine_arn> \
+     --input '{"tableName":"<tracking_table_name>","totalSegments":10}'
+   ```
+
+5. **No tfvars changes required for the transition.** `var.api.*` flags are still
+   forwarded to the new feature-plugins, so existing tfvars keep working; migrate to
+   feature-plugin wiring at your own pace.
+
+---
+
 ## [0.4.16-tf.2] - 2026-05-27
 
 ### Summary
@@ -74,7 +363,7 @@ workflow, dataset deployers, and Pattern 3 deprecation.
   `aws_sagemaker_human_task_ui`, `create_a2i_resources` Lambda, `get-workforce-url` Lambda) have
   been removed from `modules/human-review/`. The `enable_hitl` and `private_workteam_arn` variables
   are also removed from that module. HITL is now built into `processing-environment-api` via the
-  `complete_section_review` Lambda. See the [migration guide](docs/migration-guide.md) for
+  `complete_section_review` Lambda. See the migration notes for
   `terraform state rm` commands.
 
 - **`base_layer_arn` required**: All processor modules (`bda-processor`, `bedrock-llm-processor`,

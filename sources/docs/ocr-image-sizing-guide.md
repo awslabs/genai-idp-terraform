@@ -1,3 +1,7 @@
+---
+title: "OCR Image Sizing Best Practices Guide"
+---
+
 # OCR Image Sizing Best Practices Guide
 
 ## Overview

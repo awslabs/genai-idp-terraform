@@ -28,6 +28,12 @@ resource "aws_s3_bucket" "evaluation_baseline_bucket" {
   tags   = var.tags
 }
 
+# Working bucket — required by the default-on HITL (complete_section_review) feature
+resource "aws_s3_bucket" "working_bucket" {
+  bucket = "${var.prefix}-working-bucket-${random_string.suffix.result}"
+  tags   = var.tags
+}
+
 # Create DynamoDB tables
 module "tracking_table" {
   source = "../../modules/tracking-table"
@@ -75,6 +81,7 @@ module "processing_environment_api" {
   tracking_table_arn = module.tracking_table.table_arn
   input_bucket_arn   = aws_s3_bucket.input_bucket.arn
   output_bucket_arn  = aws_s3_bucket.output_bucket.arn
+  working_bucket_arn = aws_s3_bucket.working_bucket.arn
 
   # Optional configuration
   configuration_table_arn        = module.configuration_table.table_arn

@@ -82,19 +82,12 @@ locals {
     null
   )
 
-  # Determine IDP common layer extras based on processor type
-  # Keep the common layer lightweight - heavy dependencies should be in function-specific layers
-  base_extras = ["core", "appsync"]
-  processor_extras = {
-    "bda"            = local.processor_type == "bda" && try(var.bda_processor.summarization.enabled, false) ? ["docs_service"] : []
-    "bedrock-llm"    = ["ocr", "classification", "extraction", "assessment", "docs_service"] # Include all extras needed by bedrock-llm processor functions based on CDK implementation
-    "sagemaker-udop" = ["ocr", "docs_service"]                                               # Use ocr instead of sagemaker, docs_service for API integration
-  }
-
-  idp_common_layer_extras = concat(
-    local.base_extras,
-    local.processor_type != null ? local.processor_extras[local.processor_type] : []
-  )
+  # All processor façades share one unified engine and one idp-common layer, so
+  # the layer carries the same extras for every processor type. `ocr` brings
+  # pypdfium2, required by the OCR step on all paths.
+  idp_common_layer_extras = local.processor_type != null ? [
+    "core", "appsync", "ocr", "classification", "extraction", "assessment", "docs_service"
+  ] : ["core", "appsync"]
 
   # Determine name prefix
   name_prefix = var.prefix != "" ? "${var.prefix}-${random_string.suffix.result}" : "genai-idp-${random_string.suffix.result}"

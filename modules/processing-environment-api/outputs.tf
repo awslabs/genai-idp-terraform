@@ -28,7 +28,7 @@ output "realtime_url" {
 
 output "api_key" {
   description = "The API key for the GraphQL API (if API key authentication is enabled)"
-  value       = var.authorization_config == null || try(var.authorization_config.default_authorization.authorization_type, "API_KEY") == "API_KEY" ? aws_appsync_api_key.api_key[0].key : null
+  value       = length(aws_appsync_api_key.api_key) > 0 ? aws_appsync_api_key.api_key[0].key : null
   sensitive   = true
 }
 
@@ -85,15 +85,10 @@ output "discovery_bucket_arn" {
   value       = var.discovery.enabled ? module.discovery[0].discovery_bucket_arn : null
 }
 
-output "chat_with_document_function_name" {
-  description = "Name of the Chat with Document Lambda function (if chat is enabled)"
-  value       = var.chat_with_document.enabled ? module.chat_with_document[0].chat_with_document_resolver_function_name : null
-}
-
-output "chat_with_document_function_arn" {
-  description = "ARN of the Chat with Document Lambda function (if chat is enabled)"
-  value       = var.chat_with_document.enabled ? module.chat_with_document[0].chat_with_document_resolver_function_arn : null
-}
+# Chat with Document moved to the `chat-with-document` feature submodule
+# (modules/features/chat-with-document) in v0.5.12-tf.0. The root reads chat
+# Lambda outputs from `module.chat_with_document` directly; the API module no
+# longer surfaces them (the legacy synchronous resolver was removed upstream).
 # Agent Analytics outputs
 output "agent_request_handler_function_arn" {
   description = "ARN of the Agent Request Handler Lambda function (if agent analytics is enabled)"
@@ -121,28 +116,9 @@ output "agent_table_name" {
 }
 
 # MCP Integration outputs
-output "mcp_enabled" {
-  description = "Whether MCP Integration is effectively enabled (false in GovCloud)"
-  value       = local.enable_mcp_effective
-}
-
-output "mcp_gateway_endpoint" {
-  description = "MCP server endpoint URL (AgentCore Gateway endpoint)"
-  value       = local.enable_mcp_effective ? try(aws_cloudformation_stack.agentcore_gateway[0].outputs["GatewayEndpoint"], null) : null
-}
-
-output "mcp_gateway_id" {
-  description = "AgentCore Gateway ID"
-  value       = local.enable_mcp_effective ? try(aws_cloudformation_stack.agentcore_gateway[0].outputs["GatewayId"], null) : null
-}
-
-output "mcp_oauth_client_id" {
-  description = "Cognito app client ID for MCP OAuth 2.0 authentication"
-  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_client[0].id, null) : null
-}
-
-output "mcp_oauth_client_secret" {
-  description = "Cognito app client secret for MCP OAuth 2.0 authentication"
-  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_client[0].client_secret, null) : null
-  sensitive   = true
-}
+#
+# MCP moved to the `mcp-integration` feature submodule (modules/features/
+# mcp-integration) in v0.5.12-tf.0 per the feature-plugin model. The root reads
+# MCP outputs (gateway endpoint, OAuth client, etc.) from
+# `module.mcp_integration` directly; they are no longer surfaced by the API
+# module.

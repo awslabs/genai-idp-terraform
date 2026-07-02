@@ -68,22 +68,37 @@ class TestConfigManagement:
                 os.unlink(temp_path)
 
     def test_upload_config(self, client, stack_name):
-        """Test uploading config to stack."""
+        """Test uploading config to stack.
+
+        Uses a dedicated test version ('test-config') to avoid overwriting the
+        real 'default' configuration. The test version is deleted after the test.
+        """
+        test_version = "test-config"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             temp_path = f.name
 
         try:
-            # Create config
+            # Create a minimal config template
             client.config.create(features="min", output=temp_path)
 
-            # Upload it
-            result = client.config.upload(config_file=temp_path, stack_name=stack_name)
+            # Upload to the isolated test version (never touches 'default')
+            result = client.config.upload(
+                config_file=temp_path,
+                config_version=test_version,
+                stack_name=stack_name,
+            )
 
             assert hasattr(result, "success")
             assert result.success is True
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
+
+            # Clean up the test version so it doesn't linger in the stack
+            try:
+                client.config.delete(config_version=test_version, stack_name=stack_name)
+            except Exception:
+                pass  # Best-effort cleanup; don't fail the test if delete fails
 
     def test_download_config(self, client, stack_name):
         """Test downloading config from stack."""

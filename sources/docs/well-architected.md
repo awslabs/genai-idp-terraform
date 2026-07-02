@@ -1,3 +1,7 @@
+---
+title: "AWS Well-Architected Framework Assessment"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -31,7 +35,7 @@ The GenAI Intelligent Document Processing (GenAIIDP) Accelerator demonstrates st
 
 - **Defense in Depth**: Multiple security layers including IAM roles with least privilege, encryption at rest, and secure API access.
 - **Enterprise IAM Governance**: Comprehensive support for IAM permissions boundaries to comply with organizational Service Control Policies (SCPs) that mandate permissions boundaries on all IAM roles.
-- **Content Safety**: Integration with Amazon Bedrock Guardrails to enforce content policies, block sensitive information, and prevent model misuse.
+- **Content Safety**: Integration with Amazon Bedrock Guardrails to enforce content policies, block sensitive information, prevent model misuse, and enable [Automated Reasoning Checks](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-automated-reasoning.html) for formal verification of model outputs.
 - **Authentication**: Cognito user pools with configurable password policies and MFA support.
 - **Authorization**: Fine-grained access controls for different components and resources.
 - **Data Protection**: S3 bucket encryption, DynamoDB encryption, and secure transmission of data.
@@ -47,16 +51,22 @@ The GenAI Intelligent Document Processing (GenAIIDP) Accelerator demonstrates st
   - For production environments, use `LogLevel: WARN` or `LogLevel: ERROR` in your CloudFormation deployment parameters
   - Implement log filtering and masking for any essential INFO-level logs that must be retained
   - Regularly audit CloudWatch log groups to ensure no sensitive information is being captured
-- **CloudFront Security Enhancement**: 
+- **CloudFront Security Enhancement** (CloudFront hosting mode): 
   - Create a custom domain with a custom ACM certificate for the CloudFront distribution
   - Enforce TLS 1.2 or greater protocol in the CloudFront security policy
   - Configure secure response headers (X-Content-Type-Options, X-Frame-Options, Content-Security-Policy)
   - Restrict viewer access using signed URLs or cookies for sensitive content
+- **ALB Hosting Security** (ALB hosting mode — see [ALB Hosting](./alb-hosting.md)):
+  - Use internal ALB scheme to restrict access to VPC-connected users
+  - Configure `ALBAllowedCIDRs` to limit ingress to specific network ranges
+  - Use a CA-signed or ACM-issued certificate (avoid self-signed in production)
+  - Enable VPC Flow Logs to monitor traffic to the ALB and S3 VPC endpoint
 - **Additional WAF Protection**: 
-  - Deploy a WAF WebACL with GLOBAL scope in the us-east-1 region
-  - Associate this WAF with the CloudFront distribution to protect the UI
+  - Deploy a WAF WebACL with GLOBAL scope in the us-east-1 region (CloudFront) or REGIONAL scope (ALB)
+  - Associate this WAF with the CloudFront distribution or ALB to protect the UI
   - Enable core rule sets (AWS Managed Rules) including protections against XSS and SQL injection
   - Create custom rules for specific application threats
+- **Sensitive Data Discovery**: Consider enabling [Amazon Macie](https://docs.aws.amazon.com/macie/latest/user/what-is-macie.html) on document S3 buckets to automatically discover and classify sensitive data (PII, financial data, credentials) in processed documents. Macie operates as a decoupled service requiring no changes to the accelerator.
 - Consider implementing VPC endpoints for enhanced network isolation of sensitive services.
 - Add automated security scanning in the CI/CD pipeline.
 - Implement more granular data access controls based on document classification.
@@ -108,7 +118,7 @@ The GenAI Intelligent Document Processing (GenAIIDP) Accelerator demonstrates st
 
 ### Recommendations
 
-- Implement more granular cost allocation tags to track expenses by document type, workflow, or customer.
+- Implement more granular cost allocation tags to track expenses by document type, workflow, or customer. Bedrock [Application Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-create.html) can be used to tag model invocations for cost attribution — see [Cost Attribution with Application Inference Profiles](./cost-calculator.md#cost-attribution-with-bedrock-application-inference-profiles).
 - Add cost anomaly detection to identify unexpected usage patterns.
 - Consider implementing tiered storage strategies for processed documents based on access patterns.
 - Evaluate model selection based on cost-performance tradeoffs for different document types.

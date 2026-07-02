@@ -40,7 +40,9 @@ class DynamoDBClient:
             region: Optional AWS region. If not provided, will be read from AWS_REGION env var.
         """
         self.table_name = table_name or os.environ.get("TRACKING_TABLE")
-        self.region = region or os.environ.get("AWS_REGION")
+        self.region = (
+            region or os.environ.get("AWS_REGION") or boto3.Session().region_name
+        )
 
         if not self.table_name:
             raise ValueError(
@@ -49,7 +51,8 @@ class DynamoDBClient:
 
         if not self.region:
             raise ValueError(
-                "AWS region must be provided or set in AWS_REGION environment variable"
+                "AWS region must be provided, set in AWS_REGION environment variable, "
+                "or configured in AWS CLI (~/.aws/config)"
             )
 
         try:
@@ -189,6 +192,19 @@ class DynamoDBClient:
         except BotoCoreError as e:
             logger.error(f"BotoCore error during get_item: {str(e)}")
             raise DynamoDBError(f"BotoCore error: {str(e)}")
+
+    def batch_get_items(self, keys: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Batch get items from the DynamoDB table (max 100 keys)."""
+        if not keys:
+            return []
+        try:
+            response = self.dynamodb.batch_get_item(
+                RequestItems={self.table.name: {"Keys": keys}}
+            )
+            return response.get("Responses", {}).get(self.table.name, [])
+        except (ClientError, BotoCoreError) as e:
+            logger.error(f"DynamoDB batch_get_item failed: {e}")
+            raise DynamoDBError(f"Batch get failed: {e}")
 
     def transact_write_items(
         self, transact_items: List[Dict[str, Any]]

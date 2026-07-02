@@ -94,8 +94,8 @@ class DocumentOperation:
         Returns:
             DocumentStatus with processing information
         """
-        from idp_sdk.core.batch_processor import BatchProcessor
-        from idp_sdk.core.progress_monitor import ProgressMonitor
+        from idp_sdk._core.batch_processor import BatchProcessor
+        from idp_sdk._core.progress_monitor import ProgressMonitor
 
         name = self._client._require_stack(stack_name)
         processor = BatchProcessor(stack_name=name, region=self._client._region)
@@ -258,7 +258,7 @@ class DocumentOperation:
         Returns:
             DocumentReprocessResult with reprocess status
         """
-        from idp_sdk.core.rerun_processor import RerunProcessor
+        from idp_sdk._core.rerun_processor import RerunProcessor
 
         name = self._client._require_stack(stack_name)
         step_str = step.value if isinstance(step, RerunStep) else step
@@ -385,7 +385,7 @@ class DocumentOperation:
         Returns:
             DocumentListResult with documents and optional next_token
         """
-        from idp_sdk.core.document_processor import DocumentProcessor
+        from idp_sdk._core.document_processor import DocumentProcessor
 
         name = self._client._require_stack(stack_name)
 
@@ -429,7 +429,7 @@ class DocumentOperation:
         Returns:
             DocumentMetadata with extracted fields and metadata
         """
-        from idp_sdk.core.document_processor import DocumentProcessor
+        from idp_sdk._core.document_processor import DocumentProcessor
 
         name = self._client._require_stack(stack_name)
 

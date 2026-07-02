@@ -9,35 +9,30 @@ import TestSets from './TestSets';
 import TestExecutions from './TestExecutions';
 import TestResults from './TestResults';
 import TestComparison from './TestComparison';
+import ToolsPanel from './tools-panel';
 import { appLayoutLabels } from '../common/labels';
 import useAppContext from '../../contexts/app';
 
 interface TestRunItem {
   testRunId: string;
   testSetName: string;
-  context?: string;
-  startTime: Date;
-  filesCount?: number;
-  configVersion?: string;
+  status: string;
+  isActive?: boolean;
+  progress?: number;
+  filesCount: number;
+  createdAt: string;
+  completedAt: string | null;
+  context: string;
+  configVersion?: string | null;
 }
 
 const TestStudioLayout = (): React.JSX.Element => {
-  const ctx = useAppContext();
-  const navigationOpen = ctx?.navigationOpen as boolean;
-  const setNavigationOpen = ctx?.setNavigationOpen as (open: boolean) => void;
-  const activeTestRuns = (ctx?.activeTestRuns ?? []) as TestRunItem[];
-  const addTestRun = ctx?.addTestRun as (
-    testRunId: string,
-    testSetName: string,
-    context: string,
-    filesCount: number,
-    configVersion?: string,
-  ) => void;
-  const removeTestRun = ctx?.removeTestRun as (testRunId: string) => void;
+  const { navigationOpen, setNavigationOpen, activeTestRuns, addTestRun, removeTestRun } = useAppContext();
   const location = useLocation();
   const [activeTabId, setActiveTabId] = useState('sets');
-  const [timePeriodHours, setTimePeriodHours] = useState(2);
-  const [selectedTestItems, setSelectedTestItems] = useState([]);
+  const [timePeriodHours, setTimePeriodHours] = useState(336); // Default: 2 weeks
+  const [selectedTestItems, setSelectedTestItems] = useState<TestRunItem[]>([]);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   // Handle URL tab parameter
   useEffect(() => {
@@ -49,7 +44,7 @@ const TestStudioLayout = (): React.JSX.Element => {
   }, [location.search]);
 
   const handleTestStart = (testRunId: string, testSetName: string, context: string, filesCount: number, configVersion?: string): void => {
-    addTestRun(testRunId, testSetName, context, filesCount, configVersion);
+    addTestRun(testRunId, testSetName, context, filesCount, configVersion ?? '');
   };
 
   const handleTestComplete = (testRunId: string): void => {
@@ -79,7 +74,7 @@ const TestStudioLayout = (): React.JSX.Element => {
       case 'results': {
         const urlParams = new URLSearchParams(location.search);
         const testRunId = urlParams.get('testRunId');
-        return <TestResults testRunId={testRunId} />;
+        return <TestResults testRunId={testRunId ?? ''} />;
       }
       case 'comparison': {
         const urlParams = new URLSearchParams(location.search);
@@ -98,6 +93,9 @@ const TestStudioLayout = (): React.JSX.Element => {
       navigation={<Navigation />}
       navigationOpen={navigationOpen}
       onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
+      tools={<ToolsPanel />}
+      toolsOpen={toolsOpen}
+      onToolsChange={({ detail }) => setToolsOpen(detail.open)}
       content={
         <ContentLayout
           header={

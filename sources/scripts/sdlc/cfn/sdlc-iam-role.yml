@@ -7,7 +7,7 @@ Description: 'CloudFormation template to create Limited IAM Policy and SDLC Role
 Parameters:
   BuilderRoleName:
     Type: String
-    Default: idp-sdlc-role
+    Default: genaiic-sdlc-role
     Description: Name for the Builder Role
 
 Resources:
@@ -91,9 +91,15 @@ Resources:
             reason: "PowerUserAccess is required for this SDLC role to perform necessary deployment operations"
           - id: W28
             reason: "Explicit name required for cross-stack references and predictable resource naming"
+      # checkov:skip=CKV_AWS_62:PowerUserAccess is required for SDLC pipeline deployment operations
+      security-matrix:
+        rules_to_suppress:
+          - id: EC2-002
+            reason: "PowerUserAccess is required for SDLC pipeline deployment operations"
     Properties:
       RoleName: !Ref BuilderRoleName
       Description: 'Role for application builders with PowerUser and Limited IAM access'
+      MaxSessionDuration: 7200  # 2 hours for long-running CI/CD operations
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

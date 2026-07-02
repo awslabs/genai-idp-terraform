@@ -1,13 +1,14 @@
 # Classification Service Configuration
 classification:
-  top_p: '0.1'
+  top_p: "0.0"
   max_tokens: '4096'
   top_k: '5'
-  temperature: '0.0'
+  temperature: "0.0"
   model: us.amazon.nova-pro-v1:0
   system_prompt: >-
     You are a document classification expert who can analyze and classify multiple documents and their page boundaries within a document package from various domains. Your task is to determine the document type based on its content and structure, using the provided document type definitions. Your output must be valid JSON according to the requested format.
   classificationMethod: textbasedHolisticClassification
+  sectionSplitting: llm_determined
   task_prompt: >-
     <task-description>
 

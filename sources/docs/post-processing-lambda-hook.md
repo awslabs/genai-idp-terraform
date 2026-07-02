@@ -1,3 +1,7 @@
+---
+title: "Post-Processing Lambda Hook"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -15,17 +19,57 @@ The GenAIIDP solution supports an optional post-processing Lambda hook that enab
 2. **EventBridge Integration**
    - The solution automatically publishes a custom event to EventBridge
    - Event contains complete document processing details and output locations
-   - EventBridge rule matches the event pattern and triggers your Lambda function
+   - EventBridge rule matches the event pattern and triggers the decompression lambda
 
-3. **Custom Processing**
-   - Your Lambda function receives the document processing event
-   - Function can access extraction results, confidence scores, and metadata
+3. **Document Decompression** (New as of compression feature)
+   - An intermediate lambda function in the IDP stack receives the event
+   - If the document is compressed, it decompresses it using `idp_common.models.Document.load_document()`
+   - The decompressed document is reconstructed into the original payload format
+   - The decompression lambda then invokes your custom post-processing lambda
+
+4. **Custom Processing**
+   - Your Lambda function receives the document processing event with a **decompressed** document
+   - No need to import `idp_common` or handle decompression logic
+   - Function can directly access extraction results, confidence scores, and metadata
    - Implement custom logic for notifications, data transformation, or system integration
 
-4. **Error Handling**
+5. **Error Handling**
    - Built-in retry logic for transient failures
    - Dead letter queue for failed invocations
    - CloudWatch monitoring and alerting
+
+## Architecture
+
+```mermaid
+flowchart LR
+    SF[Step Function<br/>Workflow<br/>SUCCEEDED] --> EB[EventBridge<br/>Rule]
+    EB --> DL[Decompression<br/>Lambda<br/>in Stack]
+    DL --> |Check if<br/>compressed| DL
+    DL --> |If compressed:<br/>decompress from<br/>WorkingBucket| S3[(S3<br/>Working<br/>Bucket)]
+    DL --> |Invoke with<br/>decompressed<br/>payload| CPL[Your Custom<br/>Post-Processing<br/>Lambda]
+    DL --> |Handle<br/>errors| DLQ[Dead Letter<br/>Queue]
+    
+    style DL fill:#90EE90
+    style CPL fill:#87CEEB
+    style S3 fill:#FFE4B5
+```
+
+**Key Components:**
+- **EventBridge Rule**: Triggers on StepFunction SUCCEEDED status
+- **Decompression Lambda** (in IDP stack): Handles document decompression transparently
+- **Your Custom Lambda** (external): Receives decompressed payload, no `idp_common` dependency needed
+- **S3 Working Bucket**: Temporary storage for compressed documents
+- **Dead Letter Queue**: Captures failed invocations for retry/analysis
+
+## Important Notes
+
+> **Backward Compatibility**: The decompression lambda was introduced to handle document compression feature added in a previous release. Your custom post-processing lambda receives the document in its **original uncompressed format**, maintaining backward compatibility.
+
+> **No External Dependencies**: Your custom post-processing lambda does **not** need to import the `idp_common` package. The IDP stack's decompression lambda handles all compression/decompression internally.
+
+> **Payload Format**: The event payload structure remains unchanged from the original implementation. All document data, including sections, pages, and attributes, is provided in the standard format documented below.
+
+> **Performance**: The decompression step adds minimal latency (typically < 1 second) and is transparent to your custom lambda function.
 
 ## Configuration
 
@@ -50,59 +94,40 @@ When configured, the solution automatically:
 
 ## Event Payload Structure
 
-Your Lambda function receives a comprehensive event payload containing all document processing details:
+Your Lambda function receives an EventBridge event from AWS Step Functions with the following structure:
 
 ```json
 {
   "version": "0",
-  "id": "12345678-1234-1234-1234-123456789012",
-  "detail-type": "IDP Document Processing Complete",
-  "source": "aws.idp.processing",
+  "id": "09904ff3-f768-572b-6f5f-904d4d15e600",
+  "detail-type": "Step Functions Execution Status Change",
+  "source": "aws.states",
   "account": "123456789012",
   "time": "2024-01-15T14:30:00Z",
   "region": "us-east-1",
+  "resources": [
+    "arn:aws:states:us-east-1:123456789012:execution:IDP-Workflow:doc_12345"
+  ],
   "detail": {
-    "documentId": "doc_12345",
-    "inputBucket": "my-input-bucket",
-    "inputKey": "documents/invoice-001.pdf",
-    "outputBucket": "my-output-bucket",
-    "outputKey": "results/invoice-001.pdf.json",
-    "status": "COMPLETED",
-    "processingTimeMs": 45230,
-    "startTime": "2024-01-15T14:29:15Z",
-    "endTime": "2024-01-15T14:30:00Z",
-    "workflowExecutionArn": "arn:aws:states:us-east-1:123456789012:execution:IDP-Workflow:doc_12345",
-    "pattern": "Pattern2",
-    "documentClass": "Invoice",
-    "numPages": 3,
-    "sections": [
-      {
-        "sectionId": "section-1",
-        "sectionType": "Invoice",
-        "pageRange": "1-3",
-        "extractionResultUri": "s3://my-output-bucket/extraction/section-1.json",
-        "assessmentResultUri": "s3://my-output-bucket/assessment/section-1.json",
-        "attributes": {
-          "invoice_number": "INV-2024-001",
-          "vendor_name": "ABC Corporation",
-          "total_amount": "$1,250.00"
-        }
-      }
-    ],
-    "summaryReportUri": "s3://my-output-bucket/summary/invoice-001.pdf.md",
-    "evaluationResultUri": "s3://my-output-bucket/evaluation/invoice-001.pdf.json",
-    "metadata": {
-      "fileSize": 2048576,
-      "mimeType": "application/pdf",
-      "uploadTimestamp": "2024-01-15T14:28:00Z"
+    "executionArn": "arn:aws:states:us-east-1:123456789012:execution:IDP-Workflow:doc_12345",
+    "stateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:IDP-Workflow",
+    "name": "doc_12345",
+    "status": "SUCCEEDED",
+    "startDate": 1705329600000,
+    "stopDate": 1705329660000,
+    "input": "{\"document\": {\"document_id\": \"invoice-001.pdf\", ...}}",
+    "output": "{\"document\": {\"id\": \"invoice-001.pdf\", \"input_bucket\": \"my-input-bucket\", \"input_key\": \"invoice-001.pdf\", \"output_bucket\": \"my-output-bucket\", \"status\": \"EVALUATING\", \"num_pages\": 3, \"sections\": [{\"section_id\": \"1\", \"classification\": \"Invoice\", \"page_ids\": [\"1\", \"2\", \"3\"], \"extraction_result_uri\": \"s3://my-output-bucket/invoice-001.pdf/sections/1/result.json\", \"attributes\": {\"invoice_number\": \"INV-2024-001\", \"vendor_name\": \"ABC Corporation\", \"total_amount\": \"$1,250.00\"}}], \"metering\": {\"OCR/textract/analyze_document\": {\"pages\": 3}, \"Classification/bedrock/claude-3-haiku\": {\"inputTokens\": 1234, \"outputTokens\": 56}}, \"summary_report_uri\": \"s3://my-output-bucket/invoice-001.pdf/summary/summary.md\"}}",
+    "inputDetails": {
+      "included": true
     },
-    "costs": {
-      "totalTokens": 15420,
-      "estimatedCostUSD": 0.23
+    "outputDetails": {
+      "included": true
     }
   }
 }
 ```
+
+**Note**: The `input` and `output` fields are JSON-encoded strings that need to be parsed. The decompression lambda automatically handles this and provides your custom lambda with fully decompressed document data.
 
 ## Lambda Function Implementation
 
@@ -124,26 +149,43 @@ def lambda_handler(event: Dict[str, Any], context) -> Dict[str, Any]:
     Post-processing Lambda hook for IDP document completion events
     """
     try:
-        # Extract document details from EventBridge event
+        # Parse the output from Step Functions
         detail = event['detail']
-        document_id = detail['documentId']
-        document_class = detail['documentClass']
-        output_bucket = detail['outputBucket']
-        output_key = detail['outputKey']
+        output_data = json.loads(detail['output'])
+        document = output_data['document']
         
-        logger.info(f"Processing completed document: {document_id} (class: {document_class})")
+        # Extract document details
+        document_id = document['id']
+        input_bucket = document['input_bucket']
+        input_key = document['input_key']
+        output_bucket = document['output_bucket']
+        num_pages = document['num_pages']
+        sections = document.get('sections', [])
         
-        # Download and parse the extraction results
-        extraction_results = download_json_from_s3(output_bucket, output_key)
+        logger.info(f"Processing completed document: {document_id} ({num_pages} pages, {len(sections)} sections)")
         
-        # Implement your custom processing logic here
-        process_document_results(detail, extraction_results)
+        # Process each section
+        for section in sections:
+            section_id = section['section_id']
+            classification = section['classification']
+            extraction_uri = section.get('extraction_result_uri')
+            
+            logger.info(f"Section {section_id}: {classification}")
+            
+            # Download extraction results if available
+            if extraction_uri:
+                extraction_results = download_from_s3_uri(extraction_uri)
+                process_section_results(section, extraction_results)
+        
+        # Access metering data for cost tracking
+        metering = document.get('metering', {})
+        log_cost_data(document_id, metering)
         
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'message': f'Successfully processed document {document_id}',
-                'documentClass': document_class
+                'sectionsProcessed': len(sections)
             })
         }
         
@@ -152,68 +194,62 @@ def lambda_handler(event: Dict[str, Any], context) -> Dict[str, Any]:
         # Re-raise to trigger retry logic
         raise e
 
-def download_json_from_s3(bucket: str, key: str) -> Dict[str, Any]:
-    """Download and parse JSON from S3"""
+def download_from_s3_uri(s3_uri: str) -> Dict[str, Any]:
+    """Download and parse JSON from S3 URI"""
     try:
+        # Parse S3 URI (format: s3://bucket/key)
+        parts = s3_uri.replace('s3://', '').split('/', 1)
+        bucket = parts[0]
+        key = parts[1]
+        
         response = s3_client.get_object(Bucket=bucket, Key=key)
         content = response['Body'].read().decode('utf-8')
         return json.loads(content)
     except Exception as e:
-        logger.error(f"Failed to download {bucket}/{key}: {str(e)}")
+        logger.error(f"Failed to download {s3_uri}: {str(e)}")
         raise e
 
-def process_document_results(detail: Dict[str, Any], results: Dict[str, Any]):
-    """
-    Implement your custom processing logic here
-    Examples:
-    - Send notifications
-    - Update external systems
-    - Transform data for downstream systems
-    - Trigger additional workflows
-    """
-    document_class = detail['documentClass']
+def process_section_results(section: Dict[str, Any], extraction_results: Dict[str, Any]):
+    """Process extraction results for a section"""
+    classification = section['classification']
+    attributes = extraction_results.get('attributes', {})
     
-    if document_class == "Invoice":
-        process_invoice(detail, results)
-    elif document_class == "Bank Statement":
-        process_bank_statement(detail, results)
+    if classification == "Invoice":
+        process_invoice(attributes)
+    elif classification == "Bank-Statement":
+        process_bank_statement(attributes)
     else:
-        logger.info(f"No specific processing for document class: {document_class}")
+        logger.info(f"No specific processing for classification: {classification}")
 
-def process_invoice(detail: Dict[str, Any], results: Dict[str, Any]):
+def process_invoice(attributes: Dict[str, Any]):
     """Process invoice-specific logic"""
-    # Example: Extract key invoice fields
-    sections = detail.get('sections', [])
-    for section in sections:
-        attributes = section.get('attributes', {})
-        invoice_number = attributes.get('invoice_number')
-        vendor_name = attributes.get('vendor_name')
-        total_amount = attributes.get('total_amount')
+    invoice_number = attributes.get('invoice_number')
+    vendor_name = attributes.get('vendor_name')
+    total_amount = attributes.get('total_amount')
+    
+    logger.info(f"Invoice: {invoice_number} from {vendor_name} for {total_amount}")
+    
+    # Example integrations:
+    # - Update ERP system
+    # - Send approval notifications
+    # - Trigger payment workflows
         
-        logger.info(f"Invoice processed: {invoice_number} from {vendor_name} for {total_amount}")
-        
-        # Example integrations:
-        # - Update ERP system
-        # - Send approval notifications
-        # - Trigger payment workflows
-        # - Update vendor management system
-        
-def process_bank_statement(detail: Dict[str, Any], results: Dict[str, Any]):
+def process_bank_statement(attributes: Dict[str, Any]):
     """Process bank statement-specific logic"""
-    # Example: Process transaction data
-    sections = detail.get('sections', [])
-    for section in sections:
-        attributes = section.get('attributes', {})
-        account_number = attributes.get('account_number')
-        transactions = attributes.get('transactions', [])
-        
-        logger.info(f"Bank statement processed: Account {account_number} with {len(transactions)} transactions")
-        
-        # Example integrations:
-        # - Update accounting system
-        # - Reconcile transactions
-        # - Generate financial reports
-        # - Trigger fraud detection
+    account_number = attributes.get('account_number')
+    transactions = attributes.get('transactions', [])
+    
+    logger.info(f"Bank statement: Account {account_number} with {len(transactions)} transactions")
+    
+    # Example integrations:
+    # - Update accounting system
+    # - Reconcile transactions
+    # - Generate financial reports
+
+def log_cost_data(document_id: str, metering: Dict[str, Any]):
+    """Log cost/metering data for tracking"""
+    for context, metrics in metering.items():
+        logger.info(f"Document {document_id} - {context}: {metrics}")
 ```
 
 
@@ -222,56 +258,72 @@ def process_bank_statement(detail: Dict[str, Any], results: Dict[str, Any]):
 ### Enterprise System Integration
 
 ```python
-def integrate_with_erp_system(document_data: Dict[str, Any]):
+def integrate_with_erp_system(event: Dict[str, Any]):
     """Integrate processed documents with ERP systems"""
     
-    # Example: SAP integration
-    if document_data['documentClass'] == 'Invoice':
-        attributes = extract_invoice_attributes(document_data)
-        
-        # Create vendor invoice in SAP
-        sap_payload = {
-            'vendor_id': map_vendor_name_to_id(attributes['vendor_name']),
-            'invoice_number': attributes['invoice_number'],
-            'amount': parse_currency(attributes['total_amount']),
-            'due_date': parse_date(attributes['due_date']),
-            'gl_account': determine_gl_account(attributes)
-        }
-        
-        # Post to SAP via API
-        post_to_sap_api(sap_payload)
-        
-        # Update document status in tracking system
-        update_document_status(document_data['documentId'], 'ERP_INTEGRATED')
+    # Parse document from event
+    output_data = json.loads(event['detail']['output'])
+    document = output_data['document']
+    
+    # Example: SAP integration for Invoice sections
+    for section in document.get('sections', []):
+        if section['classification'] == 'Invoice':
+            # Download extraction results
+            extraction_uri = section.get('extraction_result_uri')
+            if extraction_uri:
+                attributes = download_from_s3_uri(extraction_uri).get('attributes', {})
+                
+                # Create vendor invoice in SAP
+                sap_payload = {
+                    'vendor_id': map_vendor_name_to_id(attributes.get('vendor_name')),
+                    'invoice_number': attributes.get('invoice_number'),
+                    'amount': parse_currency(attributes.get('total_amount')),
+                    'due_date': parse_date(attributes.get('due_date')),
+                    'gl_account': determine_gl_account(attributes)
+                }
+                
+                # Post to SAP via API
+                post_to_sap_api(sap_payload)
+                
+                # Update document status in tracking system
+                update_document_status(document['id'], 'ERP_INTEGRATED')
 ```
 
 ### Automated Workflow Triggers
 
 ```python
-def trigger_approval_workflow(document_data: Dict[str, Any]):
+def trigger_approval_workflow(event: Dict[str, Any]):
     """Trigger approval workflows based on document content"""
     
-    if document_data['documentClass'] == 'Contract':
-        attributes = extract_contract_attributes(document_data)
-        contract_value = parse_currency(attributes.get('contract_value', '0'))
-        
-        # Route based on contract value
-        if contract_value > 100000:
-            trigger_executive_approval(document_data)
-        elif contract_value > 10000:
-            trigger_manager_approval(document_data)
-        else:
-            auto_approve_contract(document_data)
+    # Parse document from event
+    output_data = json.loads(event['detail']['output'])
+    document = output_data['document']
+    
+    for section in document.get('sections', []):
+        if section['classification'] == 'Contract':
+            # Download extraction results
+            extraction_uri = section.get('extraction_result_uri')
+            if extraction_uri:
+                attributes = download_from_s3_uri(extraction_uri).get('attributes', {})
+                contract_value = parse_currency(attributes.get('contract_value', '0'))
+                
+                # Route based on contract value
+                if contract_value > 100000:
+                    trigger_executive_approval(document, section, attributes)
+                elif contract_value > 10000:
+                    trigger_manager_approval(document, section, attributes)
+                else:
+                    auto_approve_contract(document, section, attributes)
 
-def trigger_executive_approval(document_data: Dict[str, Any]):
+def trigger_executive_approval(document: Dict[str, Any], section: Dict[str, Any], attributes: Dict[str, Any]):
     """Trigger executive approval workflow"""
-    # Send to approval system
     approval_payload = {
-        'document_id': document_data['documentId'],
+        'document_id': document['id'],
+        'section_id': section['section_id'],
         'approval_level': 'EXECUTIVE',
         'urgency': 'HIGH',
-        'summary': get_document_summary(document_data),
-        'key_terms': extract_key_contract_terms(document_data)
+        'contract_value': attributes.get('contract_value'),
+        'summary_uri': section.get('attributes', {}).get('summary_uri')
     }
     
     send_to_approval_system(approval_payload)
@@ -280,33 +332,42 @@ def trigger_executive_approval(document_data: Dict[str, Any]):
 ### Real-time Notifications
 
 ```python
-def send_intelligent_notifications(document_data: Dict[str, Any]):
+def send_intelligent_notifications(event: Dict[str, Any]):
     """Send context-aware notifications based on document content"""
     
-    document_class = document_data['documentClass']
-    confidence_scores = extract_confidence_scores(document_data)
+    # Parse document from event
+    output_data = json.loads(event['detail']['output'])
+    document = output_data['document']
     
-    # High-priority notifications for low confidence
-    if any(score < 0.7 for score in confidence_scores.values()):
-        send_quality_alert(document_data, confidence_scores)
-    
-    # Document-specific notifications
-    if document_class == 'Invoice':
-        send_invoice_notifications(document_data)
-    elif document_class == 'Medical Record':
-        send_medical_record_notifications(document_data)
+    # Check for low confidence alerts
+    for section in document.get('sections', []):
+        confidence_alerts = section.get('confidence_threshold_alerts', [])
+        
+        if confidence_alerts:
+            send_quality_alert(document, section, confidence_alerts)
+        
+        # Classification-specific notifications
+        classification = section['classification']
+        if classification == 'Invoice':
+            send_invoice_notification(document, section)
+        elif classification == 'Bank-Statement':
+            send_bank_statement_notification(document, section)
 
-def send_quality_alert(document_data: Dict[str, Any], confidence_scores: Dict[str, float]):
+def send_quality_alert(document: Dict[str, Any], section: Dict[str, Any], alerts: list):
     """Send alerts for low-confidence extractions"""
-    low_confidence_fields = {
-        field: score for field, score in confidence_scores.items() 
-        if score < 0.7
-    }
-    
     alert_message = {
         'type': 'QUALITY_ALERT',
-        'document_id': document_data['documentId'],
-        'low_confidence_fields': low_confidence_fields,
+        'document_id': document['id'],
+        'section_id': section['section_id'],
+        'classification': section['classification'],
+        'low_confidence_fields': [
+            {
+                'attribute': alert['attribute_name'],
+                'confidence': alert['confidence'],
+                'threshold': alert['confidence_threshold']
+            }
+            for alert in alerts
+        ],
         'requires_review': True
     }
     
@@ -317,17 +378,28 @@ def send_quality_alert(document_data: Dict[str, Any], confidence_scores: Dict[st
 ### Data Pipeline Integration
 
 ```python
-def feed_data_pipeline(document_data: Dict[str, Any]):
+def feed_data_pipeline(event: Dict[str, Any]):
     """Feed extracted data into analytics and ML pipelines"""
+    
+    # Parse document from event
+    detail = event['detail']
+    output_data = json.loads(detail['output'])
+    document = output_data['document']
+    
+    # Calculate processing time
+    start_date = detail['startDate']
+    stop_date = detail['stopDate']
+    processing_time_ms = stop_date - start_date
     
     # Transform data for analytics
     analytics_record = {
-        'document_id': document_data['documentId'],
-        'processing_date': document_data['endTime'],
-        'document_class': document_data['documentClass'],
-        'processing_time_ms': document_data['processingTimeMs'],
-        'extraction_confidence': calculate_average_confidence(document_data),
-        'extracted_fields': flatten_extracted_attributes(document_data)
+        'document_id': document['id'],
+        'execution_arn': detail['executionArn'],
+        'processing_time_ms': processing_time_ms,
+        'num_pages': document['num_pages'],
+        'num_sections': len(document.get('sections', [])),
+        'status': document.get('status'),
+        'metering': document.get('metering', {})
     }
     
     # Send to data lake

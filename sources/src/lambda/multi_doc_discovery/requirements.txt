@@ -1,0 +1,3 @@
+# Multi-Document Discovery Lambda requirements
+# Most dependencies come from Lambda layers (idp_common, numpy, etc.)
+# This file lists only additional runtime dependencies not in layers

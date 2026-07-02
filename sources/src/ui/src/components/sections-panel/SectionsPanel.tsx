@@ -17,6 +17,7 @@ import {
   Textarea,
   Modal,
   Alert,
+  Badge,
 } from '@cloudscape-design/components';
 import type { ButtonDropdownProps } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
@@ -27,9 +28,8 @@ import { getSectionConfidenceAlertCount, getSectionConfidenceAlerts } from '../c
 import useConfiguration from '../../hooks/use-configuration';
 import useSettingsContext from '../../contexts/settings';
 import useUserRole from '../../hooks/use-user-role';
-import processChanges from '../../graphql/queries/processChanges';
-import getFileContents from '../../graphql/queries/getFileContents';
-import skipAllSectionsReviewMutation from '../../graphql/mutations/skipAllSectionsReview';
+import { processChanges, getFileContents, skipAllSectionsReview } from '../../graphql/generated';
+import { parseHITLReviewHistory } from '../../graphql/awsjson-parsers';
 
 const client = generateClient();
 const logger = new ConsoleLogger('SectionsPanel');
@@ -42,6 +42,11 @@ interface SectionItem {
   OriginalId?: string | null;
   isModified?: boolean;
   isNew?: boolean;
+  // True when the class is marked with x-aws-idp-exclude-from-processing=true
+  // (e.g., static instruction pages). No extraction / assessment / summary
+  // is performed for excluded sections; the UI renders a "Skipped" badge.
+  Excluded?: boolean;
+  ExclusionReason?: string | null;
 }
 
 interface PageItem {
@@ -79,7 +84,21 @@ interface SectionsPanelProps {
 
 // Cell renderer components
 const IdCell = ({ item }: { item: SectionItem }): React.JSX.Element => <span>{item.Id}</span>;
-const ClassCell = ({ item }: { item: SectionItem }): React.JSX.Element => <span>{item.Class}</span>;
+
+// Render the class name, annotated with a "Skipped" badge when the section's
+// classification was marked x-aws-idp-exclude-from-processing=true in config.
+const ClassCell = ({ item }: { item: SectionItem }): React.JSX.Element => {
+  if (item.Excluded) {
+    return (
+      <SpaceBetween direction="horizontal" size="xs">
+        <span style={{ color: '#5f6b7a' }}>{item.Class}</span>
+        <Badge color="grey">Skipped: {item.ExclusionReason || 'excluded'}</Badge>
+      </SpaceBetween>
+    );
+  }
+  return <span>{item.Class}</span>;
+};
+
 const PageIdsCell = ({ item }: { item: SectionItem }): React.JSX.Element => <span>{item.PageIds.join(', ')}</span>;
 
 // Confidence alerts cell showing only count
@@ -121,10 +140,23 @@ const ActionsCell = ({
   onViewerOpen,
   onViewerClose,
   isViewerOpen = false,
+}: {
+  item: SectionItem;
+  pages: PageItem[];
+  documentItem: DocumentItem | undefined;
+  mergedConfig: Record<string, unknown> | null | undefined;
+  isSectionCompleted: boolean;
+  isReviewerOnly: boolean;
+  isEditModeEnabled: boolean;
+  allSections?: SectionItem[];
+  currentSectionIndex?: number;
+  onNavigateToSection: (index: number) => void;
+  onViewerOpen: () => void;
+  onViewerClose: () => void;
+  isViewerOpen?: boolean;
 }) => {
   const [isDownloading, setIsDownloading] = React.useState(false);
-  const { settings: rawSettings } = useSettingsContext() || {};
-  const settings = rawSettings as Record<string, unknown> | undefined;
+  const { settings } = useSettingsContext();
 
   // Disable View/Edit only if reviewer and no review owner (review not claimed)
   // View Data should always be enabled, Edit Mode requires claimed review
@@ -135,7 +167,7 @@ const ActionsCell = ({
   const isBaselineAvailable = documentItem?.evaluationStatus === 'BASELINE_AVAILABLE' || documentItem?.evaluationStatus === 'COMPLETED';
 
   // Construct baseline URI by replacing output bucket with evaluation baseline bucket
-  const constructBaselineUri = (outputUri) => {
+  const constructBaselineUri = (outputUri: string | undefined) => {
     if (!outputUri) return null;
 
     // Get actual bucket names from settings
@@ -174,14 +206,14 @@ const ActionsCell = ({
   };
 
   // Generate download filename
-  const generateFilename = (documentKey, sectionId, type) => {
+  const generateFilename = (documentKey: string, sectionId: string, type: string) => {
     // Sanitize document key by replacing forward slashes with underscores
     const sanitizedDocId = documentKey.replace(/\//g, '_');
     return `${sanitizedDocId}_section${sectionId}_${type}.json`;
   };
 
   // Download handler for both prediction and baseline data
-  const handleDownload = async (type) => {
+  const handleDownload = async (type: string) => {
     setIsDownloading(true);
 
     try {
@@ -196,18 +228,18 @@ const ActionsCell = ({
 
       // Fetch file contents using GraphQL
       const response = await client.graphql({
-        query: getFileContents as unknown as string,
+        query: getFileContents,
         variables: { s3Uri: fileUri },
       });
 
-      const result = (response as unknown as Record<string, Record<string, Record<string, unknown>>>).data.getFileContents;
+      const result = response.data.getFileContents;
 
-      if (result.isBinary) {
+      if (result?.isBinary) {
         alert('This file contains binary content that cannot be downloaded');
         return;
       }
 
-      const content = result.content;
+      const content = result?.content;
 
       // Create blob and download
       const blob = new Blob([content as string], { type: 'application/json' });
@@ -231,10 +263,10 @@ const ActionsCell = ({
 
       let errorMessage = `Failed to download ${type} data`;
 
-      if (type === 'baseline' && error.message?.includes('not found')) {
+      if (type === 'baseline' && (error as Error).message?.includes('not found')) {
         errorMessage = 'Baseline data not found. The baseline may not have been set for this document yet.';
-      } else if (error.message) {
-        errorMessage = `Failed to download ${type} data: ${error.message}`;
+      } else if ((error as Error).message) {
+        errorMessage = `Failed to download ${type} data: ${(error as Error).message}`;
       }
 
       alert(errorMessage);
@@ -264,7 +296,7 @@ const ActionsCell = ({
   return (
     <SpaceBetween direction="horizontal" size="xs">
       <FileViewer
-        fileUri={item.OutputJSONUri}
+        fileUri={item.OutputJSONUri ?? ''}
         fileType="json"
         buttonText={isEditModeEnabled ? 'Edit Data' : 'View Data'}
         sectionData={{ ...item, pages, documentItem, mergedConfig, isSectionCompleted, isReviewerOnly }}
@@ -327,7 +359,7 @@ const EditableClassCell = ({
   <FormField errorText={validationErrors[item.Id]?.find((err) => err.includes('class'))}>
     <Select
       selectedOption={getAvailableClasses().find((option) => option.value === item.Class) || null}
-      onChange={({ detail }) => updateSection(item.Id, 'Class', detail.selectedOption.value)}
+      onChange={({ detail }) => updateSection(item.Id, 'Class', detail.selectedOption.value ?? '')}
       options={getAvailableClasses()}
       placeholder="Select class/type"
       invalid={validationErrors[item.Id]?.some((err) => err.includes('class'))}
@@ -352,7 +384,7 @@ const EditablePageIdsCell = ({
     setInputValue(item.PageIds && item.PageIds.length > 0 ? item.PageIds.join(', ') : '');
   }, [item.PageIds]);
 
-  const parseAndUpdatePageIds = (value) => {
+  const parseAndUpdatePageIds = (value: string) => {
     const trimmedValue = value.trim();
 
     if (!trimmedValue) {
@@ -363,15 +395,15 @@ const EditablePageIdsCell = ({
     // Parse comma-separated page IDs
     const rawPageIds = trimmedValue
       .split(/[,\s]+/) // Split on commas and/or whitespace
-      .map((id) => id.trim())
-      .filter((id) => id !== '');
+      .map((id: string) => id.trim())
+      .filter((id: string) => id !== '');
 
-    const seenIds = new Set();
+    const seenIds = new Set<number>();
 
     const pageIds = rawPageIds
-      .map((rawId) => parseInt(rawId, 10))
-      .filter((parsed) => !Number.isNaN(parsed) && parsed > 0)
-      .filter((parsed) => {
+      .map((rawId: string) => parseInt(rawId, 10))
+      .filter((parsed: number) => !Number.isNaN(parsed) && parsed > 0)
+      .filter((parsed: number) => {
         if (seenIds.has(parsed)) {
           return false;
         }
@@ -382,7 +414,7 @@ const EditablePageIdsCell = ({
     updateSection(item.Id, 'PageIds', pageIds);
   };
 
-  const handleInputChange = ({ detail }) => {
+  const handleInputChange = ({ detail }: { detail: { value: string } }) => {
     // Only update the input value, don't parse yet
     setInputValue(detail.value);
   };
@@ -423,11 +455,23 @@ const EditableActionsCell = ({
   onViewerOpen,
   onViewerClose,
   isViewerOpen = false,
+}: {
+  item: SectionItem;
+  deleteSection: (id: string) => void;
+  pages: PageItem[];
+  documentItem: DocumentItem | undefined;
+  mergedConfig: Record<string, unknown> | null | undefined;
+  allSections?: SectionItem[];
+  currentSectionIndex?: number;
+  onNavigateToSection: (index: number) => void;
+  onViewerOpen: () => void;
+  onViewerClose: () => void;
+  isViewerOpen?: boolean;
 }) => {
   return (
     <SpaceBetween direction="horizontal" size="xs">
       <FileViewer
-        fileUri={item.OutputJSONUri}
+        fileUri={item.OutputJSONUri ?? ''}
         fileType="json"
         buttonText="Edit Data"
         sectionData={{ ...item, pages, documentItem, mergedConfig, isSectionCompleted: false, isReviewerOnly: false }}
@@ -447,16 +491,16 @@ const EditableActionsCell = ({
 
 // Column definitions - now a factory that takes navigation params
 const createColumnDefinitions = (
-  pages,
-  documentItem,
-  mergedConfig,
-  isReviewerOnly,
-  isEditModeEnabled,
+  pages: PageItem[],
+  documentItem: DocumentItem | undefined,
+  mergedConfig: Record<string, unknown> | null | undefined,
+  isReviewerOnly: boolean,
+  isEditModeEnabled: boolean,
   // Navigation params
-  allSections,
-  openViewerSectionIndex,
-  setOpenViewerSectionIndex,
-  onNavigateToSection,
+  allSections: SectionItem[],
+  openViewerSectionIndex: number | null,
+  setOpenViewerSectionIndex: (index: number | null) => void,
+  onNavigateToSection: (index: number) => void,
 ) => {
   // Get completed sections from documentItem
   const completedSections = documentItem?.hitlSectionsCompleted || [];
@@ -465,7 +509,7 @@ const createColumnDefinitions = (
     {
       id: 'id',
       header: 'Section ID',
-      cell: (item) => <IdCell item={item} />,
+      cell: (item: SectionItem) => <IdCell item={item} />,
       sortingField: 'Id',
       minWidth: 160,
       width: 160,
@@ -474,7 +518,7 @@ const createColumnDefinitions = (
     {
       id: 'class',
       header: 'Class/Type',
-      cell: (item) => <ClassCell item={item} />,
+      cell: (item: SectionItem) => <ClassCell item={item} />,
       sortingField: 'Class',
       minWidth: 200,
       width: 200,
@@ -483,7 +527,7 @@ const createColumnDefinitions = (
     {
       id: 'pageIds',
       header: 'Page IDs',
-      cell: (item) => <PageIdsCell item={item} />,
+      cell: (item: SectionItem) => <PageIdsCell item={item} />,
       minWidth: 120,
       width: 120,
       isResizable: true,
@@ -491,7 +535,7 @@ const createColumnDefinitions = (
     {
       id: 'confidenceAlerts',
       header: 'Low Confidence Fields',
-      cell: (item) => <ConfidenceAlertsCell item={item} mergedConfig={mergedConfig} />,
+      cell: (item: SectionItem) => <ConfidenceAlertsCell item={item} mergedConfig={mergedConfig} />,
       minWidth: 140,
       width: 140,
       isResizable: true,
@@ -499,9 +543,9 @@ const createColumnDefinitions = (
     {
       id: 'actions',
       header: 'Actions',
-      cell: (item) => {
+      cell: (item: SectionItem) => {
         // Find index of current item in allSections
-        const currentIndex = allSections?.findIndex((s) => s.Id === item.Id) ?? -1;
+        const currentIndex = allSections?.findIndex((s: SectionItem) => s.Id === item.Id) ?? -1;
         const isThisViewerOpen = openViewerSectionIndex === currentIndex;
 
         return (
@@ -531,14 +575,14 @@ const createColumnDefinitions = (
 
 // Pattern-1 edit mode column definitions - data-only editing (read-only section structure)
 const createPattern1EditColumnDefinitions = (
-  pages,
-  documentItem,
-  mergedConfig,
+  pages: PageItem[],
+  documentItem: DocumentItem | undefined,
+  mergedConfig: Record<string, unknown> | null | undefined,
   // Navigation params
-  allSections,
-  openViewerSectionIndex,
-  setOpenViewerSectionIndex,
-  onNavigateToSection,
+  allSections: SectionItem[],
+  openViewerSectionIndex: number | null,
+  setOpenViewerSectionIndex: (index: number | null) => void,
+  onNavigateToSection: (index: number) => void,
 ) => {
   // Get completed sections from documentItem
   const completedSections = documentItem?.hitlSectionsCompleted || [];
@@ -547,7 +591,7 @@ const createPattern1EditColumnDefinitions = (
     {
       id: 'id',
       header: 'Section ID',
-      cell: (item) => <IdCell item={item} />,
+      cell: (item: SectionItem) => <IdCell item={item} />,
       sortingField: 'Id',
       minWidth: 160,
       width: 160,
@@ -556,7 +600,7 @@ const createPattern1EditColumnDefinitions = (
     {
       id: 'class',
       header: 'Class/Type',
-      cell: (item) => <ClassCell item={item} />,
+      cell: (item: SectionItem) => <ClassCell item={item} />,
       sortingField: 'Class',
       minWidth: 200,
       width: 200,
@@ -565,7 +609,7 @@ const createPattern1EditColumnDefinitions = (
     {
       id: 'pageIds',
       header: 'Page IDs',
-      cell: (item) => <PageIdsCell item={item} />,
+      cell: (item: SectionItem) => <PageIdsCell item={item} />,
       minWidth: 120,
       width: 120,
       isResizable: true,
@@ -573,7 +617,7 @@ const createPattern1EditColumnDefinitions = (
     {
       id: 'confidenceAlerts',
       header: 'Low Confidence Fields',
-      cell: (item) => <ConfidenceAlertsCell item={item} mergedConfig={mergedConfig} />,
+      cell: (item: SectionItem) => <ConfidenceAlertsCell item={item} mergedConfig={mergedConfig} />,
       minWidth: 140,
       width: 140,
       isResizable: true,
@@ -581,15 +625,15 @@ const createPattern1EditColumnDefinitions = (
     {
       id: 'actions',
       header: 'Actions',
-      cell: (item) => {
+      cell: (item: SectionItem) => {
         // Find index of current item in allSections
-        const currentIndex = allSections?.findIndex((s) => s.Id === item.Id) ?? -1;
+        const currentIndex = allSections?.findIndex((s: SectionItem) => s.Id === item.Id) ?? -1;
         const isThisViewerOpen = openViewerSectionIndex === currentIndex;
 
         return (
           <SpaceBetween direction="horizontal" size="xs">
             <FileViewer
-              fileUri={item.OutputJSONUri}
+              fileUri={item.OutputJSONUri ?? ''}
               fileType="json"
               buttonText="Edit Data"
               sectionData={{
@@ -621,24 +665,24 @@ const createPattern1EditColumnDefinitions = (
 
 // Edit mode column definitions for Pattern-2/3 - expanded to use maximum available width
 const createEditColumnDefinitions = (
-  validationErrors,
-  updateSection,
-  updateSectionId,
-  getAvailableClasses,
-  deleteSection,
-  pages,
-  documentItem,
-  mergedConfig,
+  validationErrors: Record<string, string[]>,
+  updateSection: (id: string, field: string, value: unknown) => void,
+  updateSectionId: (oldId: string, newId: string) => void,
+  getAvailableClasses: () => { value: string; label: string }[],
+  deleteSection: (id: string) => void,
+  pages: PageItem[],
+  documentItem: DocumentItem | undefined,
+  mergedConfig: Record<string, unknown> | null | undefined,
   // Navigation params
-  allSections,
-  openViewerSectionIndex,
-  setOpenViewerSectionIndex,
-  onNavigateToSection,
+  allSections: SectionItem[],
+  openViewerSectionIndex: number | null,
+  setOpenViewerSectionIndex: (index: number | null) => void,
+  onNavigateToSection: (index: number) => void,
 ) => [
   {
     id: 'id',
     header: 'Section ID',
-    cell: (item) => <EditableIdCell item={item} validationErrors={validationErrors} updateSectionId={updateSectionId} />,
+    cell: (item: SectionItem) => <EditableIdCell item={item} validationErrors={validationErrors} updateSectionId={updateSectionId} />,
     minWidth: 160,
     width: 300,
     isResizable: true,
@@ -646,7 +690,7 @@ const createEditColumnDefinitions = (
   {
     id: 'class',
     header: 'Class/Type',
-    cell: (item) => (
+    cell: (item: SectionItem) => (
       <EditableClassCell
         item={item}
         validationErrors={validationErrors}
@@ -661,7 +705,7 @@ const createEditColumnDefinitions = (
   {
     id: 'pageIds',
     header: 'Page IDs',
-    cell: (item) => <EditablePageIdsCell item={item} validationErrors={validationErrors} updateSection={updateSection} />,
+    cell: (item: SectionItem) => <EditablePageIdsCell item={item} validationErrors={validationErrors} updateSection={updateSection} />,
     minWidth: 250,
     width: 500,
     isResizable: true,
@@ -669,9 +713,9 @@ const createEditColumnDefinitions = (
   {
     id: 'actions',
     header: 'Actions',
-    cell: (item) => {
+    cell: (item: SectionItem) => {
       // Find index of current item in allSections
-      const currentIndex = allSections?.findIndex((s) => s.Id === item.Id) ?? -1;
+      const currentIndex = allSections?.findIndex((s: SectionItem) => s.Id === item.Id) ?? -1;
       const isThisViewerOpen = openViewerSectionIndex === currentIndex;
 
       return (
@@ -696,7 +740,7 @@ const createEditColumnDefinitions = (
   },
 ];
 
-const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocumentUpdate }: SectionsPanelProps): React.JSX.Element => {
+const SectionsPanel = ({ sections, pages = [], documentItem, mergedConfig, onDocumentUpdate }: SectionsPanelProps): React.JSX.Element => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedSections, setEditedSections] = useState<SectionItem[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
@@ -707,10 +751,8 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
   // Track which section's viewer is open for navigation
   const [openViewerSectionIndex, setOpenViewerSectionIndex] = useState<number | null>(null);
   const { mergedConfig: configuration } = useConfiguration();
-  const { settings: rawSettings2 } = useSettingsContext() || {};
-  const settings2 = rawSettings2 as Record<string, unknown> | undefined;
-  const { isReviewer, isAdmin } = useUserRole();
-  const isReviewerOnly = isReviewer && !isAdmin;
+  const { settings: settings2 } = useSettingsContext();
+  const { isReviewerOnly, canWrite, canReview } = useUserRole();
 
   // Check if current pattern is Pattern-1 (for data-only edit mode)
   const isPattern1 = () => {
@@ -724,7 +766,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
   const isHitlCompleted = hitlStatusLower === 'completed' || hitlStatusLower === 'reviewcompleted';
   const hasPendingHITL = documentItem?.hitlTriggered && !isHitlCompleted && !isHitlSkipped;
   // Show skip button only if HITL pending and not already completed/skipped
-  const showSkipAllButton = isAdmin && hasPendingHITL;
+  const showSkipAllButton = canReview && hasPendingHITL;
 
   // Log for debugging
   logger.debug('HITL Status Check:', {
@@ -746,13 +788,13 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
   const docStatus = documentItem?.objectStatus?.toLowerCase() || '';
   const isDocumentProcessing = processingStatuses.includes(docStatus);
 
-  // Disable edit mode for REVIEWERS only if:
-  // - HITL is triggered AND reviewer hasn't claimed review, OR
-  // - Document is processing, OR
-  // - HITL already completed/skipped
-  // Admins can always edit
+  // Disable edit mode if:
+  // - User has no write or review permissions (Viewer role), OR
+  // - REVIEWER only: HITL triggered but not claimed, document processing, or HITL completed/skipped
+  // Admins and Authors can always edit
   const isEditModeDisabled =
-    isReviewerOnly && ((hitlTriggered && !hasReviewOwner) || isDocumentProcessing || isHitlCompleted || isHitlSkipped);
+    (!canWrite && !canReview) ||
+    (isReviewerOnly && ((hitlTriggered && !hasReviewOwner) || isDocumentProcessing || isHitlCompleted || isHitlSkipped));
 
   logger.debug('Edit Mode Check:', { isReviewerOnly, isEditModeDisabled, isHitlCompleted, isHitlSkipped });
 
@@ -776,24 +818,17 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
       }
 
       const result = await client.graphql({
-        query: skipAllSectionsReviewMutation as unknown as string,
+        query: skipAllSectionsReview,
         variables: { objectKey },
       });
 
       logger.info('All sections review skipped successfully', result);
 
       // Update document state immediately with mutation response
-      const updatedData = (result as unknown as Record<string, Record<string, Record<string, unknown>>>).data?.skipAllSectionsReview;
+      const updatedData = result.data.skipAllSectionsReview;
       if (updatedData && onDocumentUpdate) {
-        // Parse HITLReviewHistory if it's a string (AWSJSON type)
-        let reviewHistory = updatedData.HITLReviewHistory;
-        if (typeof reviewHistory === 'string') {
-          try {
-            reviewHistory = JSON.parse(reviewHistory);
-          } catch (e) {
-            reviewHistory = [];
-          }
-        }
+        // Parse HITLReviewHistory from AWSJSON using typed parser
+        const reviewHistory = parseHITLReviewHistory(updatedData.HITLReviewHistory as string);
 
         onDocumentUpdate((prev) => {
           const newState = {
@@ -805,8 +840,8 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
             hitlSectionsPending: updatedData.HITLSectionsPending ?? [],
             hitlSectionsCompleted: updatedData.HITLSectionsCompleted ?? prev.hitlSectionsCompleted,
             hitlSectionsSkipped: updatedData.HITLSectionsSkipped ?? [],
-            hitlReviewOwner: updatedData.HITLReviewOwner ?? prev.hitlReviewOwner,
-            hitlReviewOwnerEmail: updatedData.HITLReviewOwnerEmail ?? prev.hitlReviewOwnerEmail,
+            hitlReviewOwner: updatedData.HITLReviewOwner || prev.hitlReviewOwner,
+            hitlReviewOwnerEmail: updatedData.HITLReviewOwnerEmail || prev.hitlReviewOwnerEmail,
             hitlReviewHistory: reviewHistory ?? prev.hitlReviewHistory,
           };
           logger.info('Skip All Reviews - Updated document state:', {
@@ -818,7 +853,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
       }
     } catch (error) {
       logger.error('Failed to skip all sections review:', error);
-      alert(`Failed to skip all sections: ${error.message || 'Unknown error'}`);
+      alert(`Failed to skip all sections: ${(error as Error).message || 'Unknown error'}`);
     } finally {
       setIsSkipping(false);
     }
@@ -848,7 +883,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
         // Support both JSON Schema and legacy formats
         // JSON Schema: $id or x-aws-idp-document-type
         // Legacy: name
-        const className = cls.$id || cls['x-aws-idp-document-type'] || cls.name;
+        const className = String(cls.$id || cls['x-aws-idp-document-type'] || cls.name || '');
 
         return {
           label: className,
@@ -877,7 +912,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
         }
         return null;
       })
-      .filter((num) => num !== null && !Number.isNaN(num));
+      .filter((num): num is number => num !== null && !Number.isNaN(num));
 
     // Determine the format to use based on existing sections
     const hasSimpleFormat = allSections.some((section) => /^\d+$/.test(section.Id));
@@ -921,8 +956,8 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
         sectionErrors.push('Section must have at least one valid page ID');
       } else {
         // Check each page ID for validity
-        const invalidPageIds = [];
-        const nonExistentPageIds = [];
+        const invalidPageIds: number[] = [];
+        const nonExistentPageIds: number[] = [];
 
         section.PageIds.forEach((pageId) => {
           // Check if page ID is valid (should be handled by parsing, but double-check)
@@ -1013,10 +1048,10 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
   // Add new section
   const addSection = () => {
     const newId = getNextSectionId();
-    const newSection = {
+    const newSection: SectionItem = {
       Id: newId,
       Class: '',
-      PageIds: [],
+      PageIds: [] as number[],
       OriginalId: null,
       isModified: false,
       isNew: true,
@@ -1041,7 +1076,7 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
   };
 
   // Sort sections by starting page ID
-  const sortSectionsByPageId = (sectionsToSort) => {
+  const sortSectionsByPageId = (sectionsToSort: SectionItem[]) => {
     return [...sectionsToSort].sort((a, b) => {
       const aMin = Math.min(...(a.PageIds || [Infinity]));
       const bMin = Math.min(...(b.PageIds || [Infinity]));
@@ -1050,14 +1085,14 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
   };
 
   // Check if a section has actually been modified
-  const hasActualChanges = (section, originalSections) => {
+  const hasActualChanges = (section: SectionItem, originalSections: SectionItem[] | undefined) => {
     // If it's a new section, it's always a change
     if (section.isNew) {
       return true;
     }
 
     // Find the original section
-    const originalSection = originalSections?.find((orig) => orig.Id === section.OriginalId);
+    const originalSection = originalSections?.find((orig: SectionItem) => orig.Id === section.OriginalId);
     if (!originalSection) {
       // If we can't find the original, treat as modified (shouldn't happen)
       return true;
@@ -1163,18 +1198,18 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
       // Call the GraphQL API with timeout
       const result = await Promise.race([
         client.graphql({
-          query: processChanges as unknown as string,
+          query: processChanges,
           variables: {
             objectKey,
             modifiedSections: allChanges,
           },
         }),
-        new Promise((_, reject) => {
+        new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Request timed out after 30 seconds')), 30000);
         }),
       ]);
 
-      const response = (result as unknown as Record<string, Record<string, Record<string, unknown>>>).data?.processChanges;
+      const response = result.data.processChanges;
 
       if (!response?.success) {
         throw new Error((response?.message as string) || 'Failed to process changes - no response received');
@@ -1199,15 +1234,16 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
     } catch (error) {
       // Handle different types of errors
       let errorMessage = 'Failed to process changes';
+      const err = error as { message?: string; errors?: { message?: string }[]; data?: { processChanges?: { message?: string } } };
 
-      if (error?.message) {
-        errorMessage = error.message;
-      } else if (error?.errors?.length > 0) {
-        errorMessage = error.errors[0].message || 'GraphQL error occurred';
+      if (err?.message) {
+        errorMessage = err.message;
+      } else if (err?.errors && err.errors.length > 0) {
+        errorMessage = err.errors[0].message || 'GraphQL error occurred';
       } else if (typeof error === 'string') {
         errorMessage = error;
-      } else if (error?.data?.processChanges?.message) {
-        errorMessage = error.data.processChanges.message;
+      } else if (err?.data?.processChanges?.message) {
+        errorMessage = err.data.processChanges.message;
       }
 
       alert(`Error processing changes: ${errorMessage}`);
@@ -1277,7 +1313,11 @@ const SectionsPanel = ({ sections, pages, documentItem, mergedConfig, onDocument
         handleNavigateToSection,
       );
 
-  const tableItems = isEditMode ? editedSections : sections || [];
+  // Sort sections by their starting page ID for consistent display order.
+  // During parallel Map state execution (Extraction/Assessment), subscription events
+  // may arrive out of order — the DynamoDB Sections array order depends on which
+  // parallel Lambda finishes first. Sorting ensures stable visual ordering.
+  const tableItems = isEditMode ? editedSections : sortSectionsByPageId(sections || []);
 
   // Check if there are any validation errors
   const hasValidationErrors = Object.keys(validationErrors).length > 0;

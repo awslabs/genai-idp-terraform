@@ -18,6 +18,9 @@ The BDA module enables seamless integration with Amazon Bedrock Data Automation 
 
 - **BdaService**: Main service class for interacting with BDA
 - **BdaInvocation**: Data class for handling BDA job results
+- **BdaBlueprintService**: Blueprint lifecycle management, schema conversion, and project synchronization
+- **BDABlueprintCreator**: Blueprint CRUD operations (create, update, version, delete)
+- **BlueprintOptimizer**: Orchestrates BDA blueprint optimization using ground truth data to improve extraction accuracy
 - **CloudFormation Templates**: Templates for creating BDA projects and blueprints
 
 ## Usage
@@ -157,3 +160,46 @@ For optimal performance with BDA:
 ## Thread Safety
 
 The BDA service is designed to be thread-safe, supporting concurrent processing of multiple documents in parallel workloads.
+
+## Blueprint Optimization
+
+The `BlueprintOptimizer` class uses the BDA `InvokeBlueprintOptimizationAsync` API to improve extraction accuracy by comparing results against ground truth data.
+
+### Usage
+
+```python
+from idp_common.bda.blueprint_optimizer import BlueprintOptimizer, OptimizationStatus
+from idp_common.bda.bda_blueprint_service import BdaBlueprintService
+from idp_common.bda.bda_blueprint_creator import BDABlueprintCreator
+from idp_common.config.configuration_manager import ConfigurationManager
+
+optimizer = BlueprintOptimizer(
+    blueprint_service=BdaBlueprintService(),
+    blueprint_creator=BDABlueprintCreator(),
+    config_manager=ConfigurationManager(),
+)
+
+result = optimizer.optimize(
+    class_schema=class_schema,       # IDP JSON Schema dict
+    document_key="path/to/doc.pdf",  # S3 key for sample document
+    ground_truth_key="path/to/gt.json",  # S3 key for ground truth
+    bucket="my-bucket",
+    version="default",
+    status_callback=lambda msg: print(msg),  # Optional progress callback
+)
+
+if result.status == OptimizationStatus.IMPROVED:
+    print(f"Accuracy improved: {result.before_metrics.exact_match:.2f} → {result.after_metrics.exact_match:.2f}")
+elif result.status == OptimizationStatus.NO_IMPROVEMENT:
+    print("No improvement detected, original schema kept")
+elif result.status == OptimizationStatus.FAILED:
+    print(f"Optimization failed: {result.error_message}")
+```
+
+### Key Behaviors
+
+- **Blueprint Reuse**: Looks up existing blueprints in the BDA project before creating new ones
+- **Standard Naming**: New blueprints follow `{StackName}-{ClassName}-{hash}` convention
+- **LIVE Stage**: Blueprints are created and referenced in `LIVE` stage
+- **S3 Retry**: Results fetched with retry logic (10 attempts, 2s delay) for S3 eventual consistency
+- **Polling**: Exponential backoff from 5s to 30s, 15-minute timeout

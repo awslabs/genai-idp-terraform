@@ -5,32 +5,32 @@ The solution creates several predefined tables in the Glue Data Catalog:
 
 1. Document Evaluations Table (document_evaluations)
    * Contains document-level evaluation metrics
-   * Columns include: document_id, input_key, evaluation_date, accuracy, precision, recall, f1_score, false_alarm_rate, false_discovery_rate, execution_time
+   * Columns include: document_id, input_key, evaluation_date, accuracy, precision, recall, f1_score, false_alarm_rate, false_discovery_rate, execution_time, config_version
    * Partitioned by date (YYYY-MM-DD format)
 
 2. Section Evaluations Table (section_evaluations)
    * Contains section-level evaluation metrics
-   * Columns include: document_id, section_id, section_type, accuracy, precision, recall, f1_score, false_alarm_rate, false_discovery_rate, evaluation_date
+   * Columns include: document_id, section_id, section_type, accuracy, precision, recall, f1_score, false_alarm_rate, false_discovery_rate, evaluation_date, config_version
    * Partitioned by date (YYYY-MM-DD format)
 
 3. Attribute Evaluations Table (attribute_evaluations)
    * Contains attribute-level evaluation metrics
-   * Columns include: document_id, section_id, section_type, attribute_name, expected, actual, matched, score, reason, evaluation_method, confidence, confidence_threshold, evaluation_date
+   * Columns include: document_id, section_id, section_type, attribute_name, expected, actual, matched, score, reason, evaluation_method, confidence, confidence_threshold, evaluation_date, config_version
    * Partitioned by date (YYYY-MM-DD format)
 
 4. Metering Table (metering)
    * Captures detailed usage metrics for document processing operations
-   * Columns include: document_id, context, service_api, unit, value, number_of_pages, timestamp
+   * Columns include: document_id, context, service_api, unit, value, number_of_pages, timestamp, config_version
    * Partitioned by date (YYYY-MM-DD format)
 
 5. Rule Validation Summary Table (rule_validation_summary)
    * Contains document-level rule validation results
-   * Columns include: document_id, input_key, validation_date, overall_status, total_rule_types, total_rules, pass_count, fail_count, information_not_found_count
+   * Columns include: document_id, input_key, validation_date, overall_status, total_policy_types, total_rules, pass_count, fail_count, information_not_found_count
    * Partitioned by date (YYYY-MM-DD format)
 
 6. Rule Validation Details Table (rule_validation_details)
    * Contains individual rule validation results
-   * Columns include: document_id, rule_type, rule, recommendation, reasoning, supporting_pages, validation_date
+   * Columns include: document_id, policy_type, rule, recommendation, reasoning, supporting_pages, validation_date
    * Partitioned by date (YYYY-MM-DD format)
 
 ### Dynamic Document Section Tables
@@ -39,7 +39,7 @@ In addition to the predefined tables, the solution also creates dynamic tables f
 
 * Tables are automatically created by an AWS Glue Crawler based on the section classification
 * Each section type gets its own table (e.g., document_sections_invoice, document_sections_receipt)
-* Common columns include: section_id, document_id, section_classification, section_confidence, timestamp
+* Common columns include: section_id, document_id, section_classification, section_confidence, timestamp, config_version
 * Additional columns are dynamically inferred from the JSON extraction results
 * Tables are partitioned by date (YYYY-MM-DD format)
 

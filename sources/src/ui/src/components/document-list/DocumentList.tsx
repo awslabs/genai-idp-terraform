@@ -14,6 +14,7 @@ interface DateRange {
 }
 
 import useDocumentsContext from '../../contexts/documents';
+import { Document } from '../../types/documents';
 import useSettingsContext from '../../contexts/settings';
 import useUserRole from '../../hooks/use-user-role';
 
@@ -25,8 +26,7 @@ import DeleteDocumentModal from '../common/DeleteDocumentModal';
 import ReprocessDocumentModal from '../common/ReprocessDocumentModal';
 import AbortWorkflowModal from '../common/AbortWorkflowModal';
 import DateRangeModal from '../common/DateRangeModal';
-import claimReviewMutation from '../../graphql/mutations/claimReview';
-import releaseReviewMutation from '../../graphql/mutations/releaseReview';
+import { claimReview, releaseReview } from '../../graphql/generated';
 
 import type { MappedDocument } from './documents-table-config';
 import {
@@ -59,8 +59,8 @@ const DocumentList = (): React.JSX.Element => {
   const [isAbortLoading, setIsAbortLoading] = useState(false);
   const [isDateRangeModalVisible, setIsDateRangeModalVisible] = useState(false);
   const [currentUsername, setCurrentUsername] = useState('');
-  const { settings: _settings } = useSettingsContext() as Record<string, unknown>;
-  const { isReviewer, isAdmin } = useUserRole();
+  const { settings: _settings } = useSettingsContext();
+  const { isAdmin, isReviewerOnly, canWrite, canReview } = useUserRole();
   const navigate = useNavigate();
 
   // Get current username on mount
@@ -76,26 +76,43 @@ const DocumentList = (): React.JSX.Element => {
     getUsername();
   }, []);
 
-  const documentsContext = useDocumentsContext() as Record<string, unknown>;
-  const documents = documentsContext.documents as Record<string, unknown>[];
-  const isDocumentsListLoading = documentsContext.isDocumentsListLoading as boolean;
-  const setIsDocumentsListLoading = documentsContext.setIsDocumentsListLoading as (loading: boolean) => void;
-  const setPeriodsToLoad = documentsContext.setPeriodsToLoad as (periods: number) => void;
-  const setSelectedItems = documentsContext.setSelectedItems as (items: unknown) => void;
-  const setToolsOpen = documentsContext.setToolsOpen as (open: boolean) => void;
-  const periodsToLoad = documentsContext.periodsToLoad as number;
-  const customDateRange = documentsContext.customDateRange as { startDateTime: string; endDateTime: string };
-  const setCustomDateRange = documentsContext.setCustomDateRange as (range: { startDateTime: string; endDateTime: string }) => void;
-  const getDocumentDetailsFromIds = documentsContext.getDocumentDetailsFromIds as (ids: string[]) => Promise<unknown>;
-  const deleteDocuments = documentsContext.deleteDocuments as (ids: string[]) => Promise<unknown>;
-  const reprocessDocuments = documentsContext.reprocessDocuments as (ids: string[], version?: string) => Promise<unknown>;
-  const abortWorkflows = documentsContext.abortWorkflows as (ids: string[]) => Promise<unknown>;
+  const {
+    documents,
+    isDocumentsListLoading,
+    setIsDocumentsListLoading,
+    setPeriodsToLoad,
+    setSelectedItems,
+    setToolsOpen,
+    periodsToLoad,
+    customDateRange,
+    setCustomDateRange,
+    getDocumentDetailsFromIds,
+    deleteDocuments,
+    reprocessDocuments,
+    abortWorkflows,
+    hasListBeenLoaded,
+  } = useDocumentsContext();
 
   const [preferences, setPreferences] = useLocalStorage('documents-list-preferences', DEFAULT_PREFERENCES);
 
+  // Trigger document list load when DocumentList mounts for the first time.
+  // The useGraphQlApi hook no longer auto-triggers listDocuments on mount (to avoid
+  // unnecessary API calls on non-list pages like document details or config).
+  // If the list has already been loaded (e.g., navigating back from document details),
+  // display the cached documents immediately — no re-fetch needed.
+  // The user can always click Refresh to force a fresh fetch.
+  useEffect(() => {
+    if (!isDocumentsListLoading && !hasListBeenLoaded) {
+      setIsDocumentsListLoading(true);
+    }
+  }, []);
+
   // Filter documents for reviewers - show only pending HITL reviews (not completed/skipped)
+  // Note: Server-side RBAC filtering is now applied in the listDocuments resolver.
+  // Reviewer-only users receive only HITL-pending + their own completed reviews from the API.
+  // This client-side filter is kept as a secondary safety net but is no longer the primary enforcement.
   const filteredDocumentList = useMemo(() => {
-    if (isReviewer && !isAdmin) {
+    if (isReviewerOnly) {
       return documentList.filter((doc) => {
         // Must have HITL triggered
         if (!doc.hitlTriggered) return false;
@@ -109,11 +126,11 @@ const DocumentList = (): React.JSX.Element => {
       });
     }
     return documentList;
-  }, [documentList, isReviewer, isAdmin, currentUsername]);
+  }, [documentList, isReviewerOnly, currentUsername]);
 
   // Custom empty state for reviewers
   const emptyState = useMemo(() => {
-    if (isReviewer && !isAdmin) {
+    if (isReviewerOnly) {
       return (
         <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
           <SpaceBetween size="xxs">
@@ -128,7 +145,7 @@ const DocumentList = (): React.JSX.Element => {
       );
     }
     return <TableEmptyState resourceName="Document" />;
-  }, [isReviewer, isAdmin]);
+  }, [isReviewerOnly]);
 
   // prettier-ignore
   const {
@@ -157,7 +174,7 @@ const DocumentList = (): React.JSX.Element => {
 
   useEffect(() => {
     logger.debug('setting selected items', collectionProps.selectedItems);
-    setSelectedItems(collectionProps.selectedItems);
+    setSelectedItems([...(collectionProps.selectedItems ?? [])] as unknown as Document[]);
   }, [collectionProps.selectedItems]);
 
   const handleDeleteConfirm = async () => {
@@ -179,7 +196,7 @@ const DocumentList = (): React.JSX.Element => {
     }
   };
 
-  const handleReprocessConfirm = async (version: string) => {
+  const handleReprocessConfirm = async (version?: string) => {
     const objectKeys = (collectionProps.selectedItems as MappedDocument[]).map((item) => item.objectKey);
     logger.debug('Reprocessing documents', objectKeys, 'with version', version);
 
@@ -198,7 +215,7 @@ const DocumentList = (): React.JSX.Element => {
     }
   };
 
-  const handleAbortConfirm = async (abortableItems: MappedDocument[]) => {
+  const handleAbortConfirm = async (abortableItems: { objectKey: string; objectStatus?: string }[]) => {
     const objectKeys = abortableItems.map((item) => item.objectKey);
     logger.debug('Aborting workflows', objectKeys);
 
@@ -226,7 +243,7 @@ const DocumentList = (): React.JSX.Element => {
     for (const item of selectedItems) {
       try {
         const result = await client.graphql({
-          query: claimReviewMutation,
+          query: claimReview,
           variables: { objectKey: item.objectKey },
         });
         const claimData = (
@@ -268,7 +285,7 @@ const DocumentList = (): React.JSX.Element => {
     for (const item of collectionProps.selectedItems as MappedDocument[]) {
       try {
         const result = await client.graphql({
-          query: releaseReviewMutation,
+          query: releaseReview,
           variables: { objectKey: item.objectKey },
         });
         const releaseData = (result as { data: { releaseReview: { HITLStatus: string } } }).data.releaseReview;
@@ -280,8 +297,8 @@ const DocumentList = (): React.JSX.Element => {
             doc.objectKey === item.objectKey
               ? {
                   ...doc,
-                  hitlReviewOwner: null,
-                  hitlReviewOwnerEmail: null,
+                  hitlReviewOwner: '' as string,
+                  hitlReviewOwnerEmail: '' as string,
                   hitlStatus: releaseData.HITLStatus,
                 }
               : doc,
@@ -296,7 +313,6 @@ const DocumentList = (): React.JSX.Element => {
     actions.setSelectedItems([]);
   };
 
-  /* eslint-disable react/jsx-props-no-spreading */
   return (
     <>
       <Table
@@ -323,10 +339,10 @@ const DocumentList = (): React.JSX.Element => {
               }));
               exportToExcel(exportData, 'Document-List');
             }}
-            onReprocess={isReviewer && !isAdmin ? null : () => setIsReprocessModalVisible(true)}
-            onDelete={isReviewer && !isAdmin ? null : () => setIsDeleteModalVisible(true)}
-            onAbort={isReviewer && !isAdmin ? null : () => setIsAbortModalVisible(true)}
-            onClaimReview={isReviewer ? handleClaimReview : null}
+            onReprocess={canWrite ? () => setIsReprocessModalVisible(true) : null}
+            onDelete={canWrite ? () => setIsDeleteModalVisible(true) : null}
+            onAbort={canWrite ? () => setIsAbortModalVisible(true) : null}
+            onClaimReview={canReview ? handleClaimReview : null}
             onReleaseReview={isAdmin ? handleReleaseReview : null}
             currentUsername={currentUsername}
           />
@@ -342,7 +358,7 @@ const DocumentList = (): React.JSX.Element => {
             {...filterProps}
             filteringAriaLabel="Filter documents"
             filteringPlaceholder="Find documents"
-            countText={getFilterCounterText(filteredItemsCount)}
+            countText={getFilterCounterText(filteredItemsCount ?? 0)}
           />
         }
         wrapLines={preferences.wrapLines}
@@ -357,7 +373,7 @@ const DocumentList = (): React.JSX.Element => {
         visible={isDeleteModalVisible}
         onDismiss={() => setIsDeleteModalVisible(false)}
         onConfirm={handleDeleteConfirm}
-        selectedItems={collectionProps.selectedItems}
+        selectedItems={(collectionProps.selectedItems ?? []) as readonly { objectKey: string }[]}
         isLoading={isDeleteLoading}
       />
 

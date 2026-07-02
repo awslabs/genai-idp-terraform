@@ -15,6 +15,8 @@ This approach enables a security model where:
 
 The **IDPAcceleratorCloudFormationServiceRole** is a CloudFormation service role that provides the necessary permissions for AWS CloudFormation to deploy, update, and manage GenAI IDP Accelerator stacks across all patterns (Pattern 1: BDA, Pattern 2: Textract+Bedrock, Pattern 3: Textract+UDOP+Bedrock). This role can only be assumed by the CloudFormation service, not by users directly.
 
+Demo (5 minutes)
+
 ### Key Capabilities
 - **Full CloudFormation Management**: Create, update, delete IDP stacks - This IAM service role (which CloudFormation assumes) gives necessary privileges to create/update/delete the stack which is helpful in development and sandbox environments. In production environments, admins can further limit these permissions to their discretion (e.g. disabling stack deletion).
 
@@ -103,44 +105,784 @@ The **IDPAcceleratorCloudFormationServiceRole** is a CloudFormation service role
 
 ## <span style="color: blue;">AWS Service Permissions</span>
 
-The role provides comprehensive access to AWS services required by all IDP patterns:
+The role provides comprehensive access to **28 AWS services** required by all IDP patterns. Below is a detailed breakdown organized by category.
 
-### Core Infrastructure Services
-- **CloudFormation**: `cloudformation:*` - Full stack management
-- **IAM**: Complete role and policy management for IDP components
-- **Lambda**: `lambda:*` - Function creation and management
-- **Step Functions**: `states:*` - State machine orchestration
-- **S3**: `s3:*` - Bucket and object management
-- **DynamoDB**: `dynamodb:*` - Table and data management
-- **SQS**: `sqs:*` - Queue management
-- **EventBridge**: `events:*` - Event rule configuration
-- **KMS**: `kms:*` - Encryption key management
-- **CloudWatch**: `logs:*`, `cloudwatch:*` - Monitoring and logging
-- **Secrets Manager**: `secretsmanager:*` - Secure credential storage and retrieval
+### Services Summary
 
-### AI/ML Services
-- **Amazon Bedrock**: `bedrock:*` - All foundation models and features
-- **Amazon Textract**: `textract:*` - Document OCR capabilities
-- **Amazon SageMaker**: `sagemaker:*` - Model endpoint management
-- **AWS Glue**: `glue:*` - Data catalog and ETL
-- **OpenSearch Serverless**: `aoss:*` - Vector search capabilities
+| Category | Services Count | Services |
+|----------|---------------|----------|
+| Core Infrastructure | 2 | CloudFormation, IAM |
+| Compute & Serverless | 3 | Lambda, Step Functions, CodeBuild |
+| AI/ML Services | 3 | Bedrock, Textract, SageMaker |
+| Storage Services | 3 | S3, DynamoDB, ECR |
+| API & Application | 2 | API Gateway, AppSync |
+| Security & Identity | 5 | Cognito User Pools, Cognito Identity, KMS, Secrets Manager, WAF v2 |
+| Messaging & Events | 4 | SNS, SQS, EventBridge, EventBridge Scheduler |
+| Monitoring & Management | 3 | CloudWatch, CloudWatch Logs, Systems Manager |
+| Analytics & Data | 2 | Glue, OpenSearch Serverless |
+| Networking & CDN | 2 | CloudFront, EC2 (VPC) |
+| Scaling | 1 | Application Auto Scaling |
 
-### Web & API Services
-- **Amazon Cognito**: `cognito-idp:*`, `cognito-identity:*` - Authentication
-- **AWS AppSync**: `appsync:*` - GraphQL API management
-- **CloudFront**: `cloudfront:*` - Content delivery
-- **AWS WAF**: `wafv2:*` - Web application firewall
-- **SNS**: `sns:*` - Notification services
-- **Systems Manager**: `ssm:*` - Parameter management
-- **CodeBuild**: `codebuild:*` - Build automation
+### Complete Service List
 
-### Network & Compute
-- **EC2**: Limited VPC, subnet, and security group management
-- **Application Auto Scaling**: `application-autoscaling:*`
-- **EventBridge Scheduler**: `scheduler:*`
+| Service | Access | Utility |
+|---------|--------|---------|
+| CloudFormation | Full Access | Full stack management |
+| IAM | Full Access | Complete role and policy management for IDP components |
+| Lambda | Full Access | Function creation and management |
+| Step Functions | Full Access | State machine orchestration |
+| CodeBuild | Full Access | Build automation for custom container images |
+| Bedrock | Full Access | Foundation models for document understanding |
+| Textract | Full Access | Document OCR and extraction capabilities |
+| SageMaker | Full Access | Custom ML model endpoints |
+| S3 | Full Access | Bucket and object management |
+| DynamoDB | Full Access | Table and data management |
+| ECR | Full Access | Container image registry |
+| API Gateway | Full Access | REST and HTTP API management |
+| AppSync | Full Access | GraphQL API management |
+| Cognito User Pools | Full Access | User authentication and management |
+| Cognito Identity | Full Access | Federated identity and temporary credentials |
+| KMS | Full Access | Encryption key management |
+| Secrets Manager | Full Access | Secure credential storage |
+| WAF v2 | Full Access | Web application firewall |
+| SNS | Full Access | Notification services |
+| SQS | Full Access | Message queue management |
+| EventBridge | Full Access | Event-driven workflow triggers |
+| EventBridge Scheduler | Full Access | Scheduled task management |
+| CloudWatch | Full Access | Metrics, alarms, and dashboards |
+| CloudWatch Logs | Full Access | Centralized logging |
+| Systems Manager (SSM) | Full Access | Parameter Store configuration |
+| Glue | Full Access | Data catalog and ETL jobs |
+| OpenSearch Serverless | Full Access | Vector search for embeddings |
+| CloudFront | Full Access | CDN for web hosting and API acceleration |
+| EC2 (VPC) | Limited Access | VPC, subnet, and security group management only |
+| Application Auto Scaling | Full Access | Auto-scaling for DynamoDB, Lambda, SageMaker |
 
-### Additional Permissions
-- **STS**: `sts:AssumeRole` for service integrations
+---
+
+### Detailed Service Breakdown
+
+#### Core Infrastructure Services
+
+<details>
+<summary><strong>AWS CloudFormation</strong> (<code>cloudformation</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Stack management for IDP infrastructure deployment
+
+**Actions Granted**:
+```
+cloudformation:*
+```
+- `CreateStack`, `UpdateStack`, `DeleteStack`
+- `DescribeStacks`, `DescribeStackEvents`, `DescribeStackResources`
+- `GetTemplate`, `ValidateTemplate`
+- `CreateChangeSet`, `ExecuteChangeSet`, `DeleteChangeSet`
+- `ListStacks`, `ListStackResources`
+- All other CloudFormation operations
+
+</details>
+
+<details>
+<summary><strong>AWS IAM</strong> (<code>iam</code>)</summary>
+
+**Permission Level**: Full (Roles & Policies CRUD)
+
+**Purpose**: Create and manage IAM roles/policies for Lambda functions, service integrations, and resource access
+
+**Role Management Actions**:
+```
+iam:CreateRole
+iam:DeleteRole
+iam:UpdateRole
+iam:GetRole
+iam:GetRolePolicy
+iam:ListRoles
+iam:ListRolePolicies
+iam:ListAttachedRolePolicies
+iam:ListRoleTags
+iam:PutRolePolicy
+iam:DeleteRolePolicy
+iam:AttachRolePolicy
+iam:DetachRolePolicy
+iam:TagRole
+iam:UntagRole
+iam:PassRole
+iam:CreateServiceLinkedRole
+iam:DeleteServiceLinkedRole
+```
+
+**Policy Management Actions**:
+```
+iam:CreatePolicy
+iam:DeletePolicy
+iam:GetPolicy
+iam:GetPolicyVersion
+iam:ListPolicies
+iam:ListPolicyVersions
+iam:CreatePolicyVersion
+iam:DeletePolicyVersion
+iam:SetDefaultPolicyVersion
+iam:TagPolicy
+iam:UntagPolicy
+```
+
+</details>
+
+---
+
+#### Compute & Serverless Services
+
+<details>
+<summary><strong>AWS Lambda</strong> (<code>lambda</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Deploy and manage Lambda functions for document processing, API backends, and workflow steps
+
+**Actions Granted**:
+```
+lambda:*
+```
+- `CreateFunction`, `UpdateFunctionCode`, `UpdateFunctionConfiguration`, `DeleteFunction`
+- `GetFunction`, `GetFunctionConfiguration`, `ListFunctions`
+- `CreateEventSourceMapping`, `UpdateEventSourceMapping`, `DeleteEventSourceMapping`
+- `AddPermission`, `RemovePermission`
+- `PublishVersion`, `CreateAlias`, `UpdateAlias`, `DeleteAlias`
+- `TagResource`, `UntagResource`, `ListTags`
+- `InvokeFunction`, `InvokeAsync`
+- `PutFunctionConcurrency`, `DeleteFunctionConcurrency`
+
+</details>
+
+<details>
+<summary><strong>AWS Step Functions</strong> (<code>states</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Orchestrate document processing workflows and multi-step AI pipelines
+
+**Actions Granted**:
+```
+states:*
+```
+- `CreateStateMachine`, `UpdateStateMachine`, `DeleteStateMachine`
+- `DescribeStateMachine`, `ListStateMachines`
+- `StartExecution`, `StopExecution`, `DescribeExecution`, `ListExecutions`
+- `GetExecutionHistory`
+- `CreateActivity`, `DeleteActivity`, `DescribeActivity`, `ListActivities`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>AWS CodeBuild</strong> (<code>codebuild</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Build automation for custom container images and deployment artifacts
+
+**Actions Granted**:
+```
+codebuild:*
+```
+- `CreateProject`, `UpdateProject`, `DeleteProject`
+- `BatchGetProjects`, `ListProjects`
+- `StartBuild`, `StopBuild`, `BatchGetBuilds`, `ListBuilds`
+- `CreateReportGroup`, `DeleteReportGroup`
+- `BatchGetReportGroups`, `ListReportGroups`
+
+</details>
+
+---
+
+#### AI/ML Services
+
+<details>
+<summary><strong>Amazon Bedrock</strong> (<code>bedrock</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Foundation models for document understanding, extraction, classification, and generation
+
+**Actions Granted**:
+```
+bedrock:*
+```
+- `InvokeModel`, `InvokeModelWithResponseStream`
+- `GetFoundationModel`, `ListFoundationModels`
+- `CreateModelCustomizationJob`, `GetModelCustomizationJob`
+- `CreateProvisionedModelThroughput`, `UpdateProvisionedModelThroughput`, `DeleteProvisionedModelThroughput`
+- `GetModelInvocationLoggingConfiguration`, `PutModelInvocationLoggingConfiguration`
+- `CreateGuardrail`, `UpdateGuardrail`, `DeleteGuardrail`, `GetGuardrail`
+- `CreateAgent`, `UpdateAgent`, `DeleteAgent` (for Bedrock Agents)
+- `CreateKnowledgeBase`, `UpdateKnowledgeBase`, `DeleteKnowledgeBase`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon Textract</strong> (<code>textract</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Document OCR, form extraction, table extraction, and expense analysis
+
+**Actions Granted**:
+```
+textract:*
+```
+- `DetectDocumentText`, `AnalyzeDocument`, `AnalyzeExpense`, `AnalyzeID`
+- `StartDocumentTextDetection`, `GetDocumentTextDetection`
+- `StartDocumentAnalysis`, `GetDocumentAnalysis`
+- `StartExpenseAnalysis`, `GetExpenseAnalysis`
+- `StartLendingAnalysis`, `GetLendingAnalysis`, `GetLendingAnalysisSummary`
+- `CreateAdapter`, `UpdateAdapter`, `DeleteAdapter`, `GetAdapter`
+- `CreateAdapterVersion`, `DeleteAdapterVersion`, `GetAdapterVersion`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon SageMaker</strong> (<code>sagemaker</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Custom ML model endpoints (UDOP pattern), model inference, and ML pipelines
+
+**Actions Granted**:
+```
+sagemaker:*
+```
+- `CreateModel`, `DeleteModel`, `DescribeModel`, `ListModels`
+- `CreateEndpointConfig`, `DeleteEndpointConfig`, `DescribeEndpointConfig`
+- `CreateEndpoint`, `DeleteEndpoint`, `UpdateEndpoint`, `DescribeEndpoint`, `ListEndpoints`
+- `InvokeEndpoint`, `InvokeEndpointAsync`
+- `CreateProcessingJob`, `DescribeProcessingJob`, `StopProcessingJob`
+- `CreateTrainingJob`, `DescribeTrainingJob`, `StopTrainingJob`
+- `CreateTransformJob`, `DescribeTransformJob`, `StopTransformJob`
+- `CreateNotebookInstance`, `DeleteNotebookInstance`, `DescribeNotebookInstance`
+- `AddTags`, `DeleteTags`, `ListTags`
+
+</details>
+
+---
+
+#### Storage Services
+
+<details>
+<summary><strong>Amazon S3</strong> (<code>s3</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Document storage, processing artifacts, model artifacts, and static website hosting
+
+**Actions Granted**:
+```
+s3:*
+```
+- `CreateBucket`, `DeleteBucket`, `ListBuckets`, `GetBucketLocation`
+- `PutBucketPolicy`, `GetBucketPolicy`, `DeleteBucketPolicy`
+- `PutBucketEncryption`, `GetBucketEncryption`
+- `PutBucketVersioning`, `GetBucketVersioning`
+- `PutBucketNotification`, `GetBucketNotification`
+- `PutBucketCors`, `GetBucketCors`, `DeleteBucketCors`
+- `PutObject`, `GetObject`, `DeleteObject`, `ListObjects`
+- `PutObjectTagging`, `GetObjectTagging`, `DeleteObjectTagging`
+- `PutBucketLifecycleConfiguration`, `GetBucketLifecycleConfiguration`
+
+</details>
+
+<details>
+<summary><strong>Amazon DynamoDB</strong> (<code>dynamodb</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Metadata storage, document tracking, extraction results, and configuration data
+
+**Actions Granted**:
+```
+dynamodb:*
+```
+- `CreateTable`, `DeleteTable`, `UpdateTable`, `DescribeTable`, `ListTables`
+- `CreateGlobalTable`, `UpdateGlobalTable`, `DescribeGlobalTable`
+- `PutItem`, `GetItem`, `UpdateItem`, `DeleteItem`
+- `Query`, `Scan`, `BatchGetItem`, `BatchWriteItem`
+- `CreateBackup`, `DeleteBackup`, `DescribeBackup`, `ListBackups`
+- `RestoreTableFromBackup`, `RestoreTableToPointInTime`
+- `EnableKinesisStreamingDestination`, `DisableKinesisStreamingDestination`
+- `TagResource`, `UntagResource`, `ListTagsOfResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon ECR</strong> (<code>ecr</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Container image registry for custom Lambda images and SageMaker containers
+
+**Actions Granted**:
+```
+ecr:*
+```
+- `CreateRepository`, `DeleteRepository`, `DescribeRepositories`, `ListImages`
+- `GetRepositoryPolicy`, `SetRepositoryPolicy`, `DeleteRepositoryPolicy`
+- `GetAuthorizationToken`, `GetDownloadUrlForLayer`
+- `BatchGetImage`, `BatchCheckLayerAvailability`
+- `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`
+- `PutImage`, `BatchDeleteImage`
+- `PutImageScanningConfiguration`, `StartImageScan`, `DescribeImageScanFindings`
+- `PutLifecyclePolicy`, `GetLifecyclePolicy`, `DeleteLifecyclePolicy`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+---
+
+#### API & Application Services
+
+<details>
+<summary><strong>Amazon API Gateway</strong> (<code>apigateway</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: REST and HTTP APIs for document upload, status queries, and result retrieval
+
+**Actions Granted**:
+```
+apigateway:*
+```
+- `CreateRestApi`, `DeleteRestApi`, `UpdateRestApi`, `GetRestApi`, `GetRestApis`
+- `CreateResource`, `DeleteResource`, `GetResource`, `GetResources`
+- `CreateMethod`, `DeleteMethod`, `PutMethod`, `GetMethod`
+- `CreateIntegration`, `DeleteIntegration`, `PutIntegration`, `GetIntegration`
+- `CreateDeployment`, `DeleteDeployment`, `GetDeployment`, `GetDeployments`
+- `CreateStage`, `DeleteStage`, `UpdateStage`, `GetStage`, `GetStages`
+- `CreateAuthorizer`, `DeleteAuthorizer`, `UpdateAuthorizer`, `GetAuthorizer`
+- `CreateUsagePlan`, `DeleteUsagePlan`, `UpdateUsagePlan`, `GetUsagePlan`
+- `CreateApiKey`, `DeleteApiKey`, `UpdateApiKey`, `GetApiKey`
+- `TagResource`, `UntagResource`, `GetTags`
+
+</details>
+
+<details>
+<summary><strong>AWS AppSync</strong> (<code>appsync</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: GraphQL APIs for real-time document processing updates and frontend integration
+
+**Actions Granted**:
+```
+appsync:*
+```
+- `CreateGraphqlApi`, `DeleteGraphqlApi`, `UpdateGraphqlApi`, `GetGraphqlApi`, `ListGraphqlApis`
+- `CreateDataSource`, `DeleteDataSource`, `UpdateDataSource`, `GetDataSource`
+- `CreateResolver`, `DeleteResolver`, `UpdateResolver`, `GetResolver`, `ListResolvers`
+- `CreateType`, `DeleteType`, `UpdateType`, `GetType`, `ListTypes`
+- `CreateFunction`, `DeleteFunction`, `UpdateFunction`, `GetFunction`
+- `CreateApiKey`, `DeleteApiKey`, `UpdateApiKey`, `ListApiKeys`
+- `StartSchemaCreation`, `GetSchemaCreationStatus`, `GetIntrospectionSchema`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+---
+
+#### Security & Identity Services
+
+<details>
+<summary><strong>Amazon Cognito User Pools</strong> (<code>cognito-idp</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: User authentication, user management, and access token issuance
+
+**Actions Granted**:
+```
+cognito-idp:*
+```
+- `CreateUserPool`, `DeleteUserPool`, `UpdateUserPool`, `DescribeUserPool`, `ListUserPools`
+- `CreateUserPoolClient`, `DeleteUserPoolClient`, `UpdateUserPoolClient`, `DescribeUserPoolClient`
+- `CreateUserPoolDomain`, `DeleteUserPoolDomain`, `DescribeUserPoolDomain`
+- `CreateGroup`, `DeleteGroup`, `UpdateGroup`, `GetGroup`, `ListGroups`
+- `AdminCreateUser`, `AdminDeleteUser`, `AdminUpdateUserAttributes`
+- `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`
+- `AdminSetUserPassword`, `AdminResetUserPassword`
+- `AdminInitiateAuth`, `AdminRespondToAuthChallenge`
+- `SetUserPoolMfaConfig`, `GetUserPoolMfaConfig`
+
+</details>
+
+<details>
+<summary><strong>Amazon Cognito Identity Pools</strong> (<code>cognito-identity</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Federated identity management and temporary AWS credentials for authenticated users
+
+**Actions Granted**:
+```
+cognito-identity:*
+```
+- `CreateIdentityPool`, `DeleteIdentityPool`, `UpdateIdentityPool`, `DescribeIdentityPool`
+- `ListIdentityPools`, `ListIdentities`
+- `GetId`, `GetOpenIdToken`, `GetCredentialsForIdentity`
+- `SetIdentityPoolRoles`, `GetIdentityPoolRoles`
+- `LookupDeveloperIdentity`, `MergeDeveloperIdentities`
+- `UnlinkDeveloperIdentity`, `UnlinkIdentity`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>AWS KMS</strong> (<code>kms</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Encryption key management for S3, DynamoDB, Secrets Manager, and other encrypted resources
+
+**Actions Granted**:
+```
+kms:*
+```
+- `CreateKey`, `ScheduleKeyDeletion`, `CancelKeyDeletion`, `DescribeKey`, `ListKeys`
+- `EnableKey`, `DisableKey`, `EnableKeyRotation`, `DisableKeyRotation`
+- `CreateAlias`, `DeleteAlias`, `UpdateAlias`, `ListAliases`
+- `CreateGrant`, `RetireGrant`, `RevokeGrant`, `ListGrants`
+- `Encrypt`, `Decrypt`, `ReEncrypt`, `GenerateDataKey`, `GenerateDataKeyWithoutPlaintext`
+- `PutKeyPolicy`, `GetKeyPolicy`, `ListKeyPolicies`
+- `TagResource`, `UntagResource`, `ListResourceTags`
+
+</details>
+
+<details>
+<summary><strong>AWS Secrets Manager</strong> (<code>secretsmanager</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Secure storage for API keys, database credentials, and service integration secrets
+
+**Actions Granted**:
+```
+secretsmanager:*
+```
+- `CreateSecret`, `DeleteSecret`, `UpdateSecret`, `DescribeSecret`, `ListSecrets`
+- `GetSecretValue`, `PutSecretValue`
+- `RotateSecret`, `CancelRotateSecret`
+- `UpdateSecretVersionStage`, `ListSecretVersionIds`
+- `RestoreSecret`, `ReplicateSecretToRegions`, `RemoveRegionsFromReplication`
+- `GetResourcePolicy`, `PutResourcePolicy`, `DeleteResourcePolicy`, `ValidateResourcePolicy`
+- `TagResource`, `UntagResource`
+
+</details>
+
+<details>
+<summary><strong>AWS WAF v2</strong> (<code>wafv2</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Web application firewall for API Gateway and CloudFront protection
+
+**Actions Granted**:
+```
+wafv2:*
+```
+- `CreateWebACL`, `DeleteWebACL`, `UpdateWebACL`, `GetWebACL`, `ListWebACLs`
+- `CreateRuleGroup`, `DeleteRuleGroup`, `UpdateRuleGroup`, `GetRuleGroup`, `ListRuleGroups`
+- `CreateIPSet`, `DeleteIPSet`, `UpdateIPSet`, `GetIPSet`, `ListIPSets`
+- `CreateRegexPatternSet`, `DeleteRegexPatternSet`, `UpdateRegexPatternSet`
+- `AssociateWebACL`, `DisassociateWebACL`, `GetWebACLForResource`, `ListResourcesForWebACL`
+- `PutLoggingConfiguration`, `GetLoggingConfiguration`, `DeleteLoggingConfiguration`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+---
+
+#### Messaging & Event Services
+
+<details>
+<summary><strong>Amazon SNS</strong> (<code>sns</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Notifications for processing completion, errors, and system alerts
+
+**Actions Granted**:
+```
+sns:*
+```
+- `CreateTopic`, `DeleteTopic`, `GetTopicAttributes`, `SetTopicAttributes`, `ListTopics`
+- `Subscribe`, `Unsubscribe`, `ConfirmSubscription`, `ListSubscriptions`, `ListSubscriptionsByTopic`
+- `Publish`, `PublishBatch`
+- `GetSubscriptionAttributes`, `SetSubscriptionAttributes`
+- `AddPermission`, `RemovePermission`
+- `GetDataProtectionPolicy`, `PutDataProtectionPolicy`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon SQS</strong> (<code>sqs</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Message queues for asynchronous document processing and workflow decoupling
+
+**Actions Granted**:
+```
+sqs:*
+```
+- `CreateQueue`, `DeleteQueue`, `GetQueueAttributes`, `SetQueueAttributes`, `ListQueues`
+- `GetQueueUrl`, `ListQueueTags`
+- `SendMessage`, `SendMessageBatch`
+- `ReceiveMessage`, `DeleteMessage`, `DeleteMessageBatch`
+- `ChangeMessageVisibility`, `ChangeMessageVisibilityBatch`
+- `PurgeQueue`
+- `AddPermission`, `RemovePermission`
+- `TagQueue`, `UntagQueue`
+
+</details>
+
+<details>
+<summary><strong>Amazon EventBridge</strong> (<code>events</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Event-driven triggers for document processing workflows and S3 event routing
+
+**Actions Granted**:
+```
+events:*
+```
+- `CreateEventBus`, `DeleteEventBus`, `DescribeEventBus`, `ListEventBuses`
+- `PutRule`, `DeleteRule`, `DescribeRule`, `EnableRule`, `DisableRule`, `ListRules`
+- `PutTargets`, `RemoveTargets`, `ListTargetsByRule`
+- `PutEvents`, `PutPartnerEvents`
+- `CreateArchive`, `DeleteArchive`, `DescribeArchive`, `ListArchives`
+- `CreateConnection`, `DeleteConnection`, `DescribeConnection`, `UpdateConnection`
+- `CreateApiDestination`, `DeleteApiDestination`, `DescribeApiDestination`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon EventBridge Scheduler</strong> (<code>scheduler</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Scheduled tasks for batch processing, cleanup jobs, and periodic workflows
+
+**Actions Granted**:
+```
+scheduler:*
+```
+- `CreateSchedule`, `DeleteSchedule`, `UpdateSchedule`, `GetSchedule`, `ListSchedules`
+- `CreateScheduleGroup`, `DeleteScheduleGroup`, `GetScheduleGroup`, `ListScheduleGroups`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+---
+
+#### Monitoring & Management Services
+
+<details>
+<summary><strong>Amazon CloudWatch</strong> (<code>cloudwatch</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Metrics, alarms, and dashboards for monitoring IDP processing performance
+
+**Actions Granted**:
+```
+cloudwatch:*
+```
+- `PutMetricData`, `GetMetricData`, `GetMetricStatistics`, `ListMetrics`
+- `PutMetricAlarm`, `DeleteAlarms`, `DescribeAlarms`, `DescribeAlarmsForMetric`
+- `EnableAlarmActions`, `DisableAlarmActions`, `SetAlarmState`
+- `PutDashboard`, `DeleteDashboards`, `GetDashboard`, `ListDashboards`
+- `PutCompositeAlarm`, `DescribeAnomalyDetectors`, `PutAnomalyDetector`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon CloudWatch Logs</strong> (<code>logs</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Centralized logging for Lambda functions, API Gateway, and all IDP components
+
+**Actions Granted**:
+```
+logs:*
+```
+- `CreateLogGroup`, `DeleteLogGroup`, `DescribeLogGroups`, `ListTagsLogGroup`
+- `CreateLogStream`, `DeleteLogStream`, `DescribeLogStreams`
+- `PutLogEvents`, `GetLogEvents`, `FilterLogEvents`
+- `PutRetentionPolicy`, `DeleteRetentionPolicy`
+- `PutSubscriptionFilter`, `DeleteSubscriptionFilter`, `DescribeSubscriptionFilters`
+- `CreateExportTask`, `DescribeExportTasks`
+- `PutMetricFilter`, `DeleteMetricFilter`, `DescribeMetricFilters`
+- `PutResourcePolicy`, `DeleteResourcePolicy`, `DescribeResourcePolicies`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>AWS Systems Manager (SSM)</strong> (<code>ssm</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Parameter Store for configuration management and secure parameter storage
+
+**Actions Granted**:
+```
+ssm:*
+```
+- `PutParameter`, `GetParameter`, `GetParameters`, `GetParametersByPath`, `DeleteParameter`
+- `DescribeParameters`, `GetParameterHistory`
+- `AddTagsToResource`, `RemoveTagsFromResource`, `ListTagsForResource`
+- `CreateDocument`, `DeleteDocument`, `UpdateDocument`, `DescribeDocument`
+- `CreateAssociation`, `DeleteAssociation`, `UpdateAssociation`, `DescribeAssociation`
+- `SendCommand`, `CancelCommand`, `ListCommands`, `ListCommandInvocations`
+- `StartAutomationExecution`, `StopAutomationExecution`, `GetAutomationExecution`
+
+</details>
+
+---
+
+#### Analytics & Data Services
+
+<details>
+<summary><strong>AWS Glue</strong> (<code>glue</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Data catalog, ETL jobs, and schema management for structured extraction data
+
+**Actions Granted**:
+```
+glue:*
+```
+- `CreateDatabase`, `DeleteDatabase`, `UpdateDatabase`, `GetDatabase`, `GetDatabases`
+- `CreateTable`, `DeleteTable`, `UpdateTable`, `GetTable`, `GetTables`
+- `CreatePartition`, `DeletePartition`, `UpdatePartition`, `GetPartition`, `GetPartitions`
+- `CreateCrawler`, `DeleteCrawler`, `UpdateCrawler`, `StartCrawler`, `StopCrawler`, `GetCrawler`
+- `CreateJob`, `DeleteJob`, `UpdateJob`, `StartJobRun`, `BatchStopJobRun`, `GetJob`, `GetJobRun`
+- `CreateTrigger`, `DeleteTrigger`, `UpdateTrigger`, `StartTrigger`, `StopTrigger`, `GetTrigger`
+- `CreateConnection`, `DeleteConnection`, `UpdateConnection`, `GetConnection`
+- `TagResource`, `UntagResource`, `GetTags`
+
+</details>
+
+<details>
+<summary><strong>Amazon OpenSearch Serverless</strong> (<code>aoss</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Vector search for document embeddings, semantic search, and RAG implementations
+
+**Actions Granted**:
+```
+aoss:*
+```
+- `CreateCollection`, `DeleteCollection`, `UpdateCollection`, `GetCollection`, `ListCollections`, `BatchGetCollection`
+- `CreateSecurityPolicy`, `DeleteSecurityPolicy`, `UpdateSecurityPolicy`, `GetSecurityPolicy`, `ListSecurityPolicies`
+- `CreateAccessPolicy`, `DeleteAccessPolicy`, `UpdateAccessPolicy`, `GetAccessPolicy`, `ListAccessPolicies`
+- `CreateVpcEndpoint`, `DeleteVpcEndpoint`, `UpdateVpcEndpoint`, `GetVpcEndpoint`, `ListVpcEndpoints`, `BatchGetVpcEndpoint`
+- `CreateSecurityConfig`, `DeleteSecurityConfig`, `UpdateSecurityConfig`, `GetSecurityConfig`
+- `GetAccountSettings`, `UpdateAccountSettings`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+---
+
+#### Networking & Content Delivery Services
+
+<details>
+<summary><strong>Amazon CloudFront</strong> (<code>cloudfront</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: CDN for web application hosting and API acceleration
+
+**Actions Granted**:
+```
+cloudfront:*
+```
+- `CreateDistribution`, `DeleteDistribution`, `UpdateDistribution`, `GetDistribution`, `ListDistributions`
+- `CreateOriginAccessControl`, `DeleteOriginAccessControl`, `UpdateOriginAccessControl`, `GetOriginAccessControl`
+- `CreateCachePolicy`, `DeleteCachePolicy`, `UpdateCachePolicy`, `GetCachePolicy`, `ListCachePolicies`
+- `CreateOriginRequestPolicy`, `DeleteOriginRequestPolicy`, `UpdateOriginRequestPolicy`, `GetOriginRequestPolicy`
+- `CreateResponseHeadersPolicy`, `DeleteResponseHeadersPolicy`, `UpdateResponseHeadersPolicy`
+- `CreateFunction`, `DeleteFunction`, `UpdateFunction`, `PublishFunction`, `GetFunction`
+- `CreateInvalidation`, `GetInvalidation`, `ListInvalidations`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+<details>
+<summary><strong>Amazon EC2 (VPC)</strong> (<code>ec2</code>)</summary>
+
+**Permission Level**: Limited (VPC resources only)
+
+**Purpose**: VPC, subnet, and security group management for private networking
+
+**Actions Granted**:
+```
+ec2:CreateVpc
+ec2:DeleteVpc
+ec2:DescribeVpcs
+ec2:CreateSubnet
+ec2:DeleteSubnet
+ec2:DescribeSubnets
+ec2:CreateSecurityGroup
+ec2:DeleteSecurityGroup
+ec2:DescribeSecurityGroups
+ec2:AuthorizeSecurityGroupIngress
+ec2:AuthorizeSecurityGroupEgress
+ec2:RevokeSecurityGroupIngress
+ec2:RevokeSecurityGroupEgress
+ec2:CreateTags
+ec2:DeleteTags
+ec2:DescribeTags
+ec2:DescribeAvailabilityZones
+```
+
+**Note**: EC2 permissions are intentionally limited to VPC-related resources only, excluding compute instances.
+
+</details>
+
+---
+
+#### Scaling Services
+
+<details>
+<summary><strong>AWS Application Auto Scaling</strong> (<code>application-autoscaling</code>)</summary>
+
+**Permission Level**: Full (`*`)
+
+**Purpose**: Auto-scaling for DynamoDB tables, Lambda provisioned concurrency, and SageMaker endpoints
+
+**Actions Granted**:
+```
+application-autoscaling:*
+```
+- `RegisterScalableTarget`, `DeregisterScalableTarget`, `DescribeScalableTargets`
+- `PutScalingPolicy`, `DeleteScalingPolicy`, `DescribeScalingPolicies`
+- `PutScheduledAction`, `DeleteScheduledAction`, `DescribeScheduledActions`
+- `DescribeScalingActivities`
+- `TagResource`, `UntagResource`, `ListTagsForResource`
+
+</details>
+
+---
 
 ## <span style="color: blue;">Security Considerations</span>
 

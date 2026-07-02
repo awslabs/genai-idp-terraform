@@ -448,3 +448,211 @@ class TestExtractionService:
         text = "No JSON here"
         result = extract_json_from_text(text)
         assert result == "No JSON here"
+
+
+@pytest.mark.unit
+class TestPerClassExtractionModelOverride:
+    """Tests for the per-class extraction model override feature (x-aws-idp-extraction-model)."""
+
+    @pytest.fixture
+    def config_with_override(self):
+        """Config where one class has x-aws-idp-extraction-model and another does not."""
+        return {
+            "classes": [
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "simple-receipt",
+                    "x-aws-idp-document-type": "simple-receipt",
+                    "type": "object",
+                    "description": "A simple receipt",
+                    "properties": {
+                        "total": {
+                            "type": "string",
+                            "description": "Total amount",
+                        },
+                    },
+                },
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "complex-form",
+                    "x-aws-idp-document-type": "complex-form",
+                    "x-aws-idp-extraction-model": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                    "type": "object",
+                    "description": "A complex financial form",
+                    "properties": {
+                        "account_number": {
+                            "type": "string",
+                            "description": "Account number",
+                        },
+                    },
+                },
+            ],
+            "extraction": {
+                "model": "us.amazon.nova-pro-v1:0",
+                "temperature": 0.0,
+                "top_k": 5,
+                "system_prompt": "You are a document extraction assistant.",
+                "task_prompt": dedent("""
+                    Extract fields from this {DOCUMENT_CLASS} document:
+                    {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+                    Document text: {DOCUMENT_TEXT}
+                    {DOCUMENT_IMAGE}
+                """),
+            },
+        }
+
+    @pytest.fixture
+    def service_with_override(self, config_with_override):
+        """ExtractionService with per-class model override config."""
+        return ExtractionService(region="us-west-2", config=config_with_override)
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_uses_global_model_when_no_override(
+        self, mock_invoke_model, service_with_override
+    ):
+        """When the class schema has no x-aws-idp-extraction-model, use the global model."""
+        from idp_common.extraction.service import SectionInfo
+
+        # Set up context for a class WITHOUT override
+        service_with_override._class_schema = service_with_override._get_class_schema(
+            "simple-receipt"
+        )
+        service_with_override._class_label = "simple-receipt"
+        service_with_override._page_images = []
+
+        mock_invoke_model.return_value = {
+            "response": {
+                "output": {"message": {"content": [{"text": '{"total": "$42.00"}'}]}}
+            },
+            "metering": {"tokens": 100},
+        }
+
+        section_info = SectionInfo(
+            class_label="simple-receipt",
+            sorted_page_ids=["1"],
+            page_indices=[0],
+            output_bucket="bucket",
+            output_key="key",
+            output_uri="s3://bucket/key",
+            start_page=1,
+            end_page=1,
+        )
+
+        service_with_override._invoke_extraction_model(
+            content=[{"text": "test"}],
+            system_prompt="test",
+            section_info=section_info,
+        )
+
+        # Verify the global model was used
+        mock_invoke_model.assert_called_once()
+        call_kwargs = mock_invoke_model.call_args
+        assert call_kwargs.kwargs["model_id"] == "us.amazon.nova-pro-v1:0"
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_uses_override_model_when_specified(
+        self, mock_invoke_model, service_with_override
+    ):
+        """When the class schema has x-aws-idp-extraction-model, use the override model."""
+        from idp_common.extraction.service import SectionInfo
+
+        # Set up context for a class WITH override
+        service_with_override._class_schema = service_with_override._get_class_schema(
+            "complex-form"
+        )
+        service_with_override._class_label = "complex-form"
+        service_with_override._page_images = []
+
+        mock_invoke_model.return_value = {
+            "response": {
+                "output": {
+                    "message": {"content": [{"text": '{"account_number": "12345"}'}]}
+                }
+            },
+            "metering": {"tokens": 100},
+        }
+
+        section_info = SectionInfo(
+            class_label="complex-form",
+            sorted_page_ids=["1"],
+            page_indices=[0],
+            output_bucket="bucket",
+            output_key="key",
+            output_uri="s3://bucket/key",
+            start_page=1,
+            end_page=1,
+        )
+
+        service_with_override._invoke_extraction_model(
+            content=[{"text": "test"}],
+            system_prompt="test",
+            section_info=section_info,
+        )
+
+        # Verify the per-class override model was used
+        mock_invoke_model.assert_called_once()
+        call_kwargs = mock_invoke_model.call_args
+        assert (
+            call_kwargs.kwargs["model_id"]
+            == "us.anthropic.claude-sonnet-4-20250514-v1:0"
+        )
+
+    @patch("idp_common.bedrock.invoke_model")
+    def test_override_is_logged(self, mock_invoke_model, service_with_override, caplog):
+        """Verify that using a per-class model override produces an info log message."""
+        import logging
+
+        from idp_common.extraction.service import SectionInfo
+
+        service_with_override._class_schema = service_with_override._get_class_schema(
+            "complex-form"
+        )
+        service_with_override._class_label = "complex-form"
+        service_with_override._page_images = []
+
+        mock_invoke_model.return_value = {
+            "response": {
+                "output": {
+                    "message": {"content": [{"text": '{"account_number": "12345"}'}]}
+                }
+            },
+            "metering": {"tokens": 100},
+        }
+
+        section_info = SectionInfo(
+            class_label="complex-form",
+            sorted_page_ids=["1"],
+            page_indices=[0],
+            output_bucket="bucket",
+            output_key="key",
+            output_uri="s3://bucket/key",
+            start_page=1,
+            end_page=1,
+        )
+
+        with caplog.at_level(logging.INFO, logger="idp_common.extraction.service"):
+            service_with_override._invoke_extraction_model(
+                content=[{"text": "test"}],
+                system_prompt="test",
+                section_info=section_info,
+            )
+
+        assert any(
+            "per-class extraction model override" in record.message
+            and "complex-form" in record.message
+            for record in caplog.records
+        )
+
+    def test_schema_constant_exists(self):
+        """Verify the X_AWS_IDP_EXTRACTION_MODEL constant is defined."""
+        from idp_common.config.schema_constants import X_AWS_IDP_EXTRACTION_MODEL
+
+        assert X_AWS_IDP_EXTRACTION_MODEL == "x-aws-idp-extraction-model"
+
+    def test_clean_schema_removes_extraction_model(self, service_with_override):
+        """Verify that x-aws-idp-extraction-model is stripped from prompts."""
+        schema_with_override = service_with_override._get_class_schema("complex-form")
+        assert "x-aws-idp-extraction-model" in schema_with_override
+
+        cleaned = service_with_override._clean_schema_for_prompt(schema_with_override)
+        assert "x-aws-idp-extraction-model" not in cleaned

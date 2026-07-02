@@ -1,3 +1,7 @@
+---
+title: "GenAIIDP Web User Interface"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -7,7 +11,7 @@ The solution includes a responsive web-based user interface built with React tha
 
 ![Web UI Screenshot](../images/WebUI.png)
 
-*The GenAIIDP Web Interface showing the document tracking dashboard with status information, classification results, and extracted data.*
+_The GenAIIDP Web Interface showing the document tracking dashboard with status information, classification results, and extracted data._
 
 ## Features
 
@@ -19,6 +23,7 @@ The solution includes a responsive web-based user interface built with React tha
 - Inspection of processing outputs for section classification and information extraction
 - Accuracy evaluation reports when baseline data is provided
 - View and edit pattern configuration, including document classes, prompt engineering, and model settings
+- Manage multiple configuration versions — create, compare, activate, and delete versions (see [configuration-versions.md](configuration-versions.md))
 - **Confidence threshold configuration** for HITL (Human-in-the-Loop) triggering through the Assessment & HITL Configuration section
 - Document upload from local computer
 - Knowledge base querying for document collections
@@ -50,7 +55,7 @@ The Edit Sections feature provides an intelligent interface for modifying docume
 
 1. **Edit Section Classifications**: Use dropdowns to change document types
 2. **Modify Page Assignments**: Edit comma-separated page IDs (e.g., "1, 2, 3")
-3. **Add New Sections**: Click "Add Section" for new document boundaries  
+3. **Add New Sections**: Click "Add Section" for new document boundaries
 4. **Delete Sections**: Use remove buttons to delete unnecessary sections
 5. **Validation**: Real-time validation prevents overlapping pages and invalid configurations
 6. **Submit Changes**: Click "Save & Process Changes" to trigger selective reprocessing
@@ -59,11 +64,13 @@ The Edit Sections feature provides an intelligent interface for modifying docume
 
 The Edit Sections feature uses **2-phase schema knowledge optimization**:
 
-#### Phase 1: Frontend 
+#### Phase 1: Frontend
+
 - **Selective Payload**: Only sends sections that actually changed
 - **Validation Engine**: Prevents invalid configurations before submission
 
-#### Phase 2: Backend   
+#### Phase 2: Backend
+
 - **Pipeline**: Processing functions automatically skip redundant operations
   - **OCR**: Skips if pages already have OCR data
   - **Classification**: Skips if pages already classified
@@ -74,17 +81,138 @@ The Edit Sections feature uses **2-phase schema knowledge optimization**:
 ### Pattern Compatibility
 
 #### Pattern-2 and Pattern-3 Support
+
 - **Full Functionality**: Complete edit capabilities with intelligent reprocessing
-- **Performance Optimization**: Automatic selective processing for efficiency  
+- **Performance Optimization**: Automatic selective processing for efficiency
 - **Data Preservation**: Unmodified sections retain all processing results
 
+#### Pattern-1 Support (Data-Only Edit Mode)
+
+Pattern-1 uses **Bedrock Data Automation (BDA)** with automatic section management. Edit Mode in Pattern-1 provides **data-only editing**:
+
+- **Data Editing**: Edit extraction data (predictions and ground truth) via the "Edit Data" button for each section
+- **Section Structure**: Read-only - section boundaries, classifications, and page assignments are managed by BDA
+- **Reprocessing**: "Save and Reprocess" triggers evaluation and summarization steps without re-invoking BDA
+- **BDA Skip Logic**: When reprocessing with existing pages/sections data, BDA invocation is automatically skipped
+
+**Note**: Pattern-2 and Pattern-3 offer full section structure editing. Pattern-1 maintains BDA-managed section boundaries while allowing extraction data modifications.
+
+## Edit Pages
+
+The Edit Pages feature provides an intelligent interface for modifying individual page classifications and text content, with automatic selective reprocessing for Pattern-2 and Pattern-3 workflows.
+
+### Key Capabilities
+
+- **View Page Text**: Access clean, readable page text without JSON formatting in a modal editor
+- **Classification Reset**: Reset page classifications to force reclassification during reprocessing
+- **Text Editing**: Modify page OCR text with immediate S3 saves to prevent data loss
+- **Confidence Editing**: Edit OCR confidence data displayed as markdown tables
+- **Split-Pane Editor**: Side-by-side layout with text editor and live markdown preview
+- **Intelligent Reprocessing**: Only affected sections are reprocessed based on modification type
+- **Pattern Compatibility**: Available for Pattern-2 and Pattern-3, with informative guidance for Pattern-1
+
+### How to Use
+
+1. Navigate to a completed document's detail page
+2. In the "Document Pages" panel, click the "Edit Pages" button
+3. **For Pattern-2/Pattern-3**: Enter edit mode with page-level editing capabilities
+4. **For Pattern-1**: View informative modal explaining BDA architecture differences
+
+#### Editing Workflow (Pattern-2/Pattern-3)
+
+##### View Mode (Default)
+- Click "View Page Text" button to view page content in read-only mode
+- Modal displays text with live markdown preview
+- Switch to "Text + Confidence" view to see OCR confidence table
+
+##### Edit Mode
+1. **Click "Edit Pages"**: Activates edit mode for all pages
+2. **Reset Page Classification** (optional):
+   - Click the  button next to page Class/Type
+   - Page becomes "Unclassified" and will be reclassified during reprocessing
+3. **Edit Page Text**:
+   - Click "Edit Page Text" button to open modal editor
+   - **Text + Markdown View**: Edit plain text (left) with live markdown preview (right)
+   - **Text + Confidence View**: Edit markdown confidence table (left) with rendered preview (right)
+   - Click "Save" to write changes to S3 immediately
+   - Unsaved changes warning prevents data loss
+4. **Submit Changes**: Click "Save & Process Changes" to trigger reprocessing
+5. **Review Impact**: Confirmation modal shows how many pages will trigger reclassification vs re-extraction
+6. **Confirm**: Click "Confirm & Process" to submit document for selective reprocessing
+
+### Processing Optimization
+
+The Edit Pages feature uses intelligent selective reprocessing:
+
+#### Page Classification Reset
+- **Impact**: Removes all sections containing the page
+- **Triggers**: Full reclassification and re-extraction
+- **Use Case**: When page was incorrectly classified
+
+#### Page Text Modification
+- **Impact**: Clears extraction results for sections containing the page
+- **Preserves**: Sections and classifications remain intact
+- **Triggers**: Re-extraction only (skips OCR and classification)
+- **Use Case**: Correcting OCR errors to improve extraction accuracy
+
+#### Backend Processing
+- **OCR**: Automatically skipped (page text already updated)
+- **Classification**: Skipped for text-only modifications, runs for class resets
+- **Extraction**: Runs for all affected sections
+- **Assessment**: Runs if extraction completes
+
+### Text Format Handling
+
+- **Display**: Plain text extracted from JSON wrapper - no raw JSON visible to users
+- **Editing**: User edits plain text in a clean Monaco editor
+- **Storage**: Text wrapped back in `{"text": "..."}` format for backward compatibility
+- **Confidence**: Markdown table format for readability (Text | Confidence columns)
+
+### Pattern Compatibility
+
+#### Pattern-2 and Pattern-3 Support
+
+- **Full Functionality**: Complete page editing capabilities with intelligent reprocessing
+- **Performance Optimization**: Automatic selective processing based on modification type
+- **Data Preservation**: Unmodified pages and sections retain all processing results
+
 #### Pattern-1 Information
-Pattern-1 uses **Bedrock Data Automation (BDA)** with automatic section management. When Edit Sections is clicked, users see an informative modal explaining:
 
-- **Architecture Differences**: BDA handles section boundaries automatically
-- **Alternative Workflows**: Available options like "View/Edit Data", Configuration updates, and document reprocessing
-- **Future Considerations**: Guidance on using Pattern-2/Pattern-3 for fine-grained section control
+Pattern-1 uses **Bedrock Data Automation (BDA)** with automatic page management. When Edit Pages is clicked, users see an informative modal explaining:
 
+- **Architecture Differences**: BDA handles page processing automatically
+- **Alternative Workflows**: Available options like "View Page Text", Configuration updates, and document reprocessing
+- **Future Considerations**: Guidance on using Pattern-2/Pattern-3 for fine-grained page control
+
+## Prompt Preview
+
+The **Prompt Preview** tab in the Configuration page allows you to see exactly what prompts are sent to the LLM for each processing step, with configuration-derived placeholders filled in using your actual class definitions and schemas.
+
+### Key Capabilities
+
+- **Step Selection**: Preview prompts for Classification, Extraction, Assessment, or Summarization
+- **Class Selection**: For Extraction and Assessment, select a specific document class to see how its JSON Schema appears in the prompt
+- **Filled Placeholders**: Config-derived values (`{CLASS_NAMES_AND_DESCRIPTIONS}`, `{ATTRIBUTE_NAMES_AND_DESCRIPTIONS}`, `{DOCUMENT_CLASS}`) are replaced with actual values from your configuration
+- **Runtime Markers**: Document-specific placeholders (`{DOCUMENT_TEXT}`, `{DOCUMENT_IMAGE}`, etc.) are shown as highlighted yellow markers indicating where document content will be inserted at processing time
+- **Token Estimates**: Approximate token counts for system and task prompts help with cost awareness
+- **Copy to Clipboard**: Copy rendered or raw prompt templates for use in external tools
+- **Substitution Details**: See the exact formatted class list or cleaned JSON Schema that gets inserted into the prompt
+
+### How to Use
+
+1. Navigate to the Configuration page
+2. Click the **Prompt Preview** tab (alongside Configuration, Document Schema, Rule Schema)
+3. Select a **Processing Step** from the dropdown (Classification, Extraction, Assessment, Summarization)
+4. For Extraction or Assessment, select a **Document Class** to preview its schema in the prompt
+5. View the rendered prompts in the Task Prompt and System Prompt sub-tabs
+6. Use the Raw Task Template and Raw System Template sub-tabs to see the unprocessed templates with placeholder syntax
+
+### Use Cases
+
+- **Schema Optimization**: See how your document class attributes appear in the extraction prompt — optimize descriptions and structure for better LLM comprehension
+- **Prompt Debugging**: Verify that custom prompt edits render correctly with actual placeholder values
+- **Cost Awareness**: Estimate prompt token usage before processing documents
+- **Training**: Help new users understand what the LLM actually sees during each processing step
 
 ## Document Analytics
 
@@ -125,7 +253,7 @@ The Document Process Flow feature provides a visual representation of the Step F
 
 ![Document Process Flow](../images/DocumentProcessFlow.png)
 
-*The Document Process Flow visualization showing the execution steps, status, and details.*
+_The Document Process Flow visualization showing the execution steps, status, and details._
 
 ### Key Capabilities
 
@@ -158,16 +286,64 @@ The Document Process Flow visualization is particularly useful for troubleshooti
 - Analyze execution times to identify performance bottlenecks
 - Inspect the input and output of each step to verify data transformation
 
+## Download Document Data
+
+The Document Details page exposes a **Download** dropdown in the page header that packages the document's outputs into a single ZIP archive, suitable for sharing, archival, or downstream analysis outside the IDP console.
+
+### Folder layout
+
+The ZIP preserves the **real S3 key structure** under three top-level folders that mirror their source buckets:
+
+- `output/<key>` — files from the **OutputBucket** (section results, page OCR/confidence, page images, summary, evaluation, rule validation)
+- `baseline/<key>` — files from the **EvaluationBaselineBucket** (ground-truth section results)
+- `input/<key>` — files from the **InputBucket** (the original uploaded source document, optional)
+
+This makes the archive directly comparable to the output of an `aws s3 sync` of the same buckets — users can diff, script against, or re-upload the archive without translating paths.
+
+A self-describing `manifest.json` is written at the ZIP root capturing the export timestamp, scope, document attributes, bucket-to-folder mapping, and the list of files included. If any individual file cannot be fetched (for example, a permissions error), the download continues and the failure is recorded under `errors[]` in the manifest rather than aborting the whole archive.
+
+### Scope options
+
+- **Download All (ZIP)** — every output artifact for the document (summary, evaluation & rule-validation reports, per-section predictions, baselines when available, per-page text and confidence). The options dialog offers two checkboxes:
+  - **Include page images** (off by default) — includes the rendered page image for each page (can significantly increase archive size).
+  - **Include source document** (off by default) — includes the original uploaded file from the **InputBucket** under `input/<key>`.
+- **Download Predictions (ZIP)** — only the per-section `sections/<id>/result.json` files (under `output/`) plus the `manifest.json` and `document-attributes.json`.
+- **Download Baselines (ZIP)** — only the per-section `sections/<id>/result.json` files from the **EvaluationBaselineBucket** (under `baseline/`). This option is shown only when an evaluation baseline is available.
+
+### Fetching mechanics
+
+Every file in the archive is fetched directly from S3 using a short-lived presigned URL generated client-side with your browser's Cognito credentials, preserving binary content byte-for-byte. A progress modal reports status during the download and offers a **Cancel** button for large documents. The per-section **Download Data** / **Download Baseline** buttons in the Sections panel remain available for single-file downloads.
+
 ## Chat with Document
 
-The "Chat with Document" feature is available at the bottom of the Document Detail view. This feature uses the same model that's configured to do the summarization to provide a RAG interface to the document that's the details are displayed for. No other document is taken in to account except the document you're viewing the details of. Note that this feature will only work after the document status is marked as complete.
+The "Chat with Document" feature is available at the bottom of the Document Detail view. It provides an interactive Q&A interface grounded in the text of the single document you are viewing — no other documents are considered. The feature is only available after the document's status is **COMPLETE**.
 
-Your chat history will be saved as you continue your chat but if you leave the document details screen, your chat history is erased. This feature uses prompt caching for the document contents for repeated chat requests for each document.
+### Model selection
 
-See the feature in action in this video:  
- 
+Chat has its own dedicated configuration section (**Configuration tab → "Chat-with-Document Configuration"**) — it is **independent from summarization**. This is important because chat sends the entire document text to the model in a single prompt, so a large-context model (such as `us.anthropic.claude-opus-4-7:1m` — the default — or `us.anthropic.claude-sonnet-4-6:1m`) is usually the best choice, even if you've configured a smaller, cheaper model for summarization.
+
+The Chat panel includes a **Model** selector that defaults to the `chat.model` configured in the version of the config that was used to process the document. You can override the model for the current chat session via the dropdown. The list of selectable models comes from the `chat.model` enum in the configuration schema.
+
+If a document is "too large for chat context window" — i.e. Bedrock returns an `Input Tokens Exceeded` error — pick a larger-context model in the Chat panel's Model selector and retry. For documents that are larger than any single-prompt model can fit, use the [Knowledge Base](./knowledge-base.md) feature instead.
+
+### Chat history
+
+Your chat history is preserved while you remain on the Document Detail screen; leaving and returning erases it. Prompt caching is used for the document contents across successive turns on the same document to reduce latency and cost.
+
+### Streaming & live status
+
+Chat-with-Document runs as an asynchronous workflow so it can use long-latency large-context models without hitting an AppSync synchronous-request timeout. When you submit a prompt:
+
+1. A **status pill** appears above the input area and transitions as the backend makes progress: **Queued → Loading document text → Querying {model} → Streaming response**.
+2. As soon as the model starts producing output, the assistant bubble appears with a blinking cursor and **tokens stream in** live (throttled to ~200 ms / 200-char batches server-side so the UI stays responsive under heavy throttling).
+3. When generation completes the status pill clears and the bubble finalizes with a timestamp and the model ID used.
+4. Errors (including RBAC scope denials on documents outside your `allowedConfigVersions`) render inline in the assistant bubble in red so you can see what went wrong without losing the context of the conversation.
+
+The session is scoped to your user — other users cannot subscribe to or continue your chat session even if they know the session ID.
+
+See the feature in action in this video:
+
 https://github.com/user-attachments/assets/50607084-96d6-4833-85a6-3dc0e72b28ac
-
 
 ### How to Use
 
@@ -198,7 +374,7 @@ The web UI is automatically deployed as part of the CloudFormation stack. The de
 
 1. Creates required Cognito resources (User Pool, Identity Pool)
 2. Builds and deploys the React application to S3
-3. Sets up CloudFront distribution for content delivery
+3. Sets up CloudFront distribution for content delivery (or ALB for VPC-based hosting — see [ALB Hosting](./alb-hosting.md))
 4. Configures necessary IAM roles and permissions
 
 ## Accessing the Web UI
@@ -217,14 +393,16 @@ To run the web UI locally for development:
 
 1. Navigate to the `/ui` directory
 2. Create a `.env` file using the `WebUITestEnvFile` output from the CloudFormation stack:
+
 ```
-REACT_APP_USER_POOL_ID=<value>
-REACT_APP_USER_POOL_CLIENT_ID=<value>
-REACT_APP_IDENTITY_POOL_ID=<value>
-REACT_APP_APPSYNC_GRAPHQL_URL=<value>
-REACT_APP_AWS_REGION=<value>
-REACT_APP_SETTINGS_PARAMETER=<value>
+VITE_USER_POOL_ID=<value>
+VITE_USER_POOL_CLIENT_ID=<value>
+VITE_IDENTITY_POOL_ID=<value>
+VITE_APPSYNC_GRAPHQL_URL=<value>
+VITE_AWS_REGION=<value>
+VITE_SETTINGS_PARAMETER=<value>
 ```
+
 3. Install dependencies: `npm install`
 4. Start the development server: `npm run start`
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
@@ -243,7 +421,7 @@ The web UI implementation includes several security features:
 - All communication is encrypted using HTTPS
 - Authentication tokens are automatically rotated
 - Session timeouts are enforced
-- CloudFront distribution uses secure configuration
+- CloudFront distribution uses secure configuration (or ALB with TLS 1.3 for VPC-based hosting)
 - S3 buckets are configured with appropriate security policies
 - API access is controlled through IAM and Cognito
 - Web Application Firewall (WAF) protection for AppSync API
@@ -260,6 +438,7 @@ The solution includes AWS WAF integration to protect your AppSync API:
 - **Lambda service access**: The solution automatically maintains a WAF IPSet with current AWS Lambda service IP ranges to ensure Lambda functions can always access the AppSync API even when IP restrictions are enabled
 
 When configuring the WAF:
+
 - IP ranges must be in valid CIDR notation (e.g., `192.168.1.0/24`)
 - Multiple ranges should be comma-separated
 - The WAF is only enabled when the parameter is set to something other than the default `0.0.0.0/0`
@@ -271,7 +450,7 @@ The web UI includes built-in monitoring:
 
 - CloudWatch metrics for API and authentication activity
 - Access logs in CloudWatch Logs
-- CloudFront distribution logs
+- CloudFront distribution logs (or ALB access logs for VPC-based hosting)
 - Error tracking and reporting
 - Performance monitoring
 
@@ -279,6 +458,6 @@ To troubleshoot issues:
 
 1. Check CloudWatch Logs for application errors
 2. Verify Cognito user status in the AWS Console
-3. Check CloudFront distribution status
+3. Check CloudFront distribution status (or ALB target group health for VPC-based hosting)
 4. Verify API endpoints are accessible
 5. Review browser console for client-side errors

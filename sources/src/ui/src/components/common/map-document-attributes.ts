@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getDocumentConfidenceAlertCount } from './confidence-alerts-utils';
+import { parseMetering, parseHITLReviewHistory } from '../../graphql/awsjson-parsers';
 
 interface DocumentApiItem {
   ObjectKey: string;
@@ -33,6 +34,7 @@ interface DocumentApiItem {
   HITLReviewedBy?: string;
   HITLReviewedByEmail?: string;
   HITLReviewHistory?: string | Record<string, unknown>[];
+  ConfidenceAlertCount?: number;
   ConfigVersion?: string;
 }
 
@@ -52,7 +54,7 @@ const isHitlCompleted = (status: string | undefined): boolean => {
 };
 
 /* Maps document attributes from API to a format that can be used in tables and panel */
-// eslint-disable-next-line arrow-body-style
+
 const mapDocumentsAttributes = (documents: DocumentApiItem[]): Record<string, unknown>[] => {
   return documents.map((item) => {
     const {
@@ -87,15 +89,8 @@ const mapDocumentsAttributes = (documents: DocumentApiItem[]): Record<string, un
     const hitlReviewOwnerEmail = item.HITLReviewOwnerEmail || '';
     const hitlReviewedBy = item.HITLReviewedBy || '';
     const hitlReviewedByEmail = item.HITLReviewedByEmail || '';
-    // HITLReviewHistory comes as AWSJSON (string), parse if needed
-    let hitlReviewHistory = item.HITLReviewHistory || [];
-    if (typeof hitlReviewHistory === 'string') {
-      try {
-        hitlReviewHistory = JSON.parse(hitlReviewHistory);
-      } catch (e) {
-        hitlReviewHistory = [];
-      }
-    }
+    // HITLReviewHistory comes as AWSJSON (string), parse with typed parser
+    const hitlReviewHistory = parseHITLReviewHistory(item.HITLReviewHistory as string);
 
     const formatDate = (timestamp: string | undefined): string => {
       return timestamp && timestamp !== '0' ? new Date(timestamp).toISOString() : '';
@@ -108,17 +103,15 @@ const mapDocumentsAttributes = (documents: DocumentApiItem[]): Record<string, un
     };
 
     // Parse metering data if available
-    let metering: Record<string, unknown> | null = null;
-    if (meteringJson) {
-      try {
-        metering = JSON.parse(meteringJson);
-      } catch (error) {
-        console.error('Error parsing metering data:', error);
-      }
-    }
+    const metering = parseMetering(meteringJson);
 
     // Calculate confidence alert count
-    const confidenceAlertCount = getDocumentConfidenceAlertCount(sections);
+    // Prefer the server-side computed ConfidenceAlertCount (from GSI) when Sections are not available
+    const apiConfidenceAlertCount = item.ConfidenceAlertCount;
+    const confidenceAlertCount =
+      apiConfidenceAlertCount != null && apiConfidenceAlertCount > 0
+        ? apiConfidenceAlertCount
+        : getDocumentConfidenceAlertCount((sections ?? null) as Parameters<typeof getDocumentConfidenceAlertCount>[0]);
 
     // Extract HITL metadata - use HITLTriggered from backend, fallback to status check
     const hitlTriggered = item.HITLTriggered === true || (hitlStatus && hitlStatus !== 'N/A');
@@ -168,8 +161,6 @@ const mapDocumentsAttributes = (documents: DocumentApiItem[]): Record<string, un
       hitlReviewHistory,
       configVersion,
     };
-
-    console.log('mapped-document-attributes', mapping);
 
     return mapping;
   });

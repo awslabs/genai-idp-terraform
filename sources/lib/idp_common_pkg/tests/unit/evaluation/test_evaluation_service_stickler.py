@@ -334,3 +334,84 @@ class TestSticklerEvaluationService:
                 # Verify Stickler was used
                 mock_get_model.assert_called_once()
                 mock_instance.compare_with.assert_called_once()
+
+
+@pytest.mark.unit
+def test_section_evaluation_result_includes_stickler_comparison():
+    """Test that SectionEvaluationResult can store stickler_comparison_result."""
+    stickler_result = {
+        "overall_score": 0.85,
+        "confusion_matrix": {
+            "overall": {"tp": 5, "fp": 1, "tn": 2, "fn": 1},
+            "fields": {"field1": {"tp": 3, "fp": 0, "tn": 1, "fn": 0}},
+        },
+    }
+
+    section_result = SectionEvaluationResult(
+        section_id="1",
+        document_class="Invoice",
+        attributes=[],
+        metrics={"accuracy": 0.85},
+        stickler_comparison_result=stickler_result,
+    )
+
+    assert section_result.stickler_comparison_result is not None
+    assert section_result.stickler_comparison_result["overall_score"] == 0.85
+    assert "confusion_matrix" in section_result.stickler_comparison_result
+
+
+@pytest.mark.unit
+def test_section_evaluation_result_optional_stickler_comparison():
+    """Test that stickler_comparison_result is optional."""
+    section_result = SectionEvaluationResult(
+        section_id="1",
+        document_class="Invoice",
+        attributes=[],
+        metrics={"accuracy": 0.85},
+    )
+
+    assert section_result.stickler_comparison_result is None
+
+
+@pytest.mark.unit
+def test_document_evaluation_serializes_stickler_comparison():
+    """Test that DocumentEvaluationResult.to_dict() includes stickler_comparison_result."""
+    from idp_common.evaluation.models import DocumentEvaluationResult
+
+    stickler_result = {
+        "overall_score": 0.85,
+        "confusion_matrix": {"overall": {"tp": 5, "fp": 1}},
+    }
+
+    attr_result = AttributeEvaluationResult(
+        name="field1",
+        expected="value1",
+        actual="value1",
+        matched=True,
+        score=1.0,
+        reason="Exact match",
+    )
+
+    section_result = SectionEvaluationResult(
+        section_id="1",
+        document_class="Invoice",
+        attributes=[attr_result],
+        metrics={"accuracy": 0.85},
+        stickler_comparison_result=stickler_result,
+    )
+
+    doc_result = DocumentEvaluationResult(
+        document_id="test-doc",
+        section_results=[section_result],
+        overall_metrics={"accuracy": 0.85},
+    )
+
+    result_dict = doc_result.to_dict()
+
+    assert "section_results" in result_dict
+    assert len(result_dict["section_results"]) == 1
+    assert "stickler_comparison_result" in result_dict["section_results"][0]
+    assert (
+        result_dict["section_results"][0]["stickler_comparison_result"]
+        == stickler_result
+    )

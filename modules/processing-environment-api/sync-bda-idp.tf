@@ -3,7 +3,7 @@
 #
 # BDA Sync sub-feature (v0.4.10+)
 # Always-on — syncBdaIdp is a core API operation when BDA processor is used.
-# Sourced from CDK nested appsync tree (DEC-007/DEC-009).
+# Sourced from the CDK nested appsync tree.
 
 # =============================================================================
 # IAM Role: sync_bda_idp
@@ -83,7 +83,7 @@ resource "aws_cloudwatch_log_group" "sync_bda_idp" {
 
 data "archive_file" "sync_bda_idp" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/sync_bda_idp_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/sync_bda_idp_resolver"
   output_path = "${path.module}/../../.terraform/archives/sync_bda_idp.zip"
 }
 

@@ -1,87 +1,32 @@
-# AWS Configuration
-region = "us-east-1"
-prefix = "genai-udop-idp"
+# SageMaker-UDOP Processor — copy to terraform.tfvars and set the values below.
+# Everything else uses the defaults in variables.tf.
+# NOTE: this example fine-tunes/hosts a UDOP model on SageMaker (adds cost + time).
 
-# Administrator Configuration
+region      = "us-east-1"
+prefix      = "genai-udop-idp"
 admin_email = "admin@example.com"
 
-# Logging Configuration
-log_level          = "INFO"
-log_retention_days = 7
+# ── Optional overrides (defaults shown; uncomment to change) ────────────────
+# sagemaker_endpoint_name = "udop-endpoint"
+# training_config = {
+#   max_epochs    = 3
+#   base_model    = "microsoft/udop-large"
+#   retrain_model = false            # true = retrain on each apply
+# }
+# summarization_enabled = true
+# enable_evaluation     = false
+# enable_reporting      = false
+# web_ui = { enabled = true }
+# config_file_path        = "../../sources/config_library/unified/rvl-cdip/config.yaml"
+# additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
+# tags = { Environment = "dev" }
 
-# Data Retention
-data_tracking_retention_days = 365
-
-# Configuration File Path (optional - uses default RVL-CDIP package config)
-# config_file_path = "../../sources/config_library/pattern-3/rvl-cdip/config.yaml"
-
-# SageMaker Model Training Configuration
-training_config = {
-  max_epochs    = 3                      # Number of training epochs
-  base_model    = "microsoft/udop-large" # Base UDOP model to fine-tune
-  retrain_model = false                  # Set to true to retrain on each apply
-}
-
-# SageMaker Configuration
-sagemaker_endpoint_name = "udop-endpoint"
-
-# Feature Toggles
-summarization_enabled = true
-enable_evaluation     = false
-enable_reporting      = false
-
-# Model Configuration
-summarization_model_id = "us.amazon.nova-pro-v1:0"
-evaluation_model_id    = "anthropic.claude-3-sonnet-20240229-v1:0"
-
-# API Configuration
-api = {
-  enabled = true
-
-  # v0.4.8 feature flags
-  enable_agent_companion_chat = false  # Multi-agent AI chat sessions
-  enable_test_studio          = false  # Automated dataset testing
-  enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
-  enable_error_analyzer       = false  # AI-powered error diagnostics
-  enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
-
-  # v0.4.16 feature flags
-  enable_hitl                     = true   # Built-in HITL review (replaces SageMaker A2I)
-  enable_capacity_planning        = false  # Capacity planning calculator
-  enable_omni_ai_dataset          = false  # OmniAI OCR Benchmark dataset (requires enable_test_studio)
-  enable_docplit_poly_seq_dataset = false  # DocSplit RVL-CDIP-NMP dataset (requires enable_test_studio)
-
-  agent_analytics = {
-    enabled  = false
-    model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-  }
-  discovery = {
-    enabled = true  # Creates a dedicated discovery bucket and workflow
-  }
-  chat_with_document = {
-    enabled                  = false
-    guardrail_id_and_version = null
-    # Optional: requires knowledge_base.enabled = true
-    # guardrail_id_and_version = "your-guardrail-id:1"
-  }
-  knowledge_base = {
-    enabled            = false
-    knowledge_base_arn = null  # Auto-wired by the example when enabled
-    model_id           = "amazon.nova-pro-v1:0"
-    embedding_model_id = "amazon.titan-embed-text-v2:0"
-  }
-  process_changes = {
-    enabled = false
-  }
-}
-
-# Web UI Configuration
-web_ui = {
-  enabled = true
-}
-
-# Tags
-tags = {
-  Environment = "dev"
-  Project     = "genai-idp-accelerator"
-}
+# ── Knowledge Base (Document KB + chat) ─────────────────────────────────────
+# create_knowledge_base provisions the OpenSearch + Bedrock KB backend and
+# wires it into the API. Default on. chat-with-document is on by default.
+# create_knowledge_base = true
+#
+# The KB generation model MUST be a cross-region inference-profile id
+# (us./eu./apac. prefix); the embedding model is a plain foundation-model id.
+# knowledge_base_model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)
+# knowledge_base_embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)

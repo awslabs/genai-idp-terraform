@@ -38,7 +38,7 @@ def main():
         "--pattern",
         type=str,
         default="pattern-2",
-        help="Pattern for defaults (pattern-1, pattern-2, pattern-3)",
+        help="Pattern for defaults (pattern-1, pattern-2)",
     )
     create_parser.add_argument(
         "--output",
@@ -235,10 +235,13 @@ def main():
         if hasattr(args, "description") and args.description:
             print(f"  Description: {args.description}")
 
+        # Use "example-config" as a safe fallback version so this example never
+        # accidentally overwrites the real "default" configuration. Pass
+        # --config-version explicitly to target a specific version.
         result = client.config.upload(
             config_file=args.config_file,
+            config_version=getattr(args, "config_version", "example-config"),
             validate=not args.no_validate,
-            config_version=getattr(args, "config_version", None),
             description=getattr(args, "description", None),
         )
 

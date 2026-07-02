@@ -122,7 +122,7 @@ def process_documents(event, stack_name, region):
         }
 
     # Process
-    result = client.run_inference(
+    result = client.batch.process(
         source=source,
         s3_uri=s3_uri,
         manifest=manifest,
@@ -142,8 +142,8 @@ def process_documents(event, stack_name, region):
             {
                 "batch_id": result.batch_id,
                 "document_count": len(result.document_ids),
-                "documents_queued": result.documents_queued,
-                "documents_failed": result.documents_failed,
+                "documents_queued": result.queued,
+                "documents_failed": result.failed,
             }
         ),
     }
@@ -166,7 +166,26 @@ def get_status(event, stack_name, region):
         }
 
     client = IDPClient(stack_name=stack_name, region=region)
-    status = client.get_status(batch_id=batch_id, document_id=document_id)
+
+    if batch_id:
+        status = client.batch.get_status(batch_id=batch_id)
+    else:
+        doc_status = client.document.get_status(document_id=document_id)
+        from idp_sdk import BatchStatus
+
+        status = BatchStatus(
+            batch_id="single-doc",
+            documents=[doc_status],
+            total=1,
+            completed=1 if doc_status.status.value == "COMPLETED" else 0,
+            failed=1 if doc_status.status.value == "FAILED" else 0,
+            in_progress=1
+            if doc_status.status.value in ["PROCESSING", "RUNNING"]
+            else 0,
+            queued=1 if doc_status.status.value == "QUEUED" else 0,
+            success_rate=1.0 if doc_status.status.value == "COMPLETED" else 0.0,
+            all_complete=doc_status.status.value in ["COMPLETED", "FAILED"],
+        )
 
     # Convert documents to serializable format
     documents = []
@@ -226,7 +245,7 @@ def download_results(event, stack_name, region):
 
     # Download to temp directory
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = client.download_results(
+        result = client.batch.download_results(
             batch_id=batch_id,
             output_dir=tmpdir,
             file_types=file_types,
@@ -280,7 +299,7 @@ def generate_manifest(event):
         return {"statusCode": 400, "body": json.dumps({"error": "s3_uri required"})}
 
     client = IDPClient()
-    result = client.generate_manifest(
+    result = client.manifest.generate(
         s3_uri=s3_uri,
         file_pattern=event.get("file_pattern", "*.pdf"),
         recursive=event.get("recursive", True),
@@ -306,7 +325,7 @@ def config_operation(event, stack_name, region):
     if operation == "create":
         # No stack required
         client = IDPClient()
-        result = client.config_create(
+        result = client.config.create(
             features=event.get("features", "min"),
             pattern=event.get("pattern", "pattern-2"),
         )
@@ -343,7 +362,7 @@ def config_operation(event, stack_name, region):
             temp_path = f.name
 
         try:
-            result = client.config_validate(
+            result = client.config.validate(
                 config_file=temp_path,
                 pattern=event.get("pattern", "pattern-2"),
             )
@@ -370,7 +389,7 @@ def config_operation(event, stack_name, region):
             }
 
         client = IDPClient(stack_name=stack_name, region=region)
-        result = client.config_download(format=event.get("format", "full"))
+        result = client.config.download(format=event.get("format", "full"))
 
         return {
             "statusCode": 200,

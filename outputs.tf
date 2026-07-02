@@ -78,7 +78,14 @@ locals {
 
 output "processor" {
   description = "Document processor details"
-  value       = lookup(local.processor_details, local.processor_type, null)
+  # Guard against a null processor_type: `lookup()` raises an uncatchable
+  # argument error when the key is null (zero processors configured). For any
+  # valid exactly-one configuration processor_type is non-null and this behaves
+  # identically to the bare lookup; the guard only changes the already-invalid
+  # zero-processor case (flagged by check "exactly_one_processor") from a hard
+  # crash to a graceful null, which also lets `terraform test` assert that
+  # validation via expect_failures. Non-behavioral for all valid deployments.
+  value = local.processor_type != null ? lookup(local.processor_details, local.processor_type, null) : null
 }
 
 output "agent_analytics" {
@@ -103,4 +110,9 @@ output "processing_environment" {
     output_bucket_name      = module.processing_environment.output_bucket_name
     workflow_tracker_arn    = module.processing_environment.workflow_tracker_function_arn
   }
+}
+
+output "rbac_group_names" {
+  description = "Resolved RBAC Cognito group names keyed by role, or null when RBAC is disabled."
+  value       = local.feature_enable.rbac ? module.rbac[0].group_names : null
 }

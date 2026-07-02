@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 /* eslint-disable prettier/prettier */
-/* eslint-disable prefer-destructuring */
+ 
 
 import React, { useState, useEffect, useRef, memo } from 'react';
 import {
@@ -26,11 +26,11 @@ import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
 import { getFieldConfidenceInfo } from '../common/confidence-alerts-utils';
-import getFileContents from '../../graphql/queries/getFileContents';
-import uploadDocument from '../../graphql/queries/uploadDocument';
+import { getFileContents, uploadDocument } from '../../graphql/generated';
 import JSONEditorTab from './JSONEditorTab';
 import type { BoxProps } from '@cloudscape-design/components';
 import EditHistoryTab from './EditHistoryTab';
+import ProcessingReportTab from './ProcessingReportTab';
 
 // Extended Box props to allow native HTML attributes that Cloudscape passes through at runtime
 type ExtendedBoxProps = BoxProps & React.HTMLAttributes<HTMLDivElement>;
@@ -45,12 +45,6 @@ interface BoundingBoxDimensions {
   transformedOffsetY?: number;
 }
 
-type FileContentsResponse = {
-  data: { getFileContents: { isBinary: boolean; content: string } };
-};
-type UploadDocResponse = {
-  data: { uploadDocument: { presignedUrl: string; usePostMethod: boolean } };
-};
 
 const client = generateClient();
 
@@ -72,6 +66,7 @@ const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, pan
     if (imageRef.current && page === currentPage) {
       const updateDimensions = () => {
         const img = imageRef.current;
+        if (!img || !img.parentElement) return;
         const rect = img.getBoundingClientRect();
         const containerRect = img.parentElement.getBoundingClientRect();
 
@@ -121,6 +116,7 @@ const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, pan
     if (imageRef.current && page === currentPage) {
       const updateDimensions = () => {
         const img = imageRef.current;
+        if (!img || !img.parentElement) return;
         const rect = img.getBoundingClientRect();
         const containerRect = img.parentElement.getBoundingClientRect();
 
@@ -162,10 +158,10 @@ const BoundingBox = memo(({ box, page, currentPage, imageRef, zoomLevel = 1, pan
   const bbox = box.boundingBox as { left: number; top: number; width: number; height: number };
 
   // Calculate position and size directly on the transformed image
-  const finalLeft = bbox.left * dimensions.transformedWidth + dimensions.transformedOffsetX - padding;
-  const finalTop = bbox.top * dimensions.transformedHeight + dimensions.transformedOffsetY - padding;
-  const finalWidth = bbox.width * dimensions.transformedWidth + padding * 2;
-  const finalHeight = bbox.height * dimensions.transformedHeight + padding * 2;
+  const finalLeft = bbox.left * (dimensions.transformedWidth ?? 0) + (dimensions.transformedOffsetX ?? 0) - padding;
+  const finalTop = bbox.top * (dimensions.transformedHeight ?? 0) + (dimensions.transformedOffsetY ?? 0) - padding;
+  const finalWidth = bbox.width * (dimensions.transformedWidth ?? 0) + padding * 2;
+  const finalHeight = bbox.height * (dimensions.transformedHeight ?? 0) + padding * 2;
 
   // Position the bounding box directly without additional transforms
   const style = {
@@ -230,7 +226,12 @@ const FormFieldRenderer = memo<Record<string, any>>(
     const isCollapsed = collapsedPaths.has(pathKey);
 
     // Helper to check if a value has confidence alerts (recursively)
-    const hasConfidenceAlertInTree = (val, currentFilteredPath, explainInfo, config) => {
+    const hasConfidenceAlertInTree = (
+      val: unknown,
+      currentFilteredPath: (string | number)[],
+      explainInfo: Record<string, unknown> | Record<string, unknown>[] | null,
+      config: Record<string, unknown> | null,
+    ): boolean => {
       // Handle null/undefined values - they can still have low confidence in explainability_info
       if (val === null || val === undefined) {
         const fieldInfo = getFieldConfidenceInfo(fieldKey, explainInfo, currentFilteredPath, config);
@@ -268,7 +269,13 @@ const FormFieldRenderer = memo<Record<string, any>>(
     };
 
     // Deep helper that takes fieldKey as parameter
-    const hasConfidenceAlertInTreeDeep = (val, fKey, currentFilteredPath, explainInfo, config) => {
+    const hasConfidenceAlertInTreeDeep = (
+      val: unknown,
+      fKey: string,
+      currentFilteredPath: (string | number)[],
+      explainInfo: Record<string, unknown> | Record<string, unknown>[] | null,
+      config: Record<string, unknown> | null,
+    ): boolean => {
       // Handle null/undefined values - they can still have low confidence in explainability_info
       if (val === null || val === undefined) {
         const fieldInfo = getFieldConfidenceInfo(fKey, explainInfo, currentFilteredPath.slice(0, -1), config);
@@ -303,7 +310,12 @@ const FormFieldRenderer = memo<Record<string, any>>(
     };
 
     // Helper to check if a value has eval mismatches (recursively)
-    const hasEvalMismatchInTree = (val, baseval, evalResults, secId) => {
+    const hasEvalMismatchInTree = (
+      val: unknown,
+      baseval: unknown,
+      evalResults: Record<string, unknown> | null,
+      secId: unknown,
+    ): boolean => {
       if (!evalResults?.section_results) return false;
 
       // For primitives, check direct mismatch
@@ -316,7 +328,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
       // For objects, check each property
       if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
         return Object.entries(val).some(([k, v]) => {
-          const nestedBaseline = baseval && typeof baseval === 'object' ? baseval[k] : null;
+          const nestedBaseline = baseval && typeof baseval === 'object' ? (baseval as Record<string, unknown>)[k] : null;
           return hasEvalMismatchInTree(v, nestedBaseline, evalResults, secId);
         });
       }
@@ -336,7 +348,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
     // Filter out structural keys from the path for explainability lookup
     // We need to remove top-level keys like 'inference_result', 'explainability_info', 'Document Data', etc.
     const structuralKeys = ['inference_result', 'inferenceResult', 'explainability_info', 'Document Data'];
-    let filteredPath = path.filter((pathSegment) => !structuralKeys.includes(pathSegment) && typeof pathSegment !== 'undefined');
+    let filteredPath = path.filter((pathSegment: string) => !structuralKeys.includes(pathSegment) && typeof pathSegment !== 'undefined');
 
     // Remove the field name itself from the path if it's the last element
     // The path should point to the parent container, not include the field name
@@ -379,7 +391,9 @@ const FormFieldRenderer = memo<Record<string, any>>(
     let evalResult = null;
     if (showComparison && evaluationResults?.section_results) {
       // Get section result (use first if only one)
-      let sectionResult = evaluationResults.section_results.find((sr) => String(sr.section_id) === String(sectionId));
+      let sectionResult = evaluationResults.section_results.find(
+        (sr: Record<string, unknown>) => String(sr.section_id) === String(sectionId),
+      );
       if (!sectionResult && evaluationResults.section_results.length === 1) {
         sectionResult = evaluationResults.section_results[0];
       }
@@ -425,7 +439,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
 
     // Use evaluation result for match status if available, otherwise compare values
     const hasEvalResult = evalResult !== null && evalResult !== undefined;
-    const isMatchedFromEval = hasEvalResult ? evalResult.matched : null;
+    const isMatchedFromEval = evalResult ? evalResult.matched : null;
     const valuesMatch = hasEvalResult
       ? isMatchedFromEval
       : !showComparison || baselineValue === null || JSON.stringify(value) === JSON.stringify(baselineValue);
@@ -447,8 +461,8 @@ const FormFieldRenderer = memo<Record<string, any>>(
     const confidenceInfo = getFieldConfidenceInfo(fieldKey, explainabilityInfo, filteredPath, mergedConfig);
 
     // Determine color and style for confidence display
-    let confidenceColor;
-    let confidenceStyle;
+    let confidenceColor: BoxProps.Color | undefined;
+    let confidenceStyle: React.CSSProperties | undefined;
     if (confidenceInfo.hasConfidenceInfo) {
       if (confidenceInfo.displayMode === 'with-threshold') {
         confidenceColor = confidenceInfo.isAboveThreshold ? 'text-status-success' : 'text-status-error';
@@ -470,7 +484,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
     };
 
     // Handle field click - optimized version
-    const handleClick = (event) => {
+    const handleClick = (event: React.SyntheticEvent) => {
       const clickStart = performance.now();
       logger.debug('🖱️ FIELD CLICK START:', { fieldKey, timestamp: clickStart });
 
@@ -492,16 +506,18 @@ const FormFieldRenderer = memo<Record<string, any>>(
           const fullPathParts = [...path, fieldKey];
           let pathFieldInfo = firstExplainabilityItem;
 
-          fullPathParts.forEach((pathPart) => {
+          fullPathParts.forEach((pathPart: string | number) => {
             if (pathFieldInfo && typeof pathFieldInfo === 'object') {
-              if (Array.isArray(pathFieldInfo) && !Number.isNaN(parseInt(pathPart, 10))) {
-                const arrayIndex = parseInt(pathPart, 10);
+              if (Array.isArray(pathFieldInfo) && !Number.isNaN(parseInt(String(pathPart), 10))) {
+                const arrayIndex = parseInt(String(pathPart), 10);
                 if (arrayIndex >= 0 && arrayIndex < pathFieldInfo.length) {
+                  // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
                   pathFieldInfo = pathFieldInfo[arrayIndex];
                 } else {
                   pathFieldInfo = null;
                 }
               } else if (pathFieldInfo[pathPart]) {
+                // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
                 pathFieldInfo = pathFieldInfo[pathPart];
               } else {
                 pathFieldInfo = null;
@@ -532,7 +548,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
     };
 
     // Handle field double-click
-    const handleDoubleClick = (event) => {
+    const handleDoubleClick = (event: React.SyntheticEvent) => {
       if (event) {
         event.stopPropagation();
       }
@@ -564,7 +580,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
     // Check if this specific field has been edited (for visual highlighting)
     // Note: path already INCLUDES the current field key (from recursive calls like path={[...path, key]})
     // So we should NOT add fieldKey again - just filter the path to exclude array indices and structural keys
-    const trackingPath = path.filter((p) => typeof p !== 'number' && p !== undefined && p !== 'Document Data');
+    const trackingPath = path.filter((p: unknown) => typeof p !== 'number' && p !== undefined && p !== 'Document Data');
     const fieldPathStr = trackingPath.join('.');
     const isPredictionChanged = predictionChanges.has(fieldPathStr);
     const isBaselineChanged = baselineChanges.has(fieldPathStr);
@@ -631,10 +647,10 @@ const FormFieldRenderer = memo<Record<string, any>>(
                   {confidenceInfo.hasConfidenceInfo && (
                     <ExtBox fontSize="body-s" padding={{ top: 'xxxs' }} color={confidenceColor} style={confidenceStyle}>
                       {confidenceInfo.displayMode === 'with-threshold'
-                        ? `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}% / Threshold: ${(
-                            confidenceInfo.confidenceThreshold * 100
+                        ? `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}% / Threshold: ${(
+                            (confidenceInfo.confidenceThreshold ?? 0) * 100
                           ).toFixed(1)}%`
-                        : `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}%`}
+                        : `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}%`}
                     </ExtBox>
                   )}
                   {showComparison && evalScore !== undefined && (
@@ -827,10 +843,10 @@ const FormFieldRenderer = memo<Record<string, any>>(
                   {confidenceInfo.hasConfidenceInfo && (
                     <ExtBox fontSize="body-s" padding={{ top: 'xxxs' }} color={confidenceColor} style={confidenceStyle}>
                       {confidenceInfo.displayMode === 'with-threshold'
-                        ? `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}% / Threshold: ${(
-                            confidenceInfo.confidenceThreshold * 100
+                        ? `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}% / Threshold: ${(
+                            (confidenceInfo.confidenceThreshold ?? 0) * 100
                           ).toFixed(1)}%`
-                        : `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}%`}
+                        : `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}%`}
                     </ExtBox>
                   )}
                   {showComparison && evalScore !== undefined && (
@@ -1033,10 +1049,10 @@ const FormFieldRenderer = memo<Record<string, any>>(
                   {confidenceInfo.hasConfidenceInfo && (
                     <ExtBox fontSize="body-s" padding={{ top: 'xxxs' }} color={confidenceColor} style={confidenceStyle}>
                       {confidenceInfo.displayMode === 'with-threshold'
-                        ? `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}% / Threshold: ${(
-                            confidenceInfo.confidenceThreshold * 100
+                        ? `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}% / Threshold: ${(
+                            (confidenceInfo.confidenceThreshold ?? 0) * 100
                           ).toFixed(1)}%`
-                        : `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}%`}
+                        : `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}%`}
                     </ExtBox>
                   )}
                   {showComparison && evalScore !== undefined && (
@@ -1183,7 +1199,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
           </div>
         );
 
-      case 'object':
+      case 'object': {
         if (value === null) {
           return (
             <FormField label={label}>
@@ -1210,7 +1226,9 @@ const FormFieldRenderer = memo<Record<string, any>>(
         // Look for group-level eval result (e.g., for bankInfo, personalInfo)
         let groupEvalResult = null;
         if (showComparison && evaluationResults?.section_results) {
-          let sectionResult = evaluationResults.section_results.find((sr) => String(sr.section_id) === String(sectionId));
+          let sectionResult = evaluationResults.section_results.find(
+            (sr: Record<string, unknown>) => String(sr.section_id) === String(sectionId),
+          );
           if (!sectionResult && evaluationResults.section_results.length === 1) {
             sectionResult = evaluationResults.section_results[0];
           }
@@ -1218,8 +1236,8 @@ const FormFieldRenderer = memo<Record<string, any>>(
             for (const attr of sectionResult.attributes) {
               if (attr.field_comparison_details) {
                 // Find detail that matches this object path (e.g., checks[0].bankInfo)
-                const detail = attr.field_comparison_details.find((d) => {
-                  const key = d.expected_key || '';
+                const detail = attr.field_comparison_details.find((d: Record<string, unknown>) => {
+                  const key = String(d.expected_key || '');
                   // Check if the detail's expected_key ends with our fieldKey
                   return key.endsWith(`.${fieldKey}`) || key === fieldKey;
                 });
@@ -1289,13 +1307,14 @@ const FormFieldRenderer = memo<Record<string, any>>(
                       // Handle nested structure like explainabilityInfo[0].NAME_DETAILS.LAST_NAME
                       const currentPath = [...path, key];
                       const [firstExplainabilityItem] = explainabilityInfo;
-                      // eslint-disable-next-line prefer-destructuring
+                       
                       let fieldInfo = firstExplainabilityItem;
 
                       // Navigate through the path to find the field info
                       let pathFieldInfo = fieldInfo;
-                      currentPath.forEach((pathPart) => {
-                        if (pathFieldInfo && typeof pathFieldInfo === 'object' && pathFieldInfo[pathPart]) {
+                      currentPath.forEach((pathPart: string | number) => {
+                        if (pathFieldInfo && typeof pathFieldInfo === 'object' && (pathFieldInfo as Record<string, unknown>)[pathPart as string]) {
+                          // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
                           pathFieldInfo = pathFieldInfo[pathPart];
                         } else {
                           pathFieldInfo = null;
@@ -1329,7 +1348,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
                         key={`obj-${fieldKey}-${path.join('.')}-${key}`}
                         fieldKey={key}
                         value={val}
-                        onChange={(newVal) => {
+                        onChange={(newVal: unknown) => {
                           if (!isReadOnly) {
                             const newObj = { ...value };
                             newObj[key] = newVal;
@@ -1338,7 +1357,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
                         }}
                         onBaselineChange={
                           onBaselineChange
-                            ? (newVal) => {
+                            ? (newVal: unknown) => {
                                 if (!isReadOnly && baselineValue) {
                                   const newObj = { ...baselineValue };
                                   newObj[key] = newVal;
@@ -1373,6 +1392,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
             )}
           </ExtBox>
         );
+      }
 
       case 'null':
         // Handle null values - make them editable like other field types
@@ -1420,10 +1440,10 @@ const FormFieldRenderer = memo<Record<string, any>>(
                   {confidenceInfo.hasConfidenceInfo && (
                     <ExtBox fontSize="body-s" padding={{ top: 'xxxs' }} color={confidenceColor} style={confidenceStyle}>
                       {confidenceInfo.displayMode === 'with-threshold'
-                        ? `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}% / Threshold: ${(
-                            confidenceInfo.confidenceThreshold * 100
+                        ? `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}% / Threshold: ${(
+                            (confidenceInfo.confidenceThreshold ?? 0) * 100
                           ).toFixed(1)}%`
-                        : `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}%`}
+                        : `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}%`}
                     </ExtBox>
                   )}
                   {showComparison && evalScore !== undefined && (
@@ -1582,13 +1602,18 @@ const FormFieldRenderer = memo<Record<string, any>>(
         // Look for array-level eval result (e.g., for checks array)
         let arrayEvalResult = null;
         if (showComparison && evaluationResults?.section_results) {
-          let sectionResult = evaluationResults.section_results.find((sr) => String(sr.section_id) === String(sectionId));
+          let sectionResult = evaluationResults.section_results.find(
+            (sr: Record<string, unknown>) => String(sr.section_id) === String(sectionId),
+          );
           if (!sectionResult && evaluationResults.section_results.length === 1) {
             sectionResult = evaluationResults.section_results[0];
           }
           if (sectionResult?.attributes?.length > 0) {
             // Look for top-level attribute that matches our array name
-            const attr = sectionResult.attributes.find((a) => a.name === fieldKey || a.name?.toLowerCase() === fieldKey?.toLowerCase());
+            const attr = sectionResult.attributes.find(
+              (a: Record<string, unknown>) =>
+                a.name === fieldKey || (a.name as string)?.toLowerCase() === fieldKey?.toLowerCase(),
+            );
             if (attr) {
               arrayEvalResult = {
                 matched: attr.matched,
@@ -1650,7 +1675,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
             {!isCollapsed && (
               <ExtBox padding={{ left: 'l' }}>
                 <SpaceBetween size="xs">
-                  {value.map((item, index) => {
+                  {value.map((item: unknown, index: number) => {
                     // Create a stable unique key for each array item
                     const itemKey = `arr-${fieldKey}-${path.join('.')}-${index}`;
 
@@ -1664,8 +1689,9 @@ const FormFieldRenderer = memo<Record<string, any>>(
 
                       // Handle nested structure - navigate to the array field first
                       let arrayFieldInfo = firstExplainabilityItem;
-                      path.forEach((pathPart) => {
-                        if (arrayFieldInfo && typeof arrayFieldInfo === 'object' && arrayFieldInfo[pathPart]) {
+                      path.forEach((pathPart: string | number) => {
+                        if (arrayFieldInfo && typeof arrayFieldInfo === 'object' && (arrayFieldInfo as Record<string, unknown>)[pathPart as string]) {
+                          // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
                           arrayFieldInfo = arrayFieldInfo[pathPart];
                         } else {
                           arrayFieldInfo = null;
@@ -1704,7 +1730,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
                         key={itemKey}
                         fieldKey={`[${index}]`}
                         value={item}
-                        onChange={(newVal) => {
+                        onChange={(newVal: unknown) => {
                           if (!isReadOnly) {
                             const newArray = [...value];
                             newArray[index] = newVal;
@@ -1713,7 +1739,7 @@ const FormFieldRenderer = memo<Record<string, any>>(
                         }}
                         onBaselineChange={
                           onBaselineChange
-                            ? (newVal) => {
+                            ? (newVal: unknown) => {
                                 if (!isReadOnly && baselineValue && Array.isArray(baselineValue)) {
                                   const newArray = [...baselineValue];
                                   newArray[index] = newVal;
@@ -1772,10 +1798,10 @@ const FormFieldRenderer = memo<Record<string, any>>(
                   {confidenceInfo.hasConfidenceInfo && (
                     <ExtBox fontSize="body-s" padding={{ top: 'xxxs' }} color={confidenceColor} style={confidenceStyle}>
                       {confidenceInfo.displayMode === 'with-threshold'
-                        ? `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}% / Threshold: ${(
-                            confidenceInfo.confidenceThreshold * 100
+                        ? `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}% / Threshold: ${(
+                            (confidenceInfo.confidenceThreshold ?? 0) * 100
                           ).toFixed(1)}%`
-                        : `Confidence: ${(confidenceInfo.confidence * 100).toFixed(1)}%`}
+                        : `Confidence: ${((confidenceInfo.confidence ?? 0) * 100).toFixed(1)}%`}
                     </ExtBox>
                   )}
                 </ExtBox>
@@ -1809,6 +1835,18 @@ const FormFieldRenderer = memo<Record<string, any>>(
 
 FormFieldRenderer.displayName = 'FormFieldRenderer';
 
+interface VisualEditorModalProps {
+  visible: boolean;
+  onDismiss: () => void;
+  jsonData: Record<string, unknown> | null;
+  onChange: ((jsonString: string) => void) | null;
+  isReadOnly: boolean;
+  sectionData: Record<string, unknown> | null;
+  allSections?: Array<{ Id: string; Class: string; PageIds: number[]; OutputJSONUri?: string }>;
+  currentSectionIndex?: number;
+  onNavigateToSection?: ((index: number) => void) | null;
+}
+
 const VisualEditorModal = ({
   visible,
   onDismiss,
@@ -1820,34 +1858,34 @@ const VisualEditorModal = ({
   allSections = [],
   currentSectionIndex = 0,
   onNavigateToSection,
-}) => {
+}: VisualEditorModalProps) => {
   const { currentCredentials, user } = useAppContext();
   const { settings } = useSettingsContext();
-  const [pageImages, setPageImages] = useState({});
+  const [pageImages, setPageImages] = useState<Record<string, string>>({});
   const [loadingImages, setLoadingImages] = useState(true);
-  const [currentPage, setCurrentPage] = useState(null);
-  const [activeFieldGeometry, setActiveFieldGeometry] = useState(null);
+  const [currentPage, setCurrentPage] = useState<string | number | null>(null);
+  const [activeFieldGeometry, setActiveFieldGeometry] = useState<Record<string, unknown> | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [localJsonData, setLocalJsonData] = useState(jsonData);
+  const [localJsonData, setLocalJsonData] = useState<Record<string, unknown> | null>(jsonData);
   // Evaluation comparison state
-  const [baselineData, setBaselineData] = useState(null);
-  const [evaluationResults, setEvaluationResults] = useState(null);
+  const [baselineData, setBaselineData] = useState<Record<string, unknown> | null>(null);
+  const [evaluationResults, setEvaluationResults] = useState<Record<string, unknown> | null>(null);
   const [loadingEvaluation, setLoadingEvaluation] = useState(false);
   const [showEvaluation, setShowEvaluation] = useState(false);
   // Collapse/expand state - stores path keys of collapsed items
-  const [collapsedPaths, setCollapsedPaths] = useState(new Set());
+  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
   // Filter mode state
   const [filterMode, setFilterMode] = useState('none'); // 'none', 'confidence-alerts', 'eval-mismatches'
 
   // Change tracking state for saving edits
-  const [predictionChanges, setPredictionChanges] = useState(new Map()); // Map<fieldPath, { original, current }>
-  const [baselineChanges, setBaselineChanges] = useState(new Map()); // Map<fieldPath, { original, current }>
-  const [originalPredictionData, setOriginalPredictionData] = useState(null);
-  const [originalBaselineData, setOriginalBaselineData] = useState(null);
-  const [localBaselineData, setLocalBaselineData] = useState(null);
+  const [predictionChanges, setPredictionChanges] = useState<Map<string, { original: unknown; current: unknown }>>(new Map());
+  const [baselineChanges, setBaselineChanges] = useState<Map<string, { original: unknown; current: unknown }>>(new Map());
+  const [originalPredictionData, setOriginalPredictionData] = useState<Record<string, unknown> | null>(null);
+  const [originalBaselineData, setOriginalBaselineData] = useState<Record<string, unknown> | null>(null);
+  const [localBaselineData, setLocalBaselineData] = useState<Record<string, unknown> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [_saveError, setSaveError] = useState(null);
+  const [_saveError, setSaveError] = useState<string | null>(null);
   const [_showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [_pendingDismiss, setPendingDismiss] = useState(false);
   // Tab navigation state
@@ -1857,10 +1895,10 @@ const VisualEditorModal = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  const imageRef = useRef(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
   // Toggle collapse handler
-  const handleToggleCollapse = (pathKey) => {
+  const handleToggleCollapse = (pathKey: string) => {
     setCollapsedPaths((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(pathKey)) {
@@ -1881,10 +1919,10 @@ const VisualEditorModal = ({
   const handleCollapseAll = () => {
     // Get inferenceResult from jsonData - same logic used later in component
     const result = localJsonData?.inference_result || localJsonData?.inferenceResult || localJsonData;
-    const allPaths = new Set();
+    const allPaths = new Set<string>();
 
     // Recursive function to add all collapsible paths
-    const addCollapsiblePaths = (obj, currentPath) => {
+    const addCollapsiblePaths = (obj: unknown, currentPath: string) => {
       if (obj && typeof obj === 'object') {
         if (Array.isArray(obj)) {
           // This is an array - add its path and recurse into items
@@ -1919,15 +1957,16 @@ const VisualEditorModal = ({
 
     setCollapsedPaths(allPaths);
   };
-  const imageContainerRef = useRef(null);
-  const debounceTimerRef = useRef(null);
+  const imageContainerRef = useRef<HTMLDivElement | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check if baseline is available - check multiple possible paths
-  const evaluationStatus = sectionData?.documentItem?.evaluationStatus || sectionData?.documentItem?.EvaluationStatus;
+  const sectionDocItem = sectionData?.documentItem as Record<string, unknown> | undefined;
+  const evaluationStatus = sectionDocItem?.evaluationStatus || sectionDocItem?.EvaluationStatus;
   const isBaselineAvailable = evaluationStatus === 'BASELINE_AVAILABLE' || evaluationStatus === 'COMPLETED';
 
   // Construct baseline URI from output URI
-  const constructBaselineUri = (outputUri) => {
+  const constructBaselineUri = (outputUri: string | undefined) => {
     if (!outputUri) {
       logger.debug('constructBaselineUri: No output URI provided');
       return null;
@@ -1953,7 +1992,7 @@ const VisualEditorModal = ({
   };
 
   // Construct evaluation results URI from input key
-  const constructEvaluationResultsUri = (inputKey, outputBucket) => {
+  const constructEvaluationResultsUri = (inputKey: string | undefined, outputBucket: string | undefined) => {
     if (!inputKey || !outputBucket) {
       return null;
     }
@@ -1975,12 +2014,12 @@ const VisualEditorModal = ({
     if (baselineData && evaluationResults) return; // Already loaded
 
     const loadEvaluationData = async () => {
-      const outputUri = sectionData?.OutputJSONUri;
+      const outputUri = sectionData?.OutputJSONUri as string | undefined;
       // inputKey can be objectKey or inputKey depending on context
-      const inputKey = sectionData?.documentItem?.objectKey || sectionData?.documentItem?.inputKey || sectionData?.documentItem?.InputKey;
+      const inputKey = sectionDocItem?.objectKey || sectionDocItem?.inputKey || sectionDocItem?.InputKey;
       const outputBucket =
-        sectionData?.documentItem?.outputBucket ||
-        sectionData?.documentItem?.OutputBucket ||
+        sectionDocItem?.outputBucket ||
+        sectionDocItem?.OutputBucket ||
         (settings as Record<string, unknown>)?.OutputBucket;
 
       setLoadingEvaluation(true);
@@ -1990,26 +2029,26 @@ const VisualEditorModal = ({
         if (baselineUri && !baselineData) {
           try {
             const baselineResponse = await client.graphql({
-              query: getFileContents as unknown as string,
+              query: getFileContents,
               variables: { s3Uri: baselineUri },
             });
-            const baselineResult = (baselineResponse as FileContentsResponse).data.getFileContents;
-            if (!baselineResult.isBinary && baselineResult.content) {
+            const baselineResult = baselineResponse.data.getFileContents;
+            if (baselineResult && !baselineResult.isBinary && baselineResult.content) {
               const parsed = JSON.parse(baselineResult.content);
               setBaselineData(parsed);
               logger.info('Baseline data loaded successfully');
             }
           } catch (error) {
-            logger.warn('Failed to load baseline data:', error.message);
+            logger.warn('Failed to load baseline data:', error instanceof Error ? error.message : error);
           }
         }
 
         // Load evaluation results
-        const evalResultsUri = constructEvaluationResultsUri(inputKey, outputBucket);
+        const evalResultsUri = constructEvaluationResultsUri(inputKey as string | undefined, outputBucket as string | undefined);
         if (evalResultsUri && !evaluationResults) {
           try {
             const evalResponse = await client.graphql({
-              query: getFileContents as unknown as string,
+              query: getFileContents,
               variables: { s3Uri: evalResultsUri },
             });
             const evalResult = (evalResponse as { data: { getFileContents: { isBinary: boolean; content: string } } }).data.getFileContents;
@@ -2028,7 +2067,7 @@ const VisualEditorModal = ({
     };
 
     loadEvaluationData();
-  }, [visible, isBaselineAvailable, sectionData?.OutputJSONUri, sectionData?.documentItem?.inputKey, settings]);
+  }, [visible, isBaselineAvailable, sectionData?.OutputJSONUri, sectionDocItem?.inputKey, settings]);
 
   // Reset evaluation state when modal closes
   useEffect(() => {
@@ -2042,7 +2081,7 @@ const VisualEditorModal = ({
 
   // Check if section needs review (either low confidence or HITL triggered)
   const _needsReview =
-    sectionData?.confidenceAlertCount > 0 || (sectionData?.documentItem?.hitlTriggered && !sectionData?.documentItem?.hitlCompleted);
+    (sectionData?.confidenceAlertCount as number) > 0 || (sectionDocItem?.hitlTriggered && !sectionDocItem?.hitlCompleted);
 
   // Check if this specific section is already completed
   const _isSectionCompleted = sectionData?.isSectionCompleted || false;
@@ -2079,7 +2118,7 @@ const VisualEditorModal = ({
   const hasUnsavedChanges = predictionChangeCount > 0 || baselineChangeCount > 0;
 
   // Track a field change
-  const trackPredictionChange = (fieldPath, originalValue, newValue) => {
+  const trackPredictionChange = (fieldPath: string, originalValue: unknown, newValue: unknown) => {
     logger.info('📝 TRACK PREDICTION CHANGE:', { fieldPath, originalValue, newValue });
     setPredictionChanges((prev) => {
       const newMap = new Map(prev);
@@ -2095,7 +2134,7 @@ const VisualEditorModal = ({
     });
   };
 
-  const trackBaselineChange = (fieldPath, originalValue, newValue) => {
+  const trackBaselineChange = (fieldPath: string, originalValue: unknown, newValue: unknown) => {
     setBaselineChanges((prev) => {
       const newMap = new Map(prev);
       if (JSON.stringify(originalValue) === JSON.stringify(newValue)) {
@@ -2126,7 +2165,7 @@ const VisualEditorModal = ({
 
     try {
       // Extract the actual file path from OutputJSONUri to ensure we save to the exact same location
-      const outputUri = sectionData?.OutputJSONUri;
+      const outputUri = sectionData?.OutputJSONUri as string | undefined;
       logger.info('💾 handleSaveChanges - outputUri:', outputUri);
 
       if (!outputUri) {
@@ -2141,15 +2180,18 @@ const VisualEditorModal = ({
       const [, outputBucketFromUri, outputFileKey] = outputUriMatch;
       logger.info('💾 Parsed output URI:', { bucket: outputBucketFromUri, key: outputFileKey });
 
-      const results = { predictions: null, baseline: null };
+      const results: {
+        predictions: { success: boolean; changedFields: string[] } | null;
+        baseline: { success: boolean; changedFields: string[] } | null;
+      } = { predictions: null, baseline: null };
 
       // Build combined edit entry for both files
-      const username = ((user as Record<string, unknown>)?.username as string) || 'unknown';
+      const username = user?.username || 'unknown';
       const timestamp = new Date().toISOString();
 
       // Build prediction diffs
-      const predictionDiffs = {};
-      predictionChanges.forEach((change, fieldPath) => {
+      const predictionDiffs: Record<string, { originalValue: unknown; newValue: unknown }> = {};
+      predictionChanges.forEach((change: { original: unknown; current: unknown }, fieldPath: string) => {
         predictionDiffs[fieldPath] = {
           originalValue: change.original,
           newValue: change.current,
@@ -2157,8 +2199,8 @@ const VisualEditorModal = ({
       });
 
       // Build baseline diffs
-      const baselineDiffs = {};
-      baselineChanges.forEach((change, fieldPath) => {
+      const baselineDiffs: Record<string, { originalValue: unknown; newValue: unknown }> = {};
+      baselineChanges.forEach((change: { original: unknown; current: unknown }, fieldPath: string) => {
         baselineDiffs[fieldPath] = {
           originalValue: change.original,
           newValue: change.current,
@@ -2186,8 +2228,8 @@ const VisualEditorModal = ({
         logger.info('💾 Saving prediction changes...', { count: predictionChangeCount });
 
         // Add edit history metadata with combined changes
-        const dataToSave = { ...localJsonData };
-        const editHistory = dataToSave._editHistory || [];
+        const dataToSave: Record<string, unknown> = { ...localJsonData };
+        const editHistory = (dataToSave._editHistory as unknown[]) || [];
         editHistory.push(editEntry);
         dataToSave._editHistory = editHistory;
 
@@ -2196,10 +2238,10 @@ const VisualEditorModal = ({
 
         // Extract prefix (directory) and filename for uploadDocument
         const predictionPrefix = outputFileKey.substring(0, outputFileKey.lastIndexOf('/'));
-        const predictionFilename = outputFileKey.split('/').pop();
+        const predictionFilename = outputFileKey.split('/').pop() ?? outputFileKey;
 
         const predictionUploadResponse = await client.graphql({
-          query: uploadDocument as unknown as string,
+          query: uploadDocument,
           variables: {
             fileName: predictionFilename,
             prefix: predictionPrefix,
@@ -2208,9 +2250,9 @@ const VisualEditorModal = ({
           },
         });
 
-        const predUploadData = (predictionUploadResponse as UploadDocResponse).data.uploadDocument;
+        const predUploadData = predictionUploadResponse.data.uploadDocument;
         const predictionPresignedUrl = predUploadData.presignedUrl;
-        const predictionUsePost = predUploadData.usePostMethod;
+        const predictionUsePost = predUploadData.usePostMethod?.toLowerCase() === 'true';
 
         // Upload the JSON data
         const predictionContent = JSON.stringify(dataToSave, null, 2);
@@ -2227,7 +2269,7 @@ const VisualEditorModal = ({
 
           // Append the file content as last field (required for S3 presigned POST)
           const blob = new Blob([predictionContent], { type: 'application/json' });
-          formData.append('file', blob, predictionFilename as string);
+          formData.append('file', blob, predictionFilename);
 
           logger.info('📤 Uploading predictions via presigned POST to:', presignedPostData.url);
           const uploadResponse = await fetch(presignedPostData.url, {
@@ -2257,8 +2299,8 @@ const VisualEditorModal = ({
         logger.info('💾 Saving baseline changes...', { count: baselineChangeCount });
 
         // Add edit history metadata with combined changes (same as predictions)
-        const baselineToSave = { ...localBaselineData };
-        const baselineEditHistory = baselineToSave._editHistory || [];
+        const baselineToSave: Record<string, unknown> = { ...localBaselineData };
+        const baselineEditHistory = (baselineToSave._editHistory as unknown[]) || [];
         baselineEditHistory.push(editEntry);
         baselineToSave._editHistory = baselineEditHistory;
 
@@ -2274,10 +2316,10 @@ const VisualEditorModal = ({
 
         // Extract prefix (directory) and filename for uploadDocument
         const baselinePrefix = outputFileKey.substring(0, outputFileKey.lastIndexOf('/'));
-        const baselineFilename = outputFileKey.split('/').pop();
+        const baselineFilename = outputFileKey.split('/').pop() ?? outputFileKey;
 
         const baselineUploadResponse = await client.graphql({
-          query: uploadDocument as unknown as string,
+          query: uploadDocument,
           variables: {
             fileName: baselineFilename,
             prefix: baselinePrefix,
@@ -2286,9 +2328,9 @@ const VisualEditorModal = ({
           },
         });
 
-        const baseUploadData = (baselineUploadResponse as UploadDocResponse).data.uploadDocument;
+        const baseUploadData = baselineUploadResponse.data.uploadDocument;
         const baselinePresignedUrl = baseUploadData.presignedUrl;
-        const baselineUsePost = baseUploadData.usePostMethod;
+        const baselineUsePost = baseUploadData.usePostMethod?.toLowerCase() === 'true';
 
         // Upload the JSON data
         const baselineContent = JSON.stringify(baselineToSave, null, 2);
@@ -2346,15 +2388,15 @@ const VisualEditorModal = ({
       alert(`✅ Successfully saved:\n${savedItems.join('\n')}`);
     } catch (error) {
       logger.error('❌ Error saving changes:', error);
-      setSaveError(error.message || 'Failed to save changes');
-      alert(`❌ Error saving changes:\n${error.message}`);
+      setSaveError((error as Error).message || 'Failed to save changes');
+      alert(`❌ Error saving changes:\n${(error as Error).message}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   // Debounced parent onChange function with non-blocking execution
-  const debouncedParentOnChange = (jsonString) => {
+  const debouncedParentOnChange = (jsonString: string) => {
     // Clear existing timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -2402,7 +2444,7 @@ const VisualEditorModal = ({
 
   // Extract inference results and page IDs from local data for immediate UI updates
   const inferenceResult = localJsonData?.inference_result || localJsonData?.inferenceResult || localJsonData;
-  const pageIds = sectionData?.PageIds || [];
+  const pageIds = (sectionData?.PageIds as Array<string | number>) || [];
 
   // Load page images - only when modal opens or when core data changes
   useEffect(() => {
@@ -2423,21 +2465,21 @@ const VisualEditorModal = ({
       setLoadingImages(true);
 
       try {
-        const documentPages = sectionData?.documentItem?.pages || [];
+        const documentPages = (sectionDocItem?.pages as Record<string, unknown>[]) || [];
         logger.debug('VisualEditorModal - Loading images for pageIds:', pageIds);
 
-        const images = {};
+        const images: Record<string, string> = {};
 
         await Promise.all(
-          pageIds.map(async (pageId) => {
+          pageIds.map(async (pageId: unknown) => {
             // Find the page in the document's pages array by matching the Id
-            const page = documentPages.find((p) => p.Id === pageId);
+            const page = documentPages.find((p: Record<string, unknown>) => p.Id === pageId);
 
             if (page?.ImageUri) {
               try {
                 logger.debug(`VisualEditorModal - generating presigned URL for page ${pageId}`);
                 const url = await generateS3PresignedUrl(page.ImageUri as string, currentCredentials as Record<string, unknown>);
-                images[pageId] = url;
+                images[String(pageId)] = url;
               } catch (err) {
                 logger.error(`Error generating presigned URL for page ${pageId}:`, err);
               }
@@ -2462,7 +2504,7 @@ const VisualEditorModal = ({
 
     loadImages();
     // Only reload images when modal opens or when pageIds/sectionData changes, not when switching pages
-  }, [visible, pageIds, sectionData?.documentItem?.pages, currentCredentials]);
+  }, [visible, pageIds, sectionDocItem?.pages, currentCredentials]);
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -2498,14 +2540,14 @@ const VisualEditorModal = ({
   };
 
   // Handle mouse wheel for zoom (no modifier key needed)
-  const handleWheel = (e) => {
+  const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY < 0 ? 1.1 : 0.9;
     setZoomLevel((prev) => Math.min(Math.max(prev * delta, 0.25), 4));
   };
 
   // Handle drag-to-pan - mouse down starts drag
-  const handleMouseDown = (e) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     // Only pan when zoomed in
     if (zoomLevel <= 1) return;
 
@@ -2516,7 +2558,7 @@ const VisualEditorModal = ({
   };
 
   // Handle drag-to-pan - mouse move updates pan offset
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging) return;
 
     e.preventDefault();
@@ -2539,7 +2581,7 @@ const VisualEditorModal = ({
 
   // Handle field focus - update active field geometry and switch to the correct page
   // This function is intentionally kept lightweight and independent of debounced operations
-  const handleFieldFocus = (geometry) => {
+  const handleFieldFocus = (geometry: Record<string, unknown> | null) => {
     const focusStart = performance.now();
     logger.debug('VisualEditorModal - handleFieldFocus START:', { timestamp: focusStart });
 
@@ -2550,7 +2592,7 @@ const VisualEditorModal = ({
 
         // If geometry has a page field, switch to that page
         if (geometry.page !== undefined && pageIds.length > 0) {
-          const pageIndex = geometry.page - 1;
+          const pageIndex = (geometry.page as number) - 1;
           if (pageIndex >= 0 && pageIndex < pageIds.length) {
             const targetPageId = pageIds[pageIndex];
             setCurrentPage(targetPageId);
@@ -2568,13 +2610,13 @@ const VisualEditorModal = ({
   };
 
   // Handle field double-click - zoom to 200% and center on field
-  const handleFieldDoubleClick = (geometry) => {
+  const handleFieldDoubleClick = (geometry: Record<string, unknown> | null) => {
     logger.debug('VisualEditorModal - handleFieldDoubleClick called with geometry:', geometry);
 
     if (geometry && imageRef.current && imageContainerRef.current) {
       // First switch to the correct page if needed
       if (geometry.page !== undefined && pageIds.length > 0) {
-        const pageIndex = geometry.page - 1;
+        const pageIndex = (geometry.page as number) - 1;
         if (pageIndex >= 0 && pageIndex < pageIds.length) {
           const targetPageId = pageIds[pageIndex];
           if (targetPageId !== currentPage) {
@@ -2603,7 +2645,7 @@ const VisualEditorModal = ({
           const offsetY = imgRect.top - containerRect.top;
 
           // Get bounding box coordinates
-          const bbox = geometry.boundingBox;
+          const bbox = geometry?.boundingBox as { left: number; top: number; width: number; height: number } | undefined;
 
           if (bbox) {
             const { left, top, width, height } = bbox;
@@ -2658,7 +2700,7 @@ const VisualEditorModal = ({
   };
 
   // Create carousel items from page images
-  const carouselItems = pageIds.map((pageId) => ({
+  const carouselItems = pageIds.map((pageId: unknown) => ({
     id: pageId,
     content: (
       // eslint-disable-next-line jsx-a11y/no-static-element-interactions
@@ -2683,11 +2725,11 @@ const VisualEditorModal = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
       >
-        {pageImages[pageId] ? (
+        {pageImages[String(pageId)] ? (
           <>
             <img
               ref={pageId === currentPage ? imageRef : null}
-              src={pageImages[pageId]}
+              src={pageImages[String(pageId)]}
               alt={`Page ${pageId}`}
               style={{
                 maxWidth: '100%',
@@ -2713,8 +2755,8 @@ const VisualEditorModal = ({
             {activeFieldGeometry && (
               <BoundingBox
                 box={activeFieldGeometry}
-                page={currentPage}
-                currentPage={currentPage}
+                page={String(currentPage)}
+                currentPage={String(currentPage)}
                 imageRef={imageRef}
                 zoomLevel={zoomLevel}
                 panOffset={panOffset}
@@ -2772,10 +2814,10 @@ const VisualEditorModal = ({
             <ExtBox>
               <SpaceBetween direction="horizontal" size="m">
                 <ExtBox>
-                  <strong>Section:</strong> {sectionData?.Id || sectionData?.SectionId || 'N/A'}
+                  <strong>Section:</strong> {String(sectionData?.Id || sectionData?.SectionId || 'N/A')}
                 </ExtBox>
                 <ExtBox>
-                  <strong>Type:</strong> {localJsonData?.document_class?.type || 'N/A'}
+                  <strong>Type:</strong> {(localJsonData?.document_class as Record<string, unknown>)?.type as string || 'N/A'}
                 </ExtBox>
               </SpaceBetween>
             </ExtBox>
@@ -2925,7 +2967,7 @@ const VisualEditorModal = ({
                               {/* Image display area */}
                               <ExtBox style={{ position: 'relative', overflow: 'hidden', height: '450px', minHeight: '300px' }}>
                                 {/* Display current page */}
-                                {carouselItems.find((item) => item.id === currentPage)?.content}
+                                {carouselItems.find((item: { id: unknown; content: React.ReactNode }) => item.id === currentPage)?.content}
 
                                 {/* Simple navigation arrows */}
                                 <ExtBox
@@ -2943,25 +2985,25 @@ const VisualEditorModal = ({
                                     iconName="angle-left"
                                     variant="icon"
                                     onClick={() => {
-                                      const currentIndex = pageIds.indexOf(currentPage);
+                                      const currentIndex = pageIds.indexOf(currentPage as string | number);
                                       if (currentIndex > 0) {
                                         setCurrentPage(pageIds[currentIndex - 1]);
                                         setActiveFieldGeometry(null);
                                       }
                                     }}
-                                    disabled={pageIds.indexOf(currentPage) === 0}
+                                    disabled={pageIds.indexOf(currentPage as string | number) === 0}
                                   />
                                   <Button
                                     iconName="angle-right"
                                     variant="icon"
                                     onClick={() => {
-                                      const currentIndex = pageIds.indexOf(currentPage);
+                                      const currentIndex = pageIds.indexOf(currentPage as string | number);
                                       if (currentIndex < pageIds.length - 1) {
                                         setCurrentPage(pageIds[currentIndex + 1]);
                                         setActiveFieldGeometry(null);
                                       }
                                     }}
-                                    disabled={pageIds.indexOf(currentPage) === pageIds.length - 1}
+                                    disabled={pageIds.indexOf(currentPage as string | number) === pageIds.length - 1}
                                   />
                                 </ExtBox>
                               </ExtBox>
@@ -2984,7 +3026,7 @@ const VisualEditorModal = ({
                                     borderRadius: '4px',
                                   }}
                                 >
-                                  Page {pageIds.indexOf(currentPage) + 1} of {pageIds.length}
+                                  Page {pageIds.indexOf(currentPage as string | number) + 1} of {pageIds.length}
                                 </ExtBox>
 
                                 {/* Zoom and Pan Controls */}
@@ -3232,7 +3274,7 @@ const VisualEditorModal = ({
                             showComparison={showEvaluation}
                             evaluationResults={showEvaluation ? evaluationResults : null}
                             sectionId={sectionData?.Id || sectionData?.SectionId}
-                            onBaselineChange={(newBaselineValue) => {
+                            onBaselineChange={(newBaselineValue: Record<string, unknown>) => {
                               if (!isReadOnly && localBaselineData) {
                                 const updatedBaseline = { ...localBaselineData };
                                 if (updatedBaseline.inference_result) {
@@ -3254,7 +3296,7 @@ const VisualEditorModal = ({
                                   const originalBaselineResult =
                                     originalBaselineData.inference_result || originalBaselineData.inferenceResult || originalBaselineData;
                                   // Find what changed by comparing (excluding array indices from path)
-                                  const findBaselineChanges = (original, current, pathParts = []) => {
+                                  const findBaselineChanges = (original: unknown, current: unknown, pathParts: string[] = []) => {
                                     if (typeof current !== 'object' || current === null) {
                                       const pathStr = pathParts.join('.') || 'root';
                                       if (JSON.stringify(original) !== JSON.stringify(current)) {
@@ -3277,8 +3319,8 @@ const VisualEditorModal = ({
                                       });
                                     } else {
                                       Object.keys(current).forEach((key) => {
-                                        const origVal = original ? original[key] : undefined;
-                                        findBaselineChanges(origVal, current[key], [...pathParts, key]);
+                                        const origVal = original ? (original as Record<string, unknown>)[key] : undefined;
+                                        findBaselineChanges(origVal, (current as Record<string, unknown>)[key], [...pathParts, key]);
                                       });
                                     }
                                   };
@@ -3286,7 +3328,7 @@ const VisualEditorModal = ({
                                 }
                               }
                             }}
-                            onChange={(newValue) => {
+                            onChange={(newValue: Record<string, unknown>) => {
                               if (!isReadOnly) {
                                 // Update local state immediately for responsive UI
                                 const updatedData = { ...localJsonData };
@@ -3327,7 +3369,7 @@ const VisualEditorModal = ({
                                   if (JSON.stringify(newValue) !== JSON.stringify(originalInferenceResult)) {
                                     // Find what changed by comparing
                                     // Note: paths exclude array indices to match FormFieldRenderer's path calculation
-                                    const findChanges = (original, current, pathParts = []) => {
+                                    const findChanges = (original: unknown, current: unknown, pathParts: string[] = []) => {
                                       if (typeof current !== 'object' || current === null) {
                                         const pathStr = pathParts.join('.') || 'root';
                                         if (JSON.stringify(original) !== JSON.stringify(current)) {
@@ -3343,8 +3385,8 @@ const VisualEditorModal = ({
                                         });
                                       } else {
                                         Object.keys(current).forEach((key) => {
-                                          const origVal = original ? original[key] : undefined;
-                                          findChanges(origVal, current[key], [...pathParts, key]);
+                                          const origVal = original ? (original as Record<string, unknown>)[key] : undefined;
+                                          findChanges(origVal, (current as Record<string, unknown>)[key], [...pathParts, key]);
                                         });
                                       }
                                     };
@@ -3480,6 +3522,16 @@ const VisualEditorModal = ({
             id: 'history',
             label: 'Revision History',
             content: <EditHistoryTab predictionData={localJsonData} baselineData={localBaselineData} />,
+          },
+          {
+            id: 'processing',
+            label: 'Processing Report',
+            content: (
+              <ProcessingReportTab
+                metadata={localJsonData?.metadata as Record<string, unknown> | undefined}
+                processingReport={localJsonData?.processing_report as string | undefined}
+              />
+            ),
           },
         ]}
       />

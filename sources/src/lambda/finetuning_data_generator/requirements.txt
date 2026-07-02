@@ -1,0 +1,7 @@
+# idp_common provided by Lambda Layer 1 (base)
+# Layer 1 includes: core + docs_service + image
+# model_finetuning module is part of idp_common
+
+# PDF to image conversion for fine-tuning data generation
+pypdfium2>=4.0.0
+Pillow>=10.0.0

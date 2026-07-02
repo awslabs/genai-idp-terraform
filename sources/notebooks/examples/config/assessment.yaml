@@ -2,10 +2,10 @@
 # This configuration works with both original and granular assessment approaches
 assessment:
   default_confidence_threshold: '0.8'
-  top_p: '0.1'
+  top_p: "0.0"
   max_tokens: '10000'
   top_k: '5'
-  temperature: '0.0'
+  temperature: "0.0"
   model: us.amazon.nova-pro-v1:0
   system_prompt: >-
     You are a document analysis assessment expert. Your task is to evaluate the confidence of extraction results by analyzing the source document evidence. Respond only with JSON containing confidence scores for each extracted attribute.

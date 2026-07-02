@@ -62,17 +62,8 @@ resource "aws_iam_role_policy_attachment" "dataset_deployers_vpc" {
   policy_arn = local.lambda_vpc_access_arn
 }
 
-resource "aws_iam_role_policy_attachment" "error_analyzer_vpc" {
-  count      = var.enable_error_analyzer && var.vpc_config != null ? 1 : 0
-  role       = aws_iam_role.error_analyzer[0].name
-  policy_arn = local.lambda_vpc_access_arn
-}
-
-resource "aws_iam_role_policy_attachment" "error_analyzer_resolver_vpc" {
-  count      = var.enable_error_analyzer && var.vpc_config != null ? 1 : 0
-  role       = aws_iam_role.error_analyzer_resolver[0].name
-  policy_arn = local.lambda_vpc_access_arn
-}
+# error_analyzer_vpc / error_analyzer_resolver_vpc — removed at v0.5.12 along
+# with the error-analyzer feature (see error-analyzer.tf).
 
 resource "aws_iam_role_policy_attachment" "complete_section_review_vpc" {
   count      = var.enable_hitl && var.vpc_config != null ? 1 : 0
@@ -80,15 +71,11 @@ resource "aws_iam_role_policy_attachment" "complete_section_review_vpc" {
   policy_arn = local.lambda_vpc_access_arn
 }
 
-resource "aws_iam_role_policy_attachment" "agentcore_analytics_processor_vpc" {
-  count      = local.enable_mcp_effective && var.vpc_config != null ? 1 : 0
-  role       = aws_iam_role.agentcore_analytics_processor[0].name
-  policy_arn = local.lambda_vpc_access_arn
-}
-
-# NOTE: `agentcore_gateway_manager` is intentionally NOT attached to a
-# VPC (the AgentCore control plane doesn't support PrivateLink), so it
-# does not need ENI permissions. See `mcp-integration.tf`.
+# NOTE: MCP integration moved to the `mcp-integration` feature submodule
+# (modules/features/mcp-integration) in v0.5.12-tf.0. Its VPC/ENI attachment
+# (`agentcore_mcp_handler_vpc`) now lives inside that submodule; the
+# gateway-manager Lambda is intentionally never placed in a VPC (the AgentCore
+# control plane doesn't support PrivateLink).
 
 resource "aws_iam_role_policy_attachment" "test_studio_lambdas_vpc" {
   count      = var.enable_test_studio && var.vpc_config != null ? 1 : 0

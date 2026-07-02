@@ -1,0 +1,13 @@
+mutation AddDocumentsToTestSet($testSetId: String!, $filePattern: String!, $bucketType: String!, $fileCount: Int!, $modifiedAfter: String) {
+  addDocumentsToTestSet(testSetId: $testSetId, filePattern: $filePattern, bucketType: $bucketType, fileCount: $fileCount, modifiedAfter: $modifiedAfter) {
+    id
+    name
+    description
+    filePattern
+    fileCount
+    status
+    createdAt
+    error
+    lastAddResult
+  }
+}

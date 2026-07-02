@@ -1,8 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
-/* eslint-disable react/no-unstable-nested-components, react/no-array-index-key */
+/* eslint-disable react/no-array-index-key */
 import React, { useState, useMemo, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
+import { calculateCapacity as calculateCapacityOp } from '../../graphql/generated';
 import {
   Container,
   Header,
@@ -25,8 +26,10 @@ import useConfiguration from '../../hooks/use-configuration';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import useSettingsContext from '../../contexts/settings';
 import useDocumentsContext from '../../contexts/documents';
+import type { Document as UIDocument, Section } from '../../types/documents';
 import DocumentPickerModal from './DocumentPickerModal';
 import DateRangeModal from '../common/DateRangeModal';
+import { parseMetering } from '../../graphql/awsjson-parsers';
 
 // Type definitions for configuration and state
 interface Configuration {
@@ -172,18 +175,16 @@ const CapacityPlanningLayout = () => {
   const { mergedConfig: configurationUntyped, fetchConfiguration } = useConfiguration();
   const configuration = configurationUntyped as Configuration | null;
   const { versions, getVersionOptions } = useConfigurationVersions();
-  const settingsContext = useSettingsContext() || {};
-  const deploymentSettings = settingsContext.settings as Record<string, unknown> | undefined;
-  const documentsContext = useDocumentsContext() || {};
-  const documents = documentsContext.documents as Array<Record<string, unknown>> | undefined;
-  const isDocumentsListLoading = documentsContext.isDocumentsListLoading as boolean | undefined;
-  const setIsDocumentsListLoading = documentsContext.setIsDocumentsListLoading as ((loading: boolean) => void) | undefined;
-  const periodsToLoad = documentsContext.periodsToLoad as number | undefined;
-  const setPeriodsToLoad = documentsContext.setPeriodsToLoad as ((count: number) => void) | undefined;
-  const customDateRange = documentsContext.customDateRange as { startDateTime: string; endDateTime: string } | null | undefined;
-  const setCustomDateRange = documentsContext.setCustomDateRange as
-    | ((range: { startDateTime: string; endDateTime: string } | null) => void)
-    | undefined;
+  const { settings: deploymentSettings } = useSettingsContext();
+  const {
+    documents,
+    isDocumentsListLoading,
+    setIsDocumentsListLoading,
+    periodsToLoad,
+    setPeriodsToLoad,
+    customDateRange,
+    setCustomDateRange,
+  } = useDocumentsContext();
 
   const [selectedConfigVersion, setSelectedConfigVersion] = useState<SelectOption | null>(null);
   const [manualPattern, setManualPattern] = useState<string | null>(null);
@@ -202,27 +203,25 @@ const CapacityPlanningLayout = () => {
     }
   }, [configuration]);
 
-  // Set default to active version when versions are loaded
+  // Set default to active version (or first scoped version) when versions are loaded
   useEffect(() => {
     if (versions.length > 0 && !selectedConfigVersion) {
+      const versionOptions = getVersionOptions();
       const activeVersion = versions.find((v) => v.isActive);
       if (activeVersion) {
-        const versionOptions = getVersionOptions();
         const activeVersionOption = versionOptions.find((option) => option.value === activeVersion.versionName);
         if (activeVersionOption) {
           console.log('Setting selected config version to active:', activeVersionOption.value);
           setSelectedConfigVersion(activeVersionOption);
-        }
-      } else {
-        // Fallback: if no active version found, use 'default'
-        const defaultOption = getVersionOptions().find((opt) => opt.value === 'default');
-        if (defaultOption) {
-          console.log('No active version found, using default');
-          setSelectedConfigVersion(defaultOption);
+          return;
         }
       }
+      // Fallback: select first available (scoped) version
+      if (versionOptions.length > 0) {
+        console.log('Using first available scoped version:', versionOptions[0].value);
+        setSelectedConfigVersion(versionOptions[0]);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versions, selectedConfigVersion]); // getVersionOptions is not memoized
 
   // Fetch configuration when selected version changes
@@ -232,7 +231,6 @@ const CapacityPlanningLayout = () => {
       console.log('Fetching configuration for version:', selectedConfigVersion.value);
       fetchConfiguration(selectedConfigVersion.value, true); // Use silent=true to avoid showing loading state
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConfigVersion]); // fetchConfiguration is not memoized, so we only depend on selectedConfigVersion
 
   // Auto-populate avgPages from processed documents on component mount
@@ -301,14 +299,14 @@ const CapacityPlanningLayout = () => {
   };
 
   // Handle time period changes - uses context's time range state
-  const handlePeriodChange = (shardCount) => {
+  const handlePeriodChange = (shardCount: number) => {
     if (setPeriodsToLoad) {
       setPeriodsToLoad(shardCount);
     }
   };
 
   // Handle custom date range apply - uses context's time range state
-  const handleCustomDateRangeApply = (dateRange) => {
+  const handleCustomDateRangeApply = (dateRange: { startDateTime: string; endDateTime: string }) => {
     setIsDateRangeModalVisible(false);
     if (setCustomDateRange) {
       setCustomDateRange(dateRange);
@@ -330,10 +328,10 @@ const CapacityPlanningLayout = () => {
   };
 
   // Helper function to extract token and request values from metering data structure
-  const extractTokensAndRequestsFromMetering = (meteringData) => {
+  const extractTokensAndRequestsFromMetering = (meteringData: Record<string, unknown>) => {
     // Calculate estimated request count based on token usage patterns
     // Large token counts typically indicate multiple API requests due to chunking
-    const estimateRequestsFromTokens = (tokens, stepType) => {
+    const estimateRequestsFromTokens = (tokens: number, stepType: string) => {
       if (!tokens || tokens === 0) return 0;
 
       // Get max tokens per request from environment or use defaults
@@ -493,15 +491,15 @@ const CapacityPlanningLayout = () => {
 
   // Helper function to validate a document for capacity planning
   // Returns { valid: boolean, error?: string, documentClass?: string }
-  const validateDocumentForCapacityPlanning = (doc) => {
+  const validateDocumentForCapacityPlanning = (doc: UIDocument) => {
     const configuredTypes = getConfiguredDocumentTypes();
 
     // Check if document has sections
-    const sections = doc.Sections || [];
+    const sections: Section[] = doc.Sections || [];
 
     // Get unique classes from sections
-    const uniqueClasses = new Set();
-    sections.forEach((section) => {
+    const uniqueClasses = new Set<string>();
+    sections.forEach((section: Section) => {
       if (section.Class) {
         uniqueClasses.add(section.Class);
       }
@@ -519,7 +517,7 @@ const CapacityPlanningLayout = () => {
     console.log(
       `  - Classes from Sections: ${
         sections
-          .map((s) => s.Class)
+          .map((s: Section) => s.Class)
           .filter(Boolean)
           .join(', ') || 'none'
       }`,
@@ -536,8 +534,8 @@ const CapacityPlanningLayout = () => {
       return {
         valid: false,
         error: `Document "${doc.ObjectKey}" has no classification. Please ensure documents are classified before using for capacity planning.`,
-        documentClass: null,
-        documentClasses: [],
+        documentClass: null as string | null,
+        documentClasses: [] as string[],
         isMultiClass: false,
       };
     }
@@ -660,13 +658,11 @@ const CapacityPlanningLayout = () => {
       }
 
       // Map documents with metering data and validate for capacity planning
-      const validationErrors = [];
+      const validationErrors: string[] = [];
       const validDocuments = candidateDocuments
         .map((doc) => {
-          let meteringData = {};
-          try {
-            meteringData = typeof doc.Metering === 'string' ? JSON.parse(doc.Metering) : doc.Metering;
-          } catch (e) {
+          const meteringData = parseMetering(doc.Metering as string) || {};
+          if (!meteringData || Object.keys(meteringData).length === 0) {
             console.warn('Failed to parse metering data for', doc.ObjectKey);
             return null;
           }
@@ -675,7 +671,7 @@ const CapacityPlanningLayout = () => {
           const validation = validateDocumentForCapacityPlanning(doc);
 
           if (!validation.valid) {
-            validationErrors.push(validation.error);
+            validationErrors.push(validation.error ?? 'Unknown validation error');
             console.warn('Document validation failed:', validation.error);
             return null;
           }
@@ -695,10 +691,12 @@ const CapacityPlanningLayout = () => {
             } else if (doc.Pages) {
               extractedData.avgPages = Number(doc.Pages) || 0;
               console.log(`📄 Extracted page count from doc.Pages: ${extractedData.avgPages} pages`);
-            } else if (doc.Sections && (doc.Sections as Array<Record<string, unknown>>).length > 0) {
+            } else if (doc.Sections && doc.Sections.length > 0) {
               // Try to get page count from sections
               const maxEndPage = Math.max(
-                ...(doc.Sections as Array<Record<string, unknown>>).map((s) => (s.EndPage as number) || (s.endPage as number) || 0),
+                ...(doc.Sections as unknown as Array<Record<string, unknown>>).map(
+                  (s) => (s.EndPage as number) || (s.endPage as number) || 0,
+                ),
               );
               if (maxEndPage > 0) {
                 extractedData.avgPages = maxEndPage;
@@ -756,7 +754,7 @@ const CapacityPlanningLayout = () => {
     }
   };
 
-  const populateTokensFromDocument = (selectedDoc) => {
+  const populateTokensFromDocument = (selectedDoc: RecentDocument) => {
     if (!selectedDoc.metering) return;
 
     const metering = selectedDoc.metering;
@@ -987,7 +985,7 @@ const CapacityPlanningLayout = () => {
   };
 
   // Helper function to get readable model display name
-  const getModelDisplayName = (modelId) => {
+  const getModelDisplayName = (modelId: string | undefined) => {
     if (!modelId) return 'Not configured';
 
     // Extract readable name from model ID
@@ -1025,7 +1023,7 @@ const CapacityPlanningLayout = () => {
     const defaultOption = { label: '-- Select Document Type --', value: '', disabled: true };
 
     // Only show document types from View/Edit Configuration (configuration.classes)
-    let classOptions = [];
+    let classOptions: SelectOption[] = [];
     if (configuration?.classes && Array.isArray(configuration.classes)) {
       classOptions = configuration.classes
         .map((docClass) => {
@@ -1056,7 +1054,7 @@ const CapacityPlanningLayout = () => {
             description,
           };
         })
-        .filter(Boolean); // Remove null entries
+        .filter((item): item is NonNullable<typeof item> => item !== null); // Remove null entries
     }
 
     // If no classes configured, show a helpful message
@@ -1111,7 +1109,7 @@ const CapacityPlanningLayout = () => {
 
     // Use the same logic as the left panel - simple and reliable
     if (deploymentSettings?.IDPPattern) {
-      const pattern = String(deploymentSettings.IDPPattern).split(' ')[0]; // Extract just "Pattern1", "Pattern2", etc.
+      const pattern = String(deploymentSettings.IDPPattern).split(' ')[0]; // Extract just "Pattern1", "Pattern2", "Unified", etc.
 
       if (pattern === 'Pattern1') {
         return 'PATTERN-1';
@@ -1120,6 +1118,10 @@ const CapacityPlanningLayout = () => {
         return 'PATTERN-3';
       }
       if (pattern === 'Pattern2') {
+        return 'PATTERN-2';
+      }
+      // Unified pattern uses the same Bedrock pipeline as Pattern-2
+      if (pattern.toLowerCase() === 'unified') {
         return 'PATTERN-2';
       }
     }
@@ -1145,14 +1147,14 @@ const CapacityPlanningLayout = () => {
     }
   }, [configuration]);
 
-  const updateDocumentConfig = async (index, field, value) => {
+  const updateDocumentConfig = async (index: number, field: keyof DocumentConfig, value: string | number) => {
     const updated = [...documentConfigs];
-    updated[index][field] = value;
+    updated[index] = { ...updated[index], [field]: value };
 
     setDocumentConfigs(updated);
   };
 
-  const removeDocumentConfig = (index) => {
+  const removeDocumentConfig = (index: number) => {
     const updated = documentConfigs.filter((_, i) => i !== index);
     setDocumentConfigs(updated);
   };
@@ -1245,13 +1247,13 @@ const CapacityPlanningLayout = () => {
     addNotification('success', 'All time slots cleared', 'Schedule Reset');
   };
 
-  const updateTimeSlot = (index, field, value) => {
+  const updateTimeSlot = (index: number, field: keyof TimeSlot, value: string) => {
     const updated = { ...processingConfig };
-    updated.timeSlots[index][field] = value;
+    updated.timeSlots[index] = { ...updated.timeSlots[index], [field]: value };
     setProcessingConfig(updated);
   };
 
-  const removeTimeSlot = (index) => {
+  const removeTimeSlot = (index: number) => {
     const updated = { ...processingConfig };
     updated.timeSlots = updated.timeSlots.filter((_, i) => i !== index);
     setProcessingConfig(updated);
@@ -1474,60 +1476,13 @@ const CapacityPlanningLayout = () => {
       // Create client inside the function to ensure Amplify is configured
       const client = generateClient();
       const response = await client.graphql({
-        query: `
-          query CalculateCapacity($input: String!) {
-            calculateCapacity(input: $input) {
-              success
-              errorMessage
-              metrics {
-                label
-                value
-              }
-              quotaRequirements {
-                service
-                category
-                currentQuota
-                requiredQuota
-                statusText
-                modelId
-              }
-              latencyDistribution {
-                p50
-                p75
-                p90
-                p95
-                p99
-                procP50
-                procP75
-                procP90
-                procP95
-                procP99
-                queueP50
-                queueP75
-                queueP90
-                queueP95
-                queueP99
-                baseLatency
-                queueLatency
-                totalLatency
-                exceedsLimit
-                maxAllowed
-              }
-              calculationDetails {
-                quotasUsed {
-                  bedrock_models
-                }
-              }
-              recommendations
-            }
-          }
-        `,
+        query: calculateCapacityOp,
         variables: { input: JSON.stringify(input) },
       });
 
       console.log('📊 Capacity calculation response:', response);
 
-      const responseData = (response as { data?: { calculateCapacity?: CapacityResult } }).data;
+      const responseData = response.data;
       if (responseData?.calculateCapacity) {
         // The response now has the proper GraphQL structure
         const result = responseData.calculateCapacity;
@@ -1536,7 +1491,7 @@ const CapacityPlanningLayout = () => {
 
         // Check if API returned success
         if (result.success) {
-          setResults(result);
+          setResults(result as unknown as CapacityResult);
           setHasCalculated(true);
           return; // Exit early on success
         }
@@ -1568,8 +1523,9 @@ const CapacityPlanningLayout = () => {
       console.error('❌ Capacity calculation error:', error);
 
       // Log GraphQL errors specifically
-      if (error.errors) {
-        error.errors.forEach((gqlError, index) => {
+      const gqlErr = error as { errors?: unknown[] };
+      if (gqlErr.errors) {
+        gqlErr.errors.forEach((gqlError: unknown, index: number) => {
           console.error(`GraphQL Error ${index + 1}:`, gqlError);
         });
       }
@@ -1595,13 +1551,13 @@ const CapacityPlanningLayout = () => {
   // Memoized capacity calculations that update when config changes
   const capacityMetrics = useMemo(() => {
     // Helper function to safely parse numbers
-    const safeParseInt = (value, defaultValue = 0) => {
-      const parsed = parseInt(value, 10);
+    const safeParseInt = (value: string | number, defaultValue = 0) => {
+      const parsed = parseInt(String(value), 10);
       return Number.isNaN(parsed) ? defaultValue : parsed;
     };
 
-    const safeParseFloat = (value, defaultValue = 0) => {
-      const parsed = parseFloat(value);
+    const safeParseFloat = (value: string | number, defaultValue = 0): number => {
+      const parsed = parseFloat(String(value));
       return Number.isNaN(parsed) ? defaultValue : parsed;
     };
 
@@ -1688,7 +1644,7 @@ const CapacityPlanningLayout = () => {
           const inferenceType = stepMatch ? stepMatch[1] : quota.usedFor || '';
 
           // Clean up model display name
-          const modelDisplayName = quota.modelId ? quota.modelId.split('.').pop().split(':')[0] : '';
+          const modelDisplayName = quota.modelId ? (quota.modelId.split('.').pop() ?? '').split(':')[0] : '';
 
           // Transform category names to spell out abbreviations
           let category = quota.category || 'Bedrock Models';
@@ -1707,10 +1663,11 @@ const CapacityPlanningLayout = () => {
 
       // Enhanced debugging for empty quota requirements
       if (results.quotaRequirements && Array.isArray(results.quotaRequirements) && results.quotaRequirements.length === 0) {
+        // Intentionally empty: quota requirements may be empty when the backend has no quota data
       }
 
       // Fallback: build quota data from configuration if no quotaRequirements
-      const quotaList = [];
+      const quotaList: QuotaRequirement[] = [];
 
       // Get the models from configuration including OCR
       const models = [];
@@ -2193,8 +2150,8 @@ const CapacityPlanningLayout = () => {
                   width: 220,
                   cell: (item) => (
                     <Select
-                      selectedOption={documentTypeOptions.find((opt) => opt.value === item.type && !opt.disabled) || null}
-                      onChange={({ detail }) => updateDocumentConfig(item.index, 'type', detail.selectedOption.value)}
+                      selectedOption={documentTypeOptions.find((opt) => opt.value === item.type && !opt.disabled) ?? null}
+                      onChange={({ detail }) => updateDocumentConfig(item.index ?? 0, 'type', detail.selectedOption.value ?? '')}
                       options={documentTypeOptions}
                       placeholder="Select document type"
                       expandToViewport
@@ -2214,7 +2171,7 @@ const CapacityPlanningLayout = () => {
                     <Input
                       type="number"
                       value={String(item.avgPages)}
-                      onChange={({ detail }) => updateDocumentConfig(item.index, 'avgPages', detail.value)}
+                      onChange={({ detail }) => updateDocumentConfig(item.index ?? 0, 'avgPages', detail.value)}
                       step={0.1}
                       placeholder="Pages"
                     />
@@ -2232,13 +2189,13 @@ const CapacityPlanningLayout = () => {
                             </div>
                           </div>
                         ),
-                        cell: (item) => (
+                        cell: (item: DocumentConfig) => (
                           <Input
                             type="number"
                             value={item.ocrTokens !== undefined && item.ocrTokens !== '' ? String(item.ocrTokens) : ''}
                             placeholder="OCR tokens"
                             onChange={({ detail }) =>
-                              updateDocumentConfig(item.index, 'ocrTokens', detail.value === '' ? '' : parseFloat(detail.value))
+                              updateDocumentConfig(item.index ?? 0, 'ocrTokens', detail.value === '' ? '' : parseFloat(detail.value))
                             }
                           />
                         ),
@@ -2263,7 +2220,7 @@ const CapacityPlanningLayout = () => {
                       }
                       placeholder="Classification tokens"
                       onChange={({ detail }) =>
-                        updateDocumentConfig(item.index, 'classificationTokens', detail.value === '' ? '' : parseFloat(detail.value))
+                        updateDocumentConfig(item.index ?? 0, 'classificationTokens', detail.value === '' ? '' : parseFloat(detail.value))
                       }
                     />
                   ),
@@ -2284,7 +2241,7 @@ const CapacityPlanningLayout = () => {
                       value={item.extractionTokens !== undefined && item.extractionTokens !== '' ? String(item.extractionTokens) : ''}
                       placeholder="Extraction tokens"
                       onChange={({ detail }) =>
-                        updateDocumentConfig(item.index, 'extractionTokens', detail.value === '' ? '' : parseFloat(detail.value))
+                        updateDocumentConfig(item.index ?? 0, 'extractionTokens', detail.value === '' ? '' : parseFloat(detail.value))
                       }
                     />
                   ),
@@ -2305,7 +2262,7 @@ const CapacityPlanningLayout = () => {
                       value={item.assessmentTokens !== undefined && item.assessmentTokens !== '' ? String(item.assessmentTokens) : ''}
                       placeholder="Assessment tokens"
                       onChange={({ detail }) =>
-                        updateDocumentConfig(item.index, 'assessmentTokens', detail.value === '' ? '' : parseFloat(detail.value))
+                        updateDocumentConfig(item.index ?? 0, 'assessmentTokens', detail.value === '' ? '' : parseFloat(detail.value))
                       }
                     />
                   ),
@@ -2328,7 +2285,7 @@ const CapacityPlanningLayout = () => {
                       }
                       placeholder="Summarization tokens"
                       onChange={({ detail }) =>
-                        updateDocumentConfig(item.index, 'summarizationTokens', detail.value === '' ? '' : parseFloat(detail.value))
+                        updateDocumentConfig(item.index ?? 0, 'summarizationTokens', detail.value === '' ? '' : parseFloat(detail.value))
                       }
                     />
                   ),
@@ -2340,7 +2297,7 @@ const CapacityPlanningLayout = () => {
                     <Button
                       variant="icon"
                       iconName="close"
-                      onClick={() => removeDocumentConfig(item.index)}
+                      onClick={() => removeDocumentConfig(item.index ?? 0)}
                       ariaLabel="Remove document configuration"
                     />
                   ),
@@ -2527,8 +2484,8 @@ const CapacityPlanningLayout = () => {
                   header: 'Processing Hours',
                   cell: (item) => (
                     <Select
-                      selectedOption={item.hour ? timeSlotOptions.find((opt) => opt.value === item.hour) : null}
-                      onChange={({ detail }) => updateTimeSlot(item.index, 'hour', detail.selectedOption.value)}
+                      selectedOption={item.hour ? (timeSlotOptions.find((opt) => opt.value === item.hour) ?? null) : null}
+                      onChange={({ detail }) => updateTimeSlot(item.index, 'hour', detail.selectedOption.value ?? '')}
                       options={timeSlotOptions}
                       placeholder="Select processing hour"
                       expandToViewport
@@ -2542,12 +2499,12 @@ const CapacityPlanningLayout = () => {
                     <Select
                       selectedOption={
                         item.documentType && item.documentType !== ''
-                          ? scheduleDocumentTypeOptions.find(
+                          ? (scheduleDocumentTypeOptions.find(
                               (opt) => opt.value === item.documentType && !(opt as { disabled?: boolean }).disabled,
-                            )
+                            ) ?? null)
                           : null
                       }
-                      onChange={({ detail }) => updateTimeSlot(item.index, 'documentType', detail.selectedOption.value)}
+                      onChange={({ detail }) => updateTimeSlot(item.index, 'documentType', detail.selectedOption.value ?? '')}
                       options={scheduleDocumentTypeOptions}
                       placeholder="Select document type"
                       expandToViewport
@@ -3238,7 +3195,8 @@ const CapacityPlanningLayout = () => {
                             const docType = slot.documentType || 'Other';
                             const docsPerHour = parseInt(String(slot.docsPerHour || 0), 10);
 
-                            if (docsPerHour > 0) {
+                            const hourEntry = hourlyBreakdown[hour];
+                            if (docsPerHour > 0 && hourEntry) {
                               const docConfig = documentConfigs.find((config) => config.type === docType) || {
                                 ocrTokens: 0,
                                 classificationTokens: 0,
@@ -3274,23 +3232,23 @@ const CapacityPlanningLayout = () => {
                               );
 
                               // Accumulate tokens for this hour (multiple slots can add to same hour)
-                              hourlyBreakdown[hour].ocrTokens += slotOcrTokens;
-                              hourlyBreakdown[hour].classificationTokens += slotClassificationTokens;
-                              hourlyBreakdown[hour].extractionTokens += slotExtractionTokens;
-                              hourlyBreakdown[hour].summarizationTokens += slotSummarizationTokens;
-                              hourlyBreakdown[hour].assessmentTokens += slotAssessmentTokens;
-                              hourlyBreakdown[hour].totalTokens +=
+                              hourEntry.ocrTokens += slotOcrTokens;
+                              hourEntry.classificationTokens += slotClassificationTokens;
+                              hourEntry.extractionTokens += slotExtractionTokens;
+                              hourEntry.summarizationTokens += slotSummarizationTokens;
+                              hourEntry.assessmentTokens += slotAssessmentTokens;
+                              hourEntry.totalTokens +=
                                 slotOcrTokens +
                                 slotClassificationTokens +
                                 slotExtractionTokens +
                                 slotSummarizationTokens +
                                 slotAssessmentTokens;
 
-                              console.log(`DEBUG: Hour ${hour} accumulated total: ${hourlyBreakdown[hour].totalTokens}`);
+                              console.log(`DEBUG: Hour ${hour} accumulated total: ${hourEntry.totalTokens}`);
 
                               // Track document types
-                              if (!hourlyBreakdown[hour].documentTypes.includes(docType)) {
-                                hourlyBreakdown[hour].documentTypes.push(docType);
+                              if (hourEntry.documentTypes && !hourEntry.documentTypes.includes(docType)) {
+                                hourEntry.documentTypes.push(docType);
                               }
                             }
                           });
@@ -3575,7 +3533,7 @@ const CapacityPlanningLayout = () => {
                           <div style={{ fontSize: '12px', lineHeight: '1.4' }}>
                             <div>
                               Peak: {String(peakHour.hour).padStart(2, '0')}:00-
-                              {/* eslint-disable-next-line max-len */}
+                              {}
                               {String(peakHour.hour + 1).padStart(2, '0')}:00 ({peakHour.totalTokens.toLocaleString()} tokens)
                             </div>
                             <div>
@@ -3910,7 +3868,7 @@ const CapacityPlanningLayout = () => {
         selectedDocuments={selectedDocuments as unknown as React.ComponentProps<typeof DocumentPickerModal>['selectedDocuments']}
         setSelectedDocuments={setSelectedDocuments as unknown as React.ComponentProps<typeof DocumentPickerModal>['setSelectedDocuments']}
         onUseSelectedDocuments={populateTokensFromMultipleDocuments}
-        onUseDocument={populateTokensFromDocument}
+        onUseDocument={populateTokensFromDocument as unknown as React.ComponentProps<typeof DocumentPickerModal>['onUseDocument']}
         configuration={configuration}
         periodsToLoad={periodsToLoad}
         setPeriodsToLoad={handlePeriodChange}

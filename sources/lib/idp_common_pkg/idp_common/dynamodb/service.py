@@ -12,7 +12,7 @@ import datetime
 import json
 import logging
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from idp_common.dynamodb.client import DynamoDBClient
 from idp_common.models import Document, Page, Section, Status
@@ -38,6 +38,25 @@ def convert_floats_to_decimal(obj):
         return [convert_floats_to_decimal(item) for item in obj]
     else:
         return obj
+
+
+def convert_decimals_to_native(obj):
+    """
+    Recursively convert Decimal values to int or float for JSON serialization.
+
+    Args:
+        obj: Object that may contain Decimal values (e.g. from DynamoDB)
+
+    Returns:
+        Object with Decimals converted to int (if whole) or float
+    """
+    if isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimals_to_native(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_decimals_to_native(i) for i in obj]
+    return obj
 
 
 class DocumentDynamoDBService:
@@ -109,6 +128,7 @@ class DocumentDynamoDBService:
             "ObjectStatus": document.status.value,
             "InitialEventTime": document.initial_event_time,
             "QueuedTime": document.queued_time,
+            "ItemType": "document",
         }
 
         if expires_after:
@@ -268,6 +288,25 @@ class DocumentDynamoDBService:
             expression_names["#SummaryReportUri"] = "SummaryReportUri"
             expression_values[":SummaryReportUri"] = document.summary_report_uri
 
+        # Add rule validation result if available
+        if document.rule_validation_result:
+            set_expressions.append("#RuleValidationResult = :RuleValidationResult")
+            expression_names["#RuleValidationResult"] = "RuleValidationResult"
+            # Store as JSON string to preserve structure
+            rule_validation_dict = {
+                "request_id": document.rule_validation_result.request_id,
+                "summary": document.rule_validation_result.summary,
+                "section_results": document.rule_validation_result.section_results,
+                "metadata": document.rule_validation_result.metadata,
+                "output_uri": document.rule_validation_result.output_uri,
+                "errors": document.rule_validation_result.errors,
+                "matched_policy_types": document.rule_validation_result.matched_policy_types,
+                "matched_page_ids": document.rule_validation_result.matched_page_ids,
+            }
+            expression_values[":RuleValidationResult"] = json.dumps(
+                rule_validation_dict, default=str
+            )
+
         # Add trace_id if available
         if document.trace_id:
             set_expressions.append("#TraceId = :TraceId")
@@ -279,6 +318,14 @@ class DocumentDynamoDBService:
             set_expressions.append("#HITLStatus = :HITLStatus")
             expression_names["#HITLStatus"] = "HITLStatus"
             expression_values[":HITLStatus"] = document.hitl_status
+            # Maintain sparse GSI attribute for pending review queries
+            # "PendingReview" = initial trigger, "Review Pending" = after release_review,
+            # "InProgress" = after claim_review
+            pending_statuses = ("PendingReview", "Review Pending", "InProgress")
+            if document.hitl_status in pending_statuses:
+                set_expressions.append("#HITLPendingReview = :HITLPendingReview")
+                expression_names["#HITLPendingReview"] = "HITLPendingReview"
+                expression_values[":HITLPendingReview"] = "true"
         if document.hitl_sections_pending:
             set_expressions.append("#HITLSectionsPending = :HITLSectionsPending")
             expression_names["#HITLSectionsPending"] = "HITLSectionsPending"
@@ -290,7 +337,23 @@ class DocumentDynamoDBService:
                 document.hitl_sections_completed
             )
 
+        # Always persist confidence alert count (even 0) so GSI has it for listDocuments
+        set_expressions.append("#ConfidenceAlertCount = :ConfidenceAlertCount")
+        expression_names["#ConfidenceAlertCount"] = "ConfidenceAlertCount"
+        expression_values[":ConfidenceAlertCount"] = document.confidence_alert_count
+
+        # Build update expression with optional REMOVE clause
         update_expression = "SET " + ", ".join(set_expressions)
+
+        # Remove HITLPendingReview GSI attribute when review is completed/skipped
+        remove_expressions = []
+        if document.hitl_status:
+            pending_statuses = ("PendingReview", "Review Pending", "InProgress")
+            if document.hitl_status not in pending_statuses:
+                remove_expressions.append("HITLPendingReview")
+        if remove_expressions:
+            update_expression += " REMOVE " + ", ".join(remove_expressions)
+
         # Convert any float values to Decimal for DynamoDB compatibility
         expression_values = convert_floats_to_decimal(expression_values)  # type: ignore[assignment]
 
@@ -402,6 +465,25 @@ class DocumentDynamoDBService:
         doc.hitl_status = item.get("HITLStatus")
         doc.hitl_sections_pending = item.get("HITLSectionsPending", [])
         doc.hitl_sections_completed = item.get("HITLSectionsCompleted", [])
+
+        # Convert rule validation result if present
+        if item.get("RuleValidationResult"):
+            try:
+                from idp_common.models import RuleValidationResult
+
+                rv_data = item.get("RuleValidationResult")
+                doc.rule_validation_result = RuleValidationResult(
+                    request_id=rv_data.get("request_id"),
+                    summary=rv_data.get("summary"),
+                    section_results=rv_data.get("section_results"),
+                    metadata=rv_data.get("metadata"),
+                    output_uri=rv_data.get("output_uri"),
+                    errors=rv_data.get("errors"),
+                    matched_policy_types=rv_data.get("matched_policy_types"),
+                    matched_page_ids=rv_data.get("matched_page_ids"),
+                )
+            except Exception as e:
+                logger.warning(f"Failed to parse RuleValidationResult: {e}")
 
         return doc
 
@@ -517,6 +599,18 @@ class DocumentDynamoDBService:
             return self._dynamodb_item_to_document(item)
         return None
 
+    def batch_get_documents(self, object_keys: List[str]) -> List[Dict[str, Any]]:
+        """Batch get document records by object keys (max 100)."""
+        keys = [{"PK": f"doc#{k}", "SK": "none"} for k in object_keys]
+        items = self.client.batch_get_items(keys)
+        return [
+            {
+                "document_id": item.get("PK", "").replace("doc#", ""),
+                "status": item.get("ObjectStatus", ""),
+            }
+            for item in items
+        ]
+
     def list_documents(
         self,
         start_date_time: Optional[str] = None,
@@ -526,6 +620,9 @@ class DocumentDynamoDBService:
     ) -> Dict[str, Any]:
         """
         List documents with optional date filtering.
+
+        Uses TypeDateIndex GSI when available for efficient querying.
+        Falls back to scan if GSI query fails.
 
         Args:
             start_date_time: Optional start datetime filter (ISO 8601)
@@ -539,6 +636,15 @@ class DocumentDynamoDBService:
         Raises:
             DynamoDBError: If the DynamoDB operation fails
         """
+        # Try GSI query first (efficient)
+        try:
+            return self._list_documents_via_gsi(
+                start_date_time, end_date_time, limit, exclusive_start_key
+            )
+        except Exception as e:
+            logger.warning(f"GSI query failed, falling back to scan: {e}")
+
+        # Fallback to scan
         filter_expression = None
         expression_attribute_values = {}
 
@@ -569,6 +675,57 @@ class DocumentDynamoDBService:
                 documents.append(self._dynamodb_item_to_document(item))
             except Exception as e:
                 logger.warning(f"Failed to convert item to document: {e}")
+
+        return {
+            "Documents": documents,
+            "nextToken": response.get("LastEvaluatedKey"),
+        }
+
+    def _list_documents_via_gsi(
+        self,
+        start_date_time: Optional[str] = None,
+        end_date_time: Optional[str] = None,
+        limit: Optional[int] = None,
+        exclusive_start_key: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """List documents using TypeDateIndex GSI for efficient querying."""
+        import boto3
+        from boto3.dynamodb.conditions import Key
+
+        table = boto3.resource("dynamodb").Table(self.client.table_name)
+
+        query_kwargs: Dict[str, Any] = {
+            "IndexName": "TypeDateIndex",
+            "Limit": limit or 50,
+            "ScanIndexForward": False,
+        }
+
+        if start_date_time and end_date_time:
+            query_kwargs["KeyConditionExpression"] = Key("ItemType").eq(
+                "document"
+            ) & Key("InitialEventTime").between(start_date_time, end_date_time)
+        elif start_date_time:
+            query_kwargs["KeyConditionExpression"] = Key("ItemType").eq(
+                "document"
+            ) & Key("InitialEventTime").gte(start_date_time)
+        elif end_date_time:
+            query_kwargs["KeyConditionExpression"] = Key("ItemType").eq(
+                "document"
+            ) & Key("InitialEventTime").lte(end_date_time)
+        else:
+            query_kwargs["KeyConditionExpression"] = Key("ItemType").eq("document")
+
+        if exclusive_start_key:
+            query_kwargs["ExclusiveStartKey"] = exclusive_start_key
+
+        response = table.query(**query_kwargs)
+
+        documents = []
+        for item in response.get("Items", []):
+            try:
+                documents.append(self._dynamodb_item_to_document(item))
+            except Exception as e:
+                logger.warning(f"Failed to convert GSI item to document: {e}")
 
         return {
             "Documents": documents,

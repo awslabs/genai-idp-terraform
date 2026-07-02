@@ -143,6 +143,11 @@ resource "aws_glue_catalog_table" "document_evaluations_table" {
       name = "metadata"
       type = "string"
     }
+
+    columns {
+      name = "config_version"
+      type = "string"
+    }
   }
 }
 
@@ -239,6 +244,11 @@ resource "aws_glue_catalog_table" "section_evaluations_table" {
 
     columns {
       name = "metadata"
+      type = "string"
+    }
+
+    columns {
+      name = "config_version"
       type = "string"
     }
   }
@@ -374,6 +384,11 @@ resource "aws_glue_catalog_table" "attribute_evaluations_table" {
       name = "metadata"
       type = "string"
     }
+
+    columns {
+      name = "config_version"
+      type = "string"
+    }
   }
 }
 
@@ -485,6 +500,11 @@ resource "aws_glue_catalog_table" "metering_table" {
 
     columns {
       name = "metadata"
+      type = "string"
+    }
+
+    columns {
+      name = "config_version"
       type = "string"
     }
   }

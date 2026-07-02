@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  GENAIIDP-chandra-ocr-hook: Lambda Hook that calls the Datalab Chandra OCR 2
+  hosted API for high-quality OCR. Converts page images to structured Markdown,
+  JSON, or HTML using an asynchronous submit-and-poll pattern.
+
+Parameters:
+  IDPWorkingBucket:
+    Type: String
+    Description: >
+      Name of the IDP stack's working S3 bucket. Required for reading images
+      that are uploaded as S3 references in the LambdaHook payload.
+
+  CustomerManagedEncryptionKeyArn:
+    Type: String
+    Default: ""
+    Description: >
+      (Optional) ARN of the KMS key used to encrypt the IDP working bucket.
+      Required if the working bucket uses customer-managed KMS encryption.
+
+  ChandraApiKey:
+    Type: String
+    NoEcho: true
+    Description: >
+      Datalab API key for authenticating with the Chandra OCR hosted API.
+      Get your API key from https://www.datalab.to
+
+  ChandraApiUrl:
+    Type: String
+    Default: "https://www.datalab.to"
+    Description: >
+      Datalab API base URL. Defaults to the hosted API.
+      Override if using a self-hosted instance.
+
+  OutputFormat:
+    Type: String
+    Default: "markdown"
+    AllowedValues:
+      - markdown
+      - json
+      - html
+    Description: >
+      Output format for OCR results.
+
+  ConversionMode:
+    Type: String
+    Default: "accurate"
+    AllowedValues:
+      - fast
+      - balanced
+      - accurate
+    Description: >
+      Conversion quality mode. 'fast' for lowest latency, 'balanced' for
+      a mix of accuracy and speed, 'accurate' for highest quality.
+
+Conditions:
+  HasKMSKey: !Not [!Equals [!Ref CustomerManagedEncryptionKeyArn, ""]]
+
+Resources:
+  ChandraOcrHookFunction:
+    Type: AWS::Serverless::Function
+    # checkov:skip=CKV_AWS_173: "API key is passed via NoEcho parameter, encrypted at rest by Lambda service"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for sample Lambda hook function - errors handled by IDP pipeline"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it calls an external HTTPS API"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency - sample function for demonstration purposes"
+    Properties:
+      FunctionName: GENAIIDP-chandra-ocr-hook
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      CodeUri: .
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          CHANDRA_API_KEY: !Ref ChandraApiKey
+          CHANDRA_API_URL: !Ref ChandraApiUrl
+          OUTPUT_FORMAT: !Ref OutputFormat
+          CONVERSION_MODE: !Ref ConversionMode
+          POLL_INTERVAL: "3"
+          MAX_POLL_ATTEMPTS: "60"
+          LOG_LEVEL: INFO
+      Policies:
+        - Statement:
+            # Read images from IDP working bucket
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub "arn:${AWS::Partition}:s3:::${IDPWorkingBucket}/temp/lambdahook/*"
+            # KMS decrypt if working bucket uses customer-managed encryption
+            - !If
+              - HasKMSKey
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !Ref CustomerManagedEncryptionKeyArn
+              - !Ref AWS::NoValue
+
+Outputs:
+  FunctionArn:
+    Description: ARN of the Chandra OCR Lambda hook function
+    Value: !GetAtt ChandraOcrHookFunction.Arn
+
+  Usage:
+    Description: How to use in IDP configuration
+    Value: !Sub |
+      Set OCR backend to "bedrock", model_id to "LambdaHook", and model_lambda_hook_arn to "${ChandraOcrHookFunction.Arn}"

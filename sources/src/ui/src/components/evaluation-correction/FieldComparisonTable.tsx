@@ -132,6 +132,7 @@ const _getValueByPath = (obj: unknown, path: (string | number)[], filterStructur
   let current: unknown = obj;
   for (const key of filteredPath) {
     if (current === null || current === undefined) return undefined;
+    // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
     current = (current as Record<string | number, unknown>)[key];
   }
   return current;
@@ -161,6 +162,7 @@ const getFieldExplainabilityInfo = (
       if (Array.isArray(fieldInfo) && !Number.isNaN(parseInt(String(pathPart), 10))) {
         const arrayIndex = parseInt(String(pathPart), 10);
         if (arrayIndex >= 0 && arrayIndex < fieldInfo.length) {
+          // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
           fieldInfo = fieldInfo[arrayIndex];
         } else {
           fieldInfo = null;

@@ -1,7 +1,15 @@
+---
+title: "Pattern 2: Bedrock Classification and Extraction"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
 # Pattern 2: Bedrock Classification and Extraction
+
+> **⚠️ DEPRECATED**: Pattern 2 has been superseded by the **Unified Pattern**, which combines both BDA and pipeline processing modes into a single deployment. The `use_bda` configuration flag (set via the UI) controls whether documents are processed via BDA or the step-by-step pipeline. See [architecture.md](./architecture.md) for details on the unified architecture.
+>
+> This document is retained as a reference for pipeline-specific concepts (OCR, classification, extraction, assessment, rule validation) that still apply when `use_bda: false` is set in the unified pattern (the default mode).
 
 This pattern implements an intelligent document processing workflow that uses Amazon Bedrock with Nova or Claude models for both page classification/grouping and information extraction.
 
@@ -264,12 +272,50 @@ To use Bedrock OCR:
    - `us.amazon.nova-lite-v1:0`
    - `us.amazon.nova-pro-v1:0` 
    - `us.amazon.nova-premier-v1:0`
+   - `us.amazon.nova-2-lite-v1:0`
    - `us.anthropic.claude-3-haiku-20240307-v1:0`
+   - `us.anthropic.claude-haiku-4-5-20251001-v1:0`
    - `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
    - `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
    - `us.anthropic.claude-sonnet-4-20250514-v1:0`
+   - `us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+   - `us.anthropic.claude-sonnet-4-6`
+   - `us.anthropic.claude-sonnet-4-6:1m`
    - `us.anthropic.claude-opus-4-20250514-v1:0`
    - `us.anthropic.claude-opus-4-1-20250805-v1:0`
+   - `us.anthropic.claude-opus-4-5-20251101-v1:0`
+   - `us.anthropic.claude-opus-4-6-v1`
+   - `us.anthropic.claude-opus-4-6-v1:1m`
+   - `us.anthropic.claude-opus-4-7`
+   - `us.anthropic.claude-opus-4-7:1m`
+   - `eu.amazon.nova-lite-v1:0`
+   - `eu.amazon.nova-pro-v1:0`
+   - `eu.amazon.nova-2-lite-v1:0`
+   - `eu.anthropic.claude-3-haiku-20240307-v1:0`
+   - `eu.anthropic.claude-haiku-4-5-20251001-v1:0`
+   - `eu.anthropic.claude-3-5-sonnet-20241022-v2:0`
+   - `eu.anthropic.claude-3-7-sonnet-20250219-v1:0`
+   - `eu.anthropic.claude-sonnet-4-20250514-v1:0`
+   - `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+   - `eu.anthropic.claude-sonnet-4-6`
+   - `eu.anthropic.claude-sonnet-4-6:1m`
+   - `eu.anthropic.claude-opus-4-5-20251101-v1:0`
+   - `eu.anthropic.claude-opus-4-6-v1`
+   - `eu.anthropic.claude-opus-4-6-v1:1m`
+   - `eu.anthropic.claude-opus-4-7`
+   - `eu.anthropic.claude-opus-4-7:1m`
+   - `qwen.qwen3-vl-235b-a22b`
+   - `global.amazon.nova-2-lite-v1:0`
+   - `global.anthropic.claude-haiku-4-5-20251001-v1:0`
+   - `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+   - `global.anthropic.claude-sonnet-4-6`
+   - `global.anthropic.claude-sonnet-4-6:1m`
+   - `global.anthropic.claude-opus-4-5-20251101-v1:0`
+   - `global.anthropic.claude-opus-4-6-v1`
+   - `global.anthropic.claude-opus-4-6-v1:1m`
+   - `global.anthropic.claude-opus-4-7`
+   - `global.anthropic.claude-opus-4-7:1m`
+
 3. **Configure prompts**: Customize system and task prompts for your specific use case
 4. **Deploy**: The configuration can be updated through the Web UI without stack redeployment
 
@@ -438,35 +484,42 @@ Few shot examples work by including reference documents with known classificatio
 
 ### Configuration
 
-Few shot examples are configured using the configuration files in the `config_library/pattern-2/` directory. The `few_shot_example` configuration demonstrates how to set up examples:
+Few shot examples are configured using JSON Schema format in the configuration files in the `config_library/unified/` directory. The `few_shot_example` configuration demonstrates how to set up examples:
 
 ```yaml
 classes:
-  - name: letter
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Letter
+    x-aws-idp-document-type: Letter
+    type: object
     description: "A formal written correspondence..."
-    attributes:
-      - name: sender_name
+    properties:
+      SenderName:
+        type: string
         description: "The name of the person who wrote the letter..."
-    examples:
-      - classPrompt: "This is an example of the class 'letter'"
+    x-aws-idp-examples:
+      - x-aws-idp-class-prompt: "This is an example of the class 'Letter'"
         name: "Letter1"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           expected attributes are:
-              "sender_name": "Will E. Clark",
-              "sender_address": "206 Maple Street P.O. Box 1056 Murray Kentucky 42071-1056",
-              "recipient_name": "The Honorable Wendell H. Ford"
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
-  - name: email
+              "SenderName": "Will E. Clark",
+              "SenderAddress": "206 Maple Street P.O. Box 1056 Murray Kentucky 42071-1056",
+              "RecipientName": "The Honorable Wendell H. Ford"
+        x-aws-idp-image-path: "config_library/unified/few_shot_example/example-images/letter1.jpg"
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Email
+    x-aws-idp-document-type: Email
+    type: object
     description: "A digital message with email headers..."
-    examples:
-      - classPrompt: "This is an example of the class 'email'"
+    x-aws-idp-examples:
+      - x-aws-idp-class-prompt: "This is an example of the class 'Email'"
         name: "Email1"
-        attributesPrompt: |
+        x-aws-idp-attributes-prompt: |
           expected attributes are: 
-             "from_address": "Kelahan, Ben",
-             "to_address": "TI New York: 'TI Minnesota",
-             "subject": "FW: Morning Team Notes 4/20"
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/email1.jpg"
+             "FromAddress": "Kelahan, Ben",
+             "ToAddress": "TI New York: 'TI Minnesota",
+             "Subject": "FW: Morning Team Notes 4/20"
+        x-aws-idp-image-path: "config_library/unified/few_shot_example/example-images/email1.jpg"
 ```
 
 ### Benefits
@@ -572,7 +625,7 @@ Pattern 2 supports several placeholders for building dynamic prompts:
 
 To use few shot examples in your deployment:
 
-1. **Use the example configuration**: Deploy with `ConfigurationDefaultS3Uri` pointing to `config_library/pattern-2/few_shot_example/config.yaml`
+1. **Use the example configuration**: Deploy with `ConfigurationDefaultS3Uri` pointing to `config_library/unified/few_shot_example/config.yaml`
 2. **Create custom examples**: Copy the example configuration and modify it with your own document examples
 3. **Provide example images**: Place example document images in the appropriate directory and reference them in the `imagePath` field
 
@@ -602,17 +655,23 @@ The extraction system can be customized through the configuration files rather t
    - Available models are defined in the configuration schema
    - Changes can be made through the Web UI without redeployment
 
-Example attribute definition from the configuration:
+Example attribute definition from the configuration using JSON Schema format:
 ```yaml
 classes:
-  - name: invoice
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Invoice
+    x-aws-idp-document-type: Invoice
+    type: object
     description: A commercial document issued by a seller to a buyer relating to a sale
-    attributes:
-      - name: invoice_number
+    properties:
+      InvoiceNumber:
+        type: string
         description: The unique identifier for the invoice. Look for 'invoice no', 'invoice #', or 'bill number', typically near the top of the document.
-      - name: invoice_date
+      InvoiceDate:
+        type: string
         description: The date when the invoice was issued. May be labeled as 'date', 'invoice date', or 'billing date'.
-      - name: total_amount
+      TotalAmount:
+        type: string
         description: The final amount to be paid including all charges. Look for 'total', 'grand total', or 'amount due', typically the last figure on the invoice.
 ```
 
@@ -761,21 +820,6 @@ The assessment documentation covers:
 - Cost optimization strategies and token reduction techniques
 - Multimodal assessment with image processing
 - Testing procedures and best practices
-
-## Testing
-
-Modify and use the provided test events and env files:
-
-```bash
-# Test OCR function
-sam local invoke OCRFunction --env-vars testing/env.json -e testing/OCRFunction-event.json
-
-# Test classification
-sam local invoke ClassificationFunction --env-vars testing/env.json -e testing/ClassificationFunctionEvent.json
-
-# Test extraction
-sam local invoke ExtractionFunction --env-vars testing/env.json -e testing/ExtractionFunction-event.json
-```
 
 ## Best Practices
 

@@ -64,8 +64,8 @@ export const TYPE_COLORS = {
 /** Marks a schema as a document type (top-level class) */
 export const X_AWS_IDP_DOCUMENT_TYPE = 'x-aws-idp-document-type';
 
-/** Marks a schema as a rule type (for rule validation) */
-export const X_AWS_IDP_RULE_TYPE = 'x-aws-idp-rule-type';
+/** Marks a schema as a policy type (for rule validation) */
+export const X_AWS_IDP_POLICY_TYPE = 'x-aws-idp-policy-type';
 
 /** Classification metadata for document type */
 export const X_AWS_IDP_CLASSIFICATION = 'x-aws-idp-classification';
@@ -73,6 +73,39 @@ export const X_AWS_IDP_CLASSIFICATION = 'x-aws-idp-classification';
 /** Regex patterns for classification optimization */
 export const X_AWS_IDP_DOCUMENT_NAME_REGEX = 'x-aws-idp-document-name-regex';
 export const X_AWS_IDP_PAGE_CONTENT_REGEX = 'x-aws-idp-document-page-content-regex';
+
+// Per-class extraction model override (overrides extraction.model)
+export const X_AWS_IDP_EXTRACTION_MODEL = 'x-aws-idp-extraction-model';
+
+/**
+ * Mark a class as excluded from downstream processing. When true, sections
+ * classified as this class are skipped by extraction, assessment,
+ * summarization, rule validation, and evaluation. Useful for static
+ * boilerplate (instructions, legal warnings, cover pages, etc.).
+ */
+export const X_AWS_IDP_EXCLUDE_FROM_PROCESSING = 'x-aws-idp-exclude-from-processing';
+
+/**
+ * Optional short category for why a class is excluded
+ * (e.g. "instructions", "legal", "cover-page"). Shown in UI section badges
+ * and in evaluation report annotations.
+ */
+export const X_AWS_IDP_EXCLUSION_REASON = 'x-aws-idp-exclusion-reason';
+
+/**
+ * Declares the named page sub-types a class can include. Each entry has a
+ * `name`, optional `description`, and `x-aws-idp-document-page-content-regex`
+ * used to detect the page type from per-page OCR text.
+ */
+export const X_AWS_IDP_PAGE_TYPES = 'x-aws-idp-page-types';
+
+/**
+ * On a property: declares which page sub-types contain the property's
+ * source data. If none of the listed page types are present in the section,
+ * the property is treated as MISSING (vs BLANK when the page is present
+ * but the field is empty).
+ */
+export const X_AWS_IDP_SOURCE_PAGE_TYPES = 'x-aws-idp-source-page-types';
 
 // ============================================================================
 // AWS IDP List-Specific Extensions

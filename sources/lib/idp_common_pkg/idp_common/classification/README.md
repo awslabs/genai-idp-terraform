@@ -604,14 +604,14 @@ classes:
               "sender_address": "206 Maple Street P.O. Box 1056 Murray Kentucky 42071-1056",
               "recipient_name": "The Honorable Wendell H. Ford",
               # ... other expected attributes
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
+        imagePath: "config_library/unified/few_shot_example/example-images/letter1.jpg"
       - classPrompt: "This is an example of the class 'letter'" 
         name: "Letter2"
         attributesPrompt: |
           expected attributes are:
               "sender_name": "William H. W. Anderson",
               # ... other expected attributes
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter2.png"
+        imagePath: "config_library/unified/few_shot_example/example-images/letter2.png"
 ```
 
 ### Configuration Parameters
@@ -629,12 +629,12 @@ The `imagePath` field now supports multiple formats for maximum flexibility:
 
 **Single Image File (Original functionality)**:
 ```yaml
-imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
+imagePath: "config_library/unified/few_shot_example/example-images/letter1.jpg"
 ```
 
 **Local Directory with Multiple Images (New)**:
 ```yaml
-imagePath: "config_library/pattern-2/few_shot_example/example-images/"
+imagePath: "config_library/unified/few_shot_example/example-images/"
 ```
 
 **S3 Prefix with Multiple Images (New)**:
@@ -767,7 +767,7 @@ classes:
              "to_address": "jane.smith@client.com", 
              "subject": "FW: Meeting Notes 4/20",
              "date_sent": "04/18/2024"
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/email1.jpg"
+        imagePath: "config_library/unified/few_shot_example/example-images/email1.jpg"
 
 classification:
   task_prompt: |
@@ -783,6 +783,48 @@ classification:
     {DOCUMENT_TEXT}
     </document_ocr_data>
 ```
+
+### Optional `{CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}` placeholder
+
+In addition to the standard `{CLASS_NAMES_AND_DESCRIPTIONS}` placeholder,
+classification prompts support an opt-in
+`{CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}` placeholder that expands
+to each class's name, description, **and** the schema attribute names
+(extraction fields) declared for that class. This gives the classifier
+extra disambiguation signal in domains where multiple classes share
+similar names but have very different extraction schemas (e.g.
+`appraisal_report` vs `inspection_report`).
+
+- **Page-level** (`multimodalPageLevelClassification`) prompts get an
+  XML-tagged listing.
+- **Holistic** (`textbasedHolisticClassification`) prompts get a
+  three-column markdown table (`type | description | attributes`).
+- The placeholder is fully **opt-in** — token usage and cost are
+  unchanged for users who don't reference it. The library only
+  substitutes placeholders that actually appear in the template.
+- Per-class attribute counts are soft-capped at
+  `ClassificationService.MAX_ATTRIBUTES_PER_CLASS` (default 50) to
+  prevent pathologically large schemas from bloating prompts.
+
+Example:
+
+```yaml
+classification:
+  task_prompt: |
+    Classify this page using the schema attribute names as a
+    disambiguation signal:
+
+    {CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+
+    Document text:
+    {DOCUMENT_TEXT}
+
+    Respond with JSON: {"class": "...", "document_boundary": "start|continue"}
+```
+
+See [`docs/classification.md`](../../../../docs/classification.md) for
+schema-walking rules, rendered output examples, and recommended use
+cases. Tracked in GitHub issue #262.
 
 ### Troubleshooting
 

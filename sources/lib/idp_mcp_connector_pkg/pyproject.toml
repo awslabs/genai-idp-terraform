@@ -1,0 +1,25 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "idp_mcp_connector"
+version = "0.5.12"
+description = "Local MCP connector that bridges IDE tools (Cline, Kiro) to the IDP Accelerator MCP Server on AWS Bedrock AgentCore Gateway"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT-0" }
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.25.0",
+]
+
+[project.scripts]
+idp-mcp-connector = "idp_mcp_connector.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["idp_mcp_connector*"]

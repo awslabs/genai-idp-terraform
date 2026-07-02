@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 /* eslint-disable react/no-array-index-key */
-/* eslint-disable no-use-before-define */
+
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
@@ -15,11 +15,13 @@ import {
   Button,
   Header,
   Container,
+  ExpandableSection,
   Modal,
   Tabs,
 } from '@cloudscape-design/components';
 import type { BoxProps } from '@cloudscape-design/components';
 import SchemaBuilder from '../json-schema-builder/SchemaBuilder';
+import PromptPreview from './PromptPreview';
 
 // Type for schema property definitions used throughout the config builder
 interface SchemaProperty {
@@ -44,7 +46,7 @@ interface SchemaProperty {
 
 // Extended Box props that allow style, className, event handlers, and relaxed spacing values.
 // Cloudscape Box doesn't type these but passes them through to the DOM element.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type ExtendedBoxProps = Omit<BoxProps, 'padding' | 'margin' | 'display' | 'color'> & {
   [key: string]: unknown;
   style?: React.CSSProperties;
@@ -415,7 +417,7 @@ interface ConfigBuilderProps {
   mergedConfig?: Record<string, unknown> | null;
   isCustomized?: ((key: string) => boolean) | null;
   onResetToDefault?: ((key: string) => void) | null;
-  onChange: (values: Record<string, unknown>) => void;
+  onChange?: (values: Record<string, unknown>) => void;
   extractionSchema?: Record<string, unknown> | unknown[] | null;
   currentVersionName?: string | null;
   onSchemaChange?: ((schema: unknown, isDirty: boolean) => void) | null;
@@ -426,6 +428,7 @@ interface ConfigBuilderProps {
   ruleSchema?: Record<string, unknown> | unknown[] | null;
   onRuleSchemaChange?: ((schema: unknown, isDirty: boolean) => void) | null;
   onRuleSchemaValidate?: ((isValid: boolean, errors: unknown[]) => void) | null;
+  highlightClassName?: string | null;
   versionDescription?: string;
   onDescriptionChange?: ((description: string) => void) | null;
 }
@@ -448,11 +451,15 @@ const ConfigBuilder = ({
   ruleSchema = null,
   onRuleSchemaChange = null,
   onRuleSchemaValidate = null,
+  highlightClassName = null,
   versionDescription = '',
   onDescriptionChange = null,
 }: ConfigBuilderProps): React.JSX.Element => {
   // Track expanded state for all list items across the form - default to collapsed
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+  // Track expanded state for collapsible top-level sections
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   // State for add item modals
   const [activeAddModal, setActiveAddModal] = useState<string | null>(null); // Path of the list currently showing add modal
@@ -548,7 +555,7 @@ const ConfigBuilder = ({
 
       if (!Number.isNaN(parseInt(part, 10))) {
         // Skip array indices but continue traversing
-        // eslint-disable-next-line no-continue
+
         continue;
       }
 
@@ -572,12 +579,15 @@ const ConfigBuilder = ({
   const getValueAtPath = (obj: Record<string, unknown>, path: string): unknown => {
     const segments = path.split(/[.[\]]+/).filter(Boolean);
 
-    const result = segments.reduce((acc: Record<string, unknown> | undefined, segment: string) => {
-      if (acc === null || acc === undefined) {
-        return undefined;
-      }
-      return (acc as Record<string, unknown>)[segment] as Record<string, unknown> | undefined;
-    }, obj as Record<string, unknown> | undefined);
+    const result = segments.reduce(
+      (acc: Record<string, unknown> | undefined, segment: string) => {
+        if (acc === null || acc === undefined) {
+          return undefined;
+        }
+        return (acc as Record<string, unknown>)[segment] as Record<string, unknown> | undefined;
+      },
+      obj as Record<string, unknown> | undefined,
+    );
 
     return result;
   };
@@ -609,7 +619,7 @@ const ConfigBuilder = ({
       // Only delete the property if it exists
       if (current && typeof current === 'object' && lastSegment in current) {
         delete current[lastSegment];
-        onChange(newValues);
+        onChange?.(newValues);
       }
       return;
     }
@@ -637,7 +647,7 @@ const ConfigBuilder = ({
 
       const [lastSegment] = segments.slice(-1);
       current[lastSegment] = value; // Preserve the empty array
-      onChange(newValues);
+      onChange?.(newValues);
       return;
     }
 
@@ -660,7 +670,7 @@ const ConfigBuilder = ({
 
     const [lastSegment] = segments.slice(-1);
     current[lastSegment] = value;
-    onChange(newValues);
+    onChange?.(newValues);
   };
 
   // Debug: Check if isCustomized function is properly passed
@@ -716,9 +726,16 @@ const ConfigBuilder = ({
           return null; // Hide field if we can't resolve the dependency
         }
       } else {
-        // Normal dependency resolution
+        // Normal dependency resolution: first try sibling (same parent), then fall back to top-level
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('.'));
-        dependencyPath = parentPath.length > 0 ? `${parentPath}.${dependencyField}` : dependencyField;
+        const siblingPath = parentPath.length > 0 ? `${parentPath}.${dependencyField}` : dependencyField;
+        // Check if the sibling path resolves to a value; if not, try top-level
+        if (getValueAtPath(formValues, siblingPath) !== undefined) {
+          dependencyPath = siblingPath;
+        } else {
+          // Fall back to top-level field (e.g., use_bda is at root, not inside assessment)
+          dependencyPath = dependencyField;
+        }
       }
 
       // Get the current value of the dependency field
@@ -794,7 +811,7 @@ const ConfigBuilder = ({
     return renderInputField(key, property, value, currentPath);
   }
 
-  function renderObjectField(key: string, property: SchemaProperty, path: string): React.JSX.Element {
+  function renderObjectField(key: string, property: SchemaProperty, path: string): React.JSX.Element | null {
     if (!property.properties) {
       return null;
     }
@@ -824,13 +841,15 @@ const ConfigBuilder = ({
     // For top-level objects with sectionLabel, we shouldn't add a container here
     // as it's already being added in renderTopLevelProperty
     if (property.sectionLabel && isTopLevel) {
-      return (
-        <SpaceBetween size="s">
-          {getSortedObjectProperties(property.properties).map(({ propKey, propSchema }) => {
-            return <ExtBox key={propKey}>{renderField(propKey, propSchema, fullPath)}</ExtBox>;
-          })}
-        </SpaceBetween>
-      );
+      // Pre-render fields and filter out nulls to avoid empty Box wrappers causing whitespace
+      const renderedFields = getSortedObjectProperties(property.properties)
+        .map(({ propKey, propSchema }) => {
+          const rendered = renderField(propKey, propSchema, fullPath);
+          return rendered ? <ExtBox key={propKey}>{rendered}</ExtBox> : null;
+        })
+        .filter(Boolean);
+
+      return <SpaceBetween size="s">{renderedFields}</SpaceBetween>;
     }
 
     // For nested objects with sectionLabel, use the same styling as list headers
@@ -1113,8 +1132,8 @@ const ConfigBuilder = ({
                         };
 
                         // Separate regular fields from special fields (lists, objects with dependencies)
-                        const regularProps = [];
-                        const specialProps = []; // For lists, objects with dependsOn, or objects with sectionLabel
+                        const regularProps: { propKey: string; propSchema: SchemaProperty }[] = [];
+                        const specialProps: { propKey: string; propSchema: SchemaProperty }[] = []; // For lists, objects with dependsOn, or objects with sectionLabel
 
                         // Identify and separate the fields, filtering out hidden ones
                         propEntries.forEach(({ propKey, prop: propSchema }: { propKey: string; prop: SchemaProperty }) => {
@@ -1144,9 +1163,16 @@ const ConfigBuilder = ({
                         const distributeFieldsToColumns = (
                           fields: { propKey: string; propSchema: SchemaProperty }[],
                           numColumns: number,
-                        ) => {
+                        ): {
+                          columns: { propKey: string; propSchema: SchemaProperty }[][];
+                          descriptionField: { propKey: string; propSchema: SchemaProperty } | undefined;
+                          actualColumnCount: number;
+                        } => {
                           // Create columns array
-                          const columns = Array.from({ length: numColumns }, () => []);
+                          const columns: { propKey: string; propSchema: SchemaProperty }[][] = Array.from(
+                            { length: numColumns },
+                            (): { propKey: string; propSchema: SchemaProperty }[] => [],
+                          );
 
                           // Special handling for description field - it should span full width if it exists
                           const descriptionField = fields.find(({ propKey }) => propKey === 'description');
@@ -1333,7 +1359,11 @@ const ConfigBuilder = ({
                 setShowNameAsDropdown(hasEnumForName);
 
                 // If it's a dropdown with enum values, set the default value to the first option
-                if (hasEnumForName && propertyDefinition.items.properties.name.enum.length > 0) {
+                if (
+                  hasEnumForName &&
+                  propertyDefinition?.items?.properties?.name?.enum &&
+                  propertyDefinition.items.properties.name.enum.length > 0
+                ) {
                   setNewItemName(propertyDefinition.items.properties.name.enum[0]);
                 }
               }}
@@ -1373,7 +1403,7 @@ const ConfigBuilder = ({
     // If this is an object type, it should be rendered as an object field, not an input field
     if (property.type === 'object') {
       console.log(`Redirecting object type ${key} to renderObjectField`); // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring - Debug logging with controlled internal data
-      return renderObjectField(key, property, path.substring(0, path.lastIndexOf('.')) || '');
+      return renderObjectField(key, property, path.substring(0, path.lastIndexOf('.')) || '') ?? <></>;
     }
 
     let input;
@@ -1576,10 +1606,50 @@ const ConfigBuilder = ({
       property,
     );
 
+    // Check top-level dependsOn before rendering (hides entire sections when dependency not met)
+    if (property.dependsOn) {
+      const depField = property.dependsOn.field;
+      const depValues = Array.isArray(property.dependsOn.values) ? property.dependsOn.values : [property.dependsOn.value];
+      const currentValue = getValueAtPath(formValues, depField);
+      // Handle boolean comparison: normalize string "true"/"false" to actual booleans
+      let normalizedValue = currentValue;
+      if (typeof currentValue === 'string' && (currentValue === 'true' || currentValue === 'false')) {
+        normalizedValue = currentValue === 'true';
+      }
+      const normalizedDepValues = depValues.map((v) => {
+        if (typeof v === 'string' && (v === 'true' || v === 'false')) return v === 'true';
+        return v;
+      });
+      if (!normalizedDepValues.includes(normalizedValue)) {
+        return null;
+      }
+    }
+
     // If property should have a section container, wrap it
     if (shouldUseContainer(key, property)) {
       const sectionTitle = property.sectionLabel as string;
       console.log(`Creating section container for ${key} with title: ${sectionTitle}`); // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring - Debug logging with controlled internal data
+
+      // Support collapsible top-level sections via schema property `collapsible: true`
+      // defaultExpanded controls whether section starts expanded (defaults to true for backward compat)
+      if (property.collapsible === true || property.collapsible === 'true') {
+        const defaultExpanded = property.defaultExpanded === true || property.defaultExpanded === 'true'; // default to collapsed
+        const isExpanded = expandedSections[key] !== undefined ? expandedSections[key] : defaultExpanded;
+
+        return (
+          <ExpandableSection
+            key={key}
+            variant="container"
+            headerText={sectionTitle}
+            expanded={isExpanded}
+            onChange={({ detail }) => {
+              setExpandedSections((prev) => ({ ...prev, [key]: detail.expanded }));
+            }}
+          >
+            <ExtBox padding="s">{renderField(key, property)}</ExtBox>
+          </ExpandableSection>
+        );
+      }
 
       return (
         <Container key={key} header={<Header variant="h3">{sectionTitle}</Header>}>
@@ -1620,7 +1690,7 @@ const ConfigBuilder = ({
                       value={versionDescription}
                       onChange={({ detail }) => onDescriptionChange?.(detail.value)}
                       placeholder="Enter a description for this configuration version..."
-                      invalid={versionDescription && versionDescription.length > 200}
+                      invalid={!!versionDescription && versionDescription.length > 200}
                     />
                   </FormField>
 
@@ -1643,12 +1713,12 @@ const ConfigBuilder = ({
               </ExtBox>
             ),
           },
-          // Only show Rule Schema tab for Pattern2
+          // Only show Policy Schema tab for Pattern2
           ...(showRuleSchema
             ? [
                 {
                   id: 'rule-schema',
-                  label: 'Rule Schema',
+                  label: 'Policy Schema',
                   content: (
                     <ExtBox style={{ height: 'calc(70vh - 60px)' }}>
                       <SchemaBuilder
@@ -1656,12 +1726,22 @@ const ConfigBuilder = ({
                         onChange={onRuleSchemaChange}
                         onValidate={onRuleSchemaValidate}
                         isRuleSchema={true}
+                        highlightClassName={highlightClassName}
                       />
                     </ExtBox>
                   ),
                 },
               ]
             : []),
+          {
+            id: 'prompt-preview',
+            label: 'Prompt Preview',
+            content: (
+              <ExtBox style={{ height: 'calc(70vh - 60px)', overflow: 'auto' }} padding="s">
+                <PromptPreview formValues={formValues} />
+              </ExtBox>
+            ),
+          },
         ]}
       />
 
@@ -1697,7 +1777,7 @@ const ConfigBuilder = ({
                   label: newItemName || '',
                 }}
                 onChange={({ detail }) => {
-                  setNewItemName(detail.selectedOption.value);
+                  setNewItemName(detail.selectedOption.value ?? '');
                   setNameError('');
                 }}
                 options={

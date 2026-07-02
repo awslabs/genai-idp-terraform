@@ -11,7 +11,7 @@ boto3>=1.37.29
 Pillow>=11.1.0
 %{ endif }
 %{ if extra == "ocr" || extra == "all" }
-PyMuPDF>=1.25.5
+pypdfium2>=5.5.0
 amazon-textract-textractor[pandas]>=1.9.2
 %{ endif }
 %{ if extra == "evaluation" || extra == "all" }
