@@ -58,7 +58,7 @@ resource "aws_appsync_resolver" "feature" {
 # AppSync Lambda role (the role AppSync assumes to invoke resolver Lambdas).
 # Guarded by count so nothing is created when no feature contributes statements.
 resource "aws_iam_role_policy" "feature_contracts" {
-  count = length(local.feature_iam) > 0 ? 1 : 0
+  count = var.has_feature_iam ? 1 : 0
   name  = "FeatureContractsPolicy-${random_string.suffix.result}"
   role  = aws_iam_role.appsync_lambda_role.id
 

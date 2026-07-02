@@ -363,6 +363,7 @@ module "processing_environment_api" {
   # Feature-plugin contracts from features.tf. Resolves to {} when all features
   # are off (no-op, default-off preserved).
   enabled_feature_contracts = local.enabled_feature_contracts
+  has_feature_iam           = local.feature_enable.rbac
 
   tags = var.tags
 }
