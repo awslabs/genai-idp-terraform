@@ -17,16 +17,17 @@ admin_email = "admin@example.com" # creates the initial Web UI admin user
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
 
-# ── Knowledge Base (Document KB) + chat ─────────────────────────────────────
-# Enable the KB backend via the `api` object; it auto-wires OpenSearch + KB.
-# The KB generation model MUST be a cross-region inference-profile id
-# (us./eu./apac. prefix); the embedding model is a plain foundation-model id.
-# chat-with-document is on by default and does NOT require a KB.
+# ── Knowledge Base + chat (both ON by default) ──────────────────────────────
+# chat_with_document and the Knowledge Base backend (OpenSearch Serverless +
+# Bedrock KB, auto-wired) are enabled by default. The KB generation model is a
+# cross-region inference-profile id (us./eu./apac. prefix); the embedding model
+# is a plain foundation-model id. To disable or customize, set the `api` object:
 # api = {
+#   chat_with_document = { enabled = false } # disable per-document Q&A
 #   knowledge_base = {
-#     enabled            = true
-#     model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)
-#     embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)
+#     enabled            = false             # skip OpenSearch + KB (saves cost)
+#     model_id           = "us.amazon.nova-pro-v1:0"
+#     embedding_model_id = "amazon.titan-embed-text-v2:0"
 #   }
 # }
 #
