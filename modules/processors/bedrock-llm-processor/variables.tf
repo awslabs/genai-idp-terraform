@@ -357,3 +357,21 @@ variable "additional_configurations" {
   type        = any
   default     = {}
 }
+
+variable "bda_project_arn" {
+  description = <<-EOT
+    Optional BDA project ARN used as the fallback link for use_bda:true
+    additional versions that omit their own per-version `bda_project_arn`. Does
+    not relink the `default` version (stays pipeline). A per-version
+    `bda_project_arn` takes precedence. Does not gate the BDA branch — both
+    branches are always deployed and route at runtime by the config's use_bda.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions as non-active reference rows."
+  type        = bool
+  default     = true
+}

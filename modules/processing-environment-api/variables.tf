@@ -487,6 +487,12 @@ variable "enabled_feature_contracts" {
     Default `{}` is a no-op: no feature resolvers, IAM statements, or env vars
     are composed (default-off preserved).
   EOT
-  type        = map(any)
+  type        = any
   default     = {}
+}
+
+variable "has_feature_iam" {
+  description = "Whether an enabled feature contributes IAM statements to compose."
+  type        = bool
+  default     = false
 }

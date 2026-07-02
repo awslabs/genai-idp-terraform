@@ -707,7 +707,9 @@ resource "aws_iam_policy" "get_file_contents_resolver_s3_policy" {
           local.input_bucket_arn,
           local.input_bucket_arn != null ? "${local.input_bucket_arn}/*" : null,
           local.output_bucket_arn,
-          local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null
+          local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null,
+          local.working_bucket_arn,
+          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null
         ])
       }
     ]

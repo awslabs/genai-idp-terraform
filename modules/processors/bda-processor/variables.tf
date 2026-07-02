@@ -142,7 +142,7 @@ variable "evaluation_layer_arn" {
 
 # BDA-specific (pattern-specific) input.
 variable "data_automation_project_arn" {
-  description = "The ARN of the Bedrock Data Automation Project used for document processing. Consumer-supplied; forwarded to the shared engine as bda_project_arn (use_bda = true)."
+  description = "The ARN of the Bedrock Data Automation Project used for document processing. Consumer-supplied; the project id is exposed as an output and the ARN is used to link configuration versions to the BDA branch via seeding (not a deploy-time engine input)."
   type        = string
 }
 
@@ -203,4 +203,10 @@ variable "additional_configurations" {
   description = "Extra non-active, editable configuration versions seeded alongside the default (version_name => config object). Shown in the UI version dropdown."
   type        = any
   default     = {}
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions as non-active reference rows."
+  type        = bool
+  default     = true
 }

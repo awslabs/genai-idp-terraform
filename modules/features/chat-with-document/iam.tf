@@ -26,9 +26,9 @@ locals {
         Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
       },
       {
-        Sid      = "OutputBucketRead"
+        Sid      = "OutputBucketReadWrite"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:ListBucket"]
+        Action   = ["s3:GetObject", "s3:ListBucket", "s3:PutObject"]
         Resource = [var.output_bucket_arn, "${var.output_bucket_arn}/*"]
       },
       {

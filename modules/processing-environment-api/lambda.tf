@@ -218,7 +218,9 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 
   environment {
     variables = {
-      OUTPUT_BUCKET = local.output_bucket_name
+      INPUT_BUCKET   = local.input_bucket_name
+      OUTPUT_BUCKET  = local.output_bucket_name
+      WORKING_BUCKET = local.working_bucket_name != null ? local.working_bucket_name : ""
     }
   }
 

@@ -67,12 +67,13 @@ locals {
   guardrail_id  = var.guardrail != null ? var.guardrail.guardrail_id : null
   guardrail_arn = var.guardrail != null ? var.guardrail.guardrail_arn : null
 
-  # Knowledge Base model ARN - build full ARN in Terraform so the Lambda always receives
-  # a ready-made ARN (hits the startswith("arn:") branch) regardless of model ID format.
-  # RetrieveAndGenerate only accepts foundation-model ARNs (no account ID, no inference-profile).
+  # Knowledge Base model id for the query_knowledgebase_resolver. That vendored
+  # Lambda builds the modelArn as `inference-profile/{MODEL_ID}`, so MODEL_ID must
+  # be a BARE inference-profile id (e.g. us.amazon.nova-pro-v1:0), NOT an ARN —
+  # passing an ARN produces a nested, invalid modelArn that RetrieveAndGenerate
+  # rejects. If given an ARN, use its trailing id segment.
   knowledge_base_model_id = var.knowledge_base.model_id != null ? (
-    startswith(var.knowledge_base.model_id, "arn:") ? var.knowledge_base.model_id :
-    "arn:aws:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
+    startswith(var.knowledge_base.model_id, "arn:") ? element(reverse(split("/", var.knowledge_base.model_id)), 0) : var.knowledge_base.model_id
   ) : null
 
   # Edit Sections Feature

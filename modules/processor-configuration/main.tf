@@ -54,13 +54,20 @@ data "archive_file" "lambda_zip" {
 resource "aws_lambda_invocation" "seed_default" {
   function_name = aws_lambda_function.configuration_seeder.function_name
 
-  input = jsonencode({
-    Key   = "Default"
-    Value = var.configuration
-  })
+  # Link the `default` version to a BDA project when default_bda_project_arn is
+  # set (bda-processor façade); omitted otherwise so the input is unchanged.
+  input = jsonencode(merge(
+    {
+      Key   = "Default"
+      Value = var.configuration
+    },
+    var.default_bda_project_arn != null ? { BdaProjectArn = var.default_bda_project_arn } : {}
+  ))
 
   triggers = {
     configuration_hash = sha256(jsonencode(var.configuration))
+    # Re-seed when the linked project ARN changes (unset -> "none").
+    bda_project_arn = coalesce(var.default_bda_project_arn, "none")
     # Re-invoke when the seeder Lambda source itself changes — this is
     # how we propagate seeder fixes to existing deployments without
     # forcing the operator to taint the resource.
@@ -114,6 +121,7 @@ locals {
   managed_configs = {
     for f in local.managed_config_files :
     dirname(f) => yamldecode(file("${local.managed_config_dir}/${f}"))
+    if var.seed_managed_configs
   }
 }
 
@@ -151,11 +159,36 @@ resource "aws_lambda_invocation" "seed_managed" {
 # default and can be customized like a UI "Save as Version" copy. Names that
 # collide with the reserved "default" version or a managed baseline are dropped
 # so they can never clobber those rows.
+#
+# BDA linking: an entry may declare a top-level `bda_project_arn` key to link
+# that version to a BDA project. It is a wrapper-only convention (not config
+# data), so it is lifted OUT of the seeded `Value` and passed as the seeder's
+# `BdaProjectArn`. Resolution: per-version `bda_project_arn` > fallback_bda_project_arn
+# > default_bda_project_arn > none. Both fallbacks apply only to use_bda:true versions.
 # ----------------------------------------------------------------------------
 locals {
   additional_configurations = {
     for k, v in var.additional_configurations :
     k => v if k != "default" && !contains(keys(local.managed_configs), k)
+  }
+
+  # Seeded `Value`: entry with the wrapper-only `bda_project_arn` key stripped.
+  additional_config_values = {
+    for k, v in local.additional_configurations :
+    k => { for ck, cv in v : ck => cv if ck != "bda_project_arn" }
+  }
+
+  # Resolved link per version (null => seed no BdaProjectArn). The != null chain
+  # is null-safe (coalesce errors when all are null).
+  additional_bda_project_arns = {
+    for k, v in local.additional_configurations :
+    k => (
+      try(v.bda_project_arn, null) != null
+      ? v.bda_project_arn
+      : (try(tobool(v.use_bda), false)
+        ? (var.fallback_bda_project_arn != null ? var.fallback_bda_project_arn : var.default_bda_project_arn)
+      : null)
+    )
   }
 }
 
@@ -164,17 +197,24 @@ resource "aws_lambda_invocation" "seed_additional" {
 
   function_name = aws_lambda_function.configuration_seeder.function_name
 
-  input = jsonencode({
-    Key         = "Default"
-    Version     = each.key
-    Managed     = false
-    IsActive    = false
-    Description = try(each.value.description, "Configuration: ${each.key}")
-    Value       = each.value
-  })
+  # Lift the wrapper-only `bda_project_arn` out of the config body; pass it as
+  # `BdaProjectArn` only when a link resolves.
+  input = jsonencode(merge(
+    {
+      Key         = "Default"
+      Version     = each.key
+      Managed     = false
+      IsActive    = false
+      Description = try(each.value.description, "Configuration: ${each.key}")
+      Value       = local.additional_config_values[each.key]
+    },
+    local.additional_bda_project_arns[each.key] != null ? { BdaProjectArn = local.additional_bda_project_arns[each.key] } : {}
+  ))
 
   triggers = {
-    configuration_hash = sha256(jsonencode(each.value))
+    configuration_hash = sha256(jsonencode(local.additional_config_values[each.key]))
+    # Re-seed when the resolved project link changes (unset -> "none").
+    bda_project_arn    = coalesce(local.additional_bda_project_arns[each.key], "none")
     seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
   }
 

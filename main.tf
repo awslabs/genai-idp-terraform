@@ -363,6 +363,7 @@ module "processing_environment_api" {
   # Feature-plugin contracts from features.tf. Resolves to {} when all features
   # are off (no-op, default-off preserved).
   enabled_feature_contracts = local.enabled_feature_contracts
+  has_feature_iam           = local.feature_enable.rbac
 
   tags = var.tags
 }
@@ -424,6 +425,7 @@ module "bda_processor" {
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.bda_processor.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -484,6 +486,11 @@ module "bedrock_llm_processor" {
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.bedrock_llm_processor.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
+
+  # Optional fallback BDA project for use_bda:true additional versions (does not
+  # relink the default)
+  bda_project_arn = var.bedrock_llm_processor.bda_project_arn
 
   # Feature flags
   is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
@@ -551,6 +558,11 @@ module "sagemaker_udop_processor" {
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.sagemaker_udop_processor.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
+
+  # Optional fallback BDA project for use_bda:true additional versions (does not
+  # relink the default)
+  bda_project_arn = var.sagemaker_udop_processor.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

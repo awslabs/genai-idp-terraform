@@ -8,19 +8,7 @@ variable "name" {
 
 # Façade/engine delegation interface. These variables form the contract by which
 # the per-pattern façade modules (bda-processor, bedrock-llm-processor,
-# sagemaker-udop-processor) delegate processing to this shared engine; use_bda is
-# set by which façade is instantiated.
-
-variable "use_bda" {
-  description = "Runtime processing-path selector set by the instantiating façade: true routes documents through the Bedrock Data Automation (BDA) branch; false routes through the Bedrock-LLM/SageMaker pipeline branch. Required — the engine is never instantiated without an explicit value."
-  type        = bool
-}
-
-variable "bda_project_arn" {
-  description = "ARN of the Bedrock Data Automation project to invoke on the BDA branch. Non-null only when delegated from the bda-processor façade (use_bda = true); null for the pipeline-branch façades."
-  type        = string
-  default     = null
-}
+# sagemaker-udop-processor) delegate processing to this shared engine.
 
 # Flat variables for processing environment resources - ARNs only
 variable "enable_api" {
@@ -347,6 +335,30 @@ variable "additional_configurations" {
   default     = {}
 }
 
+variable "default_bda_project_arn" {
+  description = <<-EOT
+    Optional BDA project ARN that links the `default` config version to a BDA
+    project at seed time (set by the bda-processor façade so BDA works out of the
+    box). Also the last-resort fallback for that façade's use_bda:true additional
+    versions. Pipeline façades leave this null so their default stays pipeline.
+    Seeding input only — it does not gate whether the BDA branch is deployed.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "bda_project_arn" {
+  description = <<-EOT
+    Optional BDA project ARN used only as the fallback link for use_bda:true
+    additional versions that omit their own per-version `bda_project_arn`
+    (threaded to processor-configuration as fallback_bda_project_arn). Does not
+    relink the `default` version. Seeding fallback only — both branches are
+    always deployed regardless of this value.
+  EOT
+  type        = string
+  default     = null
+}
+
 
 
 variable "enable_hitl" {
@@ -403,4 +415,10 @@ variable "tags" {
   description = "A map of tags to add to all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions as non-active reference rows."
+  type        = bool
+  default     = true
 }

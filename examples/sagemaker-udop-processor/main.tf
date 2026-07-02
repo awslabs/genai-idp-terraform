@@ -22,6 +22,15 @@ provider "awscc" {
   region = var.region
 }
 
+# OpenSearch provider for the optional Knowledge Base vector index. When the KB
+# is disabled, the collection isn't created, so point at a harmless placeholder
+# URL and skip the healthcheck (mirrors examples/unified-processor).
+provider "opensearch" {
+  url         = local.knowledge_base_enabled ? aws_opensearchserverless_collection.knowledge_base_collection[0].collection_endpoint : "https://placeholder.us-east-1.es.amazonaws.com"
+  aws_region  = var.region
+  healthcheck = false
+}
+
 # Data sources
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
@@ -37,6 +46,17 @@ resource "random_string" "suffix" {
 # Local values
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
+
+  rbac_enabled     = try(var.rbac.enabled, false)
+  admin_group_name = local.rbac_enabled ? try(module.genai_idp_accelerator.rbac_group_names["Admin"], "Admin") : one(aws_cognito_user_group.admin_group[*].name)
+
+  # Knowledge Base backend (default on; see knowledge-base.tf). Gates the whole
+  # OpenSearch Serverless + Bedrock Knowledge Base stack.
+  knowledge_base_enabled = var.create_knowledge_base
+
+  # Embedding model id used by knowledge-base.tf for the KB IAM policy and the
+  # collection's embedding_model_arn. Must match the vector index dimension.
+  knowledge_base_embedding_model_id = var.knowledge_base_embedding_model_id
 }
 
 # Create KMS key for encryption
@@ -137,10 +157,25 @@ resource "aws_glue_catalog_database" "reporting_database" {
   tags        = var.tags
 }
 
-# Enable EventBridge notifications on input bucket (required for processor to work)
+# Enable EventBridge notifications on input bucket (required for processor to work).
+#
+# Terraform allows only ONE aws_s3_bucket_notification per bucket, so the optional
+# Knowledge Base ingestion Lambda trigger is folded in here via a dynamic block
+# (rather than a second notification resource). When create_knowledge_base is
+# false the dynamic block emits nothing and this is just the EventBridge hook.
 resource "aws_s3_bucket_notification" "input_bucket_notification" {
   bucket      = aws_s3_bucket.input_bucket.id
   eventbridge = true
+
+  dynamic "lambda_function" {
+    for_each = local.knowledge_base_enabled ? [1] : []
+    content {
+      lambda_function_arn = aws_lambda_function.knowledge_base_ingestion[0].arn
+      events              = ["s3:ObjectCreated:Put"]
+    }
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_invoke]
 }
 
 #
@@ -341,7 +376,7 @@ resource "aws_cognito_user" "admin_user" {
 
 # Admin group creation (optional)
 resource "aws_cognito_user_group" "admin_group" {
-  count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
+  count        = var.admin_email != null && var.admin_email != "" && !local.rbac_enabled ? 1 : 0
   name         = "Admin"
   user_pool_id = aws_cognito_user_pool.user_pool.id
   description  = "Administrators"
@@ -352,7 +387,7 @@ resource "aws_cognito_user_group" "admin_group" {
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
-  group_name   = aws_cognito_user_group.admin_group[0].name
+  group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
 }
 
@@ -433,8 +468,21 @@ module "genai_idp_accelerator" {
     database_name = aws_glue_catalog_database.reporting_database[0].name
   } : { enabled = false }
 
-  # API configuration (consolidated)
-  api = var.api
+  # API configuration.
+  #
+  # The knowledge_base sub-block is wired from the example's create_knowledge_base
+  # toggle (see knowledge-base.tf): the created KB ARN is injected so the Web UI's
+  # "Document KB" tool can query ingested documents. chat_with_document is left to
+  # the root default (on), which pairs with the KB for retrieval-backed Q&A.
+  api = {
+    enabled = true
+    knowledge_base = {
+      enabled            = var.create_knowledge_base
+      knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)
+      model_id           = var.knowledge_base_model_id
+      embedding_model_id = var.knowledge_base_embedding_model_id
+    }
+  }
 
   # Feature flags (DEPRECATED - use api variable instead)
   # These are kept for backward compatibility during migration
@@ -443,6 +491,8 @@ module "genai_idp_accelerator" {
   chat_with_document = var.chat_with_document
   process_changes    = var.process_changes
   discovery          = var.discovery
+
+  rbac = var.rbac
 
   # Layer configuration
   force_rebuild_layers = var.force_rebuild_layers
@@ -461,6 +511,7 @@ module "genai_idp_accelerator" {
 
   # General configuration
   prefix                       = var.prefix
+  seed_managed_configs         = var.seed_managed_configs
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days

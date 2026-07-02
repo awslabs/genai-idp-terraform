@@ -67,9 +67,9 @@ variable "api" {
 
     # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -102,7 +102,7 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
     knowledge_base     = { enabled = false }
   }
@@ -301,6 +301,34 @@ variable "additional_config_files" {
   default     = {}
 }
 
+# --------------------------------------------------------------------------
+# Optional Knowledge Base backend
+# --------------------------------------------------------------------------
+#
+# When create_knowledge_base = true (default), this example stands up an
+# OpenSearch Serverless vector collection + Bedrock Knowledge Base that ingests
+# processed documents from the OUTPUT bucket, and wires its ARN into the API's
+# knowledge_base feature so the Web UI's "Agent Companion Chat" / "Document KB"
+# tools can query them.
+
+variable "create_knowledge_base" {
+  description = "Create the optional Bedrock Knowledge Base backend (OpenSearch Serverless collection, vector index, KB + S3 data source ingesting from the output bucket, and ingestion Lambda) and wire its ARN into the API's knowledge_base feature."
+  type        = bool
+  default     = true
+}
+
+variable "knowledge_base_model_id" {
+  description = "Inference-profile id used by the Knowledge Base for RetrieveAndGenerate (query/generation). Use a cross-region inference-profile id (e.g. us.amazon.nova-pro-v1:0); the resolver builds the inference-profile ARN from it."
+  type        = string
+  default     = "us.amazon.nova-pro-v1:0"
+}
+
+variable "knowledge_base_embedding_model_id" {
+  description = "Foundation-model id used to embed documents into the Knowledge Base vector index. Must match the vector index dimension (titan-embed-text-v2:0 => 1024, as configured in knowledge-base.tf)."
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
@@ -309,6 +337,29 @@ variable "tags" {
 
 variable "force_rebuild_layers" {
   description = "Force rebuild of Lambda layers regardless of requirements changes"
+  type        = bool
+  default     = false
+}
+
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
   type        = bool
   default     = false
 }

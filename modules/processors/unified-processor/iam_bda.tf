@@ -1,14 +1,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# IAM for the BDA branch Lambda functions, gated on use_bda (only the
-# bda-processor façade renders these). Mirrors upstream template.yaml policies
-# for InvokeBDAFunction / BDAProcessResultsFunction / BDACompletionFunction.
+# IAM for the BDA branch Lambda functions. Always deployed (count = 1) on every
+# façade; the BDA branch is reachable at runtime via RouteByProcessingMode.
+# Mirrors upstream template.yaml policies for InvokeBDAFunction /
+# BDAProcessResultsFunction / BDACompletionFunction.
 
 # BDA Invoke Lambda role
 
 resource "aws_iam_role" "bda_invoke_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name = "${local.name_prefix}-bda-invoke-lambda-role"
 
@@ -25,14 +26,14 @@ resource "aws_iam_role" "bda_invoke_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "bda_invoke_lambda_basic" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   role       = aws_iam_role.bda_invoke_lambda[0].name
 }
 
 resource "aws_iam_role_policy" "bda_invoke_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name = "${local.name_prefix}-bda-invoke-lambda-policy"
   role = aws_iam_role.bda_invoke_lambda[0].id
@@ -116,7 +117,7 @@ resource "aws_iam_role_policy" "bda_invoke_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "bda_invoke_lambda_vpc" {
-  count = var.use_bda && length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  count = length(var.vpc_subnet_ids) > 0 ? 1 : 0
 
   role       = aws_iam_role.bda_invoke_lambda[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -125,7 +126,7 @@ resource "aws_iam_role_policy_attachment" "bda_invoke_lambda_vpc" {
 # BDA Process Results Lambda role
 
 resource "aws_iam_role" "bda_process_results_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name = "${local.name_prefix}-bda-process-results-lambda-role"
 
@@ -142,14 +143,14 @@ resource "aws_iam_role" "bda_process_results_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "bda_process_results_lambda_basic" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   role       = aws_iam_role.bda_process_results_lambda[0].name
 }
 
 resource "aws_iam_role_policy" "bda_process_results_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name = "${local.name_prefix}-bda-process-results-lambda-policy"
   role = aws_iam_role.bda_process_results_lambda[0].id
@@ -255,7 +256,7 @@ resource "aws_iam_role_policy" "bda_process_results_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "bda_process_results_lambda_vpc" {
-  count = var.use_bda && length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  count = length(var.vpc_subnet_ids) > 0 ? 1 : 0
 
   role       = aws_iam_role.bda_process_results_lambda[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -265,7 +266,7 @@ resource "aws_iam_role_policy_attachment" "bda_process_results_lambda_vpc" {
 # Resumes the waiting Step Functions task via SendTaskSuccess/Failure.
 
 resource "aws_iam_role" "bda_completion_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name = "${local.name_prefix}-bda-completion-lambda-role"
 
@@ -282,14 +283,14 @@ resource "aws_iam_role" "bda_completion_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "bda_completion_lambda_basic" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   role       = aws_iam_role.bda_completion_lambda[0].name
 }
 
 resource "aws_iam_role_policy" "bda_completion_lambda" {
-  count = var.use_bda ? 1 : 0
+  count = 1
 
   name = "${local.name_prefix}-bda-completion-lambda-policy"
   role = aws_iam_role.bda_completion_lambda[0].id
@@ -349,7 +350,7 @@ resource "aws_iam_role_policy" "bda_completion_lambda" {
 }
 
 resource "aws_iam_role_policy_attachment" "bda_completion_lambda_vpc" {
-  count = var.use_bda && length(var.vpc_subnet_ids) > 0 ? 1 : 0
+  count = length(var.vpc_subnet_ids) > 0 ? 1 : 0
 
   role       = aws_iam_role.bda_completion_lambda[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"

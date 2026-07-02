@@ -2,11 +2,27 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 /**
- * # BDA Processor Example with Web UI
+ * # Unified Processor Example — dual-mode routing (BDA + Bedrock-LLM in one deployment)
  *
- * This example demonstrates how to use the BDA processor from the GenAI IDP Accelerator
- * with the integrated Web UI. It creates all the necessary resources including S3 buckets, KMS key,
- * and uses the top-level module to deploy the complete solution with the BDA processor.
+ * ONE processor, ONE Step Functions state machine, with both the Bedrock-LLM
+ * branch and the Bedrock Data Automation (BDA) branch always deployed.
+ * Each document routes at runtime by its configuration version's `use_bda` flag,
+ * selected per upload via the `config-version` S3 object metadata.
+ *
+ * Two configuration versions are seeded:
+ *   - `default` — Bedrock-LLM (`use_bda` absent). Documents tagged
+ *     `config-version=default` route RouteByProcessingMode -> OCRStep.
+ *   - `<bda_version_name>` (default `bda`) — `use_bda: true` plus a top-level
+ *     `bda_project_arn` linking it to a BDA project. Documents tagged with this
+ *     version route RouteByProcessingMode -> BDA_InvokeDataAutomation.
+ *
+ * The per-version `bda_project_arn` is lifted out of the config body by the
+ * `processor-configuration` module and seeded onto the version's DynamoDB row as
+ * `BdaProjectArn` (declarative replacement for a manual `update-item`). The
+ * default is never relinked.
+ *
+ * The BDA project: set `create_bda_project = true` to have this example create one
+ * (self-contained on a clean account), or pass an existing `bda_project_arn`.
  */
 
 provider "aws" {
@@ -22,32 +38,19 @@ provider "awscc" {
   region = var.region
 }
 
-# Local values for backward compatibility
-locals {
-  # KB enablement is driven by var.create_knowledge_base (default on) for parity
-  # with examples/unified-processor. The legacy api.knowledge_base.enabled /
-  # enable_knowledge_base opt-ins still force it on when set.
-  knowledge_base_enabled = var.create_knowledge_base || (
-    var.api.knowledge_base.enabled != null ? var.api.knowledge_base.enabled : (
-      var.enable_knowledge_base != null ? var.enable_knowledge_base : false
-    )
-  )
-
-  knowledge_base_model_id = var.api.knowledge_base.model_id != null ? var.api.knowledge_base.model_id : (
-    var.knowledge_base_model_id != null ? var.knowledge_base_model_id : var.api.knowledge_base.model_id
-  )
-
-  knowledge_base_embedding_model_id = var.api.knowledge_base.embedding_model_id != null ? var.api.knowledge_base.embedding_model_id : (
-    var.knowledge_base_embeddings_model_id != null ? var.knowledge_base_embeddings_model_id : var.api.knowledge_base.embedding_model_id
-  )
-}
-
-# OpenSearch provider configuration for native AWS provider implementation
+# OpenSearch provider for the optional Knowledge Base vector index. When the KB
+# is disabled (default), the collection isn't created, so point at a harmless
+# placeholder URL and skip the healthcheck (mirrors examples/bda-processor).
 provider "opensearch" {
   url         = local.knowledge_base_enabled ? aws_opensearchserverless_collection.knowledge_base_collection[0].collection_endpoint : "https://placeholder.us-east-1.es.amazonaws.com"
   aws_region  = var.region
   healthcheck = false
 }
+
+# Data sources
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
 # Create a random string for unique resource names
 resource "random_string" "suffix" {
@@ -56,17 +59,64 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
-# Local values
 locals {
   name_prefix = "${var.prefix}-${random_string.suffix.result}"
 
   rbac_enabled     = try(var.rbac.enabled, false)
   admin_group_name = local.rbac_enabled ? try(module.genai_idp_accelerator.rbac_group_names["Admin"], "Admin") : one(aws_cognito_user_group.admin_group[*].name)
+
+  # --------------------------------------------------------------------------
+  # Knowledge Base backend (default on; see knowledge-base.tf)
+  # --------------------------------------------------------------------------
+  # Gates the whole OpenSearch Serverless + Bedrock Knowledge Base stack.
+  knowledge_base_enabled = var.create_knowledge_base
+
+  # Embedding model id used by knowledge-base.tf for the KB IAM policy and the
+  # collection's embedding_model_arn. The query/generation model_id is passed to
+  # the root api.knowledge_base wiring straight from var.knowledge_base_model_id
+  # and MUST be a cross-region inference-profile id (us./eu./apac. prefix): the
+  # KB query resolver builds an inference-profile ARN from it.
+  knowledge_base_embedding_model_id = var.knowledge_base_embedding_model_id
+
+  # DEFAULT (Bedrock-LLM) configuration version. The lending-package sample does
+  # NOT set `use_bda`, so `config-version=default` routes through the Bedrock-LLM
+  # branch (RouteByProcessingMode -> OCRStep).
+  config = yamldecode(file(var.config_file_path))
+
+  # Effective BDA project ARN: the one this example creates (create_bda_project)
+  # or an existing ARN passed via var.bda_project_arn.
+  effective_bda_project_arn = var.create_bda_project ? awscc_bedrock_data_automation_project.bda_project[0].project_arn : var.bda_project_arn
+
+  # BDA-linked additional version. `use_bda: true` routes
+  # `config-version=<bda_version_name>` through the BDA branch. The top-level
+  # `bda_project_arn` is lifted out by processor-configuration and seeded as
+  # `BdaProjectArn`. When no ARN is available the key is omitted and the version
+  # degrades to the Bedrock-LLM branch at runtime.
+  bda_mode_config = merge(
+    {
+      use_bda = true
+      notes   = "Dual-mode demo: routes documents to the BDA branch."
+    },
+    local.effective_bda_project_arn != "" ? { bda_project_arn = local.effective_bda_project_arn } : {}
+  )
+
+  # Extra config versions from files (optional), plus the BDA-linked version.
+  # Paths are relative to this example dir (or absolute). tfvars cannot call
+  # yamldecode/file, so the decode happens here.
+  additional_configurations = merge(
+    {
+      for name, p in var.additional_config_files :
+      name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+    },
+    {
+      (var.bda_version_name) = local.bda_mode_config
+    }
+  )
 }
 
 # Create KMS key for encryption
 resource "aws_kms_key" "encryption_key" {
-  description             = "KMS key for IDP Processing Environment"
+  description             = "KMS key for IDP Unified Processor example"
   deletion_window_in_days = 7
   enable_key_rotation     = true
 
@@ -109,7 +159,7 @@ resource "aws_kms_key" "encryption_key" {
 }
 
 resource "aws_kms_alias" "encryption_key" {
-  name          = "alias/idp-bda-${random_string.suffix.result}"
+  name          = "alias/idp-unified-${random_string.suffix.result}"
   target_key_id = aws_kms_key.encryption_key.key_id
 }
 
@@ -132,20 +182,15 @@ resource "aws_s3_bucket" "working_bucket" {
   tags          = var.tags
 }
 
-# Optional: Create logging bucket if logging is enabled
+# Optional logging bucket (created conditionally)
 resource "aws_s3_bucket" "logging_bucket" {
   count         = var.web_ui.logging_enabled ? 1 : 0
-  bucket        = "${var.prefix}-logs-${random_string.suffix.result}"
+  bucket        = "${var.prefix}-logging-${random_string.suffix.result}"
   force_destroy = true
   tags          = var.tags
 }
 
 # CloudFront standard logging requires legacy ACLs on the destination bucket.
-# Modern S3 buckets default to BucketOwnerEnforced (no ACLs), which causes
-# CloudFront's UpdateDistribution to fail with:
-#   "The S3 bucket that you specified for CloudFront logs does not enable ACL access"
-# Switch the bucket to BucketOwnerPreferred and grant the log-delivery-write
-# canned ACL so the AWS log-delivery group can write objects.
 resource "aws_s3_bucket_ownership_controls" "logging_bucket" {
   count  = var.web_ui.logging_enabled ? 1 : 0
   bucket = aws_s3_bucket.logging_bucket[0].id
@@ -162,45 +207,36 @@ resource "aws_s3_bucket_acl" "logging_bucket" {
   depends_on = [aws_s3_bucket_ownership_controls.logging_bucket]
 }
 
-# Optional: Create evaluation baseline bucket if evaluation is enabled
-resource "aws_s3_bucket" "evaluation_baseline_bucket" {
-  count         = var.enable_evaluation ? 1 : 0
-  bucket        = "${var.prefix}-evaluation-${random_string.suffix.result}"
-  force_destroy = true
-  tags          = var.tags
-}
-
-# Optional: Create reporting bucket if reporting is enabled
-resource "aws_s3_bucket" "reporting_bucket" {
-  count         = var.enable_reporting ? 1 : 0
-  bucket        = "${var.prefix}-reporting-${random_string.suffix.result}"
-  force_destroy = true
-  tags          = var.tags
-}
-
-# Optional: Create Glue database for reporting if reporting is enabled
-resource "aws_glue_catalog_database" "reporting_database" {
-  count       = var.enable_reporting ? 1 : 0
-  name        = "${var.prefix}-reporting-database-${random_string.suffix.result}"
-  description = "Database containing tables for evaluation metrics and document processing analytics"
-  tags        = var.tags
-}
-
-# Enable EventBridge notifications on input bucket (required for processor to work)
+# Enable EventBridge notifications on input bucket (required for processor to work).
+#
+# Terraform allows only ONE aws_s3_bucket_notification per bucket, so the optional
+# Knowledge Base ingestion Lambda trigger is folded in here via a dynamic block
+# (rather than a second notification resource). When create_knowledge_base is
+# false the dynamic block emits nothing and this is just the EventBridge hook.
 resource "aws_s3_bucket_notification" "input_bucket_notification" {
   bucket      = aws_s3_bucket.input_bucket.id
   eventbridge = true
+
+  dynamic "lambda_function" {
+    for_each = local.knowledge_base_enabled ? [1] : []
+    content {
+      lambda_function_arn = aws_lambda_function.knowledge_base_ingestion[0].arn
+      events              = ["s3:ObjectCreated:Put"]
+    }
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_invoke]
 }
 
 #
 # Cognito User Identity Resources
 #
 
-# Cognito User Pool
 resource "aws_cognito_user_pool" "user_pool" {
-  name = "${local.name_prefix}-user-pool"
+  name                     = "${local.name_prefix}-user-pool"
+  auto_verified_attributes = ["email"]
+  deletion_protection      = "INACTIVE" # Disabled for examples
 
-  # Password policy
   password_policy {
     minimum_length                   = 8
     require_lowercase                = true
@@ -210,12 +246,10 @@ resource "aws_cognito_user_pool" "user_pool" {
     temporary_password_validity_days = 7
   }
 
-  # User pool add-ons
   user_pool_add_ons {
     advanced_security_mode = "ENFORCED"
   }
 
-  # Account recovery
   account_recovery_setting {
     recovery_mechanism {
       name     = "verified_email"
@@ -223,10 +257,6 @@ resource "aws_cognito_user_pool" "user_pool" {
     }
   }
 
-  # Auto-verified attributes
-  auto_verified_attributes = ["email"]
-
-  # User attributes
   schema {
     attribute_data_type = "String"
     name                = "email"
@@ -234,7 +264,6 @@ resource "aws_cognito_user_pool" "user_pool" {
     mutable             = true
   }
 
-  # Admin create user config
   admin_create_user_config {
     allow_admin_create_user_only = true
     invite_message_template {
@@ -244,31 +273,25 @@ resource "aws_cognito_user_pool" "user_pool" {
     }
   }
 
-  # Deletion protection disabled for examples
-  deletion_protection = "INACTIVE"
-
   tags = {
     Name = "${local.name_prefix}-user-pool"
   }
 }
 
-# Cognito User Pool Client
 resource "aws_cognito_user_pool_client" "user_pool_client" {
   name         = "${local.name_prefix}-user-pool-client"
   user_pool_id = aws_cognito_user_pool.user_pool.id
 
-  # OAuth settings
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_scopes                 = ["email", "openid", "profile"]
-  callback_urls                        = ["http://localhost:3000"] # Will be updated by web UI if enabled
-  logout_urls                          = ["http://localhost:3000"] # Will be updated by web UI if enabled
+  callback_urls                        = ["http://localhost:3000"]
+  logout_urls                          = ["http://localhost:3000"]
   supported_identity_providers         = ["COGNITO"]
 
-  # Token validity
-  access_token_validity  = 60 # 1 hour
-  id_token_validity      = 60 # 1 hour
-  refresh_token_validity = 30 # 30 days
+  access_token_validity  = 60
+  id_token_validity      = 60
+  refresh_token_validity = 30
 
   token_validity_units {
     access_token  = "minutes"
@@ -276,10 +299,8 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
     refresh_token = "days"
   }
 
-  # Prevent secret generation for public clients
   generate_secret = false
 
-  # Explicit auth flows
   explicit_auth_flows = [
     "ALLOW_ADMIN_USER_PASSWORD_AUTH",
     "ALLOW_CUSTOM_AUTH",
@@ -289,7 +310,6 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   ]
 }
 
-# Cognito Identity Pool
 resource "aws_cognito_identity_pool" "identity_pool" {
   identity_pool_name               = "${local.name_prefix}-identity-pool"
   allow_unauthenticated_identities = false
@@ -305,7 +325,6 @@ resource "aws_cognito_identity_pool" "identity_pool" {
   }
 }
 
-# IAM role for authenticated users
 resource "aws_iam_role" "authenticated_role" {
   name = "${local.name_prefix}-authenticated-role"
 
@@ -335,7 +354,6 @@ resource "aws_iam_role" "authenticated_role" {
   }
 }
 
-# IAM role for unauthenticated users (minimal permissions)
 resource "aws_iam_role" "unauthenticated_role" {
   name = "${local.name_prefix}-unauthenticated-role"
 
@@ -365,7 +383,6 @@ resource "aws_iam_role" "unauthenticated_role" {
   }
 }
 
-# Attach roles to identity pool
 resource "aws_cognito_identity_pool_roles_attachment" "identity_pool_roles" {
   identity_pool_id = aws_cognito_identity_pool.identity_pool.id
 
@@ -375,7 +392,6 @@ resource "aws_cognito_identity_pool_roles_attachment" "identity_pool_roles" {
   }
 }
 
-# Admin user creation (optional, externalized from the module)
 resource "aws_cognito_user" "admin_user" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
@@ -390,9 +406,6 @@ resource "aws_cognito_user" "admin_user" {
     family_name    = "User"
   }
 
-  # Send invitation email with temporary password
-  # message_action = "SUPPRESS" # Removed to allow invitation email
-
   lifecycle {
     ignore_changes = [
       password,
@@ -401,7 +414,6 @@ resource "aws_cognito_user" "admin_user" {
   }
 }
 
-# Admin group creation (optional)
 resource "aws_cognito_user_group" "admin_group" {
   count        = var.admin_email != null && var.admin_email != "" && !local.rbac_enabled ? 1 : 0
   name         = "Admin"
@@ -410,7 +422,6 @@ resource "aws_cognito_user_group" "admin_group" {
   precedence   = 0
 }
 
-# Add admin user to admin group
 resource "aws_cognito_user_in_group" "admin_user_in_group" {
   count        = var.admin_email != null && var.admin_email != "" ? 1 : 0
   user_pool_id = aws_cognito_user_pool.user_pool.id
@@ -418,42 +429,33 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
   username     = aws_cognito_user.admin_user[0].username
 }
 
-# Read configuration from config library (pattern-1 for BDA processor)
-locals {
-  config_file_path = var.config_file_path
-  config_yaml      = file(local.config_file_path)
-  config           = yamldecode(local.config_yaml)
-
-  # Additional config versions, managed from terraform.tfvars as
-  # version_name => path-to-YAML. Each becomes an editable, non-active version
-  # in the UI. Paths are relative to this example dir (or absolute). tfvars
-  # cannot call yamldecode/file, so the decode happens here.
-  additional_configurations = {
-    for name, p in var.additional_config_files :
-    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
-  }
-}
-
-# Deploy the GenAI IDP Accelerator with BDA processor
+# Deploy the GenAI IDP Accelerator with the Bedrock-LLM processor façade.
+#
+# Both the Bedrock-LLM and BDA branches are always deployed by the shared engine.
+# The `default` config stays Bedrock-LLM; the BDA-linked version (carried in
+# `additional_configurations` with its own `bda_project_arn`) routes to BDA.
 module "genai_idp_accelerator" {
-  source = "../.." # Path to the top-level module
+  source = "../.."
 
   providers = {
     aws.us-east-1 = aws.us-east-1
   }
 
-  # Processor configuration
-  bda_processor = {
-    project_arn = awscc_bedrock_data_automation_project.bda_project.project_arn
+  # Processor configuration (Bedrock-LLM default + BDA-linked additional version)
+  bedrock_llm_processor = {
+    classification_model_id = var.classification_model_id
+    extraction_model_id     = var.extraction_model_id
     summarization = {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config                    = local.config
+    config = local.config
+    # The BDA version carries its own per-version `bda_project_arn`, so no
+    # top-level fallback is needed here. The default is never relinked.
     additional_configurations = local.additional_configurations
   }
 
-  # Use external user identity instead of creating new one
+  # Use external user identity created above
   user_identity = {
     user_pool_arn          = aws_cognito_user_pool.user_pool.arn
     user_pool_client_id    = aws_cognito_user_pool_client.user_pool_client.id
@@ -466,64 +468,30 @@ module "genai_idp_accelerator" {
   output_bucket_arn  = aws_s3_bucket.output_bucket.arn
   working_bucket_arn = aws_s3_bucket.working_bucket.arn
   encryption_key_arn = aws_kms_key.encryption_key.arn
-  enable_encryption  = true
 
-  # Evaluation configuration
-  evaluation = var.enable_evaluation ? {
-    enabled             = true
-    model_id            = var.evaluation_model_id
-    baseline_bucket_arn = aws_s3_bucket.evaluation_baseline_bucket[0].arn
-  } : { enabled = false }
-
-  # Reporting configuration
-  reporting = var.enable_reporting ? {
-    enabled       = true
-    bucket_arn    = aws_s3_bucket.reporting_bucket[0].arn
-    database_name = aws_glue_catalog_database.reporting_database[0].name
-  } : { enabled = false }
-
-  # API configuration (consolidated)
+  # API configuration.
+  #
+  # chat_with_document + knowledge_base drive the Web UI's "Agent Companion Chat"
+  # / "Document KB" tools. chat_with_document is per-document Q&A. The
+  # knowledge_base backend (var.create_knowledge_base, default on) stands up an
+  # OpenSearch Serverless + Bedrock Knowledge Base that ingests uploaded docs from
+  # the input bucket; its ARN is wired in below. When create_knowledge_base is
+  # false the KB is not created and knowledge_base_arn is null, leaving
+  # chat-with-document to operate without a KB.
   api = {
-    enabled                     = var.api.enabled
-    agent_analytics             = var.api.agent_analytics
-    discovery                   = var.api.discovery
-    chat_with_document          = var.api.chat_with_document
-    process_changes             = var.api.process_changes
-    enable_agent_companion_chat = var.api.enable_agent_companion_chat
-    enable_test_studio          = var.api.enable_test_studio
-    enable_fcc_dataset          = var.api.enable_fcc_dataset
-    enable_error_analyzer       = var.api.enable_error_analyzer
-    enable_mcp                  = var.api.enable_mcp
-    # v0.4.16 feature flags
-    enable_hitl                     = var.api.enable_hitl
-    enable_capacity_planning        = var.api.enable_capacity_planning
-    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
-    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
-    knowledge_base = local.knowledge_base_enabled ? {
-      enabled            = true
-      knowledge_base_arn = aws_bedrockagent_knowledge_base.knowledge_base[0].arn
-      model_id           = local.knowledge_base_model_id
-      embedding_model_id = local.knowledge_base_embedding_model_id
-      } : {
-      enabled = false
+    enabled            = true
+    chat_with_document = { enabled = var.chat_with_document_enabled }
+    knowledge_base = {
+      enabled            = var.create_knowledge_base
+      knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)
+      model_id           = var.knowledge_base_model_id
+      embedding_model_id = var.knowledge_base_embedding_model_id
     }
+    # Discovery feature (Web UI "Discovery" tab); provisions the discovery pipeline.
+    discovery = { enabled = var.create_discovery }
   }
 
-  # DEPRECATED: Individual API variables (backward compatibility)
-  # These take precedence over api variable if both are provided
-  enable_api         = var.enable_api
-  agent_analytics    = var.agent_analytics
-  discovery          = var.discovery
-  chat_with_document = var.chat_with_document
-  process_changes    = var.process_changes
-
   rbac = var.rbac
-  knowledge_base = var.enable_knowledge_base != null ? {
-    enabled            = var.enable_knowledge_base
-    knowledge_base_arn = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
-    model_id           = var.knowledge_base_model_id
-    embedding_model_id = var.knowledge_base_embeddings_model_id
-  } : null
 
   # Web UI configuration
   web_ui = {
@@ -534,10 +502,8 @@ module "genai_idp_accelerator" {
     logging_enabled            = var.web_ui.logging_enabled
     logging_bucket_arn         = var.web_ui.logging_enabled ? aws_s3_bucket.logging_bucket[0].arn : null
     enable_signup              = var.web_ui.enable_signup
-    display_name               = "BDA Processor (${element(split("/", var.config_file_path), length(split("/", var.config_file_path)) - 2)})"
+    display_name               = "Unified Processor (dual-mode)"
   }
-
-
 
   # General configuration
   prefix                       = var.prefix
@@ -545,9 +511,6 @@ module "genai_idp_accelerator" {
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
-
-  # Force layer rebuild
-  force_rebuild_layers = var.force_layer_rebuild
 
   tags = var.tags
 }

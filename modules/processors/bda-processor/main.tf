@@ -9,7 +9,9 @@
  * `cdklabs/genai-idp@main`): a thin façade that performs only the
  * BDA-specific, pattern-specific setup and delegates ALL document processing to
  * the shared internal engine (`modules/processors/unified-processor/`) via a
- * nested `module "engine"` with `use_bda = true`.
+ * nested `module "engine"`. The engine always deploys both the BDA branch and
+ * the pipeline branch and routes each document at runtime by its config
+ * version's `use_bda` flag; there is no deploy-time branch selector.
  *
  * Pattern-specific (BDA-only) concern handled here:
  *   * The Bedrock Data Automation Project ARN that the BDA branch invokes. In
@@ -20,9 +22,12 @@
  *     `DataAutomationProject` at synth time (CDK uses a CFN custom resource that
  *     has no native Terraform-provider equivalent). The public input surface is
  *     preserved so the root `module.bda_processor` call still type-checks. The
- *     ARN is forwarded to the engine as `bda_project_arn`; the engine's
- *     `use_bda = true` branch grants `bedrock:InvokeDataAutomationAsync` and runs
- *     the BDA invoke / completion / process-results Lambdas + state machine.
+ *     project id is parsed for the `project_id` output. The engine always
+ *     deploys the BDA branch (which grants `bedrock:InvokeDataAutomationAsync`
+ *     and runs the BDA invoke / completion / process-results Lambdas + state
+ *     machine); the per-configuration-version link between this ARN and the BDA
+ *     branch is established through configuration seeding, not a deploy-time
+ *     engine input.
  *
  * Everything else (Lambdas, Step Functions state machine, IAM, SQS DLQs,
  * CloudWatch log groups, config seeding) is owned by the shared engine. The
@@ -57,20 +62,22 @@ locals {
   # Reconstruct the baseline bucket ARN expected by the engine from the bucket
   # name the root passes (S3 ARNs are partition-scoped, account-agnostic).
   evaluation_baseline_bucket_arn = local.evaluation_enabled ? "arn:${data.aws_partition.current.partition}:s3:::${var.evaluation_baseline_bucket_name}" : null
+
+  # Force the default config version onto the BDA branch: routing keys off
+  # `$.document.use_bda`, and linking BdaProjectArn alone does not set it. The
+  # shared lending sample ships `use_bda: false`, so this override must win.
+  config_with_bda = merge(var.config, { use_bda = true })
 }
 
 # =============================================================================
 # Shared internal engine (unified-processor)
 # =============================================================================
-# Delegates ALL document processing to the shared engine with use_bda = true.
+# Delegates ALL document processing to the shared engine. The engine always
+# deploys both branches and routes per document at runtime.
 module "engine" {
   source = "../unified-processor"
 
   name = var.name
-
-  # Façade ↔ engine delegation: BDA branch.
-  use_bda         = true
-  bda_project_arn = var.data_automation_project_arn
 
   # API wiring
   enable_api      = var.enable_api
@@ -115,11 +122,16 @@ module "engine" {
   evaluation_baseline_bucket_arn = local.evaluation_baseline_bucket_arn
 
   # Document processing configuration
-  config                     = var.config
+  config                     = local.config_with_bda
   max_processing_concurrency = var.max_processing_concurrency
 
   # Extra non-active config versions seeded alongside the default
   additional_configurations = var.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
+
+  # Link the `default` config version to the BDA project so this façade routes
+  # to BDA out of the box; also the fallback for its own use_bda:true versions.
+  default_bda_project_arn = var.data_automation_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
