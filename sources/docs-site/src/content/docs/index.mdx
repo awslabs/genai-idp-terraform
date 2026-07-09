@@ -1,0 +1,83 @@
+---
+title: GenAI Intelligent Document Processing
+description: Scalable, serverless AWS solution for automated document processing using OCR and generative AI
+template: splash
+hero:
+  tagline: A scalable, serverless AWS solution for automated document processing using OCR and generative AI. Deploy in minutes with CloudFormation.
+  actions:
+    - text: Get Started
+      link: ./deployment/
+      icon: right-arrow
+      variant: primary
+    - text: View Architecture
+      link: ./architecture/
+      icon: seti:config
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws
+      icon: github
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+## Key Capabilities
+
+<CardGrid>
+  <Card title="Classification" icon="seti:folder">
+    Automatically classify documents using generative AI with configurable
+    document types and confidence scoring.
+  </Card>
+  <Card title="Extraction" icon="seti:json">
+    Extract structured data from documents using customizable schemas and
+    field-level validation.
+  </Card>
+  <Card title="Assessment" icon="approve-check-circle">
+    Evaluate extraction quality with LLM-powered confidence assessment and
+    spatial bounding boxes.
+  </Card>
+  <Card title="Human Review" icon="pencil">
+    Built-in human-in-the-loop review workflows for quality assurance and
+    exception handling.
+  </Card>
+</CardGrid>
+
+## Processing Modes
+
+<CardGrid>
+  <LinkCard
+    title="BDA Mode"
+    description="Bedrock Data Automation — streamlined processing with managed AWS service"
+    href="./pattern-1/"
+  />
+  <LinkCard
+    title="Pipeline Mode"
+    description="Textract + Bedrock — full control over classification and extraction pipeline"
+    href="./pattern-2/"
+  />
+</CardGrid>
+
+## Features at a Glance
+
+<CardGrid>
+  <LinkCard
+    title="Web UI"
+    description="Full-featured web interface for document management and review"
+    href="./web-ui/"
+  />
+  <LinkCard
+    title="AI Agents"
+    description="Natural language analytics, companion chat, and MCP integration"
+    href="./agent-analysis/"
+  />
+  <LinkCard
+    title="Evaluation Framework"
+    description="Accuracy testing with field-level comparison and enhanced reporting"
+    href="./evaluation/"
+  />
+  <LinkCard
+    title="IDP CLI & SDK"
+    description="Command-line and Python SDK for batch processing and automation"
+    href="./idp-cli/"
+  />
+</CardGrid>

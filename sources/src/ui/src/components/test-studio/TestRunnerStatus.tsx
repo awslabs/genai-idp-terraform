@@ -1,10 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect } from 'react';
-import { Badge, Box } from '@cloudscape-design/components';
+import { Badge, Box, Button, SpaceBetween } from '@cloudscape-design/components';
 import type { BadgeProps } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
-import GET_TEST_RUN_STATUS from '../../graphql/queries/getTestRunStatus';
+import { getTestRunStatus } from '../../graphql/generated';
 
 const client = generateClient();
 
@@ -19,18 +19,29 @@ interface TestRunStatusData {
 
 interface TestRunnerStatusProps {
   testRunId?: string | null;
+  createdAt?: string | null;
   onComplete?: (() => void) | null;
+  onAbort?: (() => void) | null;
 }
 
-const TestRunnerStatus = ({ testRunId = null, onComplete = null }: TestRunnerStatusProps): React.JSX.Element => {
+const MAX_POLL_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+const TestRunnerStatus = ({
+  testRunId = null,
+  createdAt = null,
+  onComplete = null,
+  onAbort = null,
+}: TestRunnerStatusProps): React.JSX.Element => {
   const [testRunStatus, setTestRunStatus] = useState<TestRunStatusData | null>(null);
 
   useEffect(() => {
     if (!testRunId) return undefined;
 
+    const isStale = createdAt ? Date.now() - new Date(createdAt).getTime() > MAX_POLL_AGE_MS : false;
+
     const fetchStatus = async () => {
       try {
-        const result = await client.graphql({ query: GET_TEST_RUN_STATUS, variables: { testRunId } });
+        const result = await client.graphql({ query: getTestRunStatus, variables: { testRunId } });
         const status = (result as { data?: { getTestRunStatus?: TestRunStatusData } })?.data?.getTestRunStatus;
 
         if (!status) {
@@ -40,8 +51,14 @@ const TestRunnerStatus = ({ testRunId = null, onComplete = null }: TestRunnerSta
 
         setTestRunStatus(status);
 
-        // Close modal when test is complete (progress = 100%)
-        if (status.progress === 100 && onComplete) {
+        // Stop polling when test run reaches a terminal state
+        if (
+          (status.status === 'COMPLETE' ||
+            status.status === 'PARTIAL_COMPLETE' ||
+            status.status === 'FAILED' ||
+            status.status === 'ABORTED') &&
+          onComplete
+        ) {
           onComplete();
         }
       } catch (error) {
@@ -50,9 +67,12 @@ const TestRunnerStatus = ({ testRunId = null, onComplete = null }: TestRunnerSta
     };
 
     fetchStatus();
+
+    if (isStale) return undefined;
+
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [testRunId, onComplete]);
+  }, [testRunId, createdAt, onComplete]);
 
   if (!testRunStatus) return <span>Loading...</span>;
 
@@ -64,6 +84,7 @@ const TestRunnerStatus = ({ testRunId = null, onComplete = null }: TestRunnerSta
       COMPLETE: 'green',
       PARTIAL_COMPLETE: 'yellow',
       FAILED: 'red',
+      ABORTED: 'red',
     };
     return colors[status] || 'grey';
   };
@@ -100,17 +121,27 @@ const TestRunnerStatus = ({ testRunId = null, onComplete = null }: TestRunnerSta
     return parts;
   };
 
+  const abortableStatuses = ['QUEUED', 'RUNNING'];
+  const showAbortButton = onAbort && abortableStatuses.includes(testRunStatus.status);
+
   return (
-    <Box>
-      <Badge color={getStatusColor(testRunStatus.status) as BadgeProps['color']}>{testRunStatus.status}</Badge>
-      <div style={{ marginTop: '4px' }}>
-        {getProgressDetails().map((detail) => (
-          <div key={detail} style={{ fontSize: '0.9em', color: '#666' }}>
-            ▸ {detail}
-          </div>
-        ))}
-      </div>
-    </Box>
+    <SpaceBetween direction="horizontal" size="xs">
+      <Box>
+        <Badge color={getStatusColor(testRunStatus.status) as BadgeProps['color']}>{testRunStatus.status}</Badge>
+        <div style={{ marginTop: '4px' }}>
+          {getProgressDetails().map((detail) => (
+            <div key={detail} style={{ fontSize: '0.9em', color: '#666' }}>
+              ▸ {detail}
+            </div>
+          ))}
+        </div>
+      </Box>
+      {showAbortButton && (
+        <Button iconName="status-stopped" variant="inline-link" onClick={onAbort}>
+          Abort
+        </Button>
+      )}
+    </SpaceBetween>
   );
 };
 

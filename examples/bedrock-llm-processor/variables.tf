@@ -56,7 +56,7 @@ variable "api" {
     # Agent Analytics (GraphQL resolvers for agent functionality)
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
-      model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+      model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     }), { enabled = false })
 
     # Discovery (Document discovery and classification workflow)
@@ -66,9 +66,9 @@ variable "api" {
 
     # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -77,18 +77,25 @@ variable "api" {
 
     # Knowledge Base (external dependency for chat feature)
     knowledge_base = optional(object({
-      enabled            = optional(bool, false)
+      enabled            = optional(bool, true)
       knowledge_base_arn = optional(string)
       model_id           = optional(string, "us.amazon.nova-pro-v1:0")
       embedding_model_id = optional(string, "amazon.titan-embed-text-v2:0")
-    }), { enabled = false })
+    }), { enabled = true })
 
     # v0.4.8 feature flags
     enable_agent_companion_chat = optional(bool, false)
     enable_test_studio          = optional(bool, false)
     enable_fcc_dataset          = optional(bool, false)
+    enable_w2_dataset           = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
+
+    # v0.5.11 — version-check resolver. When public_artifacts_bucket is
+    # empty (default), the getLatestPublishedVersion resolver is not created.
+    public_artifacts_bucket = optional(string, "")
+    public_artifacts_prefix = optional(string, "artifacts/genai-idp")
+    public_artifacts_region = optional(string, "")
 
     # v0.4.16 feature flags
     enable_hitl                     = optional(bool, true)
@@ -101,9 +108,9 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
-    knowledge_base     = { enabled = false }
+    knowledge_base     = { enabled = true }
   }
 
   # Note: We intentionally do not validate that knowledge_base_arn is non-null
@@ -119,6 +126,53 @@ variable "api" {
   }
 }
 
+# RBAC feature plugin (v0.5.12) — forwarded to module.rbac at the root.
+# Default-off. When enabled, provisions the four Cognito groups (Admin/Author/
+# Reviewer/Viewer), the Users table, and the user-management Lambda. Requires a
+# Cognito user pool (this example always provisions one), enforced at plan time.
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
+  type = object({
+    enabled = optional(bool, false)
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+# External SAML/OIDC IdP federation feature plugin (v0.5.12) — forwarded to
+# module.idp_federation at the root. Default-off. The OIDC client secret is
+# supplied by REFERENCE (oidc_client_secret_ref — a Secrets Manager ARN / SSM
+# parameter name), never as a raw value. When both rbac and idp_federation are
+# enabled, the federation group-mapping targets the four RBAC group names.
+variable "idp_federation" {
+  description = "Configuration for the external SAML/OIDC IdP federation feature plugin. Default-off. The OIDC client secret is supplied by reference, never in plaintext."
+  type = object({
+    enabled                = optional(bool, false)
+    provider_type          = optional(string, "SAML")
+    provider_name          = optional(string, "ExternalIdP")
+    saml_metadata_url      = optional(string, "")
+    saml_metadata_file     = optional(string, "")
+    oidc_issuer            = optional(string, "")
+    oidc_client_id         = optional(string, "")
+    oidc_client_secret_ref = optional(string, "")
+    oidc_authorize_scopes  = optional(string, "openid email profile")
+    attribute_mapping      = optional(map(string), {})
+    group_attribute_name   = optional(string, "")
+    group_mapping          = optional(map(string), {})
+  })
+  default = {
+    enabled = false
+  }
+}
+
 # DEPRECATED: Individual API feature variables (use 'api' variable instead)
 # These are kept for backward compatibility and will be removed in a future version
 variable "enable_api" {
@@ -131,7 +185,7 @@ variable "agent_analytics" {
   description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
   type = object({
     enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
   })
   default = null
 }
@@ -206,13 +260,13 @@ variable "enable_reporting" {
 variable "classification_model_id" {
   description = "Model ID for document classification (Bedrock LLM processor only)"
   type        = string
-  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 variable "extraction_model_id" {
   description = "Model ID for information extraction (Bedrock LLM processor only)"
   type        = string
-  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 variable "summarization_enabled" {
@@ -224,7 +278,7 @@ variable "summarization_enabled" {
 variable "summarization_model_id" {
   description = "Model ID for document summarization"
   type        = string
-  default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 
@@ -278,7 +332,24 @@ variable "lambda_hook_summarization" {
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
+  default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+}
+
+variable "additional_config_files" {
+  description = "Extra config versions to seed alongside the default, as version_name => path to a YAML file (relative to this example dir or absolute). Each shows in the UI version dropdown as an editable, non-active version. Manage this list from terraform.tfvars."
+  type        = map(string)
+  default     = {}
+}
+
+# When true, append the demonstration classes in
+# config-overlays/round3-x-aws-idp-flags.yaml (the config-shape `x-aws-idp-*`
+# flags) onto the seeded config's classes list so the flags travel through the
+# configuration seeder unchanged. The flags are runtime-enforced upstream and
+# add no AWS resources. Set false to seed the base config verbatim.
+variable "demo_x_aws_idp_flags" {
+  description = "Demonstrate the config-shape x-aws-idp-* schema flags by appending overlay classes to the seeded config; the flags pass through the seeder unchanged."
+  type        = bool
+  default     = true
 }
 
 variable "tags" {
@@ -307,4 +378,10 @@ variable "build" {
     container_runtime   = "auto"
     ui_local            = false
   }
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
+  type        = bool
+  default     = false
 }

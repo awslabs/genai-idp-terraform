@@ -1,0 +1,4 @@
+# idp_common provided by Lambda Layer 1 (base)
+# Layer 1 includes: core + docs_service + image
+# model_finetuning module is part of idp_common
+pyyaml>=6.0,<7.0

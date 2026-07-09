@@ -20,3 +20,8 @@ output "schema_seeded" {
   description = "Result of seeding the Schema"
   value       = jsondecode(aws_lambda_invocation.seed_schema.result)
 }
+
+output "managed_versions_seeded" {
+  description = "Names of the managed baseline configuration versions seeded with Managed = true."
+  value       = sort(keys(local.managed_configs))
+}

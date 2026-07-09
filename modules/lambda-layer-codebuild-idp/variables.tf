@@ -43,7 +43,7 @@ variable "idp_common_extras" {
     List of extras to install for idp_common package. Available extras:
     - core: Base functionality only (minimal dependencies)
     - image: Image handling dependencies (Pillow)
-    - ocr: OCR module dependencies (Pillow, PyMuPDF, textractor, numpy, pandas, etc.)
+    - ocr: OCR module dependencies (Pillow, pypdfium2, textractor, numpy, pandas, etc.)
     - classification: Classification module dependencies
     - extraction: Extraction module dependencies  
     - assessment: Assessment module dependencies

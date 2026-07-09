@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
+  ButtonDropdown,
   ColumnLayout,
   Container,
   SpaceBetween,
@@ -13,6 +14,7 @@ import {
   ExpandableSection,
   StatusIndicator,
 } from '@cloudscape-design/components';
+import type { ButtonDropdownProps } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import { formatConfigVersionLink } from '../test-studio/utils/configVersionUtils';
@@ -26,11 +28,16 @@ import ChatPanel from '../chat-panel';
 import useConfiguration from '../../hooks/use-configuration';
 import usePricing from '../../hooks/use-pricing';
 import useUserRole from '../../hooks/use-user-role';
+import useAppContext from '../../contexts/app';
+import useSettingsContext from '../../contexts/settings';
 import { getDocumentConfidenceAlertCount } from '../common/confidence-alerts-utils';
 import { renderHitlStatus } from '../common/hitl-status-renderer';
 import StepFunctionFlowViewer from '../step-function-flow/StepFunctionFlowViewer';
 import TroubleshootModal from './TroubleshootModal';
-import claimReviewMutation from '../../graphql/mutations/claimReview';
+import { claimReview } from '../../graphql/generated';
+import { exportDocument, triggerBrowserDownload } from './document-export';
+import type { ExportErrorEntry, ExportProgress, ExportScope } from './document-export';
+import { DownloadOptionsModal, DownloadProgressModal } from './DocumentDownloadModals';
 // Uncomment the line below to enable debugging
 // import { debugDocumentStructure } from '../common/debug-utils';
 
@@ -127,12 +134,12 @@ interface DocumentPanelProps {
 
 interface TroubleshootJobData {
   jobId: string;
-  status: string;
-  result: unknown;
+  status: string | null;
+  result: string | Record<string, unknown> | null;
   agentMessages: unknown;
   error: string | null;
   timestamp: number;
-  documentKey: string;
+  documentKey: string | undefined;
 }
 
 const client = generateClient();
@@ -617,6 +624,18 @@ export const DocumentPanel = ({
   const [troubleshootJobs, setTroubleshootJobs] = useState<Record<string, TroubleshootJobData>>({});
   // State for Start Review button
   const [isClaimingReview, setIsClaimingReview] = useState(false);
+  // State for document-level download
+  const [downloadScope, setDownloadScope] = useState<ExportScope | null>(null);
+  const [isDownloadOptionsOpen, setIsDownloadOptionsOpen] = useState(false);
+  const [includePageImages, setIncludePageImages] = useState(false);
+  const [includeSourceDocument, setIncludeSourceDocument] = useState(false);
+  const [isDownloadInProgress, setIsDownloadInProgress] = useState(false);
+  const [isDownloadFinished, setIsDownloadFinished] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<ExportProgress | null>(null);
+  const [downloadErrors, setDownloadErrors] = useState<ExportErrorEntry[]>([]);
+  const [downloadAbortController, setDownloadAbortController] = useState<AbortController | null>(null);
+  const { settings } = useSettingsContext();
+  const { currentCredentials } = useAppContext();
   // Local state for document item to enable real-time updates
   const [localItem, setLocalItem] = useState(item);
 
@@ -627,8 +646,14 @@ export const DocumentPanel = ({
 
   // Fetch active configuration for dynamic confidence threshold (used by sections panel, etc.)
   const { mergedConfig } = useConfiguration();
-  // Fetch the specific config version that was used to process this document (for flow viewer)
-  const { mergedConfig: documentVersionConfig } = useConfiguration(localItem?.configVersion || 'default');
+  // Fetch the specific config version that was used to process this document (for flow viewer).
+  // Optimization: skip the extra API call when the document version is 'default' or unset,
+  // since useConfiguration() above already fetches the default config.
+  const docConfigVersion = localItem?.configVersion || 'default';
+  const needsSeparateVersionFetch = docConfigVersion !== 'default';
+  const { mergedConfig: separateVersionConfig } = useConfiguration(needsSeparateVersionFetch ? docConfigVersion : 'default');
+  // Use the separate fetch result only when the version differs; otherwise reuse the default config
+  const documentVersionConfig = needsSeparateVersionFetch ? separateVersionConfig : mergedConfig;
   const { isReviewer } = useUserRole();
 
   // Check if document can be aborted
@@ -647,7 +672,7 @@ export const DocumentPanel = ({
     setIsClaimingReview(true);
     try {
       const result = await client.graphql({
-        query: claimReviewMutation as unknown as string,
+        query: claimReview,
         variables: { objectKey: localItem.objectKey },
       });
 
@@ -674,10 +699,83 @@ export const DocumentPanel = ({
     }
   };
 
+  // Baseline option is only useful if the document has evaluation data
+  const isBaselineAvailableForDoc = localItem?.evaluationStatus === 'BASELINE_AVAILABLE' || localItem?.evaluationStatus === 'COMPLETED';
+
+  // Kick off a document export for the given scope. Scope 'all' routes through the
+  // options modal so the user can opt into page images; other scopes start immediately.
+  const startDownload = async (scope: ExportScope) => {
+    setDownloadScope(scope);
+    setDownloadErrors([]);
+    setDownloadProgress(null);
+    setIsDownloadFinished(false);
+    setIsDownloadInProgress(true);
+    const controller = new AbortController();
+    setDownloadAbortController(controller);
+
+    try {
+      const result = await exportDocument(localItem as unknown as Parameters<typeof exportDocument>[0], settings, {
+        scope,
+        includePageImages: scope === 'all' && includePageImages,
+        includeSourceDocument: scope === 'all' && includeSourceDocument,
+        credentials: currentCredentials as Record<string, unknown>,
+        signal: controller.signal,
+        onProgress: (p) => {
+          setDownloadProgress(p);
+          setDownloadErrors(p.errors);
+        },
+      });
+      triggerBrowserDownload(result);
+      setDownloadErrors(result.errors);
+    } catch (err) {
+      if ((err as { name?: string })?.name === 'AbortError') {
+        logger.info('Document export cancelled by user');
+      } else {
+        logger.error('Document export failed:', err);
+        alert(`Download failed: ${(err as Error).message || 'Unknown error'}`);
+      }
+    } finally {
+      setIsDownloadInProgress(false);
+      setIsDownloadFinished(true);
+      setDownloadAbortController(null);
+    }
+  };
+
+  const handleDownloadMenuItemClick = (id: string) => {
+    if (id === 'all') {
+      setIsDownloadOptionsOpen(true);
+    } else if (id === 'predictions' || id === 'baselines') {
+      void startDownload(id);
+    }
+  };
+
+  const handleConfirmDownloadAll = () => {
+    setIsDownloadOptionsOpen(false);
+    void startDownload('all');
+  };
+
+  const handleCancelDownload = () => {
+    downloadAbortController?.abort();
+  };
+
+  const handleCloseDownloadProgress = () => {
+    setIsDownloadFinished(false);
+    setDownloadProgress(null);
+    setDownloadScope(null);
+  };
+
+  const downloadMenuItems: ButtonDropdownProps.ItemOrGroup[] = [
+    { id: 'all', text: 'Download All (ZIP)', iconName: 'download' },
+    { id: 'predictions', text: 'Download Predictions (ZIP)', iconName: 'download' },
+  ];
+  if (isBaselineAvailableForDoc) {
+    downloadMenuItems.push({ id: 'baselines', text: 'Download Baselines (ZIP)', iconName: 'download' });
+  }
+
   // Create enhanced item with configuration
   const enhancedItem = {
     ...localItem,
-    mergedConfig,
+    mergedConfig: mergedConfig ?? undefined,
   };
 
   return (
@@ -732,6 +830,16 @@ export const DocumentPanel = ({
                     Reprocess
                   </Button>
                 )}
+                <ButtonDropdown
+                  items={downloadMenuItems}
+                  onItemClick={({ detail }) => handleDownloadMenuItemClick(detail.id)}
+                  disabled={isDownloadInProgress}
+                  loading={isDownloadInProgress}
+                  variant="normal"
+                  expandToViewport
+                >
+                  Download
+                </ButtonDropdown>
                 {onDelete && (
                   <Button iconName="remove" variant="normal" onClick={onDelete}>
                     Delete
@@ -775,7 +883,7 @@ export const DocumentPanel = ({
         } as Record<string, unknown>)}
       />
       <PagesPanel {...({ pages: localItem.pages, documentItem: localItem } as Record<string, unknown>)} />
-      <ChatPanel objectKey={localItem.objectKey} />
+      <ChatPanel objectKey={localItem.objectKey} configVersion={docConfigVersion} />
 
       {/* Step Function Flow Viewer - uses the document's config version, not the active stack config */}
       {localItem?.executionArn && (
@@ -799,6 +907,25 @@ export const DocumentPanel = ({
             [localItem.objectKey]: jobData,
           }));
         }}
+      />
+
+      {/* Document-level download UX */}
+      <DownloadOptionsModal
+        visible={isDownloadOptionsOpen}
+        includePageImages={includePageImages}
+        includeSourceDocument={includeSourceDocument}
+        onIncludePageImagesChange={setIncludePageImages}
+        onIncludeSourceDocumentChange={setIncludeSourceDocument}
+        onConfirm={handleConfirmDownloadAll}
+        onDismiss={() => setIsDownloadOptionsOpen(false)}
+      />
+      <DownloadProgressModal
+        visible={(isDownloadInProgress || isDownloadFinished) && downloadScope !== null}
+        progress={downloadProgress}
+        errors={downloadErrors}
+        isFinished={isDownloadFinished}
+        onCancel={handleCancelDownload}
+        onClose={handleCloseDownloadProgress}
       />
     </SpaceBetween>
   );

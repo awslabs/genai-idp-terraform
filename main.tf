@@ -1,32 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-/**
- * # GenAI IDP Accelerator - Complete Deployment Module
- *
- * This module provides a one-stop solution for deploying an end-to-end GenAI Intelligent Document Processing (IDP)
- * pipeline. It connects to your existing AWS resources (S3 buckets, KMS keys) and creates the processing infrastructure
- * including user identity management, processing environment, API, web UI, and the selected document processor.
- *
- * ## Features
- * - **Bring Your Own Resources**: Connect to existing S3 buckets and KMS keys
- * - **Configurable Processor**: Choose from BDA, Bedrock LLM, or SageMaker UDOP processors
- * - **Optional API**: Enable GraphQL API for programmatic access and notifications
- * - **Optional Web UI**: Enable web-based user interface for document management
- * - **Comprehensive Security**: Uses your KMS keys, IAM roles, and Cognito authentication
- * - **Monitoring & Logging**: CloudWatch logs, metrics, and optional reporting
- * - **Evaluation Support**: Optional baseline comparison and model evaluation
- *
- * ## Architecture
- * The module creates a complete document processing pipeline that connects to:
- * - Your existing S3 buckets for input, output, working, and optional logging/evaluation/reporting
- * - Your existing KMS key for encryption
- * - Processing environment with Step Functions orchestration
- * - Configurable document processor (BDA/Bedrock LLM/SageMaker UDOP)
- * - Optional GraphQL API with Cognito authentication
- * - Optional React-based web UI with CloudFront distribution
- * - Comprehensive IAM permissions and security controls
- */
+#
+# GenAI IDP Accelerator - complete deployment module.
+#
+# One-stop deployment of an end-to-end IDP pipeline: connects to existing S3
+# buckets and KMS keys and creates the processing environment, optional API and
+# web UI, user identity, and the selected document processor (BDA / Bedrock LLM
+# / SageMaker UDOP).
 
 # Validation: Web UI requires user_identity to be provided
 #tfsec:ignore:*
@@ -46,11 +27,8 @@ check "web_ui_requires_api" {
   }
 }
 
-# Validation: Agent Analytics requires Reporting
-# When agent_analytics is enabled but reporting is disabled, the configuration in
-# processing_environment_api is silently downgraded to { enabled = false } because
-# Agent Analytics depends on reporting.bucket_arn and reporting.database_name.
-# This check surfaces that dependency to the user instead of ignoring the setting.
+# Validation: Agent Analytics requires Reporting (it needs reporting.bucket_arn
+# and reporting.database_name; otherwise the API config is silently downgraded).
 # See https://github.com/awslabs/genai-idp-terraform/issues/84
 #tfsec:ignore:*
 check "agent_analytics_requires_reporting" {
@@ -60,22 +38,21 @@ check "agent_analytics_requires_reporting" {
   }
 }
 
-# Validation: Exactly one processor must be configured
+# Validation: exactly one processor façade must be configured.
 #tfsec:ignore:*
-check "single_processor_required" {
+check "exactly_one_processor" {
   assert {
-    condition = length([
-      for p in [var.bedrock_llm_processor, var.bda_processor, var.sagemaker_udop_processor] : p if p != null
-    ]) == 1
-    error_message = "Exactly one processor must be configured (bedrock_llm_processor, bda_processor, or sagemaker_udop_processor)."
+    condition = length(compact([
+      var.bda_processor != null ? "bda" : "",
+      var.bedrock_llm_processor != null ? "bedrock_llm" : "",
+      var.sagemaker_udop_processor != null ? "sagemaker_udop" : "",
+    ])) == 1
+    error_message = "Exactly one of var.bda_processor, var.bedrock_llm_processor, or var.sagemaker_udop_processor must be set. Set one processor façade."
   }
 }
 
-# Validation: enable_encryption requires encryption_key_arn
-# Several module-internal IAM policies fall back to a KMS wildcard
-# (Resource = "*") when encryption_key_arn is null. Even though the root
-# variable already requires a non-null KMS key ARN, surface this dependency
-# explicitly so flipping enable_encryption=true with a null key fails fast.
+# Validation: enable_encryption requires a KMS key (some module IAM policies
+# otherwise fall back to a KMS wildcard), so fail fast when the key is null.
 #tfsec:ignore:*
 check "enable_encryption_requires_key" {
   assert {
@@ -83,11 +60,6 @@ check "enable_encryption_requires_key" {
     error_message = "When enable_encryption is true, encryption_key_arn must be set to a non-null KMS key ARN."
   }
 }
-
-# Note: Validation checks for computed values (bucket ARNs, encryption key ARN, etc.)
-# have been removed to eliminate "known after apply" warnings. These validations
-# are still enforced by Terraform's resource dependencies and will fail at apply
-# time if the required resources don't exist.
 
 # Validation: Web UI logging bucket requirement
 #tfsec:ignore:*
@@ -98,9 +70,6 @@ check "web_ui_logging_bucket" {
   }
 }
 
-# Validation: BDA processor project ARN requirement (only for static values)
-# Note: Removed check for computed project_arn to eliminate warnings
-
 # Validation: SageMaker UDOP processor endpoint ARN requirement
 #tfsec:ignore:*
 check "sagemaker_processor_endpoint_arn" {
@@ -110,21 +79,15 @@ check "sagemaker_processor_endpoint_arn" {
   }
 }
 
-# Get current AWS account ID and caller identity
 data "aws_caller_identity" "current" {}
-
-# Get current AWS partition for cross-partition compatibility
 data "aws_partition" "current" {}
 
-# Create a random string for unique resource names
+# Random suffix for unique resource names.
 resource "random_string" "suffix" {
   length  = 8
   special = false
   upper   = false
 }
-
-# Validate processor type and required parameters
-# See locals.tf for validation logic
 
 #
 # Build runtime check
@@ -143,9 +106,7 @@ module "build_runtime_check" {
 }
 
 #
-# Shared Assets Bucket
-# Create a single S3 bucket for all application asset storage to reduce resource count
-# Supports Lambda layers, UI assets, and other deployment artifacts
+# Shared assets bucket for Lambda layers, UI assets, and deployment artifacts.
 #
 module "assets_bucket" {
   source = "./modules/assets-bucket"
@@ -227,11 +188,8 @@ module "idp_agents_layer" {
   container_runtime   = var.build.container_runtime
 }
 
-# Evaluation layer: evaluation + docs_service extras — used by the
-# per-processor evaluation Lambda. Includes munkres (Hungarian algorithm
-# comparator) and numpy. Matches CDK upstream which uses
-# IdpPythonLayerVersion.getOrCreate(scope, "evaluation", "docs_service").
-# Only built when at least one processor has evaluation enabled.
+# Evaluation layer: evaluation + docs_service extras for the per-processor
+# evaluation Lambda (munkres + numpy). Built only when evaluation is enabled.
 module "idp_evaluation_layer" {
   count  = var.evaluation.enabled ? 1 : 0
   source = "./modules/idp-common-layer"
@@ -262,42 +220,11 @@ module "user_identity" {
   tags = var.tags
 }
 
-# Human Review Environment (Optional)
-module "human_review" {
-  count  = var.human_review.enabled ? 1 : 0
-  source = "./modules/human-review"
-
-  name_prefix       = "${local.name_prefix}-human-review"
-  output_bucket_arn = var.output_bucket_arn
-
-  # Configuration
-  log_level          = var.log_level
-  log_retention_days = var.log_retention_days
-  encryption_key_arn = var.encryption_key_arn
-
-  # VPC configuration
-  vpc_subnet_ids         = var.vpc_subnet_ids
-  vpc_security_group_ids = var.vpc_security_group_ids
-
-  # Lambda layer
-  idp_common_layer_arn = module.idp_common_layer.layer_arn
-
-  # Lambda tracing configuration
-  lambda_tracing_mode = var.lambda_tracing_mode
-
-  # Pattern-2 HITL configuration
-  enable_pattern2_hitl      = var.human_review.enable_pattern2_hitl
-  hitl_confidence_threshold = var.human_review.hitl_confidence_threshold
-
-  # Pattern-2 HITL dependencies (only needed when Pattern-2 HITL is enabled)
-  tracking_table_name = module.processing_environment.tracking_table_name
-  tracking_table_arn  = module.processing_environment.tracking_table_arn
-  working_bucket_name = local.working_bucket_name
-  working_bucket_arn  = var.working_bucket_arn
-  state_machine_arn   = var.bedrock_llm_processor != null ? try(module.bedrock_llm_processor[0].state_machine_arn, "") : ""
-
-  tags = var.tags
-}
+# Human Review (REMOVED in v0.5.12-tf.0). HITL is now the built-in
+# complete_section_review Lambda + AppSync resolvers in
+# processing-environment-api (gated by var.enable_hitl). var.human_review is
+# kept as a deprecation shim: its enabled field still gates the legacy A2I IAM
+# statements in locals.tf so existing tfvars keep planning.
 
 #
 # Processing Environment
@@ -448,12 +375,17 @@ module "processing_environment_api" {
   enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
   enable_test_studio          = try(var.api.enable_test_studio, false)
   enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
+  enable_w2_dataset           = try(var.api.enable_w2_dataset, false)
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
-  enable_mcp                  = try(var.api.enable_mcp, false)
 
-  # User pool for the MCP external app client. The MCP custom resource
-  # needs a Cognito client to authenticate to the AgentCore Gateway.
-  user_pool_id = local.user_pool_id
+  # version-check resolver (v0.5.11). Default-off: empty public_artifacts_bucket
+  # creates no version-check Lambda/data source/resolver.
+  public_artifacts_bucket = try(var.api.public_artifacts_bucket, "")
+  public_artifacts_prefix = try(var.api.public_artifacts_prefix, "artifacts/genai-idp")
+  public_artifacts_region = try(var.api.public_artifacts_region, "")
+
+  # MCP moved to the mcp_integration feature submodule (features.tf), composed
+  # via enabled_feature_contracts; the API module no longer owns the MCP stack.
 
   # v0.4.16 feature flags
   enable_hitl                     = try(var.api.enable_hitl, true)
@@ -462,10 +394,8 @@ module "processing_environment_api" {
   enable_docplit_poly_seq_dataset = try(var.api.enable_docplit_poly_seq_dataset, false)
   bda_project_arn                 = length(module.bda_processor) > 0 ? module.bda_processor[0].data_automation_project_arn : ""
 
-  # AppSync API visibility — "PRIVATE" makes the GraphQL endpoint
-  # reachable only through the `appsync-api` interface VPC endpoint.
-  # Required for fully isolated VPC deployments where the API must
-  # not have a public DNS resolution path.
+  # AppSync API visibility. "PRIVATE" makes the endpoint reachable only through
+  # the appsync-api interface VPC endpoint (for fully isolated VPC deployments).
   visibility = try(var.api.visibility, "GLOBAL")
 
   # Lookup function (used by Agent Chat Processor)
@@ -480,6 +410,11 @@ module "processing_environment_api" {
   lambda_local        = var.build.lambda_local
   lambda_architecture = var.build.lambda_architecture
   container_runtime   = var.build.container_runtime
+
+  # Feature-plugin contracts from features.tf. Resolves to {} when all features
+  # are off (no-op, default-off preserved).
+  enabled_feature_contracts = local.enabled_feature_contracts
+  has_feature_iam           = local.feature_enable.rbac
 
   tags = var.tags
 }
@@ -499,6 +434,7 @@ module "bda_processor" {
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
   # API configuration (if enabled)
+  enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
   api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
@@ -516,8 +452,10 @@ module "bda_processor" {
   log_level          = module.processing_environment.log_level
   log_retention_days = module.processing_environment.log_retention_days
 
+  enable_encryption    = var.enable_encryption
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+  base_layer_arn       = module.processing_environment.base_layer_arn
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -536,8 +474,9 @@ module "bda_processor" {
   # Optional: Document processing configuration
   config = var.bda_processor.config
 
-  # HITL on BDA flows through `complete_section_review` (AppSync
-  # mutation handler) in the `processing-environment-api` module.
+  # Optional: extra non-active config versions seeded alongside the default
+  additional_configurations = var.bda_processor.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -579,7 +518,7 @@ module "bedrock_llm_processor" {
   encryption_key_arn   = var.encryption_key_arn
   enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
-  base_layer_arn       = module.idp_base_layer.layer_arn
+  base_layer_arn       = module.processing_environment.base_layer_arn
   evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
@@ -593,15 +532,21 @@ module "bedrock_llm_processor" {
   evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
   max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
 
-  # Evaluation: per-pattern Lambda built from
-  # `sources/patterns/pattern-2/src/evaluation_function/`. The
-  # per-processor Lambda is the only evaluation surface, matching
-  # upstream CDK / CloudFormation.
+  # Evaluation: per-pattern Lambda built from sources/patterns/pattern-2, the
+  # only evaluation surface, matching upstream.
   evaluation_enabled             = var.evaluation.enabled
   evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
 
   # Optional: Document processing configuration
   config = var.bedrock_llm_processor.config
+
+  # Optional: extra non-active config versions seeded alongside the default
+  additional_configurations = var.bedrock_llm_processor.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
+
+  # Optional fallback BDA project for use_bda:true additional versions (does not
+  # relink the default)
+  bda_project_arn = var.bedrock_llm_processor.bda_project_arn
 
   # Feature flags
   is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
@@ -635,6 +580,7 @@ module "sagemaker_udop_processor" {
   working_bucket_arn      = var.working_bucket_arn
   tracking_table_arn      = module.processing_environment.tracking_table_arn
   configuration_table_arn = module.processing_environment.configuration_table_arn
+  concurrency_table_arn   = module.processing_environment.concurrency_table_arn
 
   # Processing environment configuration
   metric_namespace   = module.processing_environment.metric_namespace
@@ -643,6 +589,8 @@ module "sagemaker_udop_processor" {
 
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+  base_layer_arn       = module.processing_environment.base_layer_arn
+  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -661,10 +609,16 @@ module "sagemaker_udop_processor" {
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
-  # Feature flags
-
   # Optional: Document processing configuration
   config = var.sagemaker_udop_processor.config
+
+  # Optional: extra non-active config versions seeded alongside the default
+  additional_configurations = var.sagemaker_udop_processor.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
+
+  # Optional fallback BDA project for use_bda:true additional versions (does not
+  # relink the default)
+  bda_project_arn = var.sagemaker_udop_processor.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -864,13 +818,6 @@ module "processor_attachment" {
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
   api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
-
-  # Each processor module (bda-processor, bedrock-llm-processor,
-  # sagemaker-udop-processor) creates its own evaluation Lambda from
-  # the per-pattern source path
-  # (`sources/patterns/pattern-{N}/src/evaluation_function/`) and wires
-  # it as the `EvaluationStep` in its Step Functions state machine —
-  # matching upstream CloudFormation/CDK.
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids

@@ -1,0 +1,253 @@
+{
+  "Comment": "Multi-Document Discovery Pipeline: prepare → embed → cluster → analyze → save. Status updates are published to AppSync from each Lambda handler for real-time UI subscriptions.",
+  "StartAt": "PrepareAndListDocuments",
+  "States": {
+    "PrepareAndListDocuments": {
+      "Type": "Task",
+      "Resource": "${PrepareFunction}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "bucket.$": "$.bucket",
+        "prefix.$": "$.prefix",
+        "configVersion.$": "$.configVersion",
+        "isZipUpload.$": "$.isZipUpload"
+      },
+      "ResultPath": "$.prepareResult",
+      "Next": "GenerateEmbeddings",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 6,
+          "BackoffRate": 2.5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "FailJob",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "GenerateEmbeddings": {
+      "Type": "Task",
+      "Resource": "${EmbedFunction}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "bucket.$": "$.prepareResult.bucket",
+        "s3Keys.$": "$.prepareResult.s3Keys",
+        "configVersion.$": "$.configVersion"
+      },
+      "ResultPath": "$.embedResult",
+      "TimeoutSeconds": 900,
+      "Next": "ClusterDocuments",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 6,
+          "BackoffRate": 2.5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "FailJob",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "ClusterDocuments": {
+      "Type": "Task",
+      "Resource": "${ClusterFunction}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "bucket.$": "$.prepareResult.bucket",
+        "s3Keys.$": "$.prepareResult.s3Keys",
+        "embeddingsS3Key.$": "$.embedResult.embeddingsS3Key",
+        "validKeys.$": "$.embedResult.validKeys"
+      },
+      "ResultPath": "$.clusterResult",
+      "Next": "AnalyzeClusters",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 6,
+          "BackoffRate": 2.5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "FailJob",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "AnalyzeClusters": {
+      "Type": "Map",
+      "MaxConcurrency": 5,
+      "ItemsPath": "$.clusterResult.clusterIds",
+      "ItemSelector": {
+        "jobId.$": "$.jobId",
+        "bucket.$": "$.prepareResult.bucket",
+        "clusterId.$": "$$.Map.Item.Value",
+        "embeddingsS3Key.$": "$.embedResult.embeddingsS3Key",
+        "clusterDataS3Key.$": "$.clusterResult.clusterDataS3Key",
+        "validKeys.$": "$.embedResult.validKeys",
+        "configVersion.$": "$.configVersion"
+      },
+      "Iterator": {
+        "StartAt": "AnalyzeSingleCluster",
+        "States": {
+          "AnalyzeSingleCluster": {
+            "Type": "Task",
+            "Resource": "${AnalyzeFunction}",
+            "TimeoutSeconds": 900,
+            "End": true,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException",
+                  "Lambda.TooManyRequestsException"
+                ],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 8,
+                "BackoffRate": 2.5
+              }
+            ]
+          }
+        }
+      },
+      "ResultPath": "$.analyzeResults",
+      "Next": "SaveResults",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "FailJob",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "SaveResults": {
+      "Type": "Task",
+      "Resource": "${SaveFunction}",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "bucket.$": "$.prepareResult.bucket",
+        "configVersion.$": "$.configVersion",
+        "analyzeResults.$": "$.analyzeResults",
+        "embeddingsS3Key.$": "$.embedResult.embeddingsS3Key",
+        "clusterDataS3Key.$": "$.clusterResult.clusterDataS3Key",
+        "prefix.$": "$.prefix"
+      },
+      "ResultPath": "$.saveResult",
+      "Next": "CompleteJob",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 6,
+          "BackoffRate": 2.5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "FailJob",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "CompleteJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Comment": "Persist terminal COMPLETED status to DynamoDB as safety net (AppSync update in save_handler provides real-time notification)",
+      "Parameters": {
+        "TableName": "${DiscoveryTrackingTable}",
+        "Key": {
+          "jobId": {
+            "S.$": "$.jobId"
+          }
+        },
+        "UpdateExpression": "SET #s = :s, currentStep = :step, discoveredClasses = :classes, reflectionReport = :report, updatedAt = :ts",
+        "ExpressionAttributeNames": {
+          "#s": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":s": {
+            "S": "COMPLETED"
+          },
+          ":step": {
+            "S": "Complete"
+          },
+          ":classes": {
+            "S.$": "$.saveResult.discoveredClassesJson"
+          },
+          ":report": {
+            "S.$": "$.saveResult.reflectionReport"
+          },
+          ":ts": {
+            "S.$": "$$.State.EnteredTime"
+          }
+        }
+      },
+      "End": true
+    },
+    "FailJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${DiscoveryTrackingTable}",
+        "Key": {
+          "jobId": {
+            "S.$": "$.jobId"
+          }
+        },
+        "UpdateExpression": "SET #s = :s, currentStep = :step, errorMessage = :err, updatedAt = :ts",
+        "ExpressionAttributeNames": {
+          "#s": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":s": {
+            "S": "FAILED"
+          },
+          ":step": {
+            "S": "Failed"
+          },
+          ":err": {
+            "S.$": "States.Format('{}', $.error)"
+          },
+          ":ts": {
+            "S.$": "$$.State.EnteredTime"
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

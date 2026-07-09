@@ -20,9 +20,10 @@ import {
   RadioGroup,
 } from '@cloudscape-design/components';
 import Editor from '@monaco-editor/react';
-// eslint-disable-next-line import/no-extraneous-dependencies
+
 import yaml from 'js-yaml';
 import usePricing from '../../hooks/use-pricing';
+import useUserRole from '../../hooks/use-user-role';
 
 interface PricingUnit {
   name: string;
@@ -51,6 +52,7 @@ interface PricingTableItem {
 
 const PricingLayout = (): React.JSX.Element => {
   const { pricing, defaultPricing, loading, refreshing, error, updatePricing, fetchPricing, restoreDefaultPricing } = usePricing();
+  const { isAdmin } = useUserRole();
 
   const [formValues, setFormValues] = useState<PricingFormValues>({ pricing: [] });
   const [jsonContent, setJsonContent] = useState('');
@@ -71,7 +73,7 @@ const PricingLayout = (): React.JSX.Element => {
   const [newServiceUnits, setNewServiceUnits] = useState<{ name: string; price: string }[]>([{ name: '', price: '' }]);
 
   // Service display names mapping
-  const serviceDisplayNames = {
+  const serviceDisplayNames: Record<string, string> = {
     textract: 'Amazon Textract',
     bedrock: 'Amazon Bedrock',
     bda: 'Amazon BDA',
@@ -80,7 +82,7 @@ const PricingLayout = (): React.JSX.Element => {
   };
 
   // Service display order (Amazon services first, then AWS Lambda last, then alphabetically)
-  const serviceDisplayOrder = {
+  const serviceDisplayOrder: Record<string, number> = {
     textract: 1,
     bedrock: 2,
     bda: 3,
@@ -160,9 +162,9 @@ const PricingLayout = (): React.JSX.Element => {
 
   // Handle changes in the JSON editor
   const handleJsonEditorChange = (value: string | undefined): void => {
-    setJsonContent(value);
+    setJsonContent(value ?? '');
     try {
-      const parsedValue = JSON.parse(value);
+      const parsedValue = JSON.parse(value ?? '');
       setFormValues(parsedValue);
 
       try {
@@ -174,15 +176,15 @@ const PricingLayout = (): React.JSX.Element => {
 
       setValidationErrors([]);
     } catch (e) {
-      setValidationErrors([{ message: `Invalid JSON: ${e.message}` }]);
+      setValidationErrors([{ message: `Invalid JSON: ${(e as Error).message}` }]);
     }
   };
 
   // Handle changes in the YAML editor
   const handleYamlEditorChange = (value: string | undefined): void => {
-    setYamlContent(value);
+    setYamlContent(value ?? '');
     try {
-      const parsedValue = yaml.load(value);
+      const parsedValue = yaml.load(value ?? '') as PricingFormValues;
       setFormValues(parsedValue);
 
       try {
@@ -194,7 +196,7 @@ const PricingLayout = (): React.JSX.Element => {
 
       setValidationErrors([]);
     } catch (e) {
-      setValidationErrors([{ message: `Invalid YAML: ${e.message}` }]);
+      setValidationErrors([{ message: `Invalid YAML: ${(e as Error).message}` }]);
     }
   };
 
@@ -219,7 +221,7 @@ const PricingLayout = (): React.JSX.Element => {
       }
     } catch (err) {
       console.error('Save error:', err);
-      setSaveError(`Error: ${err.message}`);
+      setSaveError(`Error: ${(err as Error).message}`);
     } finally {
       setIsSaving(false);
     }
@@ -242,7 +244,7 @@ const PricingLayout = (): React.JSX.Element => {
       }
     } catch (err) {
       console.error('Restore error:', err);
-      setSaveError(`Error: ${err.message}`);
+      setSaveError(`Error: ${(err as Error).message}`);
     } finally {
       setIsRestoring(false);
     }
@@ -331,7 +333,7 @@ const PricingLayout = (): React.JSX.Element => {
       URL.revokeObjectURL(url);
       setShowExportModal(false);
     } catch (err) {
-      setSaveError(`Export failed: ${err.message}`);
+      setSaveError(`Export failed: ${(err as Error).message}`);
     }
   };
 
@@ -361,7 +363,7 @@ const PricingLayout = (): React.JSX.Element => {
           setImportError('Invalid pricing file format');
         }
       } catch (err) {
-        setImportError(`Import failed: ${err.message}`);
+        setImportError(`Import failed: ${(err as Error).message}`);
       }
     };
     reader.readAsText(file);
@@ -371,9 +373,9 @@ const PricingLayout = (): React.JSX.Element => {
   // Update a specific unit price
   const updateUnitPrice = (apiName: string, unitName: string, newPrice: string): void => {
     const newFormValues = JSON.parse(JSON.stringify(formValues));
-    const entry = newFormValues.pricing.find((e) => e.name === apiName);
+    const entry = newFormValues.pricing.find((e: PricingEntry) => e.name === apiName);
     if (entry && entry.units) {
-      const unit = entry.units.find((u) => u.name === unitName);
+      const unit = entry.units.find((u: PricingUnit) => u.name === unitName);
       if (unit) {
         unit.price = newPrice;
         setFormValues(newFormValues);
@@ -390,12 +392,12 @@ const PricingLayout = (): React.JSX.Element => {
   // Delete a specific unit
   const handleDeleteUnit = (apiName: string, unitName: string): void => {
     const newFormValues = JSON.parse(JSON.stringify(formValues));
-    const entry = newFormValues.pricing.find((e) => e.name === apiName);
+    const entry = newFormValues.pricing.find((e: PricingEntry) => e.name === apiName);
     if (entry && entry.units) {
-      entry.units = entry.units.filter((u) => u.name !== unitName);
+      entry.units = entry.units.filter((u: PricingUnit) => u.name !== unitName);
       // Remove entry if no units remain
       if (entry.units.length === 0) {
-        newFormValues.pricing = newFormValues.pricing.filter((e) => e.name !== apiName);
+        newFormValues.pricing = newFormValues.pricing.filter((e: PricingEntry) => e.name !== apiName);
       }
       setFormValues(newFormValues);
       setJsonContent(JSON.stringify(newFormValues, null, 2));
@@ -410,7 +412,7 @@ const PricingLayout = (): React.JSX.Element => {
   // Delete an entire API/service entry
   const _handleDeleteService = (apiName: string): void => {
     const newFormValues = JSON.parse(JSON.stringify(formValues));
-    newFormValues.pricing = newFormValues.pricing.filter((e) => e.name !== apiName);
+    newFormValues.pricing = newFormValues.pricing.filter((e: PricingEntry) => e.name !== apiName);
     setFormValues(newFormValues);
     setJsonContent(JSON.stringify(newFormValues, null, 2));
     try {
@@ -433,7 +435,7 @@ const PricingLayout = (): React.JSX.Element => {
         entry.units.forEach((unit) => {
           items.push({
             apiName: entry.name,
-            displayName: entry.name.split('/')[1] || entry.name,
+            displayName: entry.name.includes('/') ? entry.name.split('/').slice(1).join('/') : entry.name,
             unitName: unit.name,
             price: unit.price,
           });
@@ -466,6 +468,8 @@ const PricingLayout = (): React.JSX.Element => {
                 type="text"
                 value={String(item.price)}
                 onChange={({ detail }) => updateUnitPrice(item.apiName, item.unitName, detail.value)}
+                disabled={!isAdmin}
+                readOnly={!isAdmin}
               />
             ),
             width: 200,
@@ -479,6 +483,7 @@ const PricingLayout = (): React.JSX.Element => {
                   variant="icon"
                   iconName="remove"
                   onClick={() => handleDeleteUnit(item.apiName, item.unitName)}
+                  disabled={!isAdmin}
                   ariaLabel="Delete unit"
                 />
               </SpaceBetween>
@@ -721,23 +726,33 @@ const PricingLayout = (): React.JSX.Element => {
                 <Button variant="normal" onClick={() => setShowExportModal(true)}>
                   Export
                 </Button>
-                <Button variant="normal" onClick={() => document.getElementById('import-pricing-file').click()}>
-                  Import
-                </Button>
-                <input id="import-pricing-file" type="file" accept=".json,.yaml,.yml" style={{ display: 'none' }} onChange={handleImport} />
-                <Button variant="normal" onClick={() => setShowAddServiceModal(true)}>
-                  Add Service/API
-                </Button>
-                <Button variant="normal" onClick={() => setShowRestoreModal(true)} disabled={!hasCustomizations()}>
-                  Restore default (All)
-                </Button>
-                <Button variant="primary" onClick={handleSave} loading={isSaving}>
-                  Save changes
-                </Button>
+                {isAdmin && (
+                  <>
+                    <Button variant="normal" onClick={() => document.getElementById('import-pricing-file')?.click()}>
+                      Import
+                    </Button>
+                    <input
+                      id="import-pricing-file"
+                      type="file"
+                      accept=".json,.yaml,.yml"
+                      style={{ display: 'none' }}
+                      onChange={handleImport}
+                    />
+                    <Button variant="normal" onClick={() => setShowAddServiceModal(true)}>
+                      Add Service/API
+                    </Button>
+                    <Button variant="normal" onClick={() => setShowRestoreModal(true)} disabled={!hasCustomizations()}>
+                      Restore default (All)
+                    </Button>
+                    <Button variant="primary" onClick={handleSave} loading={isSaving}>
+                      Save changes
+                    </Button>
+                  </>
+                )}
               </SpaceBetween>
             }
           >
-            Pricing Configuration
+            {isAdmin ? 'Pricing Configuration' : 'View Pricing'}
           </Header>
         }
       >
@@ -800,7 +815,7 @@ const PricingLayout = (): React.JSX.Element => {
                 height="70vh"
                 defaultLanguage="json"
                 value={jsonContent}
-                onChange={handleJsonEditorChange}
+                onChange={isAdmin ? handleJsonEditorChange : undefined}
                 options={{
                   minimap: { enabled: false },
                   formatOnPaste: true,
@@ -811,6 +826,7 @@ const PricingLayout = (): React.JSX.Element => {
                   lineNumbers: 'on',
                   renderLineHighlight: 'all',
                   tabSize: 2,
+                  readOnly: !isAdmin,
                 }}
               />
             )}
@@ -821,7 +837,7 @@ const PricingLayout = (): React.JSX.Element => {
                   height="70vh"
                   defaultLanguage="yaml"
                   value={yamlContent}
-                  onChange={handleYamlEditorChange}
+                  onChange={isAdmin ? handleYamlEditorChange : undefined}
                   options={{
                     minimap: { enabled: false },
                     formatOnPaste: true,
@@ -832,6 +848,7 @@ const PricingLayout = (): React.JSX.Element => {
                     lineNumbers: 'on',
                     renderLineHighlight: 'all',
                     tabSize: 2,
+                    readOnly: !isAdmin,
                   }}
                 />
               </Box>

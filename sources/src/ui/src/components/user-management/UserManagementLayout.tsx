@@ -15,7 +15,9 @@ import {
   FormField,
   Input,
   Select,
+  Multiselect,
   StatusIndicator,
+  Badge,
 } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
@@ -23,9 +25,14 @@ import { ConsoleLogger } from 'aws-amplify/utils';
 import useUserRole from '../../hooks/use-user-role';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
-import listUsers from '../../graphql/queries/listUsers';
-import createUserMutation from '../../graphql/mutations/createUser';
-import deleteUserMutation from '../../graphql/mutations/deleteUser';
+import useConfigurationVersions from '../../hooks/use-configuration-versions';
+import {
+  listUsers,
+  createUser as createUserMutation,
+  deleteUser as deleteUserMutation,
+  updateUser as updateUserMutation,
+} from '../../graphql/generated';
+import { getErrorMessage } from '../../utils/errorUtils';
 
 const logger = new ConsoleLogger('UserManagementLayout');
 
@@ -35,18 +42,24 @@ interface User {
   persona: string;
   status?: string;
   createdAt?: string;
+  allowedConfigVersions?: (string | null)[] | null;
 }
 
 const UserManagementLayout = (): React.JSX.Element => {
   const { awsConfig } = useAppContext();
   const { settings } = useSettingsContext();
   const { isAdmin, loading: roleLoading } = useUserRole();
+  const { versions, fetchVersions } = useConfigurationVersions();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditScopeModal, setShowEditScopeModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [persona, setPersona] = useState('Reviewer');
+  const [selectedConfigVersions, setSelectedConfigVersions] = useState<readonly { label: string; value: string }[]>([]);
+  const [editScopeVersions, setEditScopeVersions] = useState<readonly { label: string; value: string }[]>([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -62,9 +75,18 @@ const UserManagementLayout = (): React.JSX.Element => {
   }, [settings]);
 
   const personaOptions = [
-    { label: 'Admin', value: 'Admin' },
-    { label: 'Reviewer', value: 'Reviewer' },
+    { label: 'Admin', value: 'Admin', description: 'Full access to all operations including user management' },
+    { label: 'Author', value: 'Author', description: 'Read + write access to documents, configuration, tests, discovery' },
+    { label: 'Reviewer', value: 'Reviewer', description: 'HITL review operations with filtered document visibility' },
+    { label: 'Viewer', value: 'Viewer', description: 'Read-only access to documents, configuration, and agent chat' },
   ];
+
+  const configVersionOptions = useMemo(() => {
+    return versions.map((v) => ({
+      label: v.versionName + (v.isActive ? ' (active)' : ''),
+      value: v.versionName,
+    }));
+  }, [versions]);
 
   const validateEmail = useCallback(
     (emailValue: string): string => {
@@ -108,15 +130,14 @@ const UserManagementLayout = (): React.JSX.Element => {
       try {
         const client = generateClient();
         logger.debug('Loading users...');
-        const result = await client.graphql({ query: listUsers as unknown as string });
+        const result = await client.graphql({ query: listUsers });
         const usersList =
           (((result as { data: Record<string, unknown> }).data?.listUsers as Record<string, unknown>)?.users as User[]) || [];
         logger.debug(`Loaded ${usersList.length} users`);
         setUsers(usersList);
       } catch (err) {
         logger.error('Failed to load users:', err);
-        const errorMessage = err.errors?.[0]?.message || err.message || 'Unknown error';
-        setError(`Failed to load users: ${errorMessage}`);
+        setError(`Failed to load users: ${getErrorMessage(err)}`);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -148,10 +169,11 @@ const UserManagementLayout = (): React.JSX.Element => {
 
     try {
       const client = generateClient();
-      logger.debug('Creating user:', { email, persona });
+      const allowedConfigVersions = selectedConfigVersions.length > 0 ? selectedConfigVersions.map((opt) => opt.value) : undefined;
+      logger.debug('Creating user:', { email, persona, allowedConfigVersions });
       await client.graphql({
         query: createUserMutation,
-        variables: { email, persona },
+        variables: { email, persona, allowedConfigVersions },
       });
 
       logger.debug('User created successfully');
@@ -159,12 +181,55 @@ const UserManagementLayout = (): React.JSX.Element => {
       setShowCreateModal(false);
       setEmail('');
       setPersona('Reviewer');
+      setSelectedConfigVersions([]);
       await loadUsers();
     } catch (err) {
       logger.error('Failed to create user:', err);
-      // Extract error message from GraphQL error structure
-      const errorMessage = err.errors?.[0]?.message || err.message || 'Unknown error';
-      setError(`Failed to create user: ${errorMessage}`);
+      setError(`Failed to create user: ${getErrorMessage(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditScope = (user: User) => {
+    setEditingUser(user);
+    // Pre-populate with current scope
+    const currentScope = user.allowedConfigVersions?.filter((v): v is string => v !== null) || [];
+    setEditScopeVersions(
+      currentScope.map((v) => ({
+        label: v,
+        value: v,
+      })),
+    );
+    setShowEditScopeModal(true);
+    fetchVersions();
+  };
+
+  const saveEditScope = async () => {
+    if (!editingUser || !awsConfig) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const client = generateClient();
+      const allowedConfigVersions = editScopeVersions.length > 0 ? editScopeVersions.map((opt) => opt.value) : null;
+      logger.debug('Updating user scope:', { userId: editingUser.userId, allowedConfigVersions });
+      await client.graphql({
+        query: updateUserMutation,
+        variables: { userId: editingUser.userId, allowedConfigVersions },
+      });
+
+      logger.debug('User scope updated successfully');
+      setSuccess(`Scope updated for ${editingUser.email}`);
+      setShowEditScopeModal(false);
+      setEditingUser(null);
+      setEditScopeVersions([]);
+      await loadUsers();
+    } catch (err) {
+      logger.error('Failed to update user scope:', err);
+      setError(`Failed to update scope: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -197,8 +262,7 @@ const UserManagementLayout = (): React.JSX.Element => {
       await loadUsers();
     } catch (err) {
       logger.error('Failed to delete user:', err);
-      const errorMessage = err.errors?.[0]?.message || err.message || 'Unknown error';
-      setError(`Failed to delete user: ${errorMessage}`);
+      setError(`Failed to delete user: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -208,8 +272,20 @@ const UserManagementLayout = (): React.JSX.Element => {
     setShowCreateModal(false);
     setEmail('');
     setPersona('Reviewer');
+    setSelectedConfigVersions([]);
     setError('');
     setEmailError('');
+  };
+
+  const handleCreateModalOpen = () => {
+    setShowCreateModal(true);
+    fetchVersions();
+  };
+
+  const handleEditScopeModalClose = () => {
+    setShowEditScopeModal(false);
+    setEditingUser(null);
+    setEditScopeVersions([]);
   };
 
   const handleRefresh = () => {
@@ -242,42 +318,80 @@ const UserManagementLayout = (): React.JSX.Element => {
     );
   }
 
+  const formatConfigVersions = (userVersions: (string | null)[] | null | undefined): React.ReactNode => {
+    if (!userVersions || userVersions.length === 0) {
+      return (
+        <Box color="text-body-secondary">
+          <em>All versions</em>
+        </Box>
+      );
+    }
+    const validVersions = userVersions.filter((v): v is string => v !== null);
+    return (
+      <SpaceBetween direction="horizontal" size="xxs">
+        {validVersions.map((v) => (
+          <Badge key={v} color="blue">
+            {v}
+          </Badge>
+        ))}
+      </SpaceBetween>
+    );
+  };
+
   const columnDefinitions = [
     {
       id: 'email',
       header: 'Email',
-      cell: (item) => item.email,
+      cell: (item: User) => item.email,
       sortingField: 'email',
     },
     {
       id: 'persona',
       header: 'Role',
-      cell: (item) => (
-        <Box {...({ color: item.persona === 'Admin' ? 'text-status-info' : 'text-body-default' } as Record<string, unknown>)}>
-          {item.persona}
-        </Box>
-      ),
+      cell: (item: User) => {
+        const colorMap: Record<string, string> = {
+          Admin: 'text-status-info',
+          Author: 'text-status-success',
+          Reviewer: 'text-body-default',
+          Viewer: 'text-body-secondary',
+        };
+        return <Box {...({ color: colorMap[item.persona] || 'text-body-default' } as Record<string, unknown>)}>{item.persona}</Box>;
+      },
       sortingField: 'persona',
+    },
+    {
+      id: 'allowedConfigVersions',
+      header: 'Config Version Scope',
+      cell: (item: User) => formatConfigVersions(item.allowedConfigVersions),
     },
     {
       id: 'status',
       header: 'Status',
-      cell: (item) => <StatusIndicator type={item.status === 'active' ? 'success' : 'stopped'}>{item.status || 'active'}</StatusIndicator>,
+      cell: (item: User) => (
+        <StatusIndicator type={item.status === 'active' ? 'success' : 'stopped'}>{item.status || 'active'}</StatusIndicator>
+      ),
       sortingField: 'status',
     },
     {
       id: 'createdAt',
       header: 'Created',
-      cell: (item) => (item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'),
+      cell: (item: User) => (item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'),
       sortingField: 'createdAt',
     },
     {
       id: 'actions',
       header: 'Actions',
-      cell: (item) => (
-        <Button variant="link" onClick={() => deleteUser(item.userId, item.email)} disabled={loading || refreshing}>
-          Delete
-        </Button>
+      cell: (item: User) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          {item.persona !== 'Admin' && (
+            <Button variant="link" onClick={() => handleEditScope(item)} disabled={loading || refreshing}>
+              Edit scope
+            </Button>
+          )}
+          <Button variant="link" onClick={() => deleteUser(item.userId, item.email)} disabled={loading || refreshing}>
+            Delete
+          </Button>
+        </SpaceBetween>
       ),
     },
   ];
@@ -292,7 +406,7 @@ const UserManagementLayout = (): React.JSX.Element => {
               <Button iconName="refresh" onClick={handleRefresh} loading={refreshing} disabled={loading}>
                 Refresh
               </Button>
-              <Button variant="primary" onClick={() => setShowCreateModal(true)} disabled={loading || refreshing}>
+              <Button variant="primary" onClick={handleCreateModalOpen} disabled={loading || refreshing}>
                 Create User
               </Button>
             </SpaceBetween>
@@ -329,7 +443,7 @@ const UserManagementLayout = (): React.JSX.Element => {
               <Box variant="p" padding={{ bottom: 's' }} textAlign="center" color="inherit">
                 Create your first user to get started.
               </Box>
-              <Button onClick={() => setShowCreateModal(true)}>Create User</Button>
+              <Button onClick={handleCreateModalOpen}>Create User</Button>
             </Box>
           }
           header={
@@ -339,6 +453,7 @@ const UserManagementLayout = (): React.JSX.Element => {
           }
         />
 
+        {/* Create User Modal */}
         <Modal
           visible={showCreateModal}
           onDismiss={handleCreateModalClose}
@@ -370,11 +485,65 @@ const UserManagementLayout = (): React.JSX.Element => {
               >
                 <Input value={email} onChange={handleEmailChange} placeholder="user@example.com" type="email" />
               </FormField>
-              <FormField label="Role" description="Admin users can manage other users and configurations">
+              <FormField label="Role" description="Select the role that defines what this user can access and modify">
                 <Select
-                  selectedOption={personaOptions.find((opt) => opt.value === persona)}
-                  onChange={({ detail }) => setPersona(detail.selectedOption.value)}
+                  selectedOption={personaOptions.find((opt) => opt.value === persona) ?? null}
+                  onChange={({ detail }) => setPersona(detail.selectedOption.value ?? '')}
                   options={personaOptions}
+                />
+              </FormField>
+              <FormField
+                label={
+                  <span>
+                    Configuration Version Scope <em>- optional</em>
+                  </span>
+                }
+                description="Restrict this user to specific configuration versions. Leave empty for unrestricted access to all versions."
+              >
+                <Multiselect
+                  selectedOptions={selectedConfigVersions}
+                  onChange={({ detail }) => setSelectedConfigVersions(detail.selectedOptions as { label: string; value: string }[])}
+                  options={configVersionOptions}
+                  placeholder="All versions (unrestricted)"
+                  filteringType="auto"
+                  tokenLimit={3}
+                />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+
+        {/* Edit Scope Modal */}
+        <Modal
+          visible={showEditScopeModal}
+          onDismiss={handleEditScopeModalClose}
+          header={`Edit Config Version Scope — ${editingUser?.email ?? ''}`}
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={handleEditScopeModalClose}>
+                  Cancel
+                </Button>
+                <Button variant="primary" onClick={saveEditScope} loading={loading}>
+                  Save Scope
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            <SpaceBetween size="l">
+              <FormField
+                label="Configuration Version Scope"
+                description="Select which configuration versions this user can access. Clear all to give unrestricted access."
+              >
+                <Multiselect
+                  selectedOptions={editScopeVersions}
+                  onChange={({ detail }) => setEditScopeVersions(detail.selectedOptions as { label: string; value: string }[])}
+                  options={configVersionOptions}
+                  placeholder="All versions (unrestricted)"
+                  filteringType="auto"
+                  tokenLimit={3}
                 />
               </FormField>
             </SpaceBetween>

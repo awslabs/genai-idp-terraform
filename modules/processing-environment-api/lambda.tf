@@ -41,7 +41,7 @@ resource "random_id" "build_id" {
 # Upload Document Resolver Lambda
 data "archive_file" "upload_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/upload_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/upload_resolver"
   output_path = "${local.module_build_dir}/upload-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -89,7 +89,7 @@ resource "aws_lambda_function" "upload_resolver" {
 # Delete Document Resolver Lambda
 data "archive_file" "delete_document_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/delete_document_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/delete_document_resolver"
   output_path = "${local.module_build_dir}/delete-document-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -137,7 +137,7 @@ resource "aws_lambda_function" "delete_document_resolver" {
 # Reprocess Document Resolver Lambda
 data "archive_file" "reprocess_document_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/reprocess_document_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/reprocess_document_resolver"
   output_path = "${local.module_build_dir}/reprocess-document-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -194,7 +194,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
 # Get File Contents Resolver Lambda
 data "archive_file" "get_file_contents_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/get_file_contents_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_file_contents_resolver"
   output_path = "${local.module_build_dir}/get-file-contents-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -218,7 +218,9 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 
   environment {
     variables = {
-      OUTPUT_BUCKET = local.output_bucket_name
+      INPUT_BUCKET   = local.input_bucket_name
+      OUTPUT_BUCKET  = local.output_bucket_name
+      WORKING_BUCKET = local.working_bucket_name != null ? local.working_bucket_name : ""
     }
   }
 
@@ -238,11 +240,11 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 }
 
 # Configuration Resolver Lambda
-# Sourced from CDK nested appsync tree (DEC-007/DEC-008) — handles all config
-# versioning, pricing, and config library operations via fieldName dispatch.
+# Sourced from the CDK nested appsync tree — handles all config versioning,
+# pricing, and config library operations via fieldName dispatch.
 data "archive_file" "configuration_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/configuration_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/configuration_resolver"
   output_path = "${local.module_build_dir}/configuration_resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -265,11 +267,14 @@ resource "aws_lambda_function" "configuration_resolver" {
   kms_key_arn = var.encryption_key_arn
 
   environment {
-    variables = {
+    # Base env merged with composed feature-plugin env wiring
+    # (local.feature_env). Empty by default, so existing behaviour is
+    # unchanged when no feature contracts are enabled.
+    variables = merge({
       CONFIGURATION_TABLE_NAME = local.configuration_table_name != null ? local.configuration_table_name : ""
       CONFIGURATION_BUCKET     = local.configuration_table_name != null ? "${local.api_name}-config" : ""
       LOG_LEVEL                = var.log_level
-    }
+    }, local.feature_env)
   }
 
   dynamic "vpc_config" {
@@ -294,7 +299,7 @@ resource "aws_lambda_function" "configuration_resolver" {
 # Get Step Function Execution Resolver Lambda
 data "archive_file" "get_stepfunction_execution_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/get_stepfunction_execution_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_stepfunction_execution_resolver"
   output_path = "${local.module_build_dir}/get-stepfunction-execution-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -350,7 +355,7 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
 # Query Knowledge Base Resolver Lambda
 data "archive_file" "query_knowledge_base_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/query_knowledgebase_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/query_knowledgebase_resolver"
   output_path = "${local.module_build_dir}/query-knowledge-base-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -406,7 +411,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
 # Copy to Baseline Resolver Lambda
 data "archive_file" "copy_to_baseline_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/src/lambda/copy_to_baseline_resolver"
+  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/copy_to_baseline_resolver"
   output_path = "${local.module_build_dir}/copy-to-baseline-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]

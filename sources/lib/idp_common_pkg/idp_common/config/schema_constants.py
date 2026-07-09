@@ -29,6 +29,44 @@ X_AWS_IDP_CLASSIFICATION = "x-aws-idp-classification"
 X_AWS_IDP_DOCUMENT_NAME_REGEX = "x-aws-idp-document-name-regex"
 X_AWS_IDP_PAGE_CONTENT_REGEX = "x-aws-idp-document-page-content-regex"
 
+# Classes whose pages contain only static content (instructions, legal
+# boilerplate, cover pages, etc.) can be marked with this extension. When
+# true, downstream services (extraction, assessment, summarization,
+# rule_validation, evaluation) will skip sections classified as this class.
+X_AWS_IDP_EXCLUDE_FROM_PROCESSING = "x-aws-idp-exclude-from-processing"
+
+# Optional short reason/category for why a class is excluded
+# (e.g., "instructions", "legal", "cover-page"). Used for UI badges and
+# evaluation report annotations.
+X_AWS_IDP_EXCLUSION_REASON = "x-aws-idp-exclusion-reason"
+
+# ============================================================================
+# AWS IDP Extraction Extensions
+# ============================================================================
+# Per-class model override for extraction (overrides extraction.model)
+X_AWS_IDP_EXTRACTION_MODEL = "x-aws-idp-extraction-model"
+
+# Declares the named page sub-types a class can include. Each entry has a
+# `name`, optional `description`, and a regex (`x-aws-idp-document-page-content-regex`)
+# used to detect the page type from per-page OCR text.
+X_AWS_IDP_PAGE_TYPES = "x-aws-idp-page-types"
+
+# On a property: declares which page sub-types contain the property's source
+# data. If none of the listed page types are present in the section, the
+# property is considered MISSING (vs. blank when the page is present but the
+# field is empty).
+X_AWS_IDP_SOURCE_PAGE_TYPES = "x-aws-idp-source-page-types"
+
+# ============================================================================
+# AWS IDP Policy/Rule Type Extensions
+# ============================================================================
+# Marks a schema as a policy/rule type (for rule validation)
+X_AWS_IDP_POLICY_TYPE = "x-aws-idp-policy-type"
+
+# Note: Policy classes use the same regex fields as document types
+# X_AWS_IDP_DOCUMENT_NAME_REGEX - Pattern to match document name for policy filtering
+# X_AWS_IDP_PAGE_CONTENT_REGEX - Pattern to match page content for policy filtering
+
 # ============================================================================
 # Legacy Attribute Type Values (for migration only)
 # ============================================================================

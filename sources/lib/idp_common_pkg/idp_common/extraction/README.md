@@ -156,7 +156,7 @@ classes:
               "signature": "Will E. Clark",
               "cc": null,
               "reference_number": "TNJB 0008497"
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
+        imagePath: "config_library/unified/few_shot_example/example-images/letter1.jpg"
       - classPrompt: "This is an example of the class 'letter'"
         name: "Letter2"
         attributesPrompt: |
@@ -171,7 +171,7 @@ classes:
               "signature": "Bill",
               "cc": null,
               "reference_number": null
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/letter2.png"
+        imagePath: "config_library/unified/few_shot_example/example-images/letter2.png"
 ```
 
 ### Configuration Parameters
@@ -190,13 +190,13 @@ The `imagePath` field now supports multiple formats for maximum flexibility:
 **Single Image File (Original functionality)**:
 
 ```yaml
-imagePath: "config_library/pattern-2/few_shot_example/example-images/letter1.jpg"
+imagePath: "config_library/unified/few_shot_example/example-images/letter1.jpg"
 ```
 
 **Local Directory with Multiple Images (New)**:
 
 ```yaml
-imagePath: "config_library/pattern-2/few_shot_example/example-images/"
+imagePath: "config_library/unified/few_shot_example/example-images/"
 ```
 
 **S3 Prefix with Multiple Images (New)**:
@@ -427,7 +427,7 @@ classes:
              "priority": null,
              "thread_id": null,
              "message_id": null
-        imagePath: "config_library/pattern-2/few_shot_example/example-images/email1.jpg"
+        imagePath: "config_library/unified/few_shot_example/example-images/email1.jpg"
 
 extraction:
   task_prompt: |
@@ -469,7 +469,7 @@ from idp_common.extraction.service import ExtractionService
 import yaml
 
 # Load configuration with examples
-with open('config_library/pattern-2/few_shot_example/config.yaml', 'r') as f:
+with open('config_library/unified/few_shot_example/config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
 # Initialize service
@@ -553,13 +553,282 @@ The service supports both text and image inputs:
 
 The extraction service is designed to be thread-safe, supporting concurrent processing of multiple sections in parallel workloads.
 
+## Agentic Extraction with Table Parsing Tool
+
+The extraction service supports an optional **agentic extraction mode** powered by the Strands agent framework with tool-based structured output. When enabled, the extraction agent gains intelligent tools including a deterministic table parser for robust tabular data extraction.
+
+### Enabling Agentic Extraction
+
+Configure agentic extraction in your configuration file:
+
+```yaml
+extraction:
+  model: "us.anthropic.claude-sonnet-4-20250514-v1:0"  # or Nova models
+  agentic:
+    enabled: true
+    review_agent: false  # Optional second-pass review
+    review_agent_model: null  # or specify a model for review
+    max_concurrent_batches: 1  # Parallel processing (2-10 for very large docs)
+    table_parsing:
+      enabled: true  # Enable deterministic table parser tool
+      min_confidence_threshold: 95.0  # OCR confidence target (Textract only)
+      min_parse_success_rate: 0.90  # Parse quality threshold
+      use_confidence_data: true  # Cross-reference with OCR confidence
+      max_empty_line_gap: 3  # Tolerate up to N empty lines in tables
+      auto_merge_adjacent_tables: true  # Merge table fragments
+```
+
+### Table Parsing Tool
+
+When `table_parsing.enabled: true`, the extraction agent gains a `parse_table` tool that:
+
+1. **Deterministically parses Markdown tables** from OCR text without LLM inference
+2. **Handles OCR artifacts robustly**:
+   - Tolerates empty lines (page breaks) within tables via configurable lookahead
+   - Recovers from missing pipe characters in corrupted rows
+   - Automatically merges table fragments with identical columns
+3. **Provides quality metrics and warnings**:
+   - `parse_success_rate`: Ratio of cleanly parsed rows
+   - `avg_confidence`: OCR confidence scores (when available from Textract)
+   - `low_confidence_cells`: Specific cells needing LLM verification
+   - **⚠️ Warnings**: Alert agent to table fragmentation or quality issues
+   - **ℹ️ Info**: Confirm successful gap recovery
+4. **Enables hybrid extraction workflow**:
+   - Agent uses `parse_table` for well-structured tabular data
+   - Falls back to LLM extraction for complex layouts or poor quality
+   - Cross-validates low-confidence cells using multimodal reasoning
+
+### How It Works
+
+```
+1. Agent analyzes document and identifies Markdown tables
+2. Agent calls parse_table(table_text, expected_columns)
+3. Tool returns:
+   - Structured rows as list of dicts
+   - Quality metrics (parse_success_rate, avg_confidence)
+   - Warnings about potential incompleteness
+4. Agent reviews quality:
+   - If good (parse_rate >= 0.90, confidence >= 95):
+     * Calls map_table_to_schema with column mapping and transforms
+     * Calls finalize_table_extraction with scalar fields
+   - If poor or warnings present:
+     * Falls back to LLM extraction for affected sections
+     * Verifies low-confidence cells using document images
+5. Agent validates completeness:
+   - Cross-checks row counts against document visuals
+   - Extracts from ALL table fragments if multiple found
+   - Verifies schema constraints (e.g., min_length) are met
+```
+
+### Three-Tool Table Extraction Workflow
+
+The table extraction uses a three-tool pipeline that keeps large data out of the LLM context, minimizing token usage:
+
+```
+parse_table ──► map_table_to_schema ──► finalize_table_extraction
+   │                    │                        │
+   ▼                    ▼                        ▼
+ Agent State:       Agent State:             Agent State:
+ last_parse_        mapped_table_            current_extraction
+ table_result       rows                     (validated Pydantic)
+```
+
+**Step 1: `parse_table`** — Deterministic Markdown parser. Finds all tables, recovers from OCR artifacts, returns structured rows with quality metrics. Result stored in agent state as `last_parse_table_result`.
+
+**Step 2: `map_table_to_schema`** — Bulk transformation of parsed rows using a column mapping. The agent provides a small mapping dict; the tool transforms all rows instantly. Supports:
+- **`column_mapping`**: Maps table columns to schema fields (case-insensitive, fuzzy substring matching)
+- **`static_fields`**: Constant values added to every row (e.g., `{"account_number": "1234"}`)
+- **`value_transforms`**: Per-field transforms applied during mapping:
+  - `strip_currency`: Removes `$` and `,` (e.g., `"$1,234.56"` → `"1234.56"`)
+  - `strip_whitespace`: Removes all internal whitespace
+  - `lowercase` / `uppercase`: Case conversion
+- **Merged-row auto-splitting**: Detects OCR page-boundary artifacts where two rows are concatenated on one line (e.g., `"$57.90 $55.11"` in multiple columns) and splits them back into separate rows
+
+Mapped rows accumulate in agent state as `mapped_table_rows` (supports multiple calls for chunked processing).
+
+**Step 3: `finalize_table_extraction`** — Combines mapped table rows (from state) with scalar fields the agent provides. Validates the complete extraction against the Pydantic schema model. The agent never generates large JSON — only a small `scalar_fields` dict.
+- **`table_array_field`**: Schema field name for the table array (e.g., `"transactions"`)
+- **`scalar_fields`**: Non-table fields (e.g., `{"statement_period": "Jan 2025"}`)
+
+### Page Markers and Batch Extraction
+
+When processing multi-page documents, the service inserts page boundary markers between page texts:
+
+```
+--- PAGE 1 ---
+Account Number: 12345
+Statement Period: January 2025
+
+| Date | Description | Amount |
+|---|---|---|
+| 01/15 | Deposit | 3500.00 |
+--- PAGE 2 ---
+| 01/16 | ATM | -200.00 |
+| 01/20 | Transfer | -1500.00 |
+```
+
+**Page marker format**: `--- PAGE {N} ---` (1-indexed)
+
+The table parser transparently skips page markers inside tables — they do not break table continuity or appear in parsed rows.
+
+**Batch extraction** (`max_concurrent_batches > 1`): The document is split into N page ranges, and N agents run in parallel. Each batch agent receives the full document text but extracts only its assigned page range, using page markers to identify boundaries. Results are merged: list fields are concatenated, scalar fields take the last non-None value.
+
+```yaml
+# Enable batch extraction with 4 concurrent agents
+extraction:
+  agentic:
+    enabled: true
+    max_concurrent_batches: 4
+    table_parsing:
+      enabled: true
+```
+
+### Configuration Options
+
+#### `max_empty_line_gap` (integer, 0-10, default: 3)
+Maximum consecutive empty lines to tolerate within a table before treating as table boundary. Higher values increase tolerance for OCR page breaks but may merge unrelated tables.
+
+**Tuning guidance**:
+- **High-quality OCR** (Textract LAYOUT): Use 2
+- **Standard quality**: Use 3 (default)
+- **Low-quality or complex documents**: Use 5-7
+- **Multiple similar tables close together**: Use 1-2
+
+#### `auto_merge_adjacent_tables` (boolean, default: true)
+Automatically merge consecutive tables with identical column structure. Recovers from table splits caused by OCR artifacts like page breaks.
+
+**When to disable**:
+- Documents contain multiple distinct tables with same columns
+- Need to preserve table boundaries for semantic reasons
+
+#### `min_confidence_threshold` (float, 0-100, default: 95.0)
+Minimum average OCR confidence (Textract scale) for agent to prefer table parsing over LLM extraction. Only applies when using Textract OCR backend.
+
+#### `min_parse_success_rate` (float, 0-1, default: 0.90)
+Minimum parse success rate for agent to trust parsed results. Below this threshold, agent should fall back to LLM extraction.
+
+### Benefits
+
+- **Faster extraction**: Deterministic parsing is faster than LLM inference for well-structured tables
+- **Higher accuracy**: Eliminates LLM hallucination for tabular data
+- **Better completeness**: Intelligent recovery from OCR artifacts prevents data loss
+- **Cost reduction**: Reduces token usage for large tables
+- **Hybrid flexibility**: Agent intelligently chooses between parsing and LLM based on quality
+
+### OCR Backend Compatibility
+
+The table parsing tool works with any OCR backend producing Markdown tables:
+
+| OCR Backend | Markdown Support | Confidence Data | Notes |
+|-------------|-----------------|-----------------|-------|
+| **Textract** (TABLES) | ✅ Yes | ✅ Yes | Best for structured tables |
+| **Textract** (LAYOUT) | ✅ Yes | ✅ Yes | Handles complex layouts |
+| **Bedrock OCR** | ✅ Yes | ❌ No | Tool uses parse_success_rate only |
+| **Chandra OCR** | ✅ Yes (markdown mode) | ❌ No | High-quality Markdown output |
+
+When OCR confidence data is unavailable, the tool relies on `parse_success_rate` and column consistency for quality assessment.
+
+### Example: Bank Statement with 1000+ Transactions
+
+```yaml
+# config.yaml
+extraction:
+  model: "us.anthropic.claude-sonnet-4-20250514-v1:0"
+  agentic:
+    enabled: true
+    table_parsing:
+      enabled: true
+      max_empty_line_gap: 5  # Handle multi-page statements
+      auto_merge_adjacent_tables: true
+
+classes:
+  - $id: BankStatement
+    type: object
+    properties:
+      account_number:
+        type: string
+      statement_period:
+        type: string
+      transactions:
+        type: array
+        minItems: 1000  # Completeness validation
+        items:
+          type: object
+          properties:
+            date: {type: string}
+            description: {type: string}
+            amount: {type: number}
+            balance: {type: number}
+```
+
+**Extraction flow**:
+1. Agent identifies transaction table in OCR text
+2. Calls `parse_table(table_text)` → Returns 1020 rows with quality metrics
+3. Tool warnings: "ℹ️ Successfully recovered 3 gaps in table data"
+4. Calls `map_table_to_schema(column_mapping={"Date": "date", "Description": "description", ...}, value_transforms={"amount": "strip_currency"})` → All 1020 rows transformed instantly
+5. Calls `finalize_table_extraction(table_array_field="transactions", scalar_fields={"account_number": "12345678", "statement_period": "January 2024"})` → Validated against Pydantic model
+6. Completeness check logs: "Extraction exceeds minimum constraint: 'transactions' has 1020 items (minimum: 1000)"
+
+### Troubleshooting
+
+**Problem**: Agent extracts only 900 records instead of 1020
+
+**Root causes & solutions**:
+1. **Table split by empty lines** → Increase `max_empty_line_gap` to 5
+2. **Multiple table fragments** → Ensure `auto_merge_adjacent_tables: true`
+3. **Agent stopped early** → Check extraction logs for timeout/retry issues
+4. **Schema constraint too strict** → Reduce `minItems` or make it optional
+
+**Problem**: Parse quality is low (< 0.90)
+
+**Solutions**:
+1. **Improve OCR quality** → Use Textract LAYOUT or Chandra OCR
+2. **Complex table structure** → Use LLM extraction instead of parse_table
+3. **Merged cells or nested headers** → Preprocess table or use LLM
+
+**Problem**: Unrelated tables being merged
+
+**Solutions**:
+1. Reduce `max_empty_line_gap` to 1-2
+2. Set `auto_merge_adjacent_tables: false`
+3. Add more context to distinguish tables semantically
+
+### Observability
+
+Extraction results include table parsing metadata when the tool is used:
+
+```json
+{
+  "metadata": {
+    "extraction_method": "agentic",
+    "table_parsing_tool_used": true,
+    "table_parsing_stats": {
+      "tables_parsed": 1,
+      "rows_parsed": 1020,
+      "parse_success_rate": 0.98,
+      "avg_confidence": 96.5,
+      "confidence_available": true,
+      "invocation_count": 1
+    }
+  }
+}
+```
+
+Use these metrics to:
+- Identify documents where table parsing is working well
+- Detect quality issues requiring configuration tuning
+- Measure cost savings vs LLM-only extraction
+
 ## Future Enhancements
 
 - ✅ Few-shot example support for improved accuracy and consistency
 - ✅ Class-specific example filtering for targeted extraction guidance
 - ✅ Multimodal example support with document images
 - ✅ Enhanced imagePath support for multiple images from directories and S3 prefixes
+- ✅ Agentic extraction with tool-based structured output
+- ✅ Deterministic table parsing tool for robust tabular data extraction
 - 🔲 Dynamic few-shot example selection based on document similarity
 - 🔲 Confidence scoring for extracted attributes
 - 🔲 Support for additional extraction backends (custom models)
 - 🔲 Automatic example quality assessment and recommendations
+- 🔲 Table structure detection for complex layouts (merged cells, nested headers)

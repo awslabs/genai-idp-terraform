@@ -45,7 +45,7 @@ def calculate_backoff(
         Backoff time in seconds
     """
     backoff = min(max_backoff, initial_backoff * (2**attempt))
-    jitter = random.uniform(0, 0.1 * backoff)  # 10% jitter
+    jitter = random.uniform(0, 0.1 * backoff)  # nosec B311 - retry jitter
     return backoff + jitter
 
 

@@ -1,239 +1,114 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# SageMaker UDOP Processor
-# This processor implements an intelligent document processing workflow that uses SageMaker
-# endpoints for document classification combined with Amazon Bedrock models for information extraction.
 
-# Data sources
-data "aws_caller_identity" "current" {}
+# SageMaker-UDOP Processor (public façade) — Pattern 3 retained
+#
+# Mirrors the CDK accelerator's `SagemakerUdopProcessor` (verified against
+# cdklabs/genai-idp@main): a thin public façade that creates NO SageMaker
+# hosting/training resources of its own. The consumer supplies the SageMaker
+# endpoint via `var.classification_endpoint_arn`.
+#
+# Classification runs through idp_common's native SageMaker backend
+# (classify_page_sagemaker), which invokes the endpoint directly with the
+# {input_image, input_textract} schema the UDOP model expects. The façade
+# delegates all document processing to the shared internal engine
+# (`modules/processors/unified-processor/`) with classification_backend =
+# "sagemaker". The engine always deploys both the BDA branch and the pipeline
+# branch and routes each document at runtime by its config version's `use_bda`
+# flag; there is no deploy-time branch selector.
+
 data "aws_partition" "current" {}
-data "aws_region" "current" {}
 
-# Deprecation warning: Pattern 3 (SageMaker UDOP) is deprecated as of v0.4.16
-# and will be REMOVED in v0.5.0. Migrate to Pattern 1 (BDA) or Pattern 2 (Bedrock LLM).
-# See docs/migration-guide.md for migration steps.
-check "pattern3_deprecation" {
-  assert {
-    # References var.name so Terraform evaluates at plan time (constant false expressions are rejected)
-    condition     = var.name == "__never_match_this_sentinel_value__"
-    error_message = "DEPRECATED: The SageMaker UDOP processor (Pattern 3) is deprecated as of v0.4.16 and will be removed in v0.5.0. Please migrate to Pattern 1 (BDA) or Pattern 2 (Bedrock LLM). See docs/migration-guide.md for migration steps."
-  }
-}
-
-# Random suffix for unique resource names (used by CodeBuild and ECR resources)
-resource "random_string" "suffix" {
-  length  = 8
-  special = false
-  upper   = false
-}
-
-# ECR Repository for SageMaker UDOP processor Docker images
-resource "aws_ecr_repository" "udop_processor" {
-  name                 = "${var.name}-udop-processor"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = var.enable_ecr_image_scanning
-  }
-
-  encryption_configuration {
-    encryption_type = var.encryption_key_arn != null ? "KMS" : "AES256"
-    kms_key         = var.encryption_key_arn != null ? var.encryption_key_arn : null
-  }
-
-  tags = local.common_tags
-}
-
-# Local values
 locals {
-  name_prefix = var.name
-
-  input_bucket_arn        = var.input_bucket_arn != null ? var.input_bucket_arn : ""
-  output_bucket_arn       = var.output_bucket_arn != null ? var.output_bucket_arn : ""
-  working_bucket_arn      = var.working_bucket_arn != null ? var.working_bucket_arn : (var.output_bucket_arn != null ? var.output_bucket_arn : "")
-  configuration_table_arn = var.configuration_table_arn != null ? var.configuration_table_arn : ""
-  tracking_table_arn      = var.tracking_table_arn != null ? var.tracking_table_arn : ""
-  api_graphql_url         = var.api_graphql_url
-  api_id                  = var.api_id
-  api_arn                 = var.api_arn
-  encryption_key_arn      = var.encryption_key_arn
-  metric_namespace        = var.metric_namespace
-  log_level               = var.log_level
-  log_retention_days      = var.log_retention_days
-  vpc_subnet_ids          = var.vpc_subnet_ids
-  vpc_security_group_ids  = var.vpc_security_group_ids
-
-  # Extract resource names from ARNs
-  # Format for S3 bucket ARN: arn:${data.aws_partition.current.partition}:s3:::bucket-name
-  input_bucket_name   = element(split(":", local.input_bucket_arn), 5)
-  output_bucket_name  = element(split(":", local.output_bucket_arn), 5)
+  # Extract the working-bucket name from its ARN for S3 read scoping.
+  working_bucket_arn  = var.working_bucket_arn != null ? var.working_bucket_arn : var.output_bucket_arn
   working_bucket_name = element(split(":", local.working_bucket_arn), 5)
 
-  # Format for DynamoDB table ARN: arn:${data.aws_partition.current.partition}:dynamodb:region:account-id:table/table-name
-  configuration_table_name = element(split("/", local.configuration_table_arn), 1)
-  tracking_table_name      = element(split("/", local.tracking_table_arn), 1)
+  # Evaluation is enabled when a baseline bucket name is supplied.
+  evaluation_enabled             = var.evaluation_baseline_bucket_name != ""
+  evaluation_baseline_bucket_arn = local.evaluation_enabled ? "arn:${data.aws_partition.current.partition}:s3:::${var.evaluation_baseline_bucket_name}" : null
 
-  # Extract KMS key ID from ARN if provided
-  # Format for KMS key ARN: arn:${data.aws_partition.current.partition}:kms:region:account-id:key/key-id
-  encryption_key_id = local.encryption_key_arn != null ? element(split("/", local.encryption_key_arn), 1) : null
-
-  # Extract SageMaker endpoint name from ARN
-  # Format for SageMaker endpoint ARN: arn:${data.aws_partition.current.partition}:sagemaker:region:account-id:endpoint/endpoint-name
-  sagemaker_endpoint_name = element(split("/", var.classification_endpoint_arn), 1)
-
-  # VPC configuration for Lambda functions
-  vpc_config = length(var.vpc_subnet_ids) > 0 ? {
-    subnet_ids         = var.vpc_subnet_ids
-    security_group_ids = var.vpc_security_group_ids
-  } : null
-
-  # S3 bucket resources for IAM policies (handle null working bucket)
-  s3_bucket_arns = concat(
-    [local.input_bucket_arn, local.output_bucket_arn],
-    local.working_bucket_arn != null ? [local.working_bucket_arn] : []
-  )
-
-  s3_bucket_object_arns = concat(
-    ["${local.input_bucket_arn}/*", "${local.output_bucket_arn}/*"],
-    local.working_bucket_arn != null ? ["${local.working_bucket_arn}/*"] : []
-  )
-
-  # Common tags
   common_tags = merge(var.tags, {
     Component = "SagemakerUdopProcessor"
   })
 }
 
-# Create the configuration components using the processor-configuration module
-module "processor_configuration" {
-  source = "../../processor-configuration"
+# =============================================================================
+# Delegate document processing to the shared engine. The engine always deploys
+# both branches and routes per document at runtime; classification is routed to
+# idp_common's native SageMaker backend.
+# =============================================================================
 
-  name_prefix              = var.name
-  configuration_table_name = local.configuration_table_name
-  encryption_key_arn       = var.encryption_key_arn
+module "engine" {
+  source = "../unified-processor"
 
-  # Use the config passed from parent module (from config_library YAML files)
-  configuration = local.config_with_overrides
-  schema        = jsondecode(file("${path.module}/schema.json"))
+  name = var.name
 
-  # Required for the seeder Lambda to merge user config with system
-  # defaults. Without these layers attached, the seeder will store the
-  # sparse user YAML and the runtime will crash with "No system_prompt
-  # found in classification configuration".
-  base_layer_arn       = var.base_layer_arn
+  classification_backend                = "sagemaker"
+  classification_sagemaker_endpoint_arn = var.classification_endpoint_arn
+
+  # API wiring
+  enable_api      = var.enable_api
+  api_id          = var.api_id
+  api_arn         = var.api_arn
+  api_graphql_url = var.api_graphql_url
+
+  # Shared environment ARNs
+  input_bucket_arn        = var.input_bucket_arn
+  output_bucket_arn       = var.output_bucket_arn
+  working_bucket_arn      = local.working_bucket_arn
+  configuration_table_arn = var.configuration_table_arn
+  tracking_table_arn      = var.tracking_table_arn
+  concurrency_table_arn   = var.concurrency_table_arn
+
+  # Processing-environment configuration
+  metric_namespace   = var.metric_namespace
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+
+  # Encryption
+  encryption_key_arn = var.encryption_key_arn
+
+  # VPC configuration
+  vpc_subnet_ids         = var.vpc_subnet_ids
+  vpc_security_group_ids = var.vpc_security_group_ids
+
+  # Lambda layers
   idp_common_layer_arn = var.idp_common_layer_arn
+  base_layer_arn       = var.base_layer_arn
+  evaluation_layer_arn = var.evaluation_layer_arn
 
-  vpc_config          = local.vpc_config
+  # Model configuration
+  extraction_model_id        = var.extraction_model_id
+  classification_max_workers = var.classification_max_workers
+  ocr_max_workers            = var.ocr_max_workers
+
+  # Evaluation (derived from the baseline bucket name supplied by the root)
+  evaluation_enabled             = local.evaluation_enabled
+  evaluation_baseline_bucket_arn = local.evaluation_baseline_bucket_arn
+  evaluation_model_id            = var.evaluation_model_id
+
+  # Summarization
+  is_summarization_enabled = var.summarization_model_id != null
+  summarization_model_id   = var.summarization_model_id
+
+  # Concurrency
+  max_processing_concurrency = var.max_processing_concurrency
+
+  # Document processing configuration
+  config = var.config
+
+  # Extra non-active config versions seeded alongside the default
+  additional_configurations = var.additional_configurations
+  seed_managed_configs      = var.seed_managed_configs
+
+  # Optional fallback BDA project for use_bda:true additional versions; does not
+  # relink the default (stays pipeline).
+  bda_project_arn = var.bda_project_arn
+
+  # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
-  tags                = var.tags
-}
 
-# Configuration logic (moved from configuration/main.tf)
-locals {
-  # Use the config passed from parent module (from sources/config_library/)
-  # If no config is provided, use defaults in the individual configurations below
-  base_config = var.config
-
-  # Apply model overrides if provided, similar to CDK transforms
-  config_with_overrides = merge(
-    local.base_config,
-    # Only override extraction model if provided
-    var.extraction_model_id != null ? {
-      extraction = merge(
-        try(local.base_config.extraction, {}),
-        {
-          model = var.extraction_model_id
-        }
-      )
-    } : {},
-    # Only override summarization model if provided
-    var.summarization_model_id != null ? {
-      summarization = merge(
-        try(local.base_config.summarization, {}),
-        {
-          model = var.summarization_model_id
-        }
-      )
-    } : {},
-    # Only override evaluation model if provided
-    var.evaluation_model_id != null ? {
-      evaluation = merge(
-        try(local.base_config.evaluation, {}),
-        {
-          model = var.evaluation_model_id
-        }
-      )
-    } : {},
-    # Only override assessment model if provided
-    var.assessment_model_id != null ? {
-      assessment = merge(
-        try(local.base_config.assessment, {}),
-        {
-          model = var.assessment_model_id
-        }
-      )
-    } : {},
-    # Note: SageMaker endpoint name is passed via SAGEMAKER_ENDPOINT_NAME env var to the
-    # classification Lambda - it does not need to be stored in the config table.
-    # OCR settings - no overrides needed, use base config as-is
-  )
-}
-
-# Wait for the Step Functions IAM role + inline policy to propagate
-# before CreateStateMachine. Without this, AWS validates log-destination
-# access synchronously and fails with:
-#   AccessDeniedException: The state machine IAM Role is not authorized
-#   to access the Log Destination
-# Same pattern as the codebuild role guard above.
-resource "time_sleep" "wait_for_sfn_iam_propagation" {
-  depends_on = [
-    aws_iam_role.step_functions_role,
-    aws_iam_role_policy.step_functions_policy,
-    aws_cloudwatch_log_group.step_functions_logs
-  ]
-
-  create_duration = "30s"
-}
-
-# Create Step Functions state machine
-resource "aws_sfn_state_machine" "document_processing" {
-  depends_on = [time_sleep.wait_for_sfn_iam_propagation]
-
-  name     = "${local.name_prefix}-sagemaker-udop-processor"
-  role_arn = aws_iam_role.step_functions_role.arn
-
-  definition = templatefile("${path.module}/../../../sources/patterns/pattern-3/statemachine/workflow.asl.json", {
-    OCRFunctionArn            = aws_lambda_function.ocr_function.arn
-    ClassificationFunctionArn = aws_lambda_function.classification_function.arn
-    ExtractionFunctionArn     = aws_lambda_function.extraction_function.arn
-    ProcessResultsLambdaArn   = aws_lambda_function.process_results_function.arn
-    AssessmentFunctionArn     = aws_lambda_function.assessment_function.arn
-    IsSummarizationEnabled    = var.summarization_model_id != null ? "true" : "false"
-    SummarizationLambdaArn    = aws_lambda_function.summarization_function.arn
-    OutputBucket              = local.output_bucket_name
-    EvaluationLambdaArn       = aws_lambda_function.evaluation_function.arn
-  })
-
-  logging_configuration {
-    log_destination        = "${aws_cloudwatch_log_group.step_functions_logs.arn}:*"
-    include_execution_data = true
-    level                  = "ALL"
-  }
-
-  tracing_configuration {
-    enabled = true
-  }
-
-  tags = local.common_tags
-}
-
-# CloudWatch Log Group for Step Functions
-resource "aws_cloudwatch_log_group" "step_functions_logs" {
-  name              = "/aws/vendedlogs/states/${local.name_prefix}-sagemaker-udop-processor"
-  retention_in_days = local.log_retention_days
-  kms_key_id        = local.encryption_key_arn
-
-  tags = local.common_tags
+  tags = var.tags
 }

@@ -28,6 +28,11 @@ crash.*.log
 # are not checked in
 override.tf
 override.tf.json
+
+# Local config catalog YAMLs are user-managed and not committed; the folder is
+# kept in the repo via examples/config-catalog/.gitkeep.
+examples/config-catalog/*.yaml
+examples/config-catalog/*.yml
 *_override.tf
 *_override.tf.json
 

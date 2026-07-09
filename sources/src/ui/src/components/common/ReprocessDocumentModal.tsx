@@ -35,20 +35,47 @@ const ReprocessDocumentModal = ({
   // Helper function to check if Pattern-1 is selected
   const isPattern1 = ((settings as Record<string, unknown>)?.IDPPattern as string)?.includes('Pattern1');
 
-  // Set default to active version when modal opens
+  // Reset selected version when modal closes so it picks up the correct version next time
+  useEffect(() => {
+    if (!visible) {
+      setSelectedVersion(null);
+    }
+  }, [visible]);
+
+  // Set default version when modal opens: prefer document's configVersion, then active, then first scoped
   useEffect(() => {
     if (visible && versions.length > 0 && !selectedVersion) {
+      const versionOptions = getVersionOptions();
+
+      // Try to use the document's current ConfigVersion first
+      if (selectedItems.length > 0) {
+        const docVersion = ((selectedItems[0] as unknown as Record<string, unknown>).configVersion ||
+          (selectedItems[0] as unknown as Record<string, unknown>).ConfigVersion) as string | undefined;
+        if (docVersion) {
+          const docVersionOption = versionOptions.find((option) => option.value === docVersion);
+          if (docVersionOption) {
+            setSelectedVersion(docVersionOption);
+            return;
+          }
+        }
+      }
+
+      // Fallback: active version
       const activeVersion = versions.find((v) => v.isActive);
       if (activeVersion) {
-        // Use the same logic as getVersionOptions to ensure consistency
-        const versionOptions = getVersionOptions();
         const activeVersionOption = versionOptions.find((option) => option.value === activeVersion.versionName);
         if (activeVersionOption) {
           setSelectedVersion(activeVersionOption);
+          return;
         }
       }
+
+      // Fallback: first available (scoped) version
+      if (versionOptions.length > 0) {
+        setSelectedVersion(versionOptions[0]);
+      }
     }
-  }, [visible, versions, selectedVersion, getVersionOptions]);
+  }, [visible, versions, selectedVersion, selectedItems, getVersionOptions]);
 
   let title = 'Reprocess document';
   let message = 'Are you sure you want to reprocess this document?';

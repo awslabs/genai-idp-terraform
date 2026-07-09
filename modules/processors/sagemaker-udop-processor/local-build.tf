@@ -5,13 +5,13 @@
 # (var.lambda_local = true).
 #
 # Same pattern as bda-processor/local-build.tf: mirror what the
-# CodeBuild buildspec at sources/patterns/pattern-3/buildspec.yml does,
+# CodeBuild buildspec at sources/patterns/unified/buildspec.yml does,
 # but on the deploy host. Seven Lambda container images come out of one
 # Dockerfile by varying the FUNCTION_PATH build arg, each tagged by
 # function name in the same ECR repository.
 
 locals {
-  udop_pattern_dir = "${path.module}/../../../sources/patterns/pattern-3"
+  udop_pattern_dir = "${path.module}/../../../sources/patterns/unified"
 
   # Mirrors the FUNCTION_* env exports in the upstream buildspec.
   udop_images = {

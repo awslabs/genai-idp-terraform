@@ -1,0 +1,23 @@
+{
+  "name": "accelerated-intelligent-document-processing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Accelerated Intelligent Document Processing on AWS",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aws-samples/accelerated-intelligent-document-processing-on-aws"
+  },
+  "license": "MIT-0",
+  "devDependencies": {
+    "basedpyright": "^1.32.1"
+  },
+  "scripts": {
+    "typecheck": "basedpyright",
+    "typecheck:watch": "basedpyright --watch",
+    "typecheck:stats": "basedpyright --stats"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=11.0.0"
+  }
+}

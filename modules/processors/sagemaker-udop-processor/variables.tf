@@ -1,14 +1,30 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Variables for SageMaker UDOP Processor
+# Variables for the SageMaker-UDOP processor façade (Pattern 3 retained).
+#
+# This is the public input surface. Pattern-specific fields (the consumer-
+# supplied SageMaker endpoint) drive the engine's native SageMaker classification
+# backend; all other fields are forwarded to the shared engine (`module.engine`).
 
 variable "name" {
   description = "Name prefix for all resources"
   type        = string
 }
 
-# Flat variables for processing environment resources
+# =============================================================================
+# Pattern-specific: consumer-supplied SageMaker endpoint
+# =============================================================================
+
+variable "classification_endpoint_arn" {
+  description = "ARN of the consumer-supplied SageMaker endpoint used for document classification. The façade provisions NO SageMaker hosting/training; it grants the classification Lambda sagemaker:InvokeEndpoint on this endpoint and passes its name as SAGEMAKER_ENDPOINT_NAME."
+  type        = string
+}
+
+# =============================================================================
+# Shared environment ARNs (forwarded to the engine)
+# =============================================================================
+
 variable "input_bucket_arn" {
   description = "ARN of the S3 bucket where source documents to be processed are stored"
   type        = string
@@ -36,6 +52,11 @@ variable "tracking_table_arn" {
   description = "ARN of the DynamoDB table that tracks document processing status and metadata"
   type        = string
   default     = null
+}
+
+variable "concurrency_table_arn" {
+  description = "ARN of the DynamoDB table that manages concurrency limits for document processing"
+  type        = string
 }
 
 variable "api_graphql_url" {
@@ -98,10 +119,9 @@ variable "vpc_security_group_ids" {
   default     = []
 }
 
-variable "classification_endpoint_arn" {
-  description = "ARN of the SageMaker endpoint for document classification"
-  type        = string
-}
+# =============================================================================
+# Model configuration (forwarded to the engine)
+# =============================================================================
 
 variable "extraction_model_id" {
   description = "Optional model ID for information extraction. If not provided, the model from config.yaml will be used."
@@ -109,28 +129,10 @@ variable "extraction_model_id" {
   default     = null
 }
 
-variable "extraction_guardrail" {
-  description = "Optional Bedrock guardrail to apply to extraction model interactions"
-  type = object({
-    guardrail_id  = string
-    guardrail_arn = string
-  })
-  default = null
-}
-
 variable "summarization_model_id" {
-  description = "Optional model ID for document summarization. If not provided, the model from config.yaml will be used."
+  description = "Optional model ID for document summarization. If not provided, summarization is disabled."
   type        = string
   default     = null
-}
-
-variable "summarization_guardrail" {
-  description = "Optional Bedrock guardrail to apply to summarization model interactions"
-  type = object({
-    guardrail_id  = string
-    guardrail_arn = string
-  })
-  default = null
 }
 
 variable "evaluation_model_id" {
@@ -151,17 +153,8 @@ variable "classification_max_workers" {
   default     = 20
 }
 
-variable "classification_guardrail" {
-  description = "Optional guardrail configuration for classification function"
-  type = object({
-    guardrail_id  = string
-    guardrail_arn = string
-  })
-  default = null
-}
-
 variable "config" {
-  description = "Configuration to override defaults"
+  description = "Document processing configuration (from config_library YAML), forwarded to the engine."
   type        = any
   default     = null
 }
@@ -172,17 +165,15 @@ variable "idp_common_layer_arn" {
 }
 
 variable "base_layer_arn" {
-  description = "ARN of the shared base Lambda layer (v0.4.11+). Accepted for API consistency but not attached — all SageMaker UDOP functions use package_type=Image and do not support Lambda layers."
+  description = "ARN of the shared base Lambda layer (v0.4.11+), forwarded to the engine."
   type        = string
   default     = null
 }
 
-
-
-variable "assessment_model_id" {
-  description = "The Bedrock model ID to use for assessment (when assessment is enabled)"
+variable "evaluation_layer_arn" {
+  description = "ARN of the dedicated evaluation Lambda layer (idp_common with evaluation+docs_service extras). Required when evaluation is enabled."
   type        = string
-  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+  default     = null
 }
 
 variable "tags" {
@@ -203,28 +194,34 @@ variable "lambda_tracing_mode" {
   default     = "Active"
 }
 
-variable "enable_ecr_image_scanning" {
-  description = "Enable ECR vulnerability scanning on image push for the SageMaker UDOP processor Lambda images"
-  type        = bool
-  default     = false
-}
-
 variable "evaluation_baseline_bucket_name" {
   description = "Name of the S3 bucket containing baseline documents for evaluation. Leave empty to skip evaluation."
   type        = string
   default     = ""
 }
 
-variable "reporting_bucket_name" {
-  description = "Name of the S3 bucket for storing evaluation reporting data."
-  type        = string
-  default     = ""
+variable "additional_configurations" {
+  description = "Extra non-active, editable configuration versions seeded alongside the default (version_name => config object). Shown in the UI version dropdown."
+  type        = any
+  default     = {}
 }
 
-variable "save_reporting_function_name" {
-  description = "Name of the Lambda function that saves evaluation results to the reporting bucket."
+variable "bda_project_arn" {
+  description = <<-EOT
+    Optional BDA project ARN used as the fallback link for use_bda:true
+    additional versions that omit their own per-version `bda_project_arn`. Does
+    not relink the `default` version (stays pipeline). A per-version
+    `bda_project_arn` takes precedence. Does not gate the BDA branch — both
+    branches are always deployed and route at runtime by the config's use_bda.
+  EOT
   type        = string
-  default     = ""
+  default     = null
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions as non-active reference rows."
+  type        = bool
+  default     = true
 }
 
 #

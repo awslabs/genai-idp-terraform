@@ -1,0 +1,7 @@
+mutation AddDocumentsToTestSetFromUpload($input: TestSetDocumentsUploadInput!) {
+  addDocumentsToTestSetFromUpload(input: $input) {
+    testSetId
+    presignedUrl
+    objectKey
+  }
+}

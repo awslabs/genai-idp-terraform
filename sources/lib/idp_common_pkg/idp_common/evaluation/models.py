@@ -70,6 +70,9 @@ class SectionEvaluationResult:
     document_class: str
     attributes: List[AttributeEvaluationResult]
     metrics: Dict[str, float] = field(default_factory=dict)
+    stickler_comparison_result: Optional[Dict[str, Any]] = (
+        None  # Raw Stickler result for bulk aggregation
+    )
 
     def get_attribute_results(self) -> Dict[str, AttributeEvaluationResult]:
         """Get results indexed by attribute name."""
@@ -125,6 +128,12 @@ class DocumentEvaluationResult:
     execution_time: float = 0.0
     output_uri: Optional[str] = None
     doc_split_metrics: Optional[DocSplitMetrics] = None
+
+    # Sections whose class was marked x-aws-idp-exclude-from-processing=true.
+    # These sections are NOT included in accuracy metrics but ARE listed in
+    # the markdown report with an "Excluded" annotation, so users can see
+    # what was intentionally skipped.
+    excluded_sections: List[Dict[str, Any]] = field(default_factory=list)
 
     def _format_nested_comparisons(
         self, field_comparisons: List[Dict[str, Any]], indent_level: int = 0
@@ -221,6 +230,7 @@ class DocumentEvaluationResult:
                     "section_id": sr.section_id,
                     "document_class": sr.document_class,
                     "metrics": sr.metrics,
+                    "stickler_comparison_result": sr.stickler_comparison_result,  # Include for bulk aggregation
                     "attributes": [
                         {
                             "name": ar.name,
@@ -248,6 +258,10 @@ class DocumentEvaluationResult:
         # Add doc_split_metrics if available
         if self.doc_split_metrics:
             result["doc_split_metrics"] = self.doc_split_metrics.to_dict()
+
+        # Add excluded sections (not evaluated, but surfaced for transparency)
+        if self.excluded_sections:
+            result["excluded_sections"] = list(self.excluded_sections)
 
         return result
 
@@ -378,6 +392,30 @@ class DocumentEvaluationResult:
         )
 
         sections.append("")
+
+        # Report excluded sections (intentionally skipped from evaluation).
+        # These are surfaced here so users understand why section counts in
+        # the Overall Metrics table may be lower than the number of sections
+        # in the source document.
+        if self.excluded_sections:
+            sections.append("## Excluded Sections (Not Evaluated)")
+            sections.append("")
+            sections.append(
+                "The following sections were classified as an "
+                "`x-aws-idp-exclude-from-processing` class and were therefore "
+                "skipped during extraction/assessment/evaluation. They do "
+                "**not** contribute to the accuracy metrics above."
+            )
+            sections.append("")
+            sections.append("| Section | Classification | Exclusion Reason | Pages |")
+            sections.append("| ------- | -------------- | ---------------- | ----- |")
+            for es in self.excluded_sections:
+                sid = es.get("section_id", "")
+                cls = es.get("classification", "")
+                reason = es.get("exclusion_reason") or "excluded"
+                pages = ", ".join(str(p) for p in es.get("page_ids") or [])
+                sections.append(f"| {sid} | {cls} | {reason} | {pages} |")
+            sections.append("")
 
         # Add overall metrics with two separate tables
         sections.append("## Overall Metrics")
@@ -589,7 +627,12 @@ class DocumentEvaluationResult:
                 for metric, value in sr.metrics.items():
                     if metric == "evaluation_failed":
                         continue  # Skip the flag itself in the table
-                    metrics_table += f"| {metric} | {value:.4f} | ❌ Failed |\n"
+                    formatted_value = (
+                        f"{value:.4f}"
+                        if isinstance(value, (int, float))
+                        else str(value)
+                    )
+                    metrics_table += f"| {metric} | {formatted_value} | ❌ Failed |\n"
                 sections.append(metrics_table)
                 sections.append("")
                 continue  # Skip attribute display for failed sections

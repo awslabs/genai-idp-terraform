@@ -28,7 +28,9 @@ def get_error_analyzer_config() -> Dict[str, Any]:
 
     # Add error analyzer-specific defaults
     config.setdefault("max_log_events", 5)
-    config.setdefault("time_range_hours_default", 24)
+    config.setdefault("lookback_hours", 24)
+    # Keep legacy alias for any code that still reads time_range_hours_default
+    config.setdefault("time_range_hours_default", config["lookback_hours"])
 
     # Configure logging based on the configuration
     configure_logging(
@@ -56,7 +58,7 @@ def get_error_analyzer_model_id() -> str:
         config = get_config(as_model=True)
 
         # Get model ID from configuration with type safety
-        model_id = config.agents.chat_companion.model_id
+        model_id = config.agents.error_analyzer.model_id
 
         logger.info(f"Using error analyzer model ID from configuration: {model_id}")
         return model_id
@@ -65,7 +67,7 @@ def get_error_analyzer_model_id() -> str:
         logger.warning(f"Failed to load model ID from configuration: {e}")
 
         # Final fallback to default
-        default_model_id = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+        default_model_id = "us.anthropic.claude-sonnet-4-6"
         logger.info(f"Using default error analyzer model ID: {default_model_id}")
         return default_model_id
 
@@ -105,6 +107,31 @@ def decimal_to_float(obj: Any) -> Any:
     elif isinstance(obj, list):
         return [decimal_to_float(v) for v in obj]
     return obj
+
+
+def get_ea_param(field: str, default: Any) -> Any:
+    """
+    Safely retrieve a single ``ErrorAnalyzerParameters`` field from IDPConfig.
+
+    All tools share this helper so they never need to write bare ``getattr``
+    chains or duplicate the try/except fallback boilerplate.
+
+    Args:
+        field:   Attribute name on ``ErrorAnalyzerParameters``
+                 (e.g. ``"max_stepfunction_timeline_events"``).
+        default: Value returned when config is unavailable or the field
+                 does not exist.
+
+    Returns:
+        The configured value, or *default* on any error.
+    """
+    try:
+        from ...config import get_config
+
+        config = get_config(as_model=True)
+        return getattr(config.agents.error_analyzer.parameters, field, default)
+    except Exception:  # noqa: BLE001
+        return default
 
 
 def create_error_response(error: str, **kwargs) -> Dict[str, Any]:

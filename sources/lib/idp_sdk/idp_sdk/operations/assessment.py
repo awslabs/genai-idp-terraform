@@ -134,7 +134,7 @@ class AssessmentOperation:
               * Field validation rules (format, range, etc.)
               * Historical accuracy for similar documents
         """
-        from idp_sdk.core.assessment_analyzer import AssessmentAnalyzer
+        from idp_sdk._core.assessment_analyzer import AssessmentAnalyzer
 
         name = self._client._require_stack(stack_name)
 
@@ -246,7 +246,7 @@ class AssessmentOperation:
               * Depends on document resolution
               * Useful for exact pixel-level operations
         """
-        from idp_sdk.core.assessment_analyzer import AssessmentAnalyzer
+        from idp_sdk._core.assessment_analyzer import AssessmentAnalyzer
 
         name = self._client._require_stack(stack_name)
 
@@ -357,7 +357,7 @@ class AssessmentOperation:
             - Optimize review workflows (focus on low-confidence batches)
             - Demonstrate ROI (track automation rate improvements)
         """
-        from idp_sdk.core.assessment_analyzer import AssessmentAnalyzer
+        from idp_sdk._core.assessment_analyzer import AssessmentAnalyzer
 
         name = self._client._require_stack(stack_name)
 

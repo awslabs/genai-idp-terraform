@@ -83,6 +83,16 @@ output "configuration_table_arn" {
   value       = module.genai_idp_accelerator.processing_environment.configuration_table_arn
 }
 
+output "knowledge_base_id" {
+  description = "ID of the optional Bedrock Knowledge Base (null when create_knowledge_base = false)."
+  value       = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].id : null
+}
+
+output "knowledge_base_arn" {
+  description = "ARN of the optional Bedrock Knowledge Base (null when create_knowledge_base = false)."
+  value       = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].arn : null
+}
+
 # SageMaker Model Training Outputs
 output "model_training" {
   description = "SageMaker model training details"

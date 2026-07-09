@@ -1,0 +1,86 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# =============================================================================
+# Fine-tuning Models Configuration
+# =============================================================================
+# This file contains configuration for models that support fine-tuning in
+# Amazon Bedrock. It includes:
+# 1. Supported base models for fine-tuning (shown in UI dropdown)
+# 2. Model ID mappings (base model -> fine-tuning-capable variant)
+#
+# To add a new model:
+# 1. Add an entry to 'supported_models' with id, name, and provider
+# 2. Add a mapping in 'model_mappings' if the fine-tuning API requires
+#    a different model ID (e.g., with context window suffix)
+#
+# IMPORTANT: Model IDs must match what Bedrock expects for fine-tuning.
+# Check AWS documentation for the latest supported models:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/custom-models.html
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Supported Base Models for Fine-tuning
+# ---------------------------------------------------------------------------
+# These models appear in the UI dropdown when creating a fine-tuning job.
+# The 'id' should be the cross-region inference profile ID (e.g., us.amazon.nova-2-lite-v1:0)
+# which will be normalized to the standard model ID for the fine-tuning API.
+supported_models:
+  # Nova 2.x models (recommended)
+  - id: "us.amazon.nova-2-lite-v1:0"
+    name: "Nova 2 Lite"
+    provider: "Amazon"
+
+  - id: "us.amazon.nova-2-pro-v1:0"
+    name: "Nova 2 Pro"
+    provider: "Amazon"
+
+# ---------------------------------------------------------------------------
+# Model ID Mappings for Fine-tuning API
+# ---------------------------------------------------------------------------
+# Maps base model IDs to their fine-tuning-capable variants.
+# The Bedrock fine-tuning API requires specific model IDs that may differ
+# from the standard inference model IDs. Typically, fine-tuning-capable
+# models have a context window suffix (e.g., :300k, :256k).
+#
+# Key: Base model ID (without cross-region prefix)
+# Value: Fine-tuning-capable model ID
+model_mappings:
+  # Nova 2.x mappings (256k context window)
+  "amazon.nova-2-lite-v1:0": "amazon.nova-2-lite-v1:0:256k"
+  "amazon.nova-2-pro-v1:0": "amazon.nova-2-pro-v1:0:256k"
+
+  # Nova 1.x mappings (legacy, 300k context window)
+  "amazon.nova-lite-v1:0": "amazon.nova-lite-v1:0:300k"
+  "amazon.nova-pro-v1:0": "amazon.nova-pro-v1:0:300k"
+
+# ---------------------------------------------------------------------------
+# Model Capabilities
+# ---------------------------------------------------------------------------
+# Some models have restrictions on what features they support during
+# fine-tuning. This section documents those restrictions.
+#
+# supports_validation: Whether the model supports a validation dataset
+#   during fine-tuning. Nova 2.x models do NOT support validation sets.
+#   When false, the validation data will still be generated for internal
+#   metrics but will NOT be passed to the Bedrock CreateModelCustomizationJob API.
+model_capabilities:
+  "amazon.nova-2-lite-v1:0":
+    supports_validation: false
+  "amazon.nova-2-pro-v1:0":
+    supports_validation: false
+  # Nova 1.x models support validation sets
+  "amazon.nova-lite-v1:0":
+    supports_validation: true
+  "amazon.nova-pro-v1:0":
+    supports_validation: true
+
+# ---------------------------------------------------------------------------
+# Default Hyperparameters
+# ---------------------------------------------------------------------------
+# Default hyperparameters for fine-tuning jobs. These can be overridden
+# when creating a job.
+default_hyperparameters:
+  epochCount: "2"
+  learningRate: "0.00001"
+  batchSize: "1"

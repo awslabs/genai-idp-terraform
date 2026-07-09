@@ -1,0 +1,306 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+"""
+Unit tests for the SticklerConfigMapper.
+
+Tests focus on schema preprocessing: removing unevaluable object properties,
+including free-form objects (additionalProperties without properties) and
+arrays of free-form objects.
+"""
+
+import copy
+
+import pytest
+from idp_common.evaluation.stickler_mapper import SticklerConfigMapper
+
+
+@pytest.mark.unit
+class TestIsUnevaluableObject:
+    """Tests for _is_unevaluable_object helper method."""
+
+    def test_object_with_no_properties_key(self):
+        """Free-form object with no properties key is unevaluable."""
+        schema = {"type": "object", "additionalProperties": True}
+        assert SticklerConfigMapper._is_unevaluable_object(schema) is True
+
+    def test_object_with_empty_properties(self):
+        """Object with empty properties dict is unevaluable."""
+        schema = {"type": "object", "properties": {}}
+        assert SticklerConfigMapper._is_unevaluable_object(schema) is True
+
+    def test_object_with_additional_properties_and_no_properties(self):
+        """Object with additionalProperties: true and no properties key."""
+        schema = {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Row data as objects keyed by column name.",
+        }
+        assert SticklerConfigMapper._is_unevaluable_object(schema) is True
+
+    def test_object_with_defined_properties(self):
+        """Object with defined properties is evaluable."""
+        schema = {
+            "type": "object",
+            "properties": {"Name": {"type": "string"}},
+        }
+        assert SticklerConfigMapper._is_unevaluable_object(schema) is False
+
+    def test_non_object_type(self):
+        """Non-object types are not unevaluable objects."""
+        assert SticklerConfigMapper._is_unevaluable_object({"type": "string"}) is False
+        assert SticklerConfigMapper._is_unevaluable_object({"type": "array"}) is False
+        assert SticklerConfigMapper._is_unevaluable_object({"type": "integer"}) is False
+
+    def test_non_dict_input(self):
+        """Non-dict input returns False."""
+        assert SticklerConfigMapper._is_unevaluable_object("not a dict") is False
+        assert SticklerConfigMapper._is_unevaluable_object(None) is False
+        assert SticklerConfigMapper._is_unevaluable_object([]) is False
+
+    def test_object_with_no_type(self):
+        """Dict without type key is not unevaluable."""
+        assert SticklerConfigMapper._is_unevaluable_object({"properties": {}}) is False
+
+    def test_object_with_additional_properties_dict_and_no_properties(self):
+        """Object with additionalProperties as a schema dict (not just true)."""
+        schema = {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+        }
+        assert SticklerConfigMapper._is_unevaluable_object(schema) is True
+
+
+@pytest.mark.unit
+class TestRemoveEmptyObjectProperties:
+    """Tests for _remove_empty_object_properties method."""
+
+    def test_removes_object_with_empty_properties(self):
+        """Original behavior: removes objects with empty properties dict."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "Name": {"type": "string"},
+                "EmptyObj": {"type": "object", "properties": {}},
+            },
+        }
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert "EmptyObj" not in schema["properties"]
+        assert "Name" in schema["properties"]
+        assert len(removed) == 1
+
+    def test_removes_freeform_object_no_properties_key(self):
+        """New behavior: removes objects with no properties key at all."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "Name": {"type": "string"},
+                "FreeForm": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+        }
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert "FreeForm" not in schema["properties"]
+        assert "Name" in schema["properties"]
+        assert len(removed) == 1
+
+    def test_removes_array_of_freeform_objects(self):
+        """New behavior: removes arrays whose items are free-form objects."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "Name": {"type": "string"},
+                "TableData": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": True,
+                    },
+                    "description": "Row data as objects keyed by column name.",
+                },
+            },
+        }
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert "TableData" not in schema["properties"]
+        assert "Name" in schema["properties"]
+        assert len(removed) == 1
+
+    def test_keeps_array_of_structured_objects(self):
+        """Arrays of structured objects (with properties) are kept."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "Inventors": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "Name": {"type": "string"},
+                            "Location": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        }
+        original = copy.deepcopy(schema)
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert "Inventors" in schema["properties"]
+        assert len(removed) == 0
+        assert schema == original
+
+    def test_removes_array_of_empty_property_objects(self):
+        """Arrays whose items are objects with empty properties are removed."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "EmptyArray": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+        }
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert "EmptyArray" not in schema["properties"]
+        assert len(removed) == 1
+
+    def test_nested_freeform_object_in_parent_object(self):
+        """Free-form objects nested inside a parent object are removed."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "Table": {
+                    "type": "object",
+                    "properties": {
+                        "TableNumber": {"type": "string"},
+                        "TableData": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": True,
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        # Table should remain but TableData inside it should be removed
+        assert "Table" in schema["properties"]
+        assert "TableNumber" in schema["properties"]["Table"]["properties"]
+        assert "TableData" not in schema["properties"]["Table"]["properties"]
+        assert len(removed) == 1
+
+    def test_defs_freeform_object_removed(self):
+        """Free-form objects in $defs are removed."""
+        schema = {
+            "type": "object",
+            "properties": {"Name": {"type": "string"}},
+            "$defs": {
+                "FreeFormDef": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+                "StructuredDef": {
+                    "type": "object",
+                    "properties": {"Field": {"type": "string"}},
+                },
+            },
+        }
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert "FreeFormDef" not in schema["$defs"]
+        assert "StructuredDef" in schema["$defs"]
+        assert len(removed) == 1
+
+    def test_keeps_simple_arrays(self):
+        """Simple arrays (of primitives) are untouched."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "Tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+        }
+        original = copy.deepcopy(schema)
+        removed = SticklerConfigMapper._remove_empty_object_properties(schema)
+        assert schema == original
+        assert len(removed) == 0
+
+
+@pytest.mark.unit
+class TestUSPatentTableSchema:
+    """Integration-style test using the actual USPatent Table schema pattern."""
+
+    def test_uspatent_table_schema_preprocessing(self):
+        """Test that the USPatent Table schema with TableData using
+        additionalProperties is handled correctly by build_stickler_model_config.
+
+        This reproduces the exact error:
+        'JSON Schema must contain properties key for object type'
+        that occurs when processing USPatent documents with TableData defined as:
+        {"type": "array", "items": {"type": "object", "additionalProperties": true}}
+        """
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "USPatent",
+            "x-aws-idp-document-type": "USPatent",
+            "type": "object",
+            "properties": {
+                "PatentNumber": {
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "EXACT",
+                },
+                "Tables": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Table",
+                    },
+                    "x-aws-idp-evaluation-method": "HUNGARIAN",
+                },
+            },
+            "$defs": {
+                "Table": {
+                    "type": "object",
+                    "properties": {
+                        "TableNumber": {"type": "string"},
+                        "TableTitle": {"type": "string"},
+                        "ColumnHeaders": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "RowCount": {"type": "integer"},
+                        "TableData": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": True,
+                            },
+                            "description": "Row data as objects keyed by column name.",
+                        },
+                        "DataType": {"type": "string"},
+                    },
+                },
+            },
+        }
+
+        # This should NOT raise an error - TableData should be removed during preprocessing
+        config = SticklerConfigMapper.build_stickler_model_config(schema)
+
+        # Verify config was built successfully
+        assert config["model_name"] == "USPatent"
+
+        # Verify the schema was processed: TableData should have been removed
+        # after $ref inlining
+        result_schema = config["schema"]
+        tables_items = result_schema["properties"]["Tables"]["items"]
+        assert "TableNumber" in tables_items["properties"]
+        assert "TableTitle" in tables_items["properties"]
+        assert "DataType" in tables_items["properties"]
+        # TableData should have been removed because its items are free-form objects
+        assert "TableData" not in tables_items["properties"]

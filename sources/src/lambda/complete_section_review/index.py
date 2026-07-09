@@ -51,8 +51,9 @@ def handler(event, context):
         return release_review(object_key, username, user_email, is_admin)
 
     if field_name == "skipAllSectionsReview":
-        if not is_admin:
-            raise ValueError("Only administrators can skip all sections review")
+        is_reviewer = "Reviewer" in user_groups
+        if not is_admin and not is_reviewer:
+            raise ValueError("Only administrators and reviewers can skip sections review")
         if not object_key:
             raise ValueError("objectKey is required")
         return skip_all_sections_review(object_key, username, user_email)
@@ -150,6 +151,7 @@ def complete_section_review(
     if all_completed:
         update_expr += ", HITLCompleted = :hitlCompleted"
         expr_values[":hitlCompleted"] = True
+        update_expr += " REMOVE HITLPendingReview"
 
     table.update_item(
         Key={"PK": f"doc#{object_key}", "SK": "none"},
@@ -291,7 +293,7 @@ def skip_all_sections_review(object_key, username="", user_email=""):
 
     table.update_item(
         Key={"PK": f"doc#{object_key}", "SK": "none"},
-        UpdateExpression="SET HITLStatus = :status, HITLSectionsPending = :pending, HITLSectionsSkipped = :skipped, HITLReviewHistory = :history, HITLCompleted = :hitlCompleted, HITLReviewedBy = :reviewedBy, HITLReviewedByEmail = :reviewedByEmail",
+        UpdateExpression="SET HITLStatus = :status, HITLSectionsPending = :pending, HITLSectionsSkipped = :skipped, HITLReviewHistory = :history, HITLCompleted = :hitlCompleted, HITLReviewedBy = :reviewedBy, HITLReviewedByEmail = :reviewedByEmail REMOVE HITLPendingReview",
         ExpressionAttributeValues={
             ":status": "Review Skipped",
             ":pending": [],
@@ -366,8 +368,8 @@ def release_review(object_key, username="", user_email="", is_admin=False):
     # This avoids re-serializing metering data which could cause issues
     table.update_item(
         Key={"PK": f"doc#{object_key}", "SK": "none"},
-        UpdateExpression="SET HITLStatus = :status REMOVE HITLReviewOwner, HITLReviewOwnerEmail",
-        ExpressionAttributeValues={":status": "Review Pending"},
+        UpdateExpression="SET HITLStatus = :status, HITLPendingReview = :pending REMOVE HITLReviewOwner, HITLReviewOwnerEmail",
+        ExpressionAttributeValues={":status": "Review Pending", ":pending": "true"},
     )
 
     logger.info(f"Review released for document {object_key}, HITLStatus set to Review Pending")

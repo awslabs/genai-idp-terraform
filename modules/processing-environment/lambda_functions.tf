@@ -116,6 +116,7 @@ resource "aws_lambda_function" "queue_sender" {
       LOG_LEVEL              = var.log_level
       QUEUE_URL              = aws_sqs_queue.document_queue.url
       TRACKING_TABLE         = local.tracking_table.table_name
+      CONFIG_TABLE           = local.configuration_table.table_name
       DATA_RETENTION_IN_DAYS = var.data_tracking_retention_days
       OUTPUT_BUCKET          = local.output_bucket_name
       DOCUMENT_TRACKING_MODE = var.api != null ? "appsync" : "dynamodb"

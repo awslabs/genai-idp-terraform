@@ -62,6 +62,15 @@ resource "aws_iam_policy" "queue_processor_policy" {
         ]
         Resource = var.processor.state_machine_arn
       },
+      # DynamoDB permissions for configuration table (read config for routing)
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query"
+        ]
+        Resource = var.configuration_table_arn
+      },
       # DynamoDB permissions for concurrency table
       {
         Effect = "Allow"

@@ -203,12 +203,30 @@ module "reporting_environment" {
   tags                     = var.tags
 }
 
+# Create the assets bucket used to stage Lambda layer build artifacts.
+# The idp-common-layer module requires an externally-provided layers bucket
+# (it does not create one itself), mirroring how the root module wires it.
+module "assets_bucket" {
+  source = "../../modules/assets-bucket"
+
+  bucket_prefix = "${var.prefix}-${random_string.suffix.result}"
+
+  enable_lifecycle_management = true
+  asset_retention_days        = 90
+  old_version_retention_days  = 30
+
+  tags = var.tags
+}
+
 # Create the IDP Common Layer
 module "idp_common_layer" {
   source = "../../modules/idp-common-layer"
 
   # Use a unique layer prefix per stack to avoid conflicts with parallel deployments
   layer_prefix = "${var.prefix}-processing-env-${random_string.suffix.result}"
+
+  # Required: S3 bucket for staging the layer build artifacts
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
   # Configure the layer with the extras needed by processing environment functions
   # Based on requirements.txt analysis: queue_sender and workflow_tracker use appsync
@@ -229,6 +247,9 @@ module "processing_environment" {
 
   # Required: External IDP common layer ARN
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+
+  # Required: S3 bucket for staging the module's internal Lambda layer builds
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
   # Required parameters
   input_bucket_arn   = aws_s3_bucket.input_bucket.arn

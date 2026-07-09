@@ -1,3 +1,7 @@
+---
+title: "Agent Analysis Feature"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -18,9 +22,7 @@ The Agent Analysis feature provides intelligent data exploration and analysis ca
 - **Secure Code Execution**: Python visualization code runs in isolated AWS Bedrock AgentCore sandboxes
 - **MCP Integration**: Connect external systems and tools via Model Context Protocol (MCP) servers
 
-
 https://github.com/user-attachments/assets/e2dea2c5-5eb1-42f6-9af5-469afd2135a7
-
 
 ## Key Features
 
@@ -48,7 +50,6 @@ The Agent Analysis feature uses a multi-agent architecture with:
 1. **Orchestrator Agent**: Routes queries to appropriate specialized agents based on query content and agent capabilities
 2. **Analytics Agent**: Handles data analysis, SQL generation, and visualization creation
 3. **External MCP Agents**: Custom agents connected via Model Context Protocol servers
-
 
 ### Agent Workflow
 
@@ -85,7 +86,7 @@ The Agent Analysis feature implements a security-first design:
 ```
 User Question → Analytics Request Handler → Analytics Processor → Agent Tools:
                                                                   ├── Database Info Tool
-                                                                  ├── Athena Query Tool  
+                                                                  ├── Athena Query Tool
                                                                   ├── Code Sandbox Tool
                                                                   └── Python Execution Tool
                                                                        ↓
@@ -97,24 +98,28 @@ Results ← Web UI ← AppSync Subscription ← DynamoDB ← Agent Response
 The analytics agent has access to four specialized tools:
 
 ### 1. Database Information Tool
+
 - **Purpose**: Discovers database schema and table structures
 - **Usage**: Automatically called to understand available tables and columns
 - **Output**: Table names, column definitions, and data types
 
 ### 2. Athena Query Tool
+
 - **Purpose**: Executes SQL queries against the analytics database
-- **Features**: 
+- **Features**:
   - Automatic column name quoting for Athena compatibility
   - Query result storage in S3
   - Error handling and retry logic
   - Support for both exploratory and final queries
 
 ### 3. Code Sandbox Tool
+
 - **Purpose**: Securely transfers query results to AgentCore sandbox
 - **Security**: Isolated environment with no Lambda file system access
 - **Data Format**: CSV files containing query results
 
 ### 4. Python Execution Tool
+
 - **Purpose**: Generates visualizations and tables from query data
 - **Libraries**: Pandas, Matplotlib, and other standard Python libraries
 - **Output**: JSON-formatted charts and tables for web display
@@ -132,16 +137,19 @@ The analytics agent has access to four specialized tools:
 The Agent Analysis interface allows you to select from multiple available agents:
 
 **Multi-Agent Selection:**
+
 - Select multiple agents simultaneously for complex analysis workflows
 - Use "Select All Agents" / "Deselect All Agents" for bulk selection
 - Each agent brings specialized capabilities to your analysis
 
 **Available Agent Types:**
+
 - **Analytics Agent**: Database queries, SQL generation, and data visualization
-- **Dummy Agent**: Simple calculations and testing capabilities  
+- **Dummy Agent**: Simple calculations and testing capabilities
 - **External MCP Agents**: Custom tools and systems integrated via MCP servers
 
 **Agent Selection Tips:**
+
 - Select specific agents when you know what type of analysis you need
 - Choose multiple agents for comprehensive analysis requiring different capabilities
 - The system intelligently routes your question to the most appropriate selected agents
@@ -149,6 +157,7 @@ The Agent Analysis interface allows you to select from multiple available agents
 ### MCP Integration
 
 **Custom System Integration:**
+
 - Click "🚀 NEW: Integrate your own systems with MCP!" to learn about connecting external tools
 - Add custom agents without code changes or redeployments
 - Integrate APIs, databases, and specialized tools via Model Context Protocol servers
@@ -160,21 +169,25 @@ For detailed MCP setup instructions, see the [Custom MCP Agent Documentation](./
 The agent can answer various types of questions about your processed documents:
 
 **Document Volume Questions:**
+
 - "How many documents were processed last month?"
 - "What's the trend in document processing over time?"
 - "Which document types are most common?"
 
 **Processing Performance Questions:**
+
 - "What's the average processing time by document type?"
 - "Which documents failed processing and why?"
 - "Show me processing success rates by day"
 
 **Content Analysis Questions:**
+
 - "What are the most common vendor names in invoices?"
 - "Show me the distribution of invoice amounts"
 - "Which documents have the highest confidence scores?"
 
 **Comparative Analysis Questions:**
+
 - "How do confidence scores vary by document type?"
 - "What's the relationship between document size and processing time?"
 
@@ -203,6 +216,7 @@ The agent can return three types of results:
 3. **Text Responses**: Direct answers to simple questions
 
 Each result includes:
+
 - The original question
 - SQL queries that were executed
 - The final visualization or answer
@@ -213,6 +227,7 @@ Each result includes:
 The solution includes sample W2 tax documents for testing the analytics feature:
 
 ### Sample Documents Location
+
 - **Path**: `/samples/w2/`
 - **Files**: 20 sample W2 documents (W2_XL_input_clean_1000.pdf through W2_XL_input_clean_1019.pdf)
 - **Purpose**: Realistic test data for exploring analytics capabilities
@@ -221,21 +236,24 @@ The solution includes sample W2 tax documents for testing the analytics feature:
 ### Testing Steps
 
 1. **Upload Sample Documents**:
+
    - Use the Web UI to upload documents from the `/samples/w2/` folder
    - Or copy them directly to the S3 input bucket
 
 2. **Wait for Processing**:
+
    - Monitor document processing through the Web UI dashboard
    - Ensure all documents complete successfully
 
 3. **Try Sample Queries**:
+
    ```
    "How many W2 documents have been processed?"
-   
+
    "Make a bar chart histogram of total earnings in all W2s with bins $25000 wide"
-   
+
    "What employee from the state of California paid the most tax?"
-   
+
    "What is the ratio of state tax paid to federal tax paid for the following states: Vermont, Nevada, Indiana, and Oregon?"
    ```
 
@@ -244,14 +262,16 @@ The solution includes sample W2 tax documents for testing the analytics feature:
 The Agent Analysis feature is configured through CloudFormation parameters:
 
 ### Model Selection
+
 ```yaml
-DocumentAnalysisAgentModelId:
+ChatCompanionModelId:
   Type: String
   Default: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   Description: Model to use for Document Analysis Agent (analytics queries)
 ```
 
 **Supported Models:**
+
 - `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (Default - Recommended)
 - `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
 - `us.anthropic.claude-3-haiku-20240307-v1:0`
@@ -261,6 +281,7 @@ DocumentAnalysisAgentModelId:
 ### Infrastructure Components
 
 The feature automatically creates:
+
 - **DynamoDB Table**: Tracks analytics job status and results
 - **Lambda Functions**: Request handler and processor functions
 - **AppSync Resolvers**: GraphQL API endpoints for web UI integration
@@ -269,10 +290,11 @@ The feature automatically creates:
 ### Environment Variables
 
 Key configuration settings:
+
 - `ANALYTICS_TABLE`: DynamoDB table for job tracking
 - `ATHENA_DATABASE`: Database containing processed document data
 - `ATHENA_OUTPUT_LOCATION`: S3 location for query results
-- `DOCUMENT_ANALYSIS_AGENT_MODEL_ID`: AI model for agent processing
+- `CHAT_COMPANION_MODEL_ID`: AI model for agent processing
 
 ## Best Practices
 
@@ -295,21 +317,25 @@ Key configuration settings:
 ### Common Issues
 
 **Agent Not Responding:**
+
 - Check CloudWatch logs for the Analytics Processor Lambda function
 - Verify Bedrock model access is enabled for your selected model
 - Ensure sufficient Lambda timeout (15 minutes) for complex queries
 
 **SQL Query Errors:**
+
 - Agent automatically retries failed queries up to 5 times
 - Check that column names are properly quoted in generated SQL
 - Verify database permissions for Athena access
 
 **Visualization Errors:**
+
 - Check that query results contain expected data types
 - Verify Python code generation in AgentCore sandbox
 - Review agent messages for detailed error information
 
 **Performance Issues:**
+
 - Consider using simpler queries for large datasets
 - Try breaking complex questions into smaller parts
 - Monitor Athena query performance and optimize if needed
@@ -333,6 +359,7 @@ The Agent Analysis feature uses several AWS services that incur costs:
 - **Amazon DynamoDB**: Storage and request costs for job tracking
 
 To optimize costs:
+
 - Choose appropriate Bedrock models based on accuracy vs. cost requirements
 - Monitor usage through AWS Cost Explorer
 
@@ -341,11 +368,13 @@ To optimize costs:
 The Agent Analysis feature has access to _all_ tables that the GenAIIDP stores in Athena. Therefore it integrates seamlessly with other GenAIIDP capabilities:
 
 ### Evaluation Framework Integration
+
 - Query evaluation metrics and accuracy scores
 - Analyze patterns in document processing quality
 - Compare performance across different processing patterns
 
 ### Assessment Feature Integration
+
 - Explore confidence scores across document types
 - Identify low-confidence extractions requiring review
 - Analyze relationships between confidence and accuracy

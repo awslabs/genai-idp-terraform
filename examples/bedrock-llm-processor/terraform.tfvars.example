@@ -1,110 +1,45 @@
-# AWS Configuration
-region = "us-east-1"
-prefix = "genai-idp"
+# Bedrock-LLM Processor — copy to terraform.tfvars and set the values below.
+# Everything else uses the defaults in variables.tf.
 
-# Administrator Configuration
-admin_email = "admin@example.com"
+region      = "us-east-1"
+prefix      = "genai-idp"
+admin_email = "admin@example.com" # creates the initial Web UI admin user
 
-# Logging Configuration
-log_level           = "INFO"
-log_retention_days  = 7
+# ── Optional overrides (defaults shown; uncomment to change) ────────────────
+# classification_model_id = "us.amazon.nova-2-lite-v1:0"
+# extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
+# summarization_enabled   = true
+# enable_evaluation       = false
+# enable_reporting        = false
+# enable_rule_validation  = false
+# web_ui = { enabled = true }       # set enabled = false to skip CloudFront/UI
+# config_file_path        = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+# additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
+# tags = { Environment = "dev" }
 
-# Data Retention
-data_tracking_retention_days = 365
-
-# Configuration File Path (optional - uses default lending package config)
-# config_file_path = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
-
-# Model Configuration
-classification_model_id = "us.amazon.nova-2-lite-v1:0"
-extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
-summarization_model_id  = "us.amazon.nova-2-lite-v1:0"
-evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
-
-# Feature Toggles
-summarization_enabled = true
-enable_evaluation     = false
-enable_reporting      = false
-
-# API Configuration
-api = {
-  enabled = true
-
-  # v0.4.8 feature flags
-  enable_agent_companion_chat = false  # Multi-agent AI chat sessions
-  enable_test_studio          = false  # Automated dataset testing
-  enable_fcc_dataset          = false  # Deploy sample FCC dataset (requires enable_test_studio)
-  enable_error_analyzer       = false  # AI-powered error diagnostics
-  enable_mcp                  = false  # MCP Integration (Bedrock AgentCore Gateway, opt-in)
-
-  # v0.4.16 feature flags
-  enable_hitl                     = true   # Built-in HITL review (replaces SageMaker A2I)
-  enable_capacity_planning        = false  # Capacity planning calculator
-  enable_omni_ai_dataset          = false  # OmniAI OCR Benchmark dataset (requires enable_test_studio)
-  enable_docplit_poly_seq_dataset = false  # DocSplit RVL-CDIP-NMP dataset (requires enable_test_studio)
-
-  agent_analytics = {
-    enabled  = false
-    model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-  }
-  discovery = {
-    enabled = true  # Creates a dedicated discovery bucket and workflow
-  }
-  chat_with_document = {
-    enabled                  = false
-    guardrail_id_and_version = null
-    # Optional: requires knowledge_base.enabled = true
-    # guardrail_id_and_version = "your-guardrail-id:1"
-  }
-  knowledge_base = {
-    enabled            = false
-    knowledge_base_arn = null  # Auto-wired by the example when enabled
-    # Set enabled = true to create an OpenSearch Serverless + Bedrock Knowledge Base automatically.
-    # Also set chat_with_document.enabled = true to enable document Q&A in the UI.
-    model_id           = "amazon.nova-pro-v1:0"
-    embedding_model_id = "amazon.titan-embed-text-v2:0"
-  }
-  process_changes = {
-    enabled = false
-  }
-}
-
-# Web UI Configuration
-web_ui = {
-  enabled = true
-}
-
-# Tags
-tags = {
-  Environment = "dev"
-  Project     = "genai-idp-accelerator"
-}
-
-# v0.4.16: Rule Validation (Pattern 2 only)
-enable_rule_validation = false  # Enable compliance rule validation
-
-# v0.4.16: Lambda Hook Inference (Pattern 2 only)
-# Inject custom Lambda functions into the Step Functions workflow at specific stages.
-# ARNs must start with the 'GENAIIDP-' prefix.
-# lambda_hook_ocr            = ""  # e.g. "GENAIIDP-my-custom-ocr-hook"
-# lambda_hook_classification = ""  # e.g. "GENAIIDP-my-custom-classification-hook"
-# lambda_hook_extraction     = ""  # e.g. "GENAIIDP-my-custom-extraction-hook"
-# lambda_hook_assessment     = ""  # e.g. "GENAIIDP-my-custom-assessment-hook"
-# lambda_hook_summarization  = ""  # e.g. "GENAIIDP-my-custom-summarization-hook"
-
-# Build strategy
+# ── Knowledge Base + chat (both ON by default) ──────────────────────────────
+# chat_with_document and the Knowledge Base backend (OpenSearch Serverless +
+# Bedrock KB, auto-wired) are enabled by default. The KB generation model is a
+# cross-region inference-profile id (us./eu./apac. prefix); the embedding model
+# is a plain foundation-model id. To disable or customize, set the `api` object:
+# api = {
+#   chat_with_document = { enabled = false } # disable per-document Q&A
+#   knowledge_base = {
+#     enabled            = false             # skip OpenSearch + KB (saves cost)
+#     model_id           = "us.amazon.nova-pro-v1:0"
+#     embedding_model_id = "amazon.titan-embed-text-v2:0"
+#   }
+# }
 #
-# Defaults preserve the historical AWS CodeBuild path bit-for-bit:
-#   - Lambda layers and processor container images build in-cloud on every apply.
-#   - No host-side dependencies.
-#
-# Set lambda_local = true to build artifacts locally on the deploy host with
-# Docker / Podman / Finch (requires a container runtime). Eliminates CodeBuild
-# infrastructure and shortens dev-loop apply time from minutes to seconds.
+# Advanced toggles (agent analytics, discovery, MCP, HITL, RBAC, IdP
+# federation) also live under the `api` object — see variables.tf.
+
+# ── Build strategy (optional) ────────────────────────────────────────────────
+# Defaults use AWS CodeBuild (in-cloud). Set lambda_local = true to build
+# Lambda layers and processor images locally with Docker/Podman/Finch.
 # See docs/content/deployment-guides/local-lambda-build.md.
-#
-build = {
-  lambda_local        = false
-  lambda_architecture = "x86_64"
-  container_runtime   = "auto"
-}
+# build = {
+#   lambda_local        = false
+#   lambda_architecture = "x86_64"
+#   container_runtime   = "auto"
+# }

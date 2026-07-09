@@ -276,7 +276,7 @@ variable "agent_analytics" {
   description = "Agent analytics configuration"
   type = object({
     enabled                 = bool
-    model_id                = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    model_id                = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     reporting_database_name = optional(string)
     reporting_bucket_arn    = optional(string)
   })
@@ -386,14 +386,36 @@ variable "enable_fcc_dataset" {
   default     = false
 }
 
-variable "enable_error_analyzer" {
-  description = "Enable Error Analyzer feature (AI-powered error diagnostics)"
+variable "enable_w2_dataset" {
+  description = "Enable W2 dataset deployer (deploys the Fake W-2 Tax Form sample dataset for Test Studio). Requires enable_test_studio = true."
   type        = bool
-  default     = true
+  default     = false
 }
 
-variable "enable_mcp" {
-  description = "Enable MCP Integration feature (Bedrock AgentCore Gateway with OAuth 2.0). Not supported in GovCloud regions."
+# =============================================================================
+# VERSION-CHECK FEATURE VARIABLES (v0.5.11)
+# =============================================================================
+
+variable "public_artifacts_bucket" {
+  description = "Name of the (optionally public / cross-account) S3 bucket the version_check_resolver Lambda lists for `<prefix>/idp-main_<version>.yaml` templates. When empty (default), the version-check Lambda, AppSync data source, and resolver are not created (default-off)."
+  type        = string
+  default     = ""
+}
+
+variable "public_artifacts_prefix" {
+  description = "S3 key prefix under public_artifacts_bucket where versioned IDP templates live. Threaded into the resolver's PUBLIC_ARTIFACTS_PREFIX env var. Only used when public_artifacts_bucket is set."
+  type        = string
+  default     = "artifacts/genai-idp"
+}
+
+variable "public_artifacts_region" {
+  description = "Region of public_artifacts_bucket, threaded into the resolver's PUBLIC_ARTIFACTS_REGION env var. When empty, the shipped resolver defaults to AWS_REGION. Only used when public_artifacts_bucket is set."
+  type        = string
+  default     = ""
+}
+
+variable "enable_error_analyzer" {
+  description = "DEPRECATED (no-op as of v0.5.12). The standalone Error Analyzer Lambdas were removed upstream; error analysis is now provided by the unified agents framework (Error-Analyzer-Agent via the agent resolvers). Retained for backward compatibility; setting it has no effect."
   type        = bool
   default     = false
 }
@@ -440,16 +462,39 @@ variable "lookup_function_name" {
   default     = null
 }
 
-variable "user_pool_id" {
-  description = "Cognito User Pool ID (used by MCP Integration for OAuth 2.0 app client)"
-  type        = string
-  default     = null
+# =============================================================================
+# Feature-plugin composition (.enable()-style wiring)
+# =============================================================================
+#
+# NOTE: MCP integration moved to the `mcp-integration` feature submodule in
+# v0.5.12-tf.0. Its former inputs (`user_pool_id`, `mcp_callback_urls`) now live
+# on `modules/features/mcp-integration` and are wired at the root (features.tf).
+
+variable "enabled_feature_contracts" {
+  description = <<-EOT
+    Map of enabled feature-plugin contracts to compose into the API, mirroring
+    the CDK accelerator's `api.enable(feature)` mechanism. Each value is a
+    feature submodule's outputs contract with the shape:
+
+      {
+        enabled          = bool
+        resolvers        = { <field> = { data_source, request_template, response_template } }
+        iam_statements   = [ <policy statement objects> ]
+        environment      = { <env-var name> = <value> }
+        schema_additions = optional(string)  # GraphQL SDL fragment
+      }
+
+    Default `{}` is a no-op: no feature resolvers, IAM statements, or env vars
+    are composed (default-off preserved).
+  EOT
+  type        = any
+  default     = {}
 }
 
-variable "mcp_callback_urls" {
-  description = "Optional list of OAuth 2.0 callback URLs for the MCP external app client. Required by Cognito when the `code` flow is enabled, but unused by AgentCore Gateway (which uses JWT validation). When empty, falls back to a Cognito-hosted UI placeholder. Wire this to the CloudFront distribution URL from the caller for cleanest behaviour."
-  type        = list(string)
-  default     = []
+variable "has_feature_iam" {
+  description = "Whether an enabled feature contributes IAM statements to compose."
+  type        = bool
+  default     = false
 }
 
 #

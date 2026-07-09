@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import boto3
 from strands import tool
 
-from idp_common.config import get_config
+from ..config import get_ea_param
 
 logger = logging.getLogger(__name__)
 
@@ -309,12 +309,7 @@ def _analyze_execution_timeline(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not events:
         return {"error": "No execution events available"}
 
-    # Cache config values once
-    config = get_config(as_model=True)
-
-    max_timeline_events = (
-        config.agents.error_analyzer.parameters.max_stepfunction_timeline_events
-    )
+    max_timeline_events = get_ea_param("max_stepfunction_timeline_events", 50)
 
     timeline = []
     failure_point = None

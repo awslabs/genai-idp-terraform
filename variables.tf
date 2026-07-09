@@ -146,6 +146,25 @@ variable "vpc_security_group_ids" {
   default     = []
 }
 
+# Private Network Deployment
+#
+# When set, the root instantiates `module.vpc_endpoints` so the VPC-placed IDP
+# Lambdas can reach the AWS services the enabled processors and features need
+# over PrivateLink. The interface ENIs are placed in `vpc_subnet_ids` with
+# `vpc_security_group_ids`; the S3/DynamoDB gateway endpoints attach to
+# `route_table_ids`. Default-off: leave this null (and/or `vpc_subnet_ids`
+# empty) and no endpoint resources are created, preserving the public-deployment
+# behavior.
+variable "private_network" {
+  description = "Optional private-network deployment configuration. When set with a vpc_id and non-empty vpc_subnet_ids, the root provisions the VPC interface/gateway endpoints (module.vpc_endpoints) required by the enabled processors and features. Leave null for a public deployment (default)."
+  type = object({
+    vpc_id              = string
+    route_table_ids     = optional(list(string), [])
+    private_dns_enabled = optional(bool, true)
+  })
+  default = null
+}
+
 #
 # General Configuration
 #
@@ -194,6 +213,12 @@ variable "bedrock_llm_processor" {
     }), { enabled = true, model_id = null })
     enable_hitl = optional(bool, false)
     config      = any
+    # Extra non-active, editable config versions seeded alongside the default
+    # (version_name => config object). Shown in the UI version dropdown.
+    additional_configurations = optional(any, {})
+    # Optional fallback BDA project for use_bda:true additional versions;
+    # does not relink the default configuration.
+    bda_project_arn = optional(string, null)
   })
   default = null
 
@@ -215,6 +240,9 @@ variable "bda_processor" {
       model_id = optional(string, null)
     }), { enabled = true, model_id = null })
     config = any
+    # Extra non-active, editable config versions seeded alongside the default
+    # (version_name => config object). Shown in the UI version dropdown.
+    additional_configurations = optional(any, {})
   })
   default = null
 }
@@ -231,6 +259,12 @@ variable "sagemaker_udop_processor" {
     ocr_max_workers            = optional(number, 20)
     classification_max_workers = optional(number, 20)
     config                     = any
+    # Extra non-active, editable config versions seeded alongside the default
+    # (version_name => config object). Shown in the UI version dropdown.
+    additional_configurations = optional(any, {})
+    # Optional fallback BDA project for use_bda:true additional versions;
+    # does not relink the default configuration.
+    bda_project_arn = optional(string, null)
   })
   default = null
 }
@@ -291,11 +325,11 @@ variable "reporting" {
 # Human Review Configuration
 #
 variable "human_review" {
-  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api."
+  description = "Configuration for human review functionality in document processing. SageMaker A2I fields (user_pool_id, private_workforce_arn, workteam_name) removed in v0.4.9 — HITL is now built into processing-environment-api via complete_section_review (gated by the API enable_hitl flag). DEPRECATED in v0.5.12-tf.0: enable_pattern2_hitl and hitl_confidence_threshold are now accepted-but-ignored no-ops (the Pattern-2 Step Functions HITL trio was removed — it referenced upstream source paths that never existed). enabled still gates the legacy A2I IAM statements. These fields are retained as a deprecation shim so existing tfvars keep working."
   type = object({
     enabled                   = optional(bool, false)
-    enable_pattern2_hitl      = optional(bool, false)
-    hitl_confidence_threshold = optional(number, 80)
+    enable_pattern2_hitl      = optional(bool, false) # DEPRECATED v0.5.12-tf.0: no-op (Pattern-2 HITL trio removed)
+    hitl_confidence_threshold = optional(number, 80)  # DEPRECATED v0.5.12-tf.0: no-op (Pattern-2 HITL trio removed)
   })
   default = {
     enabled                   = false
@@ -348,7 +382,7 @@ variable "api" {
     # Agent Analytics (GraphQL resolvers for agent functionality)
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
-      model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+      model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     }), { enabled = false })
 
     # Discovery (Document discovery and classification workflow)
@@ -356,11 +390,12 @@ variable "api" {
       enabled = optional(bool, false)
     }), { enabled = false })
 
-    # Chat with Document (Document Q&A using Bedrock and Knowledge Base)
+    # Chat with Document (per-document Q&A via Bedrock; no Knowledge Base needed).
+    # Default-ON: enabled on every processor/example unless explicitly disabled.
     chat_with_document = optional(object({
-      enabled                  = optional(bool, false)
+      enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-    }), { enabled = false })
+    }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
     process_changes = optional(object({
@@ -379,8 +414,16 @@ variable "api" {
     enable_agent_companion_chat = optional(bool, false)
     enable_test_studio          = optional(bool, false)
     enable_fcc_dataset          = optional(bool, false)
+    enable_w2_dataset           = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
+
+    # v0.5.11 — version-check resolver. When public_artifacts_bucket is
+    # empty (default), the getLatestPublishedVersion resolver Lambda is not
+    # created (default-off). Optional prefix/region are threaded to the Lambda.
+    public_artifacts_bucket = optional(string, "")
+    public_artifacts_prefix = optional(string, "artifacts/genai-idp")
+    public_artifacts_region = optional(string, "")
 
     # v0.4.16 feature flags
     enable_hitl                     = optional(bool, true)
@@ -400,7 +443,7 @@ variable "api" {
     enabled            = true
     agent_analytics    = { enabled = false }
     discovery          = { enabled = false }
-    chat_with_document = { enabled = false }
+    chat_with_document = { enabled = true }
     process_changes    = { enabled = false }
     knowledge_base     = { enabled = false }
   }
@@ -412,6 +455,21 @@ variable "api" {
 }
 
 #
+# Tracking table configuration — TypeDateIndex GSI backfill
+#
+variable "tracking" {
+  description = "Configuration for the tracking table and its TypeDateIndex GSI backfill. The GSI itself is always created (additive, in place); the backfill is an operator-triggered, default-off Step Functions run that populates GSI attributes on pre-existing items."
+  type = object({
+    # When true, provisions the GSI-backfill module (worker Lambda + Step
+    # Functions state machine). Default false. Even when enabled, the backfill
+    # never runs on `terraform apply` — the operator starts the execution
+    # explicitly (see module.tracking_gsi_backfill.state_machine_arn).
+    enable_gsi_backfill = optional(bool, false)
+  })
+  default = {}
+}
+
+#
 # DEPRECATED: Individual API feature variables (use 'api' variable instead)
 # These will be removed in a future major version
 #
@@ -419,7 +477,7 @@ variable "agent_analytics" {
   description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
   type = object({
     enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
   })
   default = null
 }
@@ -519,4 +577,82 @@ variable "build" {
     condition     = contains(["auto", "docker", "podman", "finch"], var.build.container_runtime)
     error_message = "build.container_runtime must be one of: auto, docker, podman, finch."
   }
+}
+
+#
+# RBAC feature plugin
+#
+# Role-based access control modeled as a feature-plugin submodule
+# (`modules/features/rbac/`), NOT a boolean on the monolithic `var.api` object.
+# When `enabled`, the root instantiates `module.rbac` (features.tf): the four
+# Cognito groups, the `Users` table, the user-management Lambda, and the
+# server-side authorization surface, emitting the feature-plugin contract the
+# API module composes.
+#
+# Default-off: leave `enabled = false` (the default) and no RBAC resources are
+# created — the single-tenant Cognito authorization behavior is preserved. RBAC
+# requires a Cognito user pool; that constraint is enforced at plan time by a
+# root `check {}`.
+variable "rbac" {
+  description = "Configuration for the RBAC feature plugin. Default-off. When enabled, provisions the four Cognito groups, the Users table, and the user-management Lambda via module.rbac. Requires a Cognito user pool (enforced at plan time)."
+  type = object({
+    enabled = optional(bool, false)
+    # Optional overrides for the four RBAC Cognito group names. Each key
+    # defaults to its canonical name so overriding one or more does not change
+    # the default-on behavior of the four roles.
+    group_names = optional(object({
+      admin    = optional(string, "Admin")
+      author   = optional(string, "Author")
+      reviewer = optional(string, "Reviewer")
+      viewer   = optional(string, "Viewer")
+    }), {})
+    # Comma-separated list of email domains the user-management Lambda permits
+    # when creating users. Empty disables domain restriction (default).
+    allowed_signup_email_domains = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+}
+
+#
+# External SAML/OIDC IdP federation feature plugin
+#
+# Federation modeled as a feature-plugin submodule
+# (`modules/features/idp-federation/`). When `enabled`, the root instantiates
+# `module.idp_federation` (features.tf): the Cognito SAML/OIDC identity
+# provider, the OIDC client-secret resolver (no plaintext in state), and the
+# group-mapping trigger Lambda that maps external groups to the four RBAC
+# groups. The submodule always emits the feature-plugin contract.
+#
+# Default-off: leave `enabled = false` (the default) and the user pool stays
+# configured for direct Cognito authentication. The ~12 provider fields mirror
+# the upstream v0.5.6 `ExternalIdP*` surface. The OIDC client secret is supplied
+# by REFERENCE (`oidc_client_secret_ref` — a Secrets Manager ARN / SSM parameter
+# name), never as a raw value.
+variable "idp_federation" {
+  description = "Configuration for the external SAML/OIDC IdP federation feature plugin. Default-off. When enabled, provisions the Cognito identity provider and group-mapping trigger via module.idp_federation. The OIDC client secret is supplied by reference (oidc_client_secret_ref), never in plaintext."
+  type = object({
+    enabled                = optional(bool, false)
+    provider_type          = optional(string, "SAML")
+    provider_name          = optional(string, "ExternalIdP")
+    saml_metadata_url      = optional(string, "")
+    saml_metadata_file     = optional(string, "")
+    oidc_issuer            = optional(string, "")
+    oidc_client_id         = optional(string, "")
+    oidc_client_secret_ref = optional(string, "")
+    oidc_authorize_scopes  = optional(string, "openid email profile")
+    attribute_mapping      = optional(map(string), {})
+    group_attribute_name   = optional(string, "")
+    group_mapping          = optional(map(string), {})
+  })
+  default = {
+    enabled = false
+  }
+}
+
+variable "seed_managed_configs" {
+  description = "Seed the managed baseline configuration versions (sources/config_library/managed_config) as non-active, non-editable reference rows. Set false to skip them."
+  type        = bool
+  default     = true
 }

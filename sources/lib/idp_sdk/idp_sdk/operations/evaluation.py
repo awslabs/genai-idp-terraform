@@ -39,7 +39,7 @@ class EvaluationOperation:
         Returns:
             Dictionary with baseline creation result
         """
-        from idp_sdk.core.evaluation_processor import EvaluationProcessor
+        from idp_sdk._core.evaluation_processor import EvaluationProcessor
 
         name = self._client._require_stack(stack_name)
 
@@ -71,7 +71,7 @@ class EvaluationOperation:
         Returns:
             EvaluationReport with accuracy and field results
         """
-        from idp_sdk.core.evaluation_processor import EvaluationProcessor
+        from idp_sdk._core.evaluation_processor import EvaluationProcessor
 
         name = self._client._require_stack(stack_name)
 
@@ -117,7 +117,7 @@ class EvaluationOperation:
         Returns:
             EvaluationMetrics with aggregated statistics
         """
-        from idp_sdk.core.evaluation_processor import EvaluationProcessor
+        from idp_sdk._core.evaluation_processor import EvaluationProcessor
 
         name = self._client._require_stack(stack_name)
 
@@ -158,7 +158,7 @@ class EvaluationOperation:
         Returns:
             EvaluationBaselineListResult with baselines and optional next_token
         """
-        from idp_sdk.core.evaluation_processor import EvaluationProcessor
+        from idp_sdk._core.evaluation_processor import EvaluationProcessor
 
         name = self._client._require_stack(stack_name)
 
@@ -192,7 +192,7 @@ class EvaluationOperation:
         Returns:
             Dictionary with deletion result
         """
-        from idp_sdk.core.evaluation_processor import EvaluationProcessor
+        from idp_sdk._core.evaluation_processor import EvaluationProcessor
 
         name = self._client._require_stack(stack_name)
 

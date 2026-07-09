@@ -49,8 +49,8 @@ exclude = [
 line-length = 88
 indent-width = 4
 
-# Assume Python 3.9
-target-version = "py39"
+# Assume Python 3.12
+target-version = "py312"
 
 [lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
@@ -59,7 +59,8 @@ target-version = "py39"
 select = ["E4", "E7", "E9", "F"]
 ignore = []
 # Note: if you're using Ruff to organize imports in VS Code and also expect to run Ruff from the command line, you'll want to enable Ruff's isort rules by adding "I" to your extend-select.
-extend-select = ["I"]
+# TID251: enforce banned-api rules (prevents direct imports from idp_sdk._core)
+extend-select = ["I", "TID251"]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
@@ -68,9 +69,19 @@ unfixable = []
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
+[lint.flake8-tidy-imports.banned-api]
+"idp_sdk._core" = {msg = "This is a private internal module. Use IDPClient from idp_sdk instead."}
+
 [lint.per-file-ignores]
 # Let's ignore some annoying rules in notebooks
 "notebooks/*" = ["F401"]
+# Internal SDK implementation files are allowed to import from _core
+"lib/idp_sdk/idp_sdk/**" = ["TID251"]
+# Lambda tools that need direct _core access
+"src/lambda/**" = ["TID251"]
+# Tests mock _core internals directly
+"lib/idp_cli_pkg/tests/**" = ["TID251"]
+"lib/idp_sdk/tests/**" = ["TID251"]
 
 [format]
 # Like Black, use double quotes for strings.

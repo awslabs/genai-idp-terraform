@@ -9,20 +9,25 @@ export interface ConfidenceThresholdAlert {
 
 export interface Section {
   Id: string;
-  PageIds: string[];
+  PageIds: number[];
   Class: string;
   OutputJSONUri: string;
   ConfidenceThresholdAlerts: ConfidenceThresholdAlert[];
 }
 
 export interface Page {
-  Id: string;
+  Id: number;
   Class: string;
   ImageUri: string;
   TextUri: string;
   TextConfidenceUri: string;
 }
 
+/**
+ * UI-facing Document type. Manually aligned with GqlDocument for fields
+ * that had type discrepancies. Non-nullable assumptions preserved because
+ * the UI normalizes nulls to defaults in map-document-attributes.ts.
+ */
 export interface Document {
   ObjectKey: string;
   ObjectStatus: string;
@@ -40,13 +45,14 @@ export interface Document {
   EvaluationStatus: string;
   SummaryReportUri: string;
   RuleValidationResultUri: string;
-  ExpiresAfter: string;
+  ExpiresAfter: number;
   HITLStatus: string;
-  HITLTriggered: string;
+  HITLTriggered: boolean;
+  HITLCompleted: boolean;
   HITLReviewURL: string;
-  HITLSectionsPending: string;
-  HITLSectionsCompleted: string;
-  HITLSectionsSkipped: string;
+  HITLSectionsPending: string[];
+  HITLSectionsCompleted: string[];
+  HITLSectionsSkipped: string[];
   HITLReviewOwner: string;
   HITLReviewOwnerEmail: string;
   HITLReviewedBy: string;
@@ -56,4 +62,15 @@ export interface Document {
   ListSK?: string;
   PK?: string;
   SK?: string;
+  DocumentClass?: string;
+  pageCount?: number;
+  // UI-computed fields from map-document-attributes.ts
+  uniqueId?: string;
+  hitlTriggered?: boolean;
+  hitlCompleted?: boolean;
+  duration?: string;
+  metering?: Record<string, unknown>;
+  hitlReviewHistory?: Record<string, unknown>[];
+  confidenceAlertCount?: number;
+  executionArn?: string;
 }

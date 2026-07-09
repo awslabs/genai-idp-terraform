@@ -1,3 +1,7 @@
+---
+title: "GenAI IDP Accelerator Cost Considerations"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -95,6 +99,71 @@ In addition to the built-in cost tracking, consider using these AWS tools:
 - **AWS Cost Explorer**: Analyze and visualize your costs and usage over time
 - **AWS Budgets**: Set custom budgets and receive alerts when costs exceed thresholds
 - **AWS Cost and Usage Reports**: Generate detailed reports on your AWS costs and usage
+
+## Cost Attribution with Bedrock Application Inference Profiles
+
+Amazon Bedrock [Application Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-create.html) let you tag Bedrock model invocations with custom cost-allocation tags (e.g., project, team, or migration program identifiers). Because all Bedrock calls in the GenAI IDP Accelerator are driven by model IDs in the configuration, you can enable cost attribution **without any code changes** — just create an inference profile and update the configuration.
+
+### Why Use Application Inference Profiles?
+
+By default, Bedrock usage appears in AWS Cost Explorer as a single line item per model. Application inference profiles enable you to:
+
+- **Attribute Bedrock costs** to specific projects, teams, or migration programs using AWS cost-allocation tags
+- **Track costs per workload** when multiple applications share the same AWS account
+- **Support MAP (Migration Acceleration Program) tagging** — e.g., `map-migrated: migDNDBZMXMLZ`
+- **Separate cost reporting** across different IDP document processing pipelines
+
+### Step-by-Step Setup
+
+#### Step 1 — Create an Application Inference Profile in the Bedrock Console
+
+1. Open the **Amazon Bedrock Console** → **Inference** → **Inference profiles**
+2. Click **Create inference profile**
+3. Select the **foundation model** currently used in your IDP configuration (e.g., `us.anthropic.claude-3-7-sonnet-20250219-v1:0`)
+4. Add your cost-allocation tags. For example:
+   - `map-migrated`: `migDNDBZMXMLZ`
+   - `project`: `my-idp-workload`
+5. Note the **Application Inference Profile ARN** after creation — it will look like:
+   ```
+   arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcdef123456
+   ```
+
+> **💡 Tip:** Create separate inference profiles for each processing stage (classification, extraction, assessment) if you need per-stage cost breakdowns.
+
+#### Step 2 — Update the IDP Configuration (No Code Change Needed)
+
+1. In the IDP web UI, go to **View/Edit Configuration**
+2. Toggle to **JSON View** or **YAML View**
+3. Find the `model` or `model_id` fields in the relevant processing step sections — for example:
+   - **Classification**: `classification.model_id`
+   - **Extraction**: `extraction.model_id`
+   - **Assessment**: `assessment.model`
+   - **Summarization**: `summarization.model`
+4. **Replace** the standard model ID or cross-region inference profile ID with the new **Application Inference Profile ARN**
+
+   **Before:**
+   ```yaml
+   model_id: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+   ```
+
+   **After:**
+   ```yaml
+   model_id: arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcdef123456
+   ```
+
+5. Click **Save Changes**
+
+> **⚠️ Note:** Application inference profiles are region-specific. If you are using cross-region inference profiles (e.g., `us.*` or `eu.*` prefixes) for multi-region routing, be aware that an application inference profile pins invocations to the region where it was created. See the [EU Region Model Support](./eu-region-model-support.md) doc for details on cross-region behavior.
+
+### Verifying Cost Attribution
+
+After processing documents with the updated configuration:
+
+1. Go to **AWS Cost Explorer**
+2. Group by your cost-allocation tag (e.g., `map-migrated`)
+3. Bedrock invocations made through the application inference profile will now appear under the tagged allocation
+
+> **📝 Note:** Cost allocation tags may take up to 24 hours to appear in Cost Explorer after first use. You must also [activate the tags](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/activating-tags.html) in the Billing console if they are user-defined tags.
 
 ## Disclaimer
 

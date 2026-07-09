@@ -1,0 +1,643 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  AWS GenAI IDP Accelerator - Multi-Document Discovery Nested Stack.
+  Deploys container-based Lambda functions for multi-doc discovery (embed, cluster, analyze, save).
+  Uses Docker images because dependencies (scikit-learn, scipy, numpy, strands-agents) exceed
+  Lambda's 250MB unzipped layer limit.
+
+Parameters:
+  StackName:
+    Type: String
+    Description: Parent stack name
+  DiscoveryBucketName:
+    Type: String
+    Description: Discovery S3 bucket name
+  DiscoveryBucketArn:
+    Type: String
+    Description: Discovery S3 bucket ARN
+  InputBucketName:
+    Type: String
+    Description: Input S3 bucket name
+    Default: ""
+  TestSetBucketName:
+    Type: String
+    Description: Test Set S3 bucket name
+    Default: ""
+  ConfigurationTableName:
+    Type: String
+    Description: Configuration DynamoDB table name
+  ConfigurationTableArn:
+    Type: String
+    Description: Configuration DynamoDB table ARN
+  CustomerManagedEncryptionKeyArn:
+    Type: String
+    Description: KMS key ARN for encryption
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: Optional IAM permissions boundary ARN
+  LogLevel:
+    Type: String
+    Default: "INFO"
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+  BuildHash:
+    Type: String
+    Default: "initial"
+    Description: Hash to trigger Docker image rebuild when source changes
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket containing build artifacts (source zip for CodeBuild)
+  SourceZipfile:
+    Type: String
+    Description: S3 key for the source zip file used by CodeBuild
+  AppSyncApiUrl:
+    Type: String
+    Description: AppSync GraphQL API URL for real-time status updates
+    Default: ""
+  AppSyncApiArn:
+    Type: String
+    Description: AppSync GraphQL API ARN for IAM permissions
+    Default: ""
+  BedrockHubRoleArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:(aws|aws-cn|aws-us-gov|aws-iso|aws-iso-b):iam::[0-9]{12}:role/[\\w+=,.@\\-/]+$"
+    ConstraintDescription: "Must be empty or a valid IAM role ARN. The ARN must NOT contain spaces — pass ExternalId via the separate BedrockHubRoleExternalId parameter."
+    Description: >
+      (Optional) ARN of an IAM role in a centralized hub account to assume for all
+      Bedrock invocations. When set, Lambdas use sts:AssumeRole and route Bedrock
+      data-plane and control-plane traffic through this role.
+  BedrockHubRoleExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "(Optional) ExternalId for sts:AssumeRole into the Bedrock hub-account role."
+  BedrockHubRoleSessionName:
+    Type: String
+    Default: ""
+    Description: "(Optional) Session name for sts:AssumeRole into the Bedrock hub-account role."
+
+Conditions:
+  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  HasBedrockHubRole: !Not [!Equals [!Ref BedrockHubRoleArn, ""]]
+  HasBedrockHubRoleExternalId: !Not [!Equals [!Ref BedrockHubRoleExternalId, ""]]
+  HasBedrockHubRoleSessionName: !Not [!Equals [!Ref BedrockHubRoleSessionName, ""]]
+
+Resources:
+  ##########################################################################
+  # ECR Repository
+  ##########################################################################
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    # checkov:skip=CKV_AWS_51: "Mutable tags allowed for workflow flexibility"
+    # checkov:skip=CKV_AWS_163: "ECR scanning optional per deployment requirements"
+    Properties:
+      EmptyOnDelete: true
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      EncryptionConfiguration:
+        EncryptionType: KMS
+        KmsKey: !Ref CustomerManagedEncryptionKeyArn
+
+  ##########################################################################
+  # CodeBuild Project - builds Docker image and pushes to ECR
+  ##########################################################################
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "Wildcard permissions required for CloudWatch Logs creation and ECR auth"
+    Properties:
+      Path: /
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub "codebuild.${AWS::URLSuffix}"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                Resource: !GetAtt ECRRepository.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${DiscoveryBucketName}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${DiscoveryBucketName}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucket}/*"
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:ReEncrypt*
+                  - kms:GenerateDataKey*
+                  - kms:DescribeKey
+                Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  DockerBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Description: Build Docker image for Multi-Document Discovery Lambda functions
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: ECR_REPO_URI
+            Value: !GetAtt ECRRepository.RepositoryUri
+          - Name: IMAGE_TAG
+            Value: latest
+      Source:
+        Type: S3
+        Location: !Sub "${ArtifactBucket}/${SourceZipfile}"
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo Logging in to Amazon ECR...
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+            build:
+              commands:
+                - echo "Source directory contents:"
+                - ls -la
+                - echo "Creating requirements.txt..."
+                - |
+                  cat > requirements.txt << 'REQS'
+                  scikit-learn>=1.5.0
+                  scipy>=1.14.0
+                  numpy==1.26.4
+                  Pillow==12.1.1
+                  pypdfium2>=5.5.0
+                  jinja2>=3.1.0
+                  strands-agents==1.14.0
+                  boto3>=1.34.0
+                  pyyaml>=6.0.0
+                  pydantic>=2.0.0
+                  REQS
+                - echo "Creating Dockerfile..."
+                - |
+                  cat > Dockerfile << 'DOCKERFILE'
+                  FROM public.ecr.aws/lambda/python:3.12 AS builder
+                  RUN dnf install -y gcc gcc-c++ make && dnf clean all
+                  COPY requirements.txt /tmp/requirements.txt
+                  RUN pip install --no-cache-dir --target /opt/python -r /tmp/requirements.txt
+                  COPY lib/idp_common_pkg /tmp/idp_common_pkg
+                  RUN pip install --no-cache-dir --no-deps --target /opt/python /tmp/idp_common_pkg
+                  FROM public.ecr.aws/lambda/python:3.12
+                  COPY --from=builder /opt/python ${LAMBDA_TASK_ROOT}/../opt/python
+                  ENV PYTHONPATH="${LAMBDA_TASK_ROOT}/../opt/python:${LAMBDA_TASK_ROOT}"
+                  COPY src/lambda/multi_doc_discovery/*.py ${LAMBDA_TASK_ROOT}/
+                  CMD ["embed_handler.handler"]
+                  DOCKERFILE
+                - echo "Building Docker image..."
+                - docker build -t $ECR_REPO_URI:$IMAGE_TAG .
+            post_build:
+              commands:
+                - echo Pushing Docker image to ECR...
+                - docker push $ECR_REPO_URI:$IMAGE_TAG
+                - echo Build completed on `date`
+      TimeoutInMinutes: 30
+      EncryptionKey: !Ref CustomerManagedEncryptionKeyArn
+
+  ##########################################################################
+  # Custom Resource Lambda - triggers CodeBuild during deployment
+  ##########################################################################
+  DockerBuildRunFunctionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "CloudWatch Logs require wildcard for log group creation"
+    Properties:
+      Path: /
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub "lambda.${AWS::URLSuffix}"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DockerBuildRunPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                Resource: !GetAtt DockerBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+
+  DockerBuildRunFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_116: "DLQ not needed for custom resource Lambda"
+    # checkov:skip=CKV_AWS_117: "No VPC needed"
+    # checkov:skip=CKV_AWS_115: "No reserved concurrency needed"
+    # checkov:skip=CKV_AWS_173: "No sensitive env vars"
+    Properties:
+      FunctionName: !Sub "GENAIIDP-${StackName}-MultiDocBuildRun"
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./docker_build_lambda
+      Description: Custom resource handler - triggers CodeBuild for multi-doc discovery image
+      MemorySize: 128
+      Timeout: 900
+      Role: !GetAtt DockerBuildRunFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref DockerBuildRunFunctionLogGroup
+
+  DockerBuildRunFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DockerBuildRun:
+    Type: Custom::DockerBuild
+    DependsOn:
+      - DockerBuildProject
+      - ECRRepository
+    Properties:
+      ServiceToken: !GetAtt DockerBuildRunFunction.Arn
+      ProjectName: !Ref DockerBuildProject
+      BuildHash: !Ref BuildHash
+
+  ##########################################################################
+  # Container Image Lambda Functions (4 heavy functions)
+  ##########################################################################
+
+  # --- Embed Function ---
+  MultiDocDiscoveryEmbedFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_116: "DLQ handled at Step Functions level"
+    # checkov:skip=CKV_AWS_117: "No VPC needed"
+    # checkov:skip=CKV_AWS_115: "No reserved concurrency needed"
+    # checkov:skip=CKV_AWS_173: "No sensitive env vars"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:latest"
+      ImageConfig:
+        Command: ["embed_handler.handler"]
+      Description: Multi-doc discovery - generate multimodal embeddings
+      MemorySize: 2048
+      Timeout: 900
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          DISCOVERY_BUCKET: !Ref DiscoveryBucketName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          APPSYNC_API_URL: !Ref AppSyncApiUrl
+          BEDROCK_ASSUME_ROLE_ARN:
+            !If [HasBedrockHubRole, !Ref BedrockHubRoleArn, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_EXTERNAL_ID:
+            !If [HasBedrockHubRoleExternalId, !Ref BedrockHubRoleExternalId, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_SESSION_NAME:
+            !If [HasBedrockHubRoleSessionName, !Ref BedrockHubRoleSessionName, !Ref AWS::NoValue]
+      LoggingConfig:
+        LogGroup: !Ref MultiDocDiscoveryEmbedFunctionLogGroup
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DiscoveryBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref TestSetBucketName
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTableName
+        - Statement:
+            - Effect: Allow
+              Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:DescribeKey]
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            - Effect: Allow
+              Action: [bedrock:InvokeModel]
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:application-inference-profile/*"
+            # Optional cross-account Bedrock invocation via hub-account role.
+            - !If
+              - HasBedrockHubRole
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref BedrockHubRoleArn
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action: [cloudwatch:PutMetricData]
+              Resource: "*"
+            - Effect: Allow
+              Action: [appsync:GraphQL]
+              Resource: !Sub "${AppSyncApiArn}/*"
+
+  MultiDocDiscoveryEmbedFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  # --- Cluster Function ---
+  MultiDocDiscoveryClusterFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_116: "DLQ handled at Step Functions level"
+    # checkov:skip=CKV_AWS_117: "No VPC needed"
+    # checkov:skip=CKV_AWS_115: "No reserved concurrency needed"
+    # checkov:skip=CKV_AWS_173: "No sensitive env vars"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:latest"
+      ImageConfig:
+        Command: ["cluster_handler.handler"]
+      Description: Multi-doc discovery - cluster documents by embedding similarity
+      MemorySize: 2048
+      Timeout: 300
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          DISCOVERY_BUCKET: !Ref DiscoveryBucketName
+          APPSYNC_API_URL: !Ref AppSyncApiUrl
+          BEDROCK_ASSUME_ROLE_ARN:
+            !If [HasBedrockHubRole, !Ref BedrockHubRoleArn, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_EXTERNAL_ID:
+            !If [HasBedrockHubRoleExternalId, !Ref BedrockHubRoleExternalId, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_SESSION_NAME:
+            !If [HasBedrockHubRoleSessionName, !Ref BedrockHubRoleSessionName, !Ref AWS::NoValue]
+      LoggingConfig:
+        LogGroup: !Ref MultiDocDiscoveryClusterFunctionLogGroup
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DiscoveryBucketName
+        - Statement:
+            - Effect: Allow
+              Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:DescribeKey]
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            # Optional cross-account Bedrock invocation via hub-account role.
+            - !If
+              - HasBedrockHubRole
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref BedrockHubRoleArn
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action: [appsync:GraphQL]
+              Resource: !Sub "${AppSyncApiArn}/*"
+
+  MultiDocDiscoveryClusterFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  # --- Analyze Function ---
+  MultiDocDiscoveryAnalyzeFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_116: "DLQ handled at Step Functions level"
+    # checkov:skip=CKV_AWS_117: "No VPC needed"
+    # checkov:skip=CKV_AWS_115: "No reserved concurrency needed"
+    # checkov:skip=CKV_AWS_173: "No sensitive env vars"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:latest"
+      ImageConfig:
+        Command: ["analyze_handler.handler"]
+      Description: Multi-doc discovery - analyze cluster with Strands agent
+      MemorySize: 2048
+      Timeout: 900
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          DISCOVERY_BUCKET: !Ref DiscoveryBucketName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          BEDROCK_ASSUME_ROLE_ARN:
+            !If [HasBedrockHubRole, !Ref BedrockHubRoleArn, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_EXTERNAL_ID:
+            !If [HasBedrockHubRoleExternalId, !Ref BedrockHubRoleExternalId, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_SESSION_NAME:
+            !If [HasBedrockHubRoleSessionName, !Ref BedrockHubRoleSessionName, !Ref AWS::NoValue]
+      LoggingConfig:
+        LogGroup: !Ref MultiDocDiscoveryAnalyzeFunctionLogGroup
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DiscoveryBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref TestSetBucketName
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTableName
+        - Statement:
+            - Effect: Allow
+              Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:DescribeKey]
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            - Effect: Allow
+              Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, bedrock:GetInferenceProfile]
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:application-inference-profile/*"
+            # Optional cross-account Bedrock invocation via hub-account role.
+            - !If
+              - HasBedrockHubRole
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref BedrockHubRoleArn
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action: [cloudwatch:PutMetricData]
+              Resource: "*"
+
+  MultiDocDiscoveryAnalyzeFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  # --- Save Function ---
+  MultiDocDiscoverySaveFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: DockerBuildRun
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_116: "DLQ handled at Step Functions level"
+    # checkov:skip=CKV_AWS_117: "No VPC needed"
+    # checkov:skip=CKV_AWS_115: "No reserved concurrency needed"
+    # checkov:skip=CKV_AWS_173: "No sensitive env vars"
+    Properties:
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      PackageType: Image
+      ImageUri: !Sub "${ECRRepository.RepositoryUri}:latest"
+      ImageConfig:
+        Command: ["save_handler.handler"]
+      Description: Multi-doc discovery - save results and generate reflection
+      MemorySize: 1024
+      Timeout: 900
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          DISCOVERY_BUCKET: !Ref DiscoveryBucketName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          APPSYNC_API_URL: !Ref AppSyncApiUrl
+          BEDROCK_ASSUME_ROLE_ARN:
+            !If [HasBedrockHubRole, !Ref BedrockHubRoleArn, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_EXTERNAL_ID:
+            !If [HasBedrockHubRoleExternalId, !Ref BedrockHubRoleExternalId, !Ref AWS::NoValue]
+          BEDROCK_ASSUME_ROLE_SESSION_NAME:
+            !If [HasBedrockHubRoleSessionName, !Ref BedrockHubRoleSessionName, !Ref AWS::NoValue]
+      LoggingConfig:
+        LogGroup: !Ref MultiDocDiscoverySaveFunctionLogGroup
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DiscoveryBucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTableName
+        - Statement:
+            - Effect: Allow
+              Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:DescribeKey]
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            - Effect: Allow
+              Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, bedrock:GetInferenceProfile]
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:application-inference-profile/*"
+            # Optional cross-account Bedrock invocation via hub-account role.
+            - !If
+              - HasBedrockHubRole
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref BedrockHubRoleArn
+              - !Ref AWS::NoValue
+            - Effect: Allow
+              Action: [cloudwatch:PutMetricData]
+              Resource: "*"
+            - Effect: Allow
+              Action: [appsync:GraphQL]
+              Resource: !Sub "${AppSyncApiArn}/*"
+
+  MultiDocDiscoverySaveFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+Outputs:
+  EmbedFunctionArn:
+    Description: ARN of the Embed Lambda function
+    Value: !GetAtt MultiDocDiscoveryEmbedFunction.Arn
+  ClusterFunctionArn:
+    Description: ARN of the Cluster Lambda function
+    Value: !GetAtt MultiDocDiscoveryClusterFunction.Arn
+  AnalyzeFunctionArn:
+    Description: ARN of the Analyze Lambda function
+    Value: !GetAtt MultiDocDiscoveryAnalyzeFunction.Arn
+  SaveFunctionArn:
+    Description: ARN of the Save Lambda function
+    Value: !GetAtt MultiDocDiscoverySaveFunction.Arn
+  ECRRepositoryUri:
+    Description: URI of the ECR repository
+    Value: !GetAtt ECRRepository.RepositoryUri

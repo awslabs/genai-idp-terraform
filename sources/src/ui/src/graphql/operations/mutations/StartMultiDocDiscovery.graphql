@@ -1,0 +1,27 @@
+mutation StartMultiDocDiscovery(
+  $s3Bucket: String
+  $s3Prefix: String
+  $configVersion: String!
+  $zipFileName: String
+  $zipFileSize: Int
+) {
+  startMultiDocDiscovery(
+    s3Bucket: $s3Bucket
+    s3Prefix: $s3Prefix
+    configVersion: $configVersion
+    zipFileName: $zipFileName
+    zipFileSize: $zipFileSize
+  ) {
+    jobId
+    status
+    configVersion
+    currentStep
+    totalDocuments
+    clustersFound
+    discoveredClasses
+    reflectionReport
+    errorMessage
+    createdAt
+    updatedAt
+  }
+}

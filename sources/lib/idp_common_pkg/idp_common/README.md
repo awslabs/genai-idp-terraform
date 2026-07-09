@@ -20,6 +20,16 @@ The IDP Common library provides these main modules:
 - **[BDA](bda/README.md)**: Bedrock Data Automation integration
 - **[AppSync](appsync/README.md)**: Document storage through GraphQL API
 - **[Reporting](reporting/README.md)**: Analytics data storage
+- **[Assessment](assessment/README.md)**: Confidence scoring and bounding boxes
+- **[Discovery](discovery/README.md)**: Document class and schema discovery
+- **[Schema](schema/README.md)**: Dynamic Pydantic model generation from JSON Schema
+- **[Agents](agents/README.md)**: Conversational AI agent framework
+- **[Model Finetuning](model_finetuning/README.md)**: Nova fine-tuning utilities
+- **[DynamoDB](dynamodb/README.md)**: Document tracking and HITL state management
+- **[Image](image/README.md)**: Image resizing and format conversion
+- **[S3](s3/README.md)**: S3 read/write utilities
+- **[Utils](utils/README.md)**: Common utility functions
+- **[Metrics](metrics/README.md)**: Performance and token tracking
 
 ## 🗃️ Key Classes
 
@@ -45,6 +55,7 @@ class Document:
     
     # Processing state and timing
     status: Status = Status.QUEUED
+    initial_event_time: Optional[str] = None
     queued_time: Optional[str] = None
     start_time: Optional[str] = None
     completion_time: Optional[str] = None
@@ -54,15 +65,30 @@ class Document:
     num_pages: int = 0
     pages: Dict[str, Page] = field(default_factory=dict)
     sections: List[Section] = field(default_factory=list)
-    summary: Optional[str] = None
-    detailed_summary: Optional[str] = None
+    summary_report_uri: Optional[str] = None
     
     # Processing metadata
     metering: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    trace_id: Optional[str] = None
+    config_version: Optional[str] = None
+    evaluation_status: Optional[str] = None
     evaluation_report_uri: Optional[str] = None
-    evaluation_result: Any = None  # Holds the DocumentEvaluationResult object
-    rule_validation_result: Optional[RuleValidationResult] = None  # Holds rule validation results
+    evaluation_results_uri: Optional[str] = None
+    rule_validation_result: Optional[RuleValidationResult] = None
+    evaluation_result: Any = None
+    summarization_result: Any = None
     errors: List[str] = field(default_factory=list)
+    
+    # HITL metadata
+    hitl_metadata: List[HitlMetadata] = field(default_factory=list)
+    hitl_status: Optional[str] = None
+    hitl_triggered: bool = False
+    hitl_sections_pending: List[str] = field(default_factory=list)
+    hitl_sections_completed: List[str] = field(default_factory=list)
+    
+    # Confidence alerts
+    confidence_alert_count: int = 0
 ```
 
 ### Page
@@ -104,6 +130,7 @@ class Section:
     page_ids: List[str] = field(default_factory=list)
     extraction_result_uri: Optional[str] = None
     attributes: Optional[Dict[str, Any]] = None
+    confidence_threshold_alerts: List[Dict[str, Any]] = field(default_factory=list)
 ```
 
 ### Status
@@ -113,15 +140,21 @@ The document processing status is represented by the `Status` enum:
 ```python
 class Status(Enum):
     """Document processing status."""
-    QUEUED = "QUEUED"           # Initial state when document is added to queue
-    RUNNING = "RUNNING"         # Step function workflow has started
-    OCR = "OCR"                 # OCR processing
-    CLASSIFYING = "CLASSIFYING" # Document classification
-    EXTRACTING = "EXTRACTING"   # Information extraction 
-    POSTPROCESSING = "POSTPROCESSING" # Document summarization
-    SUMMARIZING = "SUMMARIZING" # Document summarization
-    COMPLETED = "COMPLETED"     # All processing completed
-    FAILED = "FAILED"           # Processing failed
+    QUEUED = "QUEUED"                                       # Initial state
+    RUNNING = "RUNNING"                                     # Workflow started
+    OCR = "OCR"                                             # OCR processing
+    CLASSIFYING = "CLASSIFYING"                             # Document classification
+    EXTRACTING = "EXTRACTING"                               # Information extraction
+    ASSESSING = "ASSESSING"                                 # Confidence assessment
+    POSTPROCESSING = "POSTPROCESSING"                       # Post-processing
+    HITL_IN_PROGRESS = "HITL_IN_PROGRESS"                   # Human review in progress
+    SUMMARIZING = "SUMMARIZING"                             # Document summarization
+    RULE_VALIDATION = "RULE_VALIDATION"                     # Rule validation
+    RULE_VALIDATION_ORCHESTRATOR = "RULE_VALIDATION_ORCHESTRATOR"  # Rule consolidation
+    EVALUATING = "EVALUATING"                               # Evaluation
+    COMPLETED = "COMPLETED"                                 # All processing completed
+    FAILED = "FAILED"                                       # Processing failed
+    ABORTED = "ABORTED"                                     # User cancelled
 ```
 
 ## 📦 Document Compression for Large Documents
@@ -325,6 +358,16 @@ document = orchestrator.consolidate_and_save(document, config=config, multiple_s
 # Document Evaluation
 evaluation_service = evaluation.EvaluationService(config=config)
 document = evaluation_service.evaluate_document(document, expected_document)
+
+# Document Class Discovery (generates JSON Schema for new document types)
+from idp_common.discovery.classes_discovery import ClassesDiscovery
+discovery = ClassesDiscovery(input_bucket="bucket", input_prefix="doc.pdf", region="us-west-2")
+# With local file bytes (no S3 read):
+result = discovery.discovery_classes_with_document(
+    input_bucket="local", input_prefix="doc.pdf",
+    file_bytes=open("doc.pdf", "rb").read(), save_to_config=False
+)
+schema = result["schema"]  # JSON Schema dict
 
 # Store in AppSync
 appsync_service = appsync.DocumentAppSyncService()

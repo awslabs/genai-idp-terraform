@@ -9,7 +9,7 @@ import { ConsoleLogger } from 'aws-amplify/utils';
 import PageImageViewer from '../common/PageImageViewer';
 import FieldComparisonTable from './FieldComparisonTable';
 import CorrectionDeltaPanel from './CorrectionDeltaPanel';
-import getFileContents from '../../graphql/queries/getFileContents';
+import { getFileContents } from '../../graphql/generated';
 import useSettingsContext from '../../contexts/settings';
 
 const client = generateClient();
@@ -25,9 +25,9 @@ interface Correction {
 }
 
 interface FieldGeometry {
-  boundingBox: Record<string, number>;
-  page: number;
-  vertices?: Record<string, number>[];
+  boundingBox?: Record<string, number>;
+  page?: number | string;
+  vertices?: unknown;
 }
 
 interface SectionData {
@@ -71,6 +71,7 @@ const applyCorrections = (data: Record<string, unknown> | null, corrections: Cor
       if (current[pathParts[i]] === undefined) {
         current[pathParts[i]] = {};
       }
+      // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop
       current = current[pathParts[i]];
     }
 
@@ -157,7 +158,7 @@ const EvaluationCorrectionEditor = ({
         // Load predicted data
         logger.info('Loading predicted data from:', outputUri);
         const predictedResponse = await client.graphql({
-          query: getFileContents as unknown as string,
+          query: getFileContents,
           variables: { s3Uri: outputUri },
         });
         const predictedContent = (predictedResponse as unknown as Record<string, Record<string, Record<string, unknown>>>).data
@@ -176,7 +177,7 @@ const EvaluationCorrectionEditor = ({
           logger.info('Loading baseline data from:', baselineUri);
           try {
             const baselineResponse = await client.graphql({
-              query: getFileContents as unknown as string,
+              query: getFileContents,
               variables: { s3Uri: baselineUri },
             });
             const baselineContent = (baselineResponse as unknown as Record<string, Record<string, Record<string, unknown>>>).data
@@ -219,7 +220,7 @@ const EvaluationCorrectionEditor = ({
   }, []);
 
   // Remove a correction
-  const handleRemoveCorrection = useCallback((correction: Correction) => {
+  const handleRemoveCorrection = useCallback((correction: { pathString: string; source: string }) => {
     setCorrections((prev) => prev.filter((c) => !(c.pathString === correction.pathString && c.source === correction.source)));
   }, []);
 

@@ -5,10 +5,13 @@
 
 from .assessment import AssessmentOperation
 from .batch import BatchOperation
+from .chat import ChatOperation
 from .config import ConfigOperation
+from .discovery import DiscoveryOperation
 from .document import DocumentOperation
 from .evaluation import EvaluationOperation
 from .manifest import ManifestOperation
+from .publish import PublishOperation
 from .search import SearchOperation
 from .stack import StackOperation
 from .testing import TestingOperation
@@ -16,10 +19,13 @@ from .testing import TestingOperation
 __all__ = [
     "AssessmentOperation",
     "BatchOperation",
+    "ChatOperation",
     "ConfigOperation",
+    "DiscoveryOperation",
     "DocumentOperation",
     "EvaluationOperation",
     "ManifestOperation",
+    "PublishOperation",
     "SearchOperation",
     "StackOperation",
     "TestingOperation",

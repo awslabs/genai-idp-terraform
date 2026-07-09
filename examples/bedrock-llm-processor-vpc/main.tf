@@ -170,263 +170,45 @@ resource "aws_security_group" "vpc_endpoints" {
   })
 }
 
-# VPC Endpoints for AWS services (based on CDK sample requirements)
+# VPC endpoints for AWS services, via the reusable partition-aware
+# `modules/vpc-endpoints/` building block. Instantiated only when this example
+# creates its own VPC (existing-VPC consumers bring their own endpoints). The
+# `appsync-api` endpoint is required when `api.visibility = "PRIVATE"`.
+module "vpc_endpoints" {
+  source = "../../modules/vpc-endpoints"
 
-# Gateway Endpoints (free)
-resource "aws_vpc_endpoint" "s3" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id            = local.vpc_id
-  service_name      = "com.amazonaws.${data.aws_region.current.id}.s3"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = aws_route_table.isolated[*].id
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-s3-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "dynamodb" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id            = local.vpc_id
-  service_name      = "com.amazonaws.${data.aws_region.current.id}.dynamodb"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = aws_route_table.isolated[*].id
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-dynamodb-endpoint"
-  })
-}
-
-# Interface Endpoints (required for isolated network)
-resource "aws_vpc_endpoint" "ssm" {
   count = local.create_vpc_resources ? 1 : 0
 
   vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.ssm"
-  vpc_endpoint_type   = "Interface"
   subnet_ids          = local.vpc_subnet_ids
   security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
   private_dns_enabled = true
 
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-ssm-endpoint"
-  })
-}
+  # Exactly the interface endpoints the example provisioned inline.
+  enabled_interface_endpoints = {
+    ssm                   = true
+    logs                  = true
+    monitoring            = true
+    kms                   = true
+    bedrock               = true
+    bedrock-runtime       = true
+    bedrock-agent-runtime = true
+    sts                   = true
+    codebuild             = true
+    events                = true
+    lambda                = true
+    sqs                   = true
+    states                = true
+    textract              = true
+    appsync-api           = true
+  }
 
-resource "aws_vpc_endpoint" "cloudwatch_logs" {
-  count = local.create_vpc_resources ? 1 : 0
+  # Gateway endpoints (S3 + DynamoDB) routed through the isolated route tables.
+  enable_s3_gateway       = true
+  enable_dynamodb_gateway = true
+  route_table_ids         = aws_route_table.isolated[*].id
 
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.logs"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-cloudwatch-logs-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "cloudwatch_monitoring" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.monitoring"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-cloudwatch-monitoring-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "kms" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.kms"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-kms-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "bedrock" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.bedrock"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-bedrock-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "bedrock_runtime" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.bedrock-runtime"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-bedrock-runtime-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "bedrock_agent_runtime" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.bedrock-agent-runtime"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-bedrock-agent-runtime-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "sts" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.sts"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-sts-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "codebuild" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.codebuild"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-codebuild-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "eventbridge" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.events"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-eventbridge-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "lambda" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.lambda"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-lambda-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "sqs" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.sqs"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-sqs-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "step_functions" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.states"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-step-functions-endpoint"
-  })
-}
-
-resource "aws_vpc_endpoint" "textract" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.textract"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-textract-endpoint"
-  })
-}
-
-# AppSync interface endpoint — required when api.visibility = "PRIVATE".
-# Without this endpoint, Lambdas in the VPC cannot resolve or reach the
-# private GraphQL API. AppSync only supports PrivateLink for PRIVATE
-# APIs; GLOBAL APIs continue to be reached over the public internet.
-resource "aws_vpc_endpoint" "appsync_api" {
-  count = local.create_vpc_resources ? 1 : 0
-
-  vpc_id              = local.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.appsync-api"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.vpc_subnet_ids
-  security_group_ids  = local.create_vpc_resources ? [aws_security_group.vpc_endpoints[0].id] : local.vpc_security_group_ids
-  private_dns_enabled = true
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-appsync-api-endpoint"
-  })
+  tags = var.tags
 }
 
 # Create KMS key for encryption
@@ -533,6 +315,15 @@ locals {
   config_yaml      = file(local.config_file_path)
   config           = yamldecode(local.config_yaml)
 
+  # Additional config versions, managed from terraform.tfvars as
+  # version_name => path-to-YAML. Each becomes an editable, non-active version
+  # in the UI. Paths are relative to this example dir (or absolute). tfvars
+  # cannot call yamldecode/file, so the decode happens here.
+  additional_configurations = {
+    for name, p in var.additional_config_files :
+    name => yamldecode(file(startswith(p, "/") ? p : "${path.module}/${p}"))
+  }
+
   # Backward compatibility: merge old individual variables with new api structure
   # New api variable takes precedence when both are provided
   api_config = var.api.enabled || var.discovery != null || var.chat_with_document != null || var.process_changes != null ? {
@@ -611,7 +402,8 @@ module "genai_idp_accelerator" {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
     }
-    config = local.config
+    config                    = local.config
+    additional_configurations = local.additional_configurations
   }
 
   # Resource ARNs

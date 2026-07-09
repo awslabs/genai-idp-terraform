@@ -1,3 +1,7 @@
+---
+title: "Customizing Classification"
+---
+
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 
@@ -66,6 +70,86 @@ Page 6: type="invoice", boundary="continue"   → Section 3 (Invoice #2)
 
 The system automatically creates three sections, properly separating the two invoices despite them having the same document type.
 
+##### Page Context for Classification
+
+The multimodal page-level classification supports including surrounding pages as context to improve classification accuracy. This is particularly useful when a single page doesn't contain enough information to determine its document type or boundary status.
+
+**Configuration:**
+
+```yaml
+classification:
+  classificationMethod: multimodalPageLevelClassification
+  contextPagesCount: 1  # Include 1 page before and 1 page after as context
+  # contextPagesCount: 0  # Default: no additional context (current behavior)
+  # contextPagesCount: 2  # Include 2 pages before and 2 pages after
+```
+
+**How It Works:**
+
+When `contextPagesCount` is set to a value greater than 0, the classification prompt includes surrounding pages as additional context:
+
+- **`contextPagesCount: 1`**: Includes 1 page before and 1 page after the target page
+- **`contextPagesCount: 2`**: Includes 2 pages before and 2 pages after the target page
+- **Edge handling**: At document boundaries, only available pages are included (e.g., first page has no "before" pages)
+
+**Enhanced Prompt Structure:**
+
+The system replaces the standard `{DOCUMENT_TEXT}` and `{DOCUMENT_IMAGE}` placeholders with context-aware versions that clearly separate context pages from the page being classified:
+
+**Text Context Structure:**
+```xml
+For context, here is the OCR text for the page(s) immediately prior to the page you should classify:
+<context-pages-before>
+[OCR text from all context pages before - combined if multiple pages]
+</context-pages-before>
+
+Here is the OCR text for the page to classify:
+<current-page>
+[OCR text for the page being classified]
+</current-page>
+
+For context, here is the OCR text for the page(s) immediately after the page you should classify:
+<context-pages-after>
+[OCR text from all context pages after - combined if multiple pages]
+</context-pages-after>
+```
+
+**Image Context Structure:**
+```
+For context, here are the image(s) for the page(s) immediately prior to the page you should classify:
+[Image 1 - context page before]
+[Image 2 - context page before (if contextPagesCount >= 2)]
+
+Here is the image for the page to classify:
+[Image - current page being classified]
+
+For context, here are the image(s) for the page(s) immediately after the page you should classify:
+[Image 1 - context page after]
+[Image 2 - context page after (if contextPagesCount >= 2)]
+```
+
+**Note:** Context pages are combined within their respective sections (before or after). The structure uses descriptive text labels and XML tags (`<context-pages-before>`, `<current-page>`, `<context-pages-after>`) to clearly indicate which content is for context versus which content should be classified.
+
+**Benefits:**
+
+- **Improved Boundary Detection**: Context helps the LLM identify document transitions
+- **Better Classification Accuracy**: Surrounding pages provide additional clues
+- **Handles Ambiguous Pages**: Pages that look similar can be distinguished by context
+- **Flexible Configuration**: Adjust context size based on document complexity
+
+**Use Cases:**
+
+- Documents where headers/footers span multiple pages
+- Multi-page forms where individual pages look similar
+- Document packages with varying page layouts
+- Cases where LLM boundary detection has been unreliable
+
+**Considerations:**
+
+- Increases token usage proportionally to the number of context pages
+- May increase latency due to larger prompts
+- Works best when surrounding pages provide meaningful classification hints
+
 **Configuration for Boundary Detection:**
 
 The boundary detection is automatically included in the classification results. No special configuration is needed - the system will populate the `document_boundary` field in the metadata for each page:
@@ -88,9 +172,9 @@ The boundary detection is automatically included in the classification results. 
 - Identifies distinct document segments within multi-page documents
 - Determines document type for each segment
 - Better suited for multi-document packets where context spans multiple pages
-- Deployed when you select the default pattern-2 configuration during stack deployment or update
+- Deployed when you select the default pipeline mode configuration during stack deployment or update
 
-The default configuration in `config_library/pattern-2/default/config.yaml` implements this approach with a task prompt that instructs the model to:
+The default configuration in `config_library/unified/default/config.yaml` implements this approach with a task prompt that instructs the model to:
 
 1. Read through the entire document package to understand its contents
 2. Identify page ranges that form complete, distinct documents
@@ -147,6 +231,292 @@ Despite its strengths in handling full-document context, this method has several
 - Model is deployed on Amazon SageMaker
 - Performs multi-modal page-level classification (classifies each page based on OCR data and page image)
 - Not configurable inside the GenAIIDP solution
+
+## Section Splitting Strategies
+
+The `sectionSplitting` configuration controls how classified pages are grouped into document sections. This setting works with both classification methods and provides three strategies:
+
+### Available Strategies
+
+#### 1. `disabled` - No Splitting (Entire Document = One Section)
+
+**Behavior:**
+- All pages are assigned to a single section
+- Uses **majority voting** to determine the document class (most common classification wins)
+- Excludes unclassifiable/blank pages from voting to prevent them from affecting the result
+- If there's a tie, uses the first page's classification for determinism
+- Ignores any page-level classification boundaries
+
+**Use Cases:**
+- Documents known to be single-type with no internal divisions
+- Simplified processing where granular section splitting isn't needed
+- When you want to force all pages to be treated as one cohesive document
+- **Documents with occasional blank or unclassifiable pages** (these won't affect the final classification)
+
+**Configuration Example:**
+```yaml
+classification:
+  sectionSplitting: disabled
+  classificationMethod: multimodalPageLevelClassification
+```
+
+**Result:**
+- Document with 10 pages → 1 section containing all 10 pages
+- All pages assigned the most common (voted) class
+
+**Voting Behavior:**
+
+The `disabled` strategy uses majority voting to determine the document classification, which provides robust handling of edge cases:
+
+1. **Config-Driven Voting**: Only pages whose classification matches a valid document type defined in your configuration are eligible to vote. This automatically excludes:
+   - Blank pages (`unclassifiable_blank_page`, `blank`, etc.)
+   - Error states (`error (backoff/retry)`, `unclassified`)
+   - LLM hallucinations or typos that don't match any defined class
+
+2. **Majority Wins**: The classification that appears most frequently among votable pages becomes the document classification.
+
+3. **Tie-Breaking**: If multiple classifications have the same count, the classification from the earliest page (by page number) is used for determinism.
+
+4. **Fallback**: If no pages have valid classifications (all are unclassifiable types), the first page's classification is used.
+
+**Example:**
+```
+6-page document with classifications:
+- Page 1: DRILLING_PLAN_GEOLOGIC
+- Page 2: DRILLING_PLAN_GEOLOGIC  
+- Page 3: DRILLING_PLAN_GEOLOGIC
+- Page 4: DRILLING_PLAN_GEOLOGIC
+- Page 5: DRILLING_PLAN_GEOLOGIC
+- Page 6: unclassifiable_blank_page (excluded from voting)
+
+Voting result: DRILLING_PLAN_GEOLOGIC (5 votes)
+→ Entire document classified as DRILLING_PLAN_GEOLOGIC
+```
+
+**GitHub Issue Reference:**
+This voting behavior addresses [Issue #167](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues/167) where documents with blank last pages were incorrectly classified as the blank page type.
+
+#### 2. `page` - Per-Page Splitting (Each Page = Own Section)
+
+**Behavior:**
+- Every page becomes an independent section
+- Each page keeps its individually classified document type
+- **Prevents automatic joining of same-type documents**
+
+**Use Cases:**
+- **Critical for long documents with multiple same-type forms** (e.g., multiple W-2 forms, multiple invoices)
+- When LLM boundary detection is unreliable or fails frequently
+- Government form processing where each form must be processed independently
+- Scenarios where deterministic splitting is required
+
+**Configuration Example:**
+```yaml
+classification:
+  sectionSplitting: page
+  classificationMethod: multimodalPageLevelClassification
+```
+
+**Result:**
+- Document with 10 pages → 10 sections (one per page)
+- Each page maintains its individual classification
+
+**GitHub Issue Reference:**
+This strategy directly addresses [Issue #146](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues/146) where long documents with multiple same-type forms were being incorrectly joined together.
+
+#### 3. `llm_determined` - LLM Boundary Detection (Default)
+
+**Behavior:**
+- Uses "Start"/"Continue" boundary indicators from LLM responses
+- Automatically groups related pages into logical sections
+- Implements BIO-like tagging for sophisticated document segmentation
+
+**Use Cases:**
+- Complex multi-document packets requiring intelligent boundary detection
+- When LLM boundary detection works reliably
+- Default behavior that works well for most use cases
+
+**Configuration Example:**
+```yaml
+classification:
+  sectionSplitting: llm_determined  # This is the default
+  classificationMethod: multimodalPageLevelClassification
+```
+
+**Result:**
+- Document with 10 pages → Variable number of sections based on LLM boundary detection
+- Pages grouped according to document boundaries and type changes
+
+### Strategy Comparison Table
+
+| Strategy | Sections Created | Boundary Detection | Same-Type Handling | Deterministic | Performance |
+|----------|-----------------|-------------------|-------------------|---------------|-------------|
+| `disabled` | 1 section always | None | All joined | Yes | Fastest |
+| `page` | N sections (N pages) | Per-page | Never joined | Yes | Fast |
+| `llm_determined` | Variable | LLM boundaries | May join | No | Standard |
+
+### Configuration Placement
+
+The `sectionSplitting` setting is placed in the classification configuration section:
+
+```yaml
+classification:
+  model: us.amazon.nova-pro-v1:0
+  classificationMethod: multimodalPageLevelClassification
+  sectionSplitting: page  # Options: disabled, page, llm_determined
+  maxPagesForClassification: "ALL"
+  temperature: "0.0"
+  # ... other classification settings
+```
+
+### Interaction with Classification Methods
+
+The `sectionSplitting` setting works with both classification methods:
+
+**With `multimodalPageLevelClassification`:**
+- `disabled`: First page's class applies to all pages in one section
+- `page`: Each page's individual classification preserved in separate sections
+- `llm_determined`: Pages grouped by class + boundary metadata
+
+**With `textbasedHolisticClassification`:**
+- `disabled`: First segment's class applies to all pages in one section
+- `page`: Each page gets its own section with the class assigned by holistic method
+- `llm_determined`: LLM-determined segments used as sections (default behavior)
+
+### Real-World Example: Multiple W-2 Forms
+
+Consider a 6-page document containing three W-2 forms (2 pages each):
+
+**With `sectionSplitting: llm_determined` (may work or may fail):**
+```
+Result depends on LLM boundary detection accuracy
+Best case: 3 sections (one per W-2)
+Worst case: 1 section (all W-2s incorrectly joined)
+```
+
+**With `sectionSplitting: page` (deterministic solution):**
+```
+Page 1 → Section 1 (W-2)
+Page 2 → Section 2 (W-2)
+Page 3 → Section 3 (W-2)
+Page 4 → Section 4 (W-2)
+Page 5 → Section 5 (W-2)
+Page 6 → Section 6 (W-2)
+
+Result: 6 independent sections
+Each W-2 page processed separately
+No risk of incorrect joining
+```
+
+**With `sectionSplitting: disabled` (simplest case):**
+```
+All 6 pages → Section 1 (W-2)
+
+Result: Single section
+Entire document treated as one unit
+```
+
+## Excluding Static Pages (e.g. Instructions, Legal Boilerplate)
+
+Many forms packages bundle several pages of **static** content alongside
+the pages that actually carry dynamic, applicant-specific data. Think of
+the first four pages of a DS-11 U.S. Passport Application (WARNING
+notice, fee instructions, FEDERAL TAX LAW disclosure, ACTS OR
+CONDITIONS affidavit) — they are identical across every applicant and
+carry no fields to extract.
+
+You can mark a class as *excluded* so that downstream stages
+(extraction, assessment, summarization, rule validation, evaluation)
+will **skip** sections classified as that class, avoiding wasted LLM
+calls, tokens, and noise in accuracy metrics.
+
+https://github.com/user-attachments/assets/3c5106ee-ffaf-48d0-ac57-6de78a221474
+
+### How classification decides a section is "excluded"
+
+The **primary mechanism is the LLM classifier** using each class's
+`description` field. Mark the class as excluded via
+`x-aws-idp-exclude-from-processing: true`; the multimodal page-level
+classifier then picks the class by description like any other class,
+and the `excluded` flag propagates onto the resulting `Section`. This
+is the canonical, robust path — tolerant of form revisions, OCR quirks,
+wording differences, and visual-only pages.
+
+The optional `x-aws-idp-document-page-content-regex` extension is just
+a **tokens-saving fast-path** for pages whose OCR text reliably matches
+a known stable boilerplate phrase; if the regex misses, the LLM still
+classifies the page correctly via the description. Regex alone is not
+a substitute for a well-written class `description`.
+
+### Configuring through the UI
+
+In the Web UI **Configuration Editor → Document Schema**, select a
+document-type class and use the **"Exclude from Processing"** checkbox
+and the **"Exclusion Reason"** text input (appears when the checkbox is
+enabled). Changes round-trip through the standard configuration save
+flow, no YAML editing required.
+
+### Class-level extensions
+
+Add two JSON Schema extensions to the class:
+
+```yaml
+- $schema: https://json-schema.org/draft/2020-12/schema
+  $id: PassportApplicationInstructions
+  type: object
+  x-aws-idp-document-type: PassportApplicationInstructions
+  description: >-
+    Static informational pages of a DS-11 passport application —
+    WARNING notice, fee instructions, FEDERAL TAX LAW, ACTS OR
+    CONDITIONS affidavit. No applicant-specific data.
+
+  # The new, feature-defining flag.
+  x-aws-idp-exclude-from-processing: true
+
+  # Optional human-readable reason, surfaced in UI badges and the
+  # evaluation report.
+  x-aws-idp-exclusion-reason: instructions
+
+  # Optional: use the existing page-content regex fast path so pages
+  # containing these anchor phrases are classified instantly without
+  # an LLM call.
+  x-aws-idp-document-page-content-regex: "(?is)(WARNING:\\s*False statements|FEDERAL TAX LAW\\s*Section 6039E|ACTS OR CONDITIONS)"
+
+  # Excluded classes have no extractable fields.
+  properties: {}
+```
+
+### What happens at each stage
+
+| Stage | Behavior on an excluded section |
+|-------|---------------------------------|
+| **Classification** | Section is classified normally (regex fast path or LLM). The `excluded` and `exclusion_reason` flags are copied from the class config onto the `Section` object. |
+| **Extraction** | `process_document_section` short-circuits and writes a small stub `result.json` with `{"status": "skipped_excluded_class", "excluded": true, ...}`. Zero LLM calls. |
+| **Assessment** (both classic and granular) | Returns without writing anything (no extraction results exist to assess). |
+| **Summarization** | Writes a small `summary.json` stub. No LLM call. |
+| **Rule Validation** | Skips the section in `validate_document_async`. |
+| **Evaluation** | Filters excluded sections out of precision/recall/F1. They still appear in the markdown report under an **Excluded Sections (Not Evaluated)** table so nothing is silently dropped. |
+| **Reporting database** | Excluded sections are skipped when writing the per-section parquet rows (their stub JSON has no attributes to aggregate). |
+| **UI** | Sections panel renders excluded sections with a grey `Skipped: <reason>` badge next to the class name. |
+
+### Backwards compatibility
+
+* If the `x-aws-idp-exclude-from-processing` extension is absent (the
+  existing case), everything behaves as before.
+* Legacy snake_case keys `exclude_from_processing` and
+  `exclusion_reason` are accepted too for hand-authored configs.
+* `Section.to_dict()` only emits the flags when they are set, so
+  documents persisted before the feature still round-trip cleanly.
+
+### End-to-end example
+
+A working sample config for the DS-11 passport application form is
+available at `config_library/unified/ds11-passport-application/`
+(together with a fixture PDF `samples/DS11-USPassportApplication.pdf`).
+A single-file Jupyter notebook walking through the full pipeline —
+OCR → classification (LLM + optional regex) → extraction → assessment
+→ summarization, with side-by-side real vs. stub output inspection —
+ships at
+`notebooks/usecase-specific-examples/ds11-passport-application/demo.ipynb`.
 
 ## Choosing Between Classification Methods
 
@@ -401,11 +771,116 @@ classification:
 
 ### Multi-Page Documents
 
-For documents with multiple pages, the system automatically handles image limits:
+For documents with multiple pages, the system provides comprehensive image support:
 
-- **Bedrock Limit**: Maximum 20 images per request (automatically enforced)
-- **Warning Logging**: System logs warnings when images are truncated due to limits
-- **Smart Handling**: Images are processed in page order, with excess images automatically dropped
+- **No Image Limits**: All document pages are processed following Bedrock API removal of image count restrictions
+- **Info Logging**: System logs image counts for monitoring and debugging purposes
+- **Automatic Pagination**: Images are processed in page order for all pages
+
+## Optional `{CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}` Placeholder
+
+Pattern 2 classification prompts support an **optional** placeholder that
+expands to each class's name, description, **and the names of the schema
+attributes (extraction fields)** declared for that class. This gives the
+classifier richer disambiguation signal — particularly useful when two
+document types have similar names or descriptions but very different
+extraction schemas (e.g. `appraisal_report` vs `inspection_report`).
+
+The placeholder is fully **opt-in**:
+
+- The default classification prompts in `config_library/` continue to use
+  only `{CLASS_NAMES_AND_DESCRIPTIONS}`. **Token usage and cost are
+  unchanged** for users who don't reference the new placeholder.
+- Power users with schema-rich domains (lending, healthcare, insurance)
+  can drop `{CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}` into a custom
+  `task_prompt` to give the model the extra signal.
+
+### Rendered output (page-level classification)
+
+In the page-level (`multimodalPageLevelClassification`) path, the
+placeholder renders as one XML block per class:
+
+```xml
+<class name="appraisal_report">
+  <description>Real estate valuation report</description>
+  <attributes>property_address, appraised_value, effective_date, appraiser_name, comparable_sales.address, comparable_sales.sale_price</attributes>
+</class>
+<class name="inspection_report">
+  <description>Property condition inspection report</description>
+  <attributes>property_address, inspection_date, inspector_name, findings</attributes>
+</class>
+```
+
+### Rendered output (holistic packet classification)
+
+In the holistic (`textbasedHolisticClassification`) path the same
+placeholder renders as a markdown table — matching the format of the
+existing `{CLASS_NAMES_AND_DESCRIPTIONS}` table:
+
+```markdown
+| type | description | attributes |
+| --- | --- | --- |
+| appraisal_report | Real estate valuation report | property_address, appraised_value, effective_date, ... |
+| inspection_report | Property condition inspection report | property_address, inspection_date, inspector_name, findings |
+```
+
+### Example: Custom prompt using the new placeholder
+
+```yaml
+classification:
+  task_prompt: |
+    Classify the following document page into one of these document types.
+
+    Use the schema attribute names listed for each class as a strong
+    disambiguation signal — if the page text mentions field names that
+    match a class's attributes, prefer that class.
+
+    {CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+
+    Document text:
+    <document-text>
+    {DOCUMENT_TEXT}
+    </document-text>
+
+    Respond with JSON: {"class": "...", "document_boundary": "start|continue"}
+```
+
+### Schema-walking rules
+
+- Flat scalar properties surface by their property name
+  (e.g. `appraised_value`).
+- Nested `object` properties are flattened to dotted paths
+  (e.g. `borrower.address.zip`).
+- Arrays of objects are unwrapped — each item-property is rendered as
+  `parent.child` (no `[]` indexing).
+- Arrays of scalars (or arrays without item properties) surface by their
+  parent name only.
+- Classes that have no JSON Schema render
+  `<attributes>(no schema)</attributes>` so the absence is obvious for
+  debugging.
+
+### Soft cap and token-cost guardrails
+
+To prevent pathologically large schemas from bloating the classification
+prompt, the rendered attribute list per class is **soft-capped at 50
+field names** (`ClassificationService.MAX_ATTRIBUTES_PER_CLASS`). When a
+class exceeds the cap, the rendered list is truncated and a
+`...(+N more)` suffix is appended; a `WARNING` log line is emitted for
+visibility.
+
+If you have a class with hundreds of attributes, prefer:
+
+1. Writing a richer class `description` that captures distinguishing
+   characteristics, **or**
+2. Adding [few-shot classification examples](#setting-up-few-shot-examples-in-pattern-2)
+   for that class.
+
+### Mixing with the legacy placeholder
+
+You can use both placeholders in the same prompt — they're independent.
+For example you could keep the compact `{CLASS_NAMES_AND_DESCRIPTIONS}`
+list for an overview block and add `{CLASS_AND_ATTRIBUTE_NAMES_AND_DESCRIPTIONS}`
+in a "for ambiguous cases, consult the schema fields" sub-section.
 
 ## Setting Up Few Shot Examples in Pattern 2
 
@@ -421,30 +896,34 @@ Pattern 2's multimodal page-level classification supports few-shot example promp
 
 ### Few Shot Example Configuration
 
-In Pattern 2, few-shot examples are configured within document class definitions:
+In Pattern 2, few-shot examples are configured within document class definitions using JSON Schema format:
 
 ```yaml
 classes:
-  - name: letter
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Letter
+    x-aws-idp-document-type: Letter
+    type: object
     description: "A formal written correspondence..."
-    attributes:
-      - name: sender_name
+    properties:
+      SenderName:
+        type: string
         description: "The name of the person who wrote the letter..."
-    examples:
-      - classPrompt: "This is an example of the class 'letter'"
+    x-aws-idp-examples:
+      - x-aws-idp-class-prompt: "This is an example of the class 'Letter'"
         name: "Letter1"
-        imagePath: "config_library/pattern-2/your_config/example-images/letter1.jpg"
-      - classPrompt: "This is an example of the class 'letter'"
+        x-aws-idp-image-path: "config_library/unified/your_config/example-images/letter1.jpg"
+      - x-aws-idp-class-prompt: "This is an example of the class 'Letter'"
         name: "Letter2"
-        imagePath: "config_library/pattern-2/your_config/example-images/letter2.png"
+        x-aws-idp-image-path: "config_library/unified/your_config/example-images/letter2.png"
 ```
 
 ### Example Image Path Support
 
 The `imagePath` field supports multiple formats:
 
-- **Single Image File**: `"config_library/pattern-2/examples/letter1.jpg"`
-- **Local Directory with Multiple Images**: `"config_library/pattern-2/examples/letters/"`
+- **Single Image File**: `"config_library/unified/examples/letter1.jpg"`
+- **Local Directory with Multiple Images**: `"config_library/unified/examples/letters/"`
 - **S3 Prefix with Multiple Images**: `"s3://my-config-bucket/examples/letter/"`
 - **Direct S3 Image URI**: `"s3://my-config-bucket/examples/letter1.jpg"`
 
@@ -602,13 +1081,16 @@ When you want all pages of a document to be classified as the same class, you ca
 
 ```yaml
 classes:
-  - name: Payslip
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Payslip
+    x-aws-idp-document-type: Payslip
+    type: object
     description: "Employee wage statement showing earnings and deductions"
-    document_name_regex: "(?i).*(payslip|paystub|salary|wage).*"
-    attributes:
-      - name: EmployeeName
+    x-aws-idp-document-name-regex: "(?i).*(payslip|paystub|salary|wage).*"
+    properties:
+      EmployeeName:
+        type: string
         description: "Name of the employee"
-        attributeType: simple
 ```
 
 **Benefits:**
@@ -632,24 +1114,33 @@ classification:
   classificationMethod: multimodalPageLevelClassification
 
 classes:
-  - name: Invoice
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Invoice
+    x-aws-idp-document-type: Invoice
+    type: object
     description: "Business invoice document"
-    document_page_content_regex: "(?i)(invoice\\s+number|bill\\s+to|amount\\s+due)"
-    attributes:
-      - name: InvoiceNumber
+    x-aws-idp-document-page-content-regex: "(?i)(invoice\\s+number|bill\\s+to|amount\\s+due)"
+    properties:
+      InvoiceNumber:
+        type: string
         description: "Invoice number"
-        attributeType: simple
-  - name: Payslip
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Payslip
+    x-aws-idp-document-type: Payslip
+    type: object
     description: "Employee wage statement"
-    document_page_content_regex: "(?i)(gross\\s+pay|net\\s+pay|employee\\s+id)"
-    attributes:
-      - name: EmployeeName
+    x-aws-idp-document-page-content-regex: "(?i)(gross\\s+pay|net\\s+pay|employee\\s+id)"
+    properties:
+      EmployeeName:
+        type: string
         description: "Employee name"
-        attributeType: simple
-  - name: Other
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Other
+    x-aws-idp-document-type: Other
+    type: object
     description: "Documents that don't match specific patterns"
     # No regex - will always use LLM
-    attributes: []
+    properties: {}
 ```
 
 **Benefits:**
@@ -713,20 +1204,40 @@ The regex system includes robust error handling:
 ```yaml
 classes:
   # W2 Tax Forms
-  - name: W2
-    document_page_content_regex: "(?i)(form\\s+w-?2|wage\\s+and\\s+tax|social\\s+security)"
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: W2
+    x-aws-idp-document-type: W2
+    type: object
+    description: "W2 Tax Form"
+    x-aws-idp-document-page-content-regex: "(?i)(form\\s+w-?2|wage\\s+and\\s+tax|social\\s+security)"
+    properties: {}
     
   # Bank Statements  
-  - name: Bank-Statement
-    document_page_content_regex: "(?i)(account\\s+number|statement\\s+period|beginning\\s+balance)"
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Bank-Statement
+    x-aws-idp-document-type: Bank-Statement
+    type: object
+    description: "Bank Statement"
+    x-aws-idp-document-page-content-regex: "(?i)(account\\s+number|statement\\s+period|beginning\\s+balance)"
+    properties: {}
     
   # Driver Licenses
-  - name: US-drivers-licenses
-    document_page_content_regex: "(?i)(driver\\s+license|state\\s+id|date\\s+of\\s+birth)"
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: US-drivers-licenses
+    x-aws-idp-document-type: US-drivers-licenses
+    type: object
+    description: "US Driver's License"
+    x-aws-idp-document-page-content-regex: "(?i)(driver\\s+license|state\\s+id|date\\s+of\\s+birth)"
+    properties: {}
     
   # Invoices
-  - name: Invoice
-    document_page_content_regex: "(?i)(invoice\\s+number|bill\\s+to|remit\\s+payment)"
+  - $schema: "https://json-schema.org/draft/2020-12/schema"
+    $id: Invoice
+    x-aws-idp-document-type: Invoice
+    type: object
+    description: "Invoice"
+    x-aws-idp-document-page-content-regex: "(?i)(invoice\\s+number|bill\\s+to|remit\\s+payment)"
+    properties: {}
 ```
 
 ## Best Practices for Classification

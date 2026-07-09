@@ -4,7 +4,7 @@
 # Local-build path for BDA processor container images (var.lambda_local = true).
 #
 # This mirrors what the CodeBuild buildspec
-# (sources/patterns/pattern-1/buildspec.yml) does, but on the deploy host:
+# (sources/patterns/unified/buildspec-bda.yml) does, but on the deploy host:
 # build five Lambda container images (bda-invoke, bda-completion,
 # processresults, summarization, evaluation -- plus the hitl-* variants
 # the upstream buildspec also produces) from a single Dockerfile by
@@ -18,10 +18,10 @@
 # audit.
 
 locals {
-  bda_pattern_dir = "${path.module}/../../../sources/patterns/pattern-1"
+  bda_pattern_dir = "${path.module}/../../../sources/patterns/unified"
 
   # Function-path map. Mirrors the FUNCTION_* env exports in
-  # sources/patterns/pattern-1/buildspec.yml. Each entry maps the ECR
+  # sources/patterns/unified/buildspec-bda.yml. Each entry maps the ECR
   # image tag to the build context's FUNCTION_PATH build-arg.
   bda_images = {
     "bda-invoke-function"         = "patterns/pattern-1/src/bda_invoke_function"
@@ -37,7 +37,7 @@ locals {
   # Lambda docker platform.
   bda_docker_platform = var.lambda_architecture == "arm64" ? "linux/arm64" : "linux/amd64"
 
-  # Hash all source files under sources/patterns/pattern-1/ so the build
+  # Hash all source files under sources/patterns/unified/ so the build
   # re-runs only when actually-relevant source changes.
   bda_source_files = fileset(local.bda_pattern_dir, "**")
   bda_source_hash = md5(join("", [

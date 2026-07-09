@@ -1,9 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
+import io
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, cast
+import re
+from typing import Any, Dict, Optional, Tuple, cast
 
 import jsonschema
 from jsonschema import Draft202012Validator
@@ -54,7 +56,203 @@ class ClassesDiscovery:
 
         return
 
-    def discovery_classes_with_document(self, input_bucket: str, input_prefix: str):
+    @staticmethod
+    def parse_page_range(page_range: str) -> Tuple[int, int]:
+        """
+        Parse a page range string like "3-5" into (start, end) 1-based page numbers.
+
+        Args:
+            page_range: String in format "start-end" (e.g., "1-3", "5-5")
+
+        Returns:
+            Tuple of (start_page, end_page), both 1-based inclusive
+
+        Raises:
+            ValueError: If the format is invalid
+        """
+        page_range = page_range.strip()
+        match = re.match(r"^(\d+)\s*-\s*(\d+)$", page_range)
+        if not match:
+            raise ValueError(
+                f"Invalid page range format: '{page_range}'. Expected 'start-end' (e.g., '1-3')"
+            )
+        start = int(match.group(1))
+        end = int(match.group(2))
+        if start < 1:
+            raise ValueError(f"Page numbers must be >= 1, got start={start}")
+        if end < start:
+            raise ValueError(f"End page ({end}) must be >= start page ({start})")
+        return start, end
+
+    @staticmethod
+    def extract_pdf_pages(pdf_bytes: bytes, start_page: int, end_page: int) -> bytes:
+        """
+        Extract a range of pages from a PDF and return as new PDF bytes.
+
+        Uses pypdfium2 to read the source PDF and create a new PDF containing
+        only the specified page range.
+
+        Args:
+            pdf_bytes: The full PDF document as bytes
+            start_page: 1-based start page number (inclusive)
+            end_page: 1-based end page number (inclusive)
+
+        Returns:
+            bytes: A new PDF containing only the specified pages
+
+        Raises:
+            ValueError: If page range is out of bounds
+        """
+        import pypdfium2 as pdfium  # Lazy import — not available in all Lambda environments
+
+        pdf_doc = pdfium.PdfDocument(pdf_bytes)
+        try:
+            num_pages = len(pdf_doc)
+            if start_page < 1 or end_page > num_pages:
+                raise ValueError(
+                    f"Page range {start_page}-{end_page} is out of bounds. "
+                    f"Document has {num_pages} pages."
+                )
+
+            # Convert to 0-based indices for pypdfium2
+            page_indices = list(range(start_page - 1, end_page))
+
+            # Create a new PDF with only the selected pages
+            new_pdf = pdfium.PdfDocument.new()
+            new_pdf.import_pages(pdf_doc, page_indices)
+
+            # Write to bytes
+            output_buffer = io.BytesIO()
+            new_pdf.save(output_buffer)
+            new_pdf.close()
+
+            result_bytes = output_buffer.getvalue()
+            logger.info(
+                f"Extracted pages {start_page}-{end_page} from {num_pages}-page PDF "
+                f"({len(pdf_bytes)} bytes -> {len(result_bytes)} bytes)"
+            )
+            return result_bytes
+        finally:
+            pdf_doc.close()
+
+    def auto_detect_sections(
+        self,
+        input_bucket: str,
+        input_prefix: str,
+        file_bytes: Optional[bytes] = None,
+        model_id: Optional[str] = None,
+    ) -> list:
+        """
+        Use an LLM to automatically detect document section boundaries in a multi-page PDF.
+
+        Sends the full document to Bedrock and asks it to identify where different
+        document types begin and end, returning a list of page ranges with type labels.
+
+        Args:
+            input_bucket: S3 bucket name
+            input_prefix: S3 key for the PDF document
+            file_bytes: Optional document bytes. If provided, skips S3 read.
+            model_id: Optional Bedrock model ID override. When provided, this
+                replaces the ``auto_split.model_id`` from the discovery config
+                for this call only. Useful for callers (e.g. ``idp-cli``) that
+                want to use a more capable model than the configured default.
+
+        Returns:
+            list of dicts: [{"start": 1, "end": 3, "type": "W2 Form"}, ...]
+
+        Raises:
+            Exception: If auto-detection fails
+        """
+        logger.info(f"Auto-detecting sections in: s3://{input_bucket}/{input_prefix}")
+
+        try:
+            if file_bytes is not None:
+                file_in_bytes = file_bytes
+            else:
+                file_in_bytes = S3Util.get_bytes(bucket=input_bucket, key=input_prefix)
+
+            file_extension = os.path.splitext(input_prefix)[1].lower()[1:]
+
+            # Use the auto_split config (falls back to defaults from base-discovery.yaml)
+            auto_split_config = self.discovery_config.auto_split
+            # Caller-supplied override takes precedence over configured model_id
+            model_id = model_id or auto_split_config.model_id
+            top_p = auto_split_config.top_p
+            max_tokens = auto_split_config.max_tokens
+
+            system_prompt = (
+                auto_split_config.system_prompt
+                or "You are an expert document analyst. Your task is to identify "
+                "distinct document sections within a multi-page document package."
+            )
+
+            user_prompt = (
+                auto_split_config.user_prompt
+                or "Analyze this multi-page document package. Identify the page boundaries "
+                "where different document types or sections begin and end.\n\n"
+                "For each distinct document section, provide:\n"
+                '- "start": the first page number (1-based)\n'
+                '- "end": the last page number (1-based)\n'
+                '- "type": a short label for the document type (e.g., "W2 Form", "Letter", "Invoice")\n\n'
+                "Return ONLY a JSON array, no other text:\n"
+                '[{"start": 1, "end": 2, "type": "Letter"}, {"start": 3, "end": 3, "type": "Invoice"}]'
+            )
+
+            content = self._create_content_list(
+                prompt=user_prompt,
+                document_content=file_in_bytes,
+                file_extension=file_extension,
+            )
+
+            response = self.bedrock_client.invoke_model(
+                model_id=model_id,
+                system_prompt=system_prompt,
+                content=content,
+                temperature=0.0,  # Low temperature for consistent results
+                top_p=top_p,
+                max_tokens=max_tokens,
+                context="AutoDetectSections",
+            )
+
+            from idp_common import bedrock as bedrock_mod
+
+            content_text = bedrock_mod.extract_text_from_response(response)
+            logger.info(f"Auto-detect response: {content_text}")
+
+            # Parse the JSON response
+            sections = json.loads(self._extract_json(content_text))
+
+            if not isinstance(sections, list):
+                raise ValueError(
+                    f"Expected a JSON array, got: {type(sections).__name__}"
+                )
+
+            # Validate each section
+            for section in sections:
+                if not isinstance(section, dict):
+                    raise ValueError(
+                        f"Each section must be a dict, got: {type(section).__name__}"
+                    )
+                if "start" not in section or "end" not in section:
+                    raise ValueError(f"Section missing 'start' or 'end': {section}")
+
+            logger.info(f"Auto-detected {len(sections)} sections")
+            return sections
+
+        except Exception as e:
+            logger.error(f"Error auto-detecting sections: {e}", exc_info=True)
+            raise Exception(f"Failed to auto-detect sections: {str(e)}")
+
+    def discovery_classes_with_document(
+        self,
+        input_bucket: str,
+        input_prefix: str,
+        file_bytes: Optional[bytes] = None,
+        save_to_config: bool = True,
+        page_range: Optional[str] = None,
+        class_name_hint: Optional[str] = None,
+        model_id: Optional[str] = None,
+    ):
         """
         Create blueprint for document discovery.
         Process document/image:
@@ -64,30 +262,56 @@ class ClassesDiscovery:
 
         Args:
             input_bucket: S3 bucket name
-            input_prefix: S3 prefix
+            input_prefix: S3 prefix (also used to determine file extension)
+            file_bytes: Optional document bytes. If provided, skips S3 read.
+            save_to_config: If True (default), saves schema to DynamoDB config.
+                If False, returns the schema without saving.
+            page_range: Optional page range string (e.g., "1-3") to extract
+                specific pages from a PDF before discovery. If None, the
+                entire document is used.
+            class_name_hint: Optional hint for the document class name. When provided,
+                the LLM will use this as the $id and x-aws-idp-document-type values.
+            model_id: Optional Bedrock model ID override. When provided, this
+                replaces the ``without_ground_truth.model_id`` from the discovery
+                config for this call only.
 
         Returns:
-            status of blueprint creation
+            dict with status and optionally the discovered schema
 
         Raises:
             Exception: If blueprint creation fails
         """
+        range_label = f" (pages {page_range})" if page_range else ""
         logger.info(
-            f"Creating blueprint for document discovery: s3://{input_bucket}/{input_prefix}"
+            f"Creating blueprint for document discovery: "
+            f"s3://{input_bucket}/{input_prefix}{range_label}"
         )
 
         try:
-            file_in_bytes = S3Util.get_bytes(bucket=input_bucket, key=input_prefix)
+            if file_bytes is not None:
+                file_in_bytes = file_bytes
+            else:
+                file_in_bytes = S3Util.get_bytes(bucket=input_bucket, key=input_prefix)
 
             # Extract labels
             file_extension = os.path.splitext(input_prefix)[1].lower()
             # remove the .
             file_extension = file_extension[1:]
 
+            # If a page range is specified and the file is a PDF, extract only those pages
+            if page_range and file_extension == "pdf":
+                start_page, end_page = self.parse_page_range(page_range)
+                file_in_bytes = self.extract_pdf_pages(
+                    file_in_bytes, start_page, end_page
+                )
+
             logger.info(f" document len: {len(file_in_bytes)}")
 
             model_response = self._extract_data_from_document(
-                file_in_bytes, file_extension
+                file_in_bytes,
+                file_extension,
+                class_name_hint=class_name_hint,
+                model_id=model_id,
             )
             logger.info(f"Extracted data from document: {model_response}")
 
@@ -98,11 +322,12 @@ class ClassesDiscovery:
             # No need to transform - it's already in the right format
             current_class = model_response
 
-            # Merge the new class with existing Default + Custom classes
-            # and save to Custom config
-            self._merge_and_save_class(current_class)
+            if save_to_config:
+                # Merge the new class with existing Default + Custom classes
+                # and save to Custom config
+                self._merge_and_save_class(current_class)
 
-            return {"status": "SUCCESS"}
+            return {"status": "SUCCESS", "schema": current_class}
 
         except Exception as e:
             logger.error(
@@ -112,36 +337,72 @@ class ClassesDiscovery:
             raise Exception(f"Failed to process document {input_prefix}: {str(e)}")
 
     def discovery_classes_with_document_and_ground_truth(
-        self, input_bucket: str, input_prefix: str, ground_truth_key: str
+        self,
+        input_bucket: str,
+        input_prefix: str,
+        ground_truth_key: str = "",
+        file_bytes: Optional[bytes] = None,
+        ground_truth_data: Optional[dict] = None,
+        save_to_config: bool = True,
+        page_range: Optional[str] = None,
+        model_id: Optional[str] = None,
     ):
         """
         Create optimized blueprint using ground truth data.
 
         Args:
             input_bucket: S3 bucket name
-            input_prefix: S3 prefix for document
-            ground_truth_s3_uri: S3 URI for JSON file with ground truth data
+            input_prefix: S3 prefix for document (also used to determine file extension)
+            ground_truth_key: S3 key for ground truth JSON file
+            file_bytes: Optional document bytes. If provided, skips S3 read.
+            ground_truth_data: Optional ground truth dict. If provided, skips S3 read for GT.
+            save_to_config: If True (default), saves schema to DynamoDB config.
+                If False, returns the schema without saving.
+            page_range: Optional page range string (e.g., "1-3") to extract
+                specific pages from a PDF before discovery. If None, the
+                entire document is used.
+            model_id: Optional Bedrock model ID override. When provided, this
+                replaces the ``with_ground_truth.model_id`` from the discovery
+                config for this call only.
 
         Returns:
-            status of blueprint creation
+            dict with status and optionally the discovered schema
 
         Raises:
             Exception: If blueprint creation fails
         """
+        range_label = f" (pages {page_range})" if page_range else ""
         logger.info(
-            f"Creating optimized blueprint with ground truth: s3://{input_bucket}/{input_prefix}"
+            f"Creating optimized blueprint with ground truth: "
+            f"s3://{input_bucket}/{input_prefix}{range_label}"
         )
 
         try:
-            # Load ground truth data
-            ground_truth_data = self._load_ground_truth(input_bucket, ground_truth_key)
+            # Load ground truth data from S3 or use provided data
+            if ground_truth_data is None:
+                ground_truth_data = self._load_ground_truth(
+                    input_bucket, ground_truth_key
+                )
 
-            file_in_bytes = S3Util.get_bytes(bucket=input_bucket, key=input_prefix)
+            if file_bytes is not None:
+                file_in_bytes = file_bytes
+            else:
+                file_in_bytes = S3Util.get_bytes(bucket=input_bucket, key=input_prefix)
 
             file_extension = os.path.splitext(input_prefix)[1].lower()[1:]
 
+            # If a page range is specified and the file is a PDF, extract only those pages
+            if page_range and file_extension == "pdf":
+                start_page, end_page = self.parse_page_range(page_range)
+                file_in_bytes = self.extract_pdf_pages(
+                    file_in_bytes, start_page, end_page
+                )
+
             model_response = self._extract_data_from_document_with_ground_truth(
-                file_in_bytes, file_extension, ground_truth_data
+                file_in_bytes,
+                file_extension,
+                ground_truth_data,
+                model_id=model_id,
             )
 
             if model_response is None:
@@ -151,11 +412,12 @@ class ClassesDiscovery:
             # No need to transform - it's already in the right format
             current_class = model_response
 
-            # Merge the new class with existing Default + Custom classes
-            # and save to Custom config
-            self._merge_and_save_class(current_class)
+            if save_to_config:
+                # Merge the new class with existing Default + Custom classes
+                # and save to Custom config
+                self._merge_and_save_class(current_class)
 
-            return {"status": "SUCCESS"}
+            return {"status": "SUCCESS", "schema": current_class}
 
         except Exception as e:
             logger.error(
@@ -166,18 +428,17 @@ class ClassesDiscovery:
 
     def _merge_and_save_class(self, new_class: Dict[str, Any]) -> None:
         """
-        Merge a new discovered class with existing Default + Custom classes and save to Custom.
+        Merge a new discovered class into the target version's configuration.
 
-        This method ensures that discovered classes are ADDITIVE to existing classes:
-        1. Read Default classes (base classes from deployment)
-        2. Read existing Custom classes (previous user customizations)
-        3. Build a merged list starting from Default, overriding with Custom
-        4. Add/update the new discovered class
-        5. Save the complete merged list to Custom
+        This method only adds/updates the discovered class within the target version's
+        own class list. It does NOT pull in classes from the default configuration version,
+        keeping the target version's classes exactly as the user curated them, plus the
+        newly discovered class.
 
-        This is necessary because the Default+Custom merge uses array replacement,
-        not array concatenation. By saving the complete class list to Custom,
-        we ensure no classes are lost during the merge.
+        Steps:
+        1. Read existing classes from the target version
+        2. Add/update the new discovered class (deduplicate by $id)
+        3. Save back to the target version
 
         Args:
             new_class: The newly discovered class schema to add/update
@@ -186,65 +447,44 @@ class ClassesDiscovery:
         new_class_id = new_class.get("$id") or new_class.get("x-aws-idp-document-type")
         logger.info(f"Merging discovered class: {new_class_id}")
 
-        # Step 1: Read Default classes (base classes from deployment)
-        default_config = self.config_manager.get_configuration("Config", "default")
-        default_classes: list = []
-        if (
-            default_config
-            and isinstance(default_config, IDPConfig)
-            and default_config.classes
-        ):
-            # Convert to list of dicts for easier manipulation
-            default_classes = [
-                cls
-                if isinstance(cls, dict)
-                else cls.model_dump()
-                if hasattr(cls, "model_dump")
-                else dict(cls)
-                for cls in default_config.classes
-            ]
-        logger.info(f"Found {len(default_classes)} classes in Default config")
-
-        # Step 2: Read existing Custom config (raw, no Pydantic defaults)
+        # Read existing config for the target version (raw, no Pydantic defaults)
         existing_custom = (
             self.config_manager.get_raw_configuration("Config", version=self.version)
             or {}
         )
         custom_classes = list(existing_custom.get("classes", []))
-        logger.info(f"Found {len(custom_classes)} classes in Custom config")
+        logger.info(
+            f"Found {len(custom_classes)} existing classes in version '{self.version}'"
+        )
 
-        # Step 3: Build merged class list - start with Default, override with Custom
-        # Use a dict keyed by class ID for efficient deduplication
-        merged_classes_by_id: Dict[str, Dict[str, Any]] = {}
-
-        # Add Default classes first
-        for cls in default_classes:
-            cls_id = cls.get("$id") or cls.get("x-aws-idp-document-type")
-            if cls_id:
-                merged_classes_by_id[cls_id] = cls
-
-        # Override/add Custom classes
+        # Build class list from existing version classes, deduplicating by ID
+        classes_by_id: Dict[str, Dict[str, Any]] = {}
         for cls in custom_classes:
             cls_id = cls.get("$id") or cls.get("x-aws-idp-document-type")
             if cls_id:
-                merged_classes_by_id[cls_id] = cls
+                classes_by_id[cls_id] = cls
 
-        # Step 4: Add/update the new discovered class
+        # Add/update the new discovered class
         if new_class_id:
-            merged_classes_by_id[new_class_id] = new_class
+            classes_by_id[new_class_id] = new_class
 
         # Convert back to list
-        merged_classes = list(merged_classes_by_id.values())
-        logger.info(f"Merged class list has {len(merged_classes)} classes")
+        merged_classes = list(classes_by_id.values())
+        logger.info(f"Saving {len(merged_classes)} classes to version '{self.version}'")
 
-        # Step 5: Save to Custom config
-        # The merged list will replace Default.classes during runtime merge,
-        # ensuring all classes (Default + Custom + new) are preserved
+        # Save to version config
         existing_custom["classes"] = merged_classes
         self.config_manager.save_raw_configuration(
             "Config", existing_custom, version=self.version
         )
-        logger.info(f"Saved {len(merged_classes)} classes to Custom config")
+
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        """Strip markdown code fences from LLM response before JSON parsing."""
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
+        if match:
+            return match.group(1)
+        return text
 
     def _validate_json_schema(self, schema: Dict[str, Any]) -> tuple[bool, str]:
         """
@@ -311,11 +551,17 @@ class ClassesDiscovery:
             raise
 
     def _extract_data_from_document(
-        self, document_content, file_extension, max_retries: int = 3
+        self,
+        document_content,
+        file_extension,
+        max_retries: int = 3,
+        class_name_hint: Optional[str] = None,
+        model_id: Optional[str] = None,
     ):
         """Extract data from document with retry logic for invalid schemas."""
         # Get configuration for without ground truth
-        model_id = self.without_gt_config.model_id
+        # Caller-supplied override takes precedence over configured model_id
+        model_id = model_id or self.without_gt_config.model_id
         system_prompt = (
             self.without_gt_config.system_prompt
             or "You are an expert in processing forms. Extracting data from images and documents"
@@ -341,7 +587,15 @@ class ClassesDiscovery:
                 if attempt > 0 and validation_feedback:
                     retry_prompt = f"\n\nPREVIOUS ATTEMPT FAILED: {validation_feedback}\nPlease fix the issue and generate a valid JSON Schema.\n\n"
 
-                full_prompt = f"{retry_prompt}{user_prompt}\nFormat the extracted data using the below JSON format:\n{sample_format}"
+                # If class_name_hint is provided, instruct the LLM to use it as the class name
+                class_hint_instruction = ""
+                if class_name_hint:
+                    class_hint_instruction = (
+                        f'\nIMPORTANT: Use "{class_name_hint}" as the document class name. '
+                        f'Set "$id" and "x-aws-idp-document-type" to "{class_name_hint}".\n'
+                    )
+
+                full_prompt = f"{retry_prompt}{user_prompt}{class_hint_instruction}\nFormat the extracted data using the below JSON format:\n{sample_format}"
                 # Create content for the user message
                 content = self._create_content_list(
                     prompt=full_prompt,
@@ -367,7 +621,7 @@ class ClassesDiscovery:
                 )
 
                 # Parse JSON response
-                schema = json.loads(content_text)
+                schema = json.loads(self._extract_json(content_text))
 
                 # Validate the schema
                 is_valid, error_msg = self._validate_json_schema(schema)
@@ -428,11 +682,17 @@ class ClassesDiscovery:
         return content
 
     def _extract_data_from_document_with_ground_truth(
-        self, document_content, file_extension, ground_truth_data, max_retries: int = 3
+        self,
+        document_content,
+        file_extension,
+        ground_truth_data,
+        max_retries: int = 3,
+        model_id: Optional[str] = None,
     ):
         """Extract data from document using ground truth as reference with retry logic."""
         # Get configuration for with ground truth
-        model_id = self.with_gt_config.model_id
+        # Caller-supplied override takes precedence over configured model_id
+        model_id = model_id or self.with_gt_config.model_id
         system_prompt = (
             self.with_gt_config.system_prompt
             or "You are an expert in processing forms. Extracting data from images and documents"
@@ -493,7 +753,7 @@ class ClassesDiscovery:
                 )
 
                 # Parse JSON response
-                schema = json.loads(content_text)
+                schema = json.loads(self._extract_json(content_text))
 
                 # Validate the schema
                 is_valid, error_msg = self._validate_json_schema(schema)

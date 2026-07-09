@@ -18,11 +18,12 @@ import {
 import type { SelectProps } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
 
-import uploadDocument from '../../graphql/queries/uploadDocument';
+import { uploadDocument } from '../../graphql/generated';
 
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
 
 import useSettingsContext from '../../contexts/settings';
+import { SUPPORTED_UPLOAD_EXTENSIONS } from '../common/constants';
 
 const client = generateClient();
 
@@ -43,17 +44,21 @@ const UploadDocumentPanel = (): React.JSX.Element => {
   const [prefix, setPrefix] = useState('');
   const [selectedVersion, setSelectedVersion] = useState<SelectProps.Option | null>(null);
 
-  // Set default to active version when versions are loaded
+  // Set default to active version (or first scoped version) when versions are loaded
   useEffect(() => {
     if (versions.length > 0 && !selectedVersion) {
+      const versionOptions = getVersionOptions();
       const activeVersion = versions.find((v) => v.isActive);
       if (activeVersion) {
-        // Use the same logic as getVersionOptions to ensure consistency
-        const versionOptions = getVersionOptions();
         const activeVersionOption = versionOptions.find((option) => option.value === activeVersion.versionName);
         if (activeVersionOption) {
           setSelectedVersion(activeVersionOption);
+          return;
         }
+      }
+      // Fallback: select first available (scoped) version
+      if (versionOptions.length > 0) {
+        setSelectedVersion(versionOptions[0]);
       }
     }
   }, [versions, selectedVersion, getVersionOptions]);
@@ -100,7 +105,7 @@ const UploadDocumentPanel = (): React.JSX.Element => {
           console.log(`Using prefix: ${prefix || 'none'}`);
 
           const response = await client.graphql({
-            query: uploadDocument as unknown as string,
+            query: uploadDocument,
             variables: {
               fileName: file.name,
               contentType: file.type,
@@ -110,13 +115,10 @@ const UploadDocumentPanel = (): React.JSX.Element => {
             },
           });
 
-          const { presignedUrl, objectKey, usePostMethod } = (response as { data: Record<string, unknown> }).data.uploadDocument as {
-            presignedUrl: string;
-            objectKey: string;
-            usePostMethod: boolean;
-          };
+          const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
+          const usePost = usePostMethod?.toLowerCase() === 'true';
 
-          if (!usePostMethod) {
+          if (!usePost) {
             throw new Error('Server returned PUT method which is not supported. Please update your backend code.');
           }
 
@@ -166,7 +168,7 @@ const UploadDocumentPanel = (): React.JSX.Element => {
           newUploadStatus.push({
             file: file.name,
             status: 'error',
-            error: err.message,
+            error: err instanceof Error ? err.message : String(err),
           });
         }
 
@@ -175,7 +177,7 @@ const UploadDocumentPanel = (): React.JSX.Element => {
       }, Promise.resolve() as Promise<void>);
     } catch (err) {
       console.error('Error in overall upload process:', err);
-      setError(`Upload process failed: ${err.message}`);
+      setError(`Upload process failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsUploading(false);
     }
@@ -205,7 +207,7 @@ const UploadDocumentPanel = (): React.JSX.Element => {
           />
         </FormField>
 
-        <FormField label="Select files to upload" constraintText="Supported formats: PDF, PNG, JPEG, TIFF. Multiple files allowed.">
+        <FormField label="Select files to upload" constraintText="Multiple files allowed. Excel files are converted on the backend.">
           <FileUpload
             onChange={({ detail }) => handleFileChange(detail.value)}
             value={selectedFiles}
@@ -216,7 +218,7 @@ const UploadDocumentPanel = (): React.JSX.Element => {
               errorIconAriaLabel: 'Error',
               warningIconAriaLabel: 'Warning',
             }}
-            accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
+            accept={SUPPORTED_UPLOAD_EXTENSIONS}
             multiple
             showFileSize
             showFileLastModified

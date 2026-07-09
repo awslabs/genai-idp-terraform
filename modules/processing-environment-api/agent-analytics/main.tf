@@ -213,7 +213,7 @@ resource "random_id" "request_handler_build_id" {
 # Source code archive for request handler
 data "archive_file" "agent_request_handler_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/src/lambda/agent_request_handler"
+  source_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/agent_request_handler"
   output_path = "${local.module_build_dir}/agent-request-handler.zip_${random_id.request_handler_build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -369,7 +369,7 @@ resource "random_id" "list_agents_build_id" {
 # Source code archive for list agents
 data "archive_file" "list_available_agents_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/src/lambda/list_available_agents"
+  source_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/list_available_agents"
   output_path = "${local.module_build_dir}/list-available-agents.zip_${random_id.list_agents_build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]

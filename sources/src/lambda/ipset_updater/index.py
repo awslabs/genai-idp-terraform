@@ -100,7 +100,7 @@ def get_aws_ip_ranges(service):
     url = 'https://ip-ranges.amazonaws.com/ip-ranges.json'
     
     try:
-        response = urllib.request.urlopen(url)
+        response = urllib.request.urlopen(url)  # nosec B310 - hardcoded trusted AWS endpoint
         ip_ranges = json.loads(response.read().decode('utf-8'))
         
         # Extract IPv4 ranges for the specified service

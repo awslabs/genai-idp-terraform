@@ -60,6 +60,7 @@ resource "aws_lambda_function" "queue_processor" {
       STATE_MACHINE_ARN      = var.processor.state_machine_arn
       TRACKING_TABLE         = local.tracking_table_name
       CONCURRENCY_TABLE      = local.concurrency_table_name
+      CONFIG_TABLE           = local.configuration_table_name
       MAX_CONCURRENT         = var.processor.max_processing_concurrency
       DOCUMENT_TRACKING_MODE = var.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL        = var.api_id != null ? var.api_graphql_url : ""

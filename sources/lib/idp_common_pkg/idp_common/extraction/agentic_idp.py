@@ -7,6 +7,7 @@ tool-based approach with dynamic tool creation based on Pydantic models.
 """
 
 import asyncio
+import contextvars
 import io
 import json
 import logging
@@ -36,7 +37,7 @@ from strands.types.media import (
     ImageSource,
 )
 
-from idp_common.bedrock.client import CACHEPOINT_SUPPORTED_MODELS
+from idp_common.bedrock.client import CACHEPOINT_SUPPORTED_MODELS, is_claude_4_7_model
 from idp_common.config.models import IDPConfig
 from idp_common.utils.bedrock_utils import (
     async_exponential_backoff_retry,
@@ -162,10 +163,15 @@ class BedrockInvokeModelResponse(TypedDict):
 
     The response contains both the raw Bedrock API response and
     metering information with usage statistics.
+
+    The metering dict may also contain a special "_table_parsing_stats" key
+    with tool usage statistics when agentic extraction with table parsing is used.
     """
 
     response: BedrockResponse
-    metering: dict[str, BedrockUsage]  # Key format: "{context}/bedrock/{model_id}"
+    metering: dict[
+        str, BedrockUsage | dict[str, Any]
+    ]  # Key format: "{context}/bedrock/{model_id}" or "_table_parsing_stats"
 
 
 class JsonPatchModel(BaseModel):
@@ -263,6 +269,74 @@ def create_view_image_tool(page_images: list[bytes]) -> Any:
     return view_image
 
 
+# Thread-safe checkpoint callback and confidence data storage using contextvars.
+# These are set before agent invocation and read by tools after each state update.
+# Using ContextVar instead of module-level globals ensures thread safety when:
+# - concurrent_structured_output_async runs multiple agents via asyncio.gather
+# - structured_output() spawns a new thread for nested event loops
+# - Multiple Lambda invocations share a warm container
+_active_checkpoint_callback_var: contextvars.ContextVar[Any | None] = (
+    contextvars.ContextVar("_active_checkpoint_callback", default=None)
+)
+_active_confidence_data_var: contextvars.ContextVar[dict[str, str] | None] = (
+    contextvars.ContextVar("_active_confidence_data", default=None)
+)
+
+
+def set_confidence_data(confidence_data_by_page: dict[str, str] | None) -> None:
+    """
+    Set the context-local confidence data for the parse_table tool.
+
+    Called by ExtractionService before invoking agentic extraction to make
+    OCR confidence data available to the table parser tool.
+
+    Args:
+        confidence_data_by_page: Dict mapping page IDs to confidence data strings,
+            or None to clear.
+    """
+    _active_confidence_data_var.set(confidence_data_by_page)
+
+
+def _invoke_checkpoint_callback(agent: Agent) -> None:
+    """
+    Invoke the active checkpoint callback if one is set.
+
+    Called after each successful update to current_extraction or
+    intermediate_extraction to persist intermediate results for
+    resume-on-timeout scenarios.
+
+    Saves whichever state has data: prefers current_extraction (validated),
+    falls back to intermediate_extraction (buffer/unvalidated).
+
+    The callback is stored in a ContextVar (not in agent state) because
+    Strands AgentState requires all values to be JSON-serializable, and
+    Python callables are not.
+
+    Args:
+        agent: The Strands agent whose extraction state to checkpoint
+    """
+    callback = _active_checkpoint_callback_var.get()
+    if not callback:
+        return
+
+    # Prefer validated extraction; fall back to buffer data
+    data = agent.state.get("current_extraction")
+    source = "current_extraction"
+    if not data:
+        data = agent.state.get("intermediate_extraction")
+        source = "intermediate_extraction"
+    if not data:
+        return
+
+    try:
+        callback({"source": source, "data": data})
+    except Exception as e:
+        logger.warning(
+            "Checkpoint save failed, continuing extraction",
+            extra={"error": str(e)},
+        )
+
+
 def create_dynamic_extraction_tool_and_patch_tool(model_class: type[TargetModel]):
     """
     Create a dynamic tool function that extracts data according to a Pydantic model.
@@ -289,7 +363,37 @@ def create_dynamic_extraction_tool_and_patch_tool(model_class: type[TargetModel]
 
         # Note: The @tool decorator passes data as a dict, not as a model instance
         # We need to validate it manually using the Pydantic model
-        extraction_model = model_class.model_validate(extraction)  # pyright: ignore[reportAssignmentType]
+
+        # Handle case where LLM returns a single-element array instead of dict
+        # This happens when models mistakenly wrap the extraction in an array
+        extraction_data = extraction
+        if isinstance(extraction_data, list):
+            if len(extraction_data) == 1:
+                logger.warning(
+                    "LLM returned single-element array instead of object, unwrapping",
+                    extra={"original_type": "list", "element_count": 1},
+                )
+                extraction_data = extraction_data[0]
+            elif len(extraction_data) == 0:
+                logger.error(
+                    "LLM returned empty array when single object expected",
+                    extra={"element_count": 0},
+                )
+                return (
+                    "Error: Expected single object but received empty array. "
+                    "Please provide a single object, not an array."
+                )
+            else:  # len > 1
+                logger.error(
+                    "LLM returned multi-element array when single object expected",
+                    extra={"element_count": len(extraction_data)},
+                )
+                return (
+                    f"Error: Expected single object but received array with {len(extraction_data)} elements. "
+                    "Please provide a single object, not an array."
+                )
+
+        extraction_model = model_class.model_validate(extraction_data)  # pyright: ignore[reportAssignmentType]
         extraction_dict = extraction_model.model_dump(mode="json")
         logger.info(
             "extraction_tool called", extra={"models_extraction": extraction_dict}
@@ -299,6 +403,8 @@ def create_dynamic_extraction_tool_and_patch_tool(model_class: type[TargetModel]
             "Successfully stored extraction in state",
             extra={"extraction": extraction_dict},
         )
+        # Save checkpoint after successful extraction
+        _invoke_checkpoint_callback(agent)
         return "Extraction succeeded, the data format is correct"
 
     @tool
@@ -325,6 +431,8 @@ def create_dynamic_extraction_tool_and_patch_tool(model_class: type[TargetModel]
             key="current_extraction",
             value=validated_patched_data.model_dump(mode="json"),
         )
+        # Save checkpoint after successful patch
+        _invoke_checkpoint_callback(agent)
 
         return {
             "status": "success",
@@ -336,10 +444,96 @@ def create_dynamic_extraction_tool_and_patch_tool(model_class: type[TargetModel]
         valid_extraction = model_class(**agent.state.get("intermediate_extraction"))
 
         agent.state.set("current_extraction", valid_extraction.model_dump(mode="json"))
+        # Save checkpoint after buffer→extraction promotion
+        _invoke_checkpoint_callback(agent)
 
         return f"Successfully made the existing extraction the same as the buffer data {str(valid_extraction.model_dump(mode='json'))[:100]}..."
 
-    return extraction_tool, apply_json_patches, make_buffer_data_final_extraction
+    @tool
+    def finalize_table_extraction(
+        table_array_field: str,
+        scalar_fields: dict[str, Any],
+        agent: Agent,
+    ) -> dict[str, Any]:
+        """
+        Finalize extraction by combining mapped table rows (from agent state)
+        with scalar fields you provide.  This avoids generating large JSON —
+        the mapped rows are read directly from state.
+
+        PREREQUISITE: You must call map_table_to_schema BEFORE this tool.
+        The mapped rows are stored automatically in agent state.
+
+        Args:
+            table_array_field: The schema field name for the table array
+                (e.g., "holdings_positions", "transactions", "line_items")
+            scalar_fields: Non-table fields extracted from the document.
+                Example: {"Statement Period": "Jan 2025", "Account number": "1234"}
+                Only include fields that are NOT part of the table rows.
+        """
+        # Read mapped rows from agent state
+        mapped_result = agent.state.get("mapped_table_rows")
+        if not mapped_result or not mapped_result.get("mapped_rows"):
+            return {
+                "status": "error",
+                "message": (
+                    "No mapped table rows found in agent state. "
+                    "Call map_table_to_schema first."
+                ),
+            }
+
+        mapped_rows = mapped_result["mapped_rows"]
+        row_count = len(mapped_rows)
+
+        # Assemble the complete extraction dict
+        extraction_dict: dict[str, Any] = dict(scalar_fields)
+        extraction_dict[table_array_field] = mapped_rows
+
+        # Validate against the Pydantic model
+        try:
+            validated = model_class.model_validate(extraction_dict)
+            validated_dict = validated.model_dump(mode="json")
+            agent.state.set(key="current_extraction", value=validated_dict)
+            # Save checkpoint
+            _invoke_checkpoint_callback(agent)
+
+            logger.info(
+                "finalize_table_extraction succeeded",
+                extra={
+                    "table_field": table_array_field,
+                    "row_count": row_count,
+                    "scalar_fields": list(scalar_fields.keys()),
+                },
+            )
+            return {
+                "status": "success",
+                "message": (
+                    f"Extraction finalized: {row_count} rows in "
+                    f"'{table_array_field}' + {len(scalar_fields)} scalar fields. "
+                    f"Data validated successfully."
+                ),
+                "row_count": row_count,
+                "scalar_fields": list(scalar_fields.keys()),
+            }
+        except Exception as e:
+            logger.warning(
+                "finalize_table_extraction validation failed",
+                extra={"error": str(e)},
+            )
+            return {
+                "status": "validation_error",
+                "message": (
+                    f"Validation failed: {str(e)[:500]}. "
+                    f"Check that table_array_field and scalar_fields match the schema."
+                ),
+                "row_count": row_count,
+            }
+
+    return (
+        extraction_tool,
+        apply_json_patches,
+        make_buffer_data_final_extraction,
+        finalize_table_extraction,
+    )
 
 
 @tool
@@ -499,7 +693,10 @@ def patch_buffer_data(patches: list[dict[str, Any]], agent: Agent) -> str:
 
     logger.info(f"Current length of buffer data {len(patched_data)} ")
 
-    return f"Successfully patched {str(patched_data)[100:]}...."
+    # Save checkpoint after buffer patch (critical for resume-on-timeout)
+    _invoke_checkpoint_callback(agent)
+
+    return f"Successfully patched {str(patched_data)[:100]}...."
 
 
 SYSTEM_PROMPT = """
@@ -548,6 +745,50 @@ After successfully using the extraction tool, you MUST:
 4. Look for any missing fields, incorrect values, or formatting issues
 5. If any discrepancies are found, use the apply_json_patches tool to fix them
 6. Only finish when you are confident all data is accurate and complete
+"""
+
+
+TABLE_PARSING_PROMPT_ADDENDUM = """
+TABLE EXTRACTION OPTIMIZATION:
+When you encounter tables in the document text (Markdown tables with | delimiters),
+use the EFFICIENT two-tool workflow instead of generating JSON row-by-row:
+
+PREFERRED WORKFLOW (fast — use for tables with 50+ rows):
+1. Extract non-table scalar fields first (e.g. account_number, statement_period)
+2. Call parse_table with the full document text — parses ALL tables instantly
+3. Review the columns and row_count returned
+4. Call map_table_to_schema with:
+   - column_mapping: maps each table column to the corresponding schema field
+     (match by semantic meaning, e.g. "Amt" → "amount", "Desc" → "description")
+   - static_fields: constant values to add to every row (e.g. account_number,
+     cost_basis) — use values you extracted in step 1
+   - value_transforms: optional cleanup rules (e.g. "strip_currency" for price fields)
+5. Review the sample_first_row and sample_last_row to verify the mapping is correct
+6. Call finalize_table_extraction with:
+   - table_array_field: the schema field name for the array (e.g. "holdings_positions")
+   - scalar_fields: the non-table fields from step 1
+
+finalize_table_extraction reads the mapped rows directly from state — you do NOT
+need to pass the rows as arguments.  This is critical for performance: it eliminates
+generating thousands of lines of JSON.  Do NOT use extraction_tool for large tables.
+
+FALLBACK WORKFLOW (use when map_table_to_schema is not suitable):
+- Complex tables with merged cells, nested headers, or irregular structure
+- Tables where column mapping is ambiguous
+- Small tables (< 50 rows) where manual extraction is acceptable
+In these cases, use parse_table + extraction_tool/apply_json_patches as before.
+
+QUALITY CHECKS:
+- parse_success_rate target: >= {min_parse_success_rate}
+- avg_confidence target: >= {min_confidence_threshold} (Textract only)
+- If quality is poor, fall back to LLM extraction for those sections
+- Always extract non-tabular fields (headers, metadata) using normal extraction
+
+ROW COUNT VALIDATION:
+- Verify row_count from parse_table matches the document
+- If parse_table returns multiple tables with IDENTICAL columns, they are fragments
+  of a single table — the tool auto-merges them, but verify completeness
+- NEVER stop until ALL table data is captured
 """
 
 
@@ -650,6 +891,15 @@ def _build_model_config(
         read_timeout=read_timeout,
     )
 
+    # Handle ':1m' suffix for 1M context window models (Claude 4.x beta).
+    # Bedrock rejects ':1m' as a model identifier; strip it and pass the
+    # anthropic_beta header via additional_request_fields, mirroring
+    # bedrock/client.py::invoke_model. See GitHub issue #312.
+    additional_request_fields: dict[str, Any] | None = None
+    if model_id.endswith(":1m"):
+        model_id = model_id[:-3]
+        additional_request_fields = {"anthropic_beta": ["context-1m-2025-08-07"]}
+
     # Determine model-specific maximum token limits
     model_max = 4_096  # Default fallback
     model_id_lower = model_id.lower()
@@ -686,9 +936,31 @@ def _build_model_config(
         max_output_tokens = model_max
 
     # Build base model config
+    # Honor BEDROCK_ASSUME_ROLE_ARN by sourcing the boto session from the
+    # shared factory. Falls back to default credentials when unset.
+    try:
+        from idp_common.bedrock.session import get_bedrock_session
+
+        bedrock_session = get_bedrock_session()
+    except Exception as e:
+        logger.debug(
+            "Falling back to default Bedrock session for agentic extraction (%s)", e
+        )
+        bedrock_session = None
+
     model_config = dict(
-        model_id=model_id, boto_client_config=boto_config, max_tokens=max_output_tokens
+        model_id=model_id,
+        boto_client_config=boto_config,
+        max_tokens=max_output_tokens,
     )
+    if bedrock_session is not None:
+        model_config["boto_session"] = bedrock_session
+
+    # Forward anthropic_beta header for 1M context models via Strands'
+    # additional_request_fields, which maps to ConverseStream's
+    # additionalModelRequestFields.
+    if additional_request_fields is not None:
+        model_config["additional_request_fields"] = additional_request_fields
 
     logger.info(
         "Setting max_tokens for model",
@@ -725,21 +997,44 @@ def _build_model_config(
     return model_config
 
 
-def _get_inference_params(temperature: float, top_p: float | None) -> dict[str, float]:
+def _get_inference_params(
+    model_id: str,
+    temperature: float,
+    top_p: float | None,
+) -> dict[str, float]:
     """
     Get inference parameters ensuring temperature and top_p are mutually exclusive.
 
     Some Bedrock models don't allow both temperature and top_p to be specified.
-    This follows the same logic as bedrock/client.py lines 348-364.
+    This follows the same logic as bedrock/client.py.
+
+    Claude 4.7+ models (e.g. ``us.anthropic.claude-opus-4-7``) deprecate the
+    ``temperature``, ``top_p`` and ``top_k`` parameters and reject requests
+    that pass them. For these models this helper returns an empty dict so
+    that no inference parameters are forwarded to the Strands ``BedrockModel``
+    / ConverseStream call. See GitHub issue #304.
 
     Args:
-        temperature: Temperature value from config
-        top_p: Top_p value from config (may be None)
+        model_id: Bedrock model identifier (used to detect Claude 4.7+).
+        temperature: Temperature value from config.
+        top_p: Top_p value from config (may be None).
 
     Returns:
-        Dict with only one of temperature or top_p
+        Dict with only one of temperature or top_p, or an empty dict for
+        Claude 4.7+ models where both are deprecated.
     """
-    params = {}
+    # Claude 4.7+ models don't support temperature/top_p/top_k. Omit them
+    # entirely so ConverseStream doesn't fail with
+    # "`top_p` is deprecated for this model".
+    if is_claude_4_7_model(model_id):
+        logger.info(
+            "Skipping temperature/top_p for Claude 4.7+ model "
+            "(these parameters are deprecated for this model)",
+            extra={"model_id": model_id},
+        )
+        return {}
+
+    params: dict[str, float] = {}
 
     # Only use top_p if it's positive (greater than 0)
     # This allows temperature=0.0 for deterministic output (recommended by Anthropic)
@@ -821,11 +1116,30 @@ def _prepare_prompt_content(
                 )
             )
 
-    # Add existing data context if provided
+    # Add existing data context if provided (checkpoint resume scenario)
     if existing_data:
+        existing_dict = existing_data.model_dump(mode="json")
+        # Count items for a helpful summary without sending the full data in the prompt
+        # (the full data is already loaded into agent.state["current_extraction"])
+        item_counts = []
+        for key, value in existing_dict.items():
+            if isinstance(value, list):
+                item_counts.append(f"{len(value)} {key}")
+            elif value is not None:
+                item_counts.append(key)
+        items_summary = ", ".join(item_counts) if item_counts else "partial data"
+
         prompt_content.append(
             ContentBlock(
-                text=f"Please update the existing data using the extraction tool or patches. Existing data: {existing_data.model_dump(mode='json')}"
+                text=(
+                    f"IMPORTANT - RESUME FROM CHECKPOINT: Your extraction state already contains "
+                    f"previously extracted data ({items_summary}). This data is already loaded "
+                    f"in your current_extraction state. Do NOT call extraction_tool again — that "
+                    f"would overwrite the existing data. Instead, use view_existing_extraction to "
+                    f"review what's already extracted, then use apply_json_patches to ADD only the "
+                    f"remaining items that are not yet extracted. Focus on the pages/rows that come "
+                    f"AFTER the already-extracted data."
+                )
             )
         )
 
@@ -928,6 +1242,173 @@ async def _invoke_agent_for_extraction(
     return response, None
 
 
+async def _run_batch_agent(
+    batch_index: int,
+    total_batches: int,
+    page_start: int,
+    page_end: int,
+    total_pages: int,
+    model_id: str,
+    data_format: type[TargetModel],
+    prompt: str | Message | Image.Image,
+    page_images: list[bytes] | None,
+    config: IDPConfig,
+    context: str,
+    max_retries: int,
+    connect_timeout: float,
+    read_timeout: float,
+    max_tokens: int | None,
+    checkpoint_callback: Any | None,
+    base_custom_instruction: str | None = None,
+) -> tuple[TargetModel, BedrockInvokeModelResponse]:
+    """Run a single batch agent for a page range, with instructions to extract only its assigned pages."""
+    # Build a custom instruction telling this agent its page assignment
+    batch_instruction = (
+        f"You are batch {batch_index + 1} of {total_batches}. "
+        f"Extract data ONLY from pages {page_start + 1} to {page_end} "
+        f"(out of {total_pages} total pages). "
+        f"Ignore content from other pages."
+    )
+
+    # Combine base custom instruction with batch instruction
+    combined_instruction = batch_instruction
+    if base_custom_instruction:
+        combined_instruction = f"{base_custom_instruction}\n\n{batch_instruction}"
+
+    return await structured_output_async(
+        model_id=model_id,
+        data_format=data_format,
+        prompt=prompt,
+        page_images=page_images,
+        config=config,
+        context=context,
+        max_retries=max_retries,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        max_tokens=max_tokens,
+        custom_instruction=combined_instruction,
+        checkpoint_callback=checkpoint_callback,
+    )
+
+
+async def concurrent_structured_output_async(
+    model_id: str,
+    data_format: type[TargetModel],
+    prompt: str | Message | Image.Image,
+    page_images: list[bytes],
+    num_batches: int,
+    config: IDPConfig = IDPConfig(),
+    context: str = "Extraction",
+    max_retries: int = 7,
+    connect_timeout: float = 10.0,
+    read_timeout: float = 600.0,
+    max_tokens: int | None = None,
+    checkpoint_callback: Any | None = None,
+    custom_instruction: str | None = None,
+    total_pages: int | None = None,
+) -> tuple[TargetModel, BedrockInvokeModelResponse]:
+    """
+    Run multiple extraction agents concurrently on different page ranges.
+
+    Splits the document's pages into N batches, runs N agents in parallel
+    (each seeing ALL images but instructed to extract only its assigned pages),
+    then merges results by concatenating list fields and taking the last
+    non-None value for scalar fields.
+
+    Args:
+        num_batches: Number of concurrent agents to run (2-10)
+        total_pages: Override for page count (used when images not provided)
+        Other args: Same as structured_output_async
+
+    Returns:
+        Merged (data_format instance, metering response)
+    """
+    total_pages = total_pages or len(page_images)
+    # Calculate page ranges for each batch
+    pages_per_batch = max(1, total_pages // num_batches)
+    batch_ranges = []
+    for i in range(num_batches):
+        start = i * pages_per_batch
+        end = (
+            min((i + 1) * pages_per_batch, total_pages)
+            if i < num_batches - 1
+            else total_pages
+        )
+        if start < total_pages:
+            batch_ranges.append((start, end))
+
+    logger.info(
+        "Starting concurrent batch extraction",
+        extra={
+            "num_batches": len(batch_ranges),
+            "total_pages": total_pages,
+            "batch_ranges": [(s, e) for s, e in batch_ranges],
+        },
+    )
+
+    # Run all batches concurrently
+    tasks = [
+        _run_batch_agent(
+            batch_index=i,
+            total_batches=len(batch_ranges),
+            page_start=start,
+            page_end=end,
+            total_pages=total_pages,
+            model_id=model_id,
+            data_format=data_format,
+            prompt=prompt,
+            page_images=page_images,
+            config=config,
+            context=context,
+            max_retries=max_retries,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+            max_tokens=max_tokens,
+            checkpoint_callback=checkpoint_callback,
+            base_custom_instruction=custom_instruction,
+        )
+        for i, (start, end) in enumerate(batch_ranges)
+    ]
+    results = await asyncio.gather(*tasks)
+
+    # Merge results: concatenate list fields, take last non-None for scalars
+    merged_dict: dict[str, Any] = {}
+    merged_metering: dict[str, Any] = {}
+    for result_data, result_response in results:
+        result_dict = result_data.model_dump(mode="json")
+        for key, value in result_dict.items():
+            if isinstance(value, list):
+                merged_dict.setdefault(key, []).extend(value)
+            elif value is not None:
+                merged_dict[key] = value
+        # Accumulate metering
+        for mk, mv in result_response.get("metering", {}).items():
+            if mk not in merged_metering:
+                merged_metering[mk] = dict(mv)
+            else:
+                for tk, tv in mv.items():
+                    merged_metering[mk][tk] = merged_metering[mk].get(tk, 0) + (tv or 0)
+
+    merged_result = data_format(**merged_dict)
+    # Count merged items for logging
+    total_items = sum(len(v) for v in merged_dict.values() if isinstance(v, list))
+    logger.info(
+        "Concurrent batch extraction complete",
+        extra={"total_items": total_items, "batches_completed": len(results)},
+    )
+
+    return merged_result, BedrockInvokeModelResponse(
+        response=BedrockResponse(
+            output=BedrockOutput(
+                message=BedrockMessage(
+                    role="assistant", content=[BedrockMessageContent(text="merged")]
+                )
+            )
+        ),
+        metering=merged_metering,
+    )
+
+
 async def structured_output_async(
     model_id: str,
     data_format: type[TargetModel],
@@ -940,8 +1421,10 @@ async def structured_output_async(
     context: str = "Extraction",
     max_retries: int = 7,
     connect_timeout: float = 10.0,
-    read_timeout: float = 300.0,
+    read_timeout: float = 600.0,
     max_tokens: int | None = None,
+    checkpoint_callback: Any | None = None,
+    checkpoint_buffer_data: dict[str, Any] | None = None,
 ) -> tuple[TargetModel, BedrockInvokeModelResponse]:
     """
     Extract structured data using Strands agents with tool-based validation.
@@ -1014,6 +1497,23 @@ async def structured_output_async(
     """
     if not system_prompt:
         system_prompt = SYSTEM_PROMPT
+
+    # Append table parsing guidance to system prompt if enabled
+    table_parsing_config = config.extraction.agentic.table_parsing
+    if table_parsing_config.enabled:
+        system_prompt += TABLE_PARSING_PROMPT_ADDENDUM.format(
+            min_parse_success_rate=table_parsing_config.min_parse_success_rate,
+            min_confidence_threshold=table_parsing_config.min_confidence_threshold,
+        )
+        logger.info(
+            "Table parsing tool enabled for agentic extraction",
+            extra={
+                "min_confidence_threshold": table_parsing_config.min_confidence_threshold,
+                "min_parse_success_rate": table_parsing_config.min_parse_success_rate,
+                "use_confidence_data": table_parsing_config.use_confidence_data,
+            },
+        )
+
     logger.debug(
         "Starting agentic extraction",
         extra={"data_format": data_format.__name__, "model_id": model_id},
@@ -1042,6 +1542,28 @@ async def structured_output_async(
         update_todo,
         view_todo_list,
     ]
+
+    # Add table parsing tools if enabled
+    if table_parsing_config.enabled:
+        from idp_common.extraction.tools.table_parser import (
+            create_map_table_to_schema_tool,
+            create_parse_table_tool,
+        )
+
+        # The actual confidence data is injected via a ContextVar
+        # (_active_confidence_data_var) by the ExtractionService before calling
+        # structured_output via set_confidence_data().
+        parse_table_tool = create_parse_table_tool(
+            confidence_data_by_page=_active_confidence_data_var.get(),
+            max_empty_line_gap=table_parsing_config.max_empty_line_gap,
+            auto_merge_adjacent_tables=table_parsing_config.auto_merge_adjacent_tables,
+        )
+        tools.append(parse_table_tool)
+
+        # map_table_to_schema: bulk-transforms parsed rows using a column mapping
+        # Eliminates the need for the LLM to generate JSON row-by-row
+        map_tool = create_map_table_to_schema_tool()
+        tools.append(map_tool)
 
     # Build system prompt with schema
     final_system_prompt, schema_json = _build_system_prompt(
@@ -1077,10 +1599,19 @@ async def structured_output_async(
     # Track token usage
     token_usage = _initialize_token_usage()
 
-    # Get inference params ensuring temperature and top_p are mutually exclusive
+    # Get inference params ensuring temperature and top_p are mutually exclusive.
+    # For Claude 4.7+ models, no inference params are returned because
+    # temperature/top_p/top_k are deprecated (see GitHub issue #304).
     inference_params = _get_inference_params(
-        temperature=config.extraction.temperature, top_p=config.extraction.top_p
+        model_id=model_id,
+        temperature=config.extraction.temperature,
+        top_p=config.extraction.top_p,
     )
+
+    # Set the context-local checkpoint callback so tools can invoke it.
+    # Stored in a ContextVar (not in agent state) because AgentState
+    # requires all values to be JSON-serializable.
+    _active_checkpoint_callback_var.set(checkpoint_callback)
 
     agent = Agent(
         model=BedrockModel(
@@ -1098,11 +1629,41 @@ async def structured_output_async(
             "extraction_schema_json": schema_json,  # Store for schema reminder tool
         },
         conversation_manager=SummarizingConversationManager(
-            summary_ratio=0.8, preserve_recent_messages=2
+            summary_ratio=0.95, preserve_recent_messages=5
         ),
     )
     if existing_data:
         agent.state.set("current_extraction", existing_data.model_dump(mode="json"))
+
+    # Load buffer checkpoint into agent's intermediate_extraction state
+    if checkpoint_buffer_data:
+        agent.state.set("intermediate_extraction", checkpoint_buffer_data)
+        # Count items for resume prompt
+        buffer_counts = []
+        for key, value in checkpoint_buffer_data.items():
+            if isinstance(value, list):
+                buffer_counts.append(f"{len(value)} {key}")
+        buffer_summary = (
+            ", ".join(buffer_counts) if buffer_counts else "partial buffer data"
+        )
+        # Add resume instruction to prompt
+        prompt_content.insert(
+            -2,
+            ContentBlock(
+                text=(
+                    f"IMPORTANT - RESUME FROM BUFFER CHECKPOINT: Your intermediate_extraction "
+                    f"buffer already contains previously extracted data ({buffer_summary}). "
+                    f"This data is already loaded in your buffer state. Use view_buffer_data_stats "
+                    f"to check progress, then continue adding remaining items with patch_buffer_data. "
+                    f"When all items are extracted, use make_buffer_data_final_extraction to finalize. "
+                    f"Do NOT start over — continue from where the buffer left off."
+                )
+            ),
+        )
+        logger.info(
+            "Loaded buffer checkpoint into agent state",
+            extra={"buffer_summary": buffer_summary},
+        )
 
     response, result = await _invoke_agent_for_extraction(
         agent=agent,
@@ -1114,102 +1675,37 @@ async def structured_output_async(
     # Accumulate token usage
     _accumulate_token_usage(response, token_usage)
 
-    # Add explicit review step (Option 2)
-    if (
-        config.extraction.agentic.enabled
-        and config.extraction.agentic.review_agent
-        and config.extraction.agentic.review_agent_model
-    ):
-        # result is guaranteed to be non-None here (we raised an error earlier if it was None)
-        assert result is not None
-
-        logger.debug(
-            "Initiating final review of extracted data",
-            extra={"review_enabled": True},
-        )
-        review_prompt = Message(
-            role="user",
-            content=[
-                *prompt_content,
-                ContentBlock(
-                    text=f"""
-                You have successfully extracted the following data:
-                {json.dumps(result.model_dump(mode="json"), indent=2)}
-
-                Please take one final careful look at this extraction:
-                1. Check each field against the source document
-                2. Verify all values are accurate (pay special attention to numbers, dates, names)
-                3. Ensure no required fields are missing
-                4. Look for any formatting issues or typos
-                5. Make sure no data locations didn't change compared to the document unless to adhere to the data format required.
-
-                If everything is correct, respond with "Data verified and accurate."
-                If corrections are needed, use the apply_json_patches tool to fix any issues you find.
-                """
-                ),
-                ContentBlock(cachePoint=CachePoint(type="default")),
-            ],
-        )
-        # Build config for review agent
-        review_model_config = _build_model_config(
-            model_id=config.extraction.agentic.review_agent_model,
-            max_tokens=max_tokens,
-            max_retries=max_retries,
-            connect_timeout=connect_timeout,
-            read_timeout=read_timeout,
-        )
-
-        # Get inference params for review agent ensuring temperature and top_p are mutually exclusive
-        review_inference_params = _get_inference_params(
-            temperature=config.extraction.temperature, top_p=config.extraction.top_p
-        )
-
-        agent = Agent(
-            model=BedrockModel(
-                **review_model_config,
-                **review_inference_params,
-            ),  # pyright: ignore[reportArgumentType]
-            tools=tools,
-            system_prompt=f"{final_system_prompt}",
-            state={
-                "current_extraction": result.model_dump(mode="json"),
-                "images": {},
-                "existing_data": (
-                    existing_data.model_dump(mode="json") if existing_data else None
-                ),
-                "extraction_schema_json": schema_json,  # Store for schema reminder tool
+    # Review agent is deprecated and disabled. The main extraction agent already
+    # performs a final review step as part of its SYSTEM_PROMPT instructions.
+    # The review_agent config fields are preserved for backward compatibility
+    # but are no-ops. See CHANGELOG for details.
+    if config.extraction.agentic.review_agent:
+        logger.warning(
+            "review_agent config is deprecated and has no effect. "
+            "The main extraction agent already performs self-review as part of its "
+            "system prompt. Remove 'review_agent' and 'review_agent_model' from your "
+            "config to suppress this warning.",
+            extra={
+                "review_agent": config.extraction.agentic.review_agent,
+                "review_agent_model": config.extraction.agentic.review_agent_model,
             },
-            conversation_manager=SummarizingConversationManager(
-                summary_ratio=0.8, preserve_recent_messages=2
-            ),
         )
-
-        review_response = await invoke_agent_with_retry(
-            agent=agent, input=[review_prompt]
-        )
-        logger.debug("Review response received", extra={"review_completed": True})
-
-        # Accumulate token usage from review
-        _accumulate_token_usage(review_response, token_usage)
-
-        # Check if patches were applied during review
-        updated_extraction = agent.state.get("current_extraction")
-        if updated_extraction != result.model_dump(mode="json"):
-            # Patches were applied, validate the new extraction
-            try:
-                result = data_format(**updated_extraction)
-                logger.debug(
-                    "Applied corrections after final review",
-                    extra={"corrections_applied": True},
-                )
-            except Exception as e:
-                logger.debug(
-                    "Post-review validation failed",
-                    extra={"error": str(e)},
-                )
 
     # Return best effort result
     if result and response:
+        # Build metering dict with token usage
+        metering_dict = {f"{context}/bedrock/{model_id}": BedrockUsage(**token_usage)}
+
+        # Include table parsing stats if tool was used
+        tool_stats = agent.state.get("table_parsing_stats")
+        if tool_stats:
+            # Use special key that service.py expects
+            metering_dict["_table_parsing_stats"] = tool_stats
+            logger.info(
+                "Table parsing tool was used during extraction",
+                extra={"tool_stats": tool_stats},
+            )
+
         return result, BedrockInvokeModelResponse(
             response=BedrockResponse(
                 output=BedrockOutput(
@@ -1219,7 +1715,7 @@ async def structured_output_async(
                     )
                 )
             ),
-            metering={f"{context}/bedrock/{model_id}": BedrockUsage(**token_usage)},
+            metering=metering_dict,
         )
 
     logger.error(
@@ -1241,7 +1737,9 @@ def structured_output(
     config: IDPConfig = IDPConfig(),
     max_retries: int = 7,
     connect_timeout: float = 10.0,
-    read_timeout: float = 300.0,
+    read_timeout: float = 600.0,
+    checkpoint_callback: Any | None = None,
+    checkpoint_buffer_data: dict[str, Any] | None = None,
 ) -> tuple[BaseModel, BedrockInvokeModelResponse]:
     """
     Synchronous version of structured_output_async.
@@ -1328,6 +1826,8 @@ def structured_output(
                         connect_timeout=connect_timeout,
                         read_timeout=read_timeout,
                         page_images=page_images,
+                        checkpoint_callback=checkpoint_callback,
+                        checkpoint_buffer_data=checkpoint_buffer_data,
                     )
                 )
             except Exception as e:
@@ -1360,6 +1860,8 @@ def structured_output(
                 connect_timeout=connect_timeout,
                 read_timeout=read_timeout,
                 page_images=page_images,
+                checkpoint_callback=checkpoint_callback,
+                checkpoint_buffer_data=checkpoint_buffer_data,
             )
         )
 

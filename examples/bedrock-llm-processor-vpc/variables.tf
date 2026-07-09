@@ -116,7 +116,13 @@ variable "summarization_model_id" {
 variable "config_file_path" {
   description = "Path to the configuration YAML file for document processing"
   type        = string
-  default     = "../../sources/config_library/pattern-2/lending-package-sample/config.yaml"
+  default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+}
+
+variable "additional_config_files" {
+  description = "Extra config versions to seed alongside the default, as version_name => path to a YAML file (relative to this example dir or absolute). Each shows in the UI version dropdown as an editable, non-active version. Manage this list from terraform.tfvars."
+  type        = map(string)
+  default     = {}
 }
 
 variable "tags" {

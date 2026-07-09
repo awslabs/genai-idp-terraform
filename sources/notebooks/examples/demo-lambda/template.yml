@@ -16,10 +16,47 @@ Parameters:
     AllowedPattern: "^(|arn:aws[a-z-]*::iam::[0-9]{12}:policy/.+)$"
     ConstraintDescription: Must be empty or a valid IAM policy ARN
 
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: >-
+      (Optional) ARN of an existing KMS key for CloudWatch Logs encryption.
+      Leave blank to create a new customer-managed key.
+    AllowedPattern: "^(|arn:aws[a-z-]*::kms:[a-z0-9-]+:[0-9]{12}:key/.+)$"
+    ConstraintDescription: Must be empty or a valid KMS key ARN
+
 Conditions:
   HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  CreateKmsKey: !Equals [!Ref KmsKeyArn, ""]
 
 Resources:
+
+  DemoKmsKey:
+    Type: AWS::KMS::Key
+    Condition: CreateKmsKey
+    Properties:
+      Description: 'KMS key for demo Lambda CloudWatch Logs encryption'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CloudWatch Logs
+            Effect: Allow
+            Principal:
+              Service: !Sub 'logs.${AWS::Region}.amazonaws.com'
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
 
   DemoLambdaFunction:
     Type: AWS::Serverless::Function
@@ -61,10 +98,10 @@ Resources:
         rules_to_suppress:
           - id: W84
             reason: "Demo function - KMS CMK not required, but can be added by customer for production use cases"
-    # checkov:skip=CKV_AWS_158: "Demo function - KMS CMK not required, but can be added by customer for production use cases"
     Properties:
       LogGroupName: !Sub "/aws/lambda/GENAIIDP-notebook-demo-extractor"
       RetentionInDays: 7  # Short retention for demo purposes
+      KmsKeyId: !If [CreateKmsKey, !GetAtt DemoKmsKey.Arn, !Ref KmsKeyArn]
 
 Outputs:
   

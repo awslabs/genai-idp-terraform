@@ -1,0 +1,59 @@
+# Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Config-shape flag demonstration overlay.
+#
+# These `x-aws-idp-*` schema key families are RUNTIME-ENFORCED UPSTREAM by the
+# read-only `idp_common` library. The Terraform wrapper's only obligation is
+# faithful PASS-THROUGH: the configuration seeder persists them into the
+# configuration DynamoDB table unchanged — it adds NO new AWS resources and
+# applies NO key allow-listing.
+#
+# main.tf appends these classes onto the seeded config's `classes` list, so the
+# flags travel through the seed path verbatim. This overlay is intentionally
+# minimal and self-contained — it demonstrates the flag SHAPES, not a complete
+# extraction schema.
+classes:
+  # `x-aws-idp-extraction-model`: override the extraction model per class
+  # AND per attribute (overrides the document-level extraction.model).
+  # `x-aws-idp-page-types` (class) + `x-aws-idp-source-page-types`
+  # (property): let the runtime distinguish a MISSING field (the page that would
+  # carry it was never present) from a BLANK field (page present, value empty).
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: Round3BankStatement
+    type: object
+    x-aws-idp-document-type: Round3BankStatement
+    description: >-
+      Demonstration class exercising the per-class extraction-model override
+      (B9) and the page-type presence hints (B12).
+    # Class-level: extract this whole class with a specific model.
+    x-aws-idp-extraction-model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    # Class-level: declare the named page sub-types this class can contain.
+    x-aws-idp-page-types:
+      - name: AccountSummary
+        x-aws-idp-document-page-content-regex: "(?i)account summary"
+    properties:
+      ClosingBalance:
+        type: string
+        description: The closing balance shown on the account summary page.
+        x-aws-idp-evaluation-method: EXACT
+        # Attribute-level: override the model for just this field.
+        x-aws-idp-extraction-model: us.anthropic.claude-opus-4-7:1m
+        # Property-level: this field only appears on AccountSummary pages;
+        # if that page type is absent the field is MISSING (not BLANK).
+        x-aws-idp-source-page-types:
+          - AccountSummary
+
+  # `x-aws-idp-exclude-from-processing` (+ `x-aws-idp-exclusion-reason`):
+  # mark a whole class so the runtime skips LLM extraction/assessment/
+  # summarization for sections classified as it.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: Round3Instructions
+    type: object
+    x-aws-idp-document-type: Round3Instructions
+    description: >-
+      Demonstration class exercising the exclude-from-processing flag (B10).
+      Sections classified as this class skip all LLM calls.
+    x-aws-idp-exclude-from-processing: true
+    x-aws-idp-exclusion-reason: instructions
+    properties: {}

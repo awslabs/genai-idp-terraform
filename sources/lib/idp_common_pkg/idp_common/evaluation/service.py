@@ -1117,6 +1117,7 @@ class EvaluationService:
             document_class=section.classification,
             attributes=attribute_results,
             metrics=metrics,
+            stickler_comparison_result=stickler_result,  # Store raw result for bulk aggregation
         )
 
     def _remove_none_values(self, data: Any) -> Any:
@@ -1488,10 +1489,13 @@ class EvaluationService:
             expected_instance = ModelClass(**coerced_expected)
             actual_instance = ModelClass(**coerced_actual)
 
-            # Compare using Stickler with field_comparisons enabled (sticker-eval v0.1.4+)
+            # Compare using Stickler with field_comparisons and confusion_matrix enabled
             stickler_result = expected_instance.compare_with(
                 actual_instance,
                 document_field_comparisons=True,  # Enable detailed field-by-field comparison
+                document_non_matches=True,  # Enable non-match documentation
+                include_confusion_matrix=True,  # Enable confusion matrix for bulk aggregation
+                add_derived_metrics=True,  # Enable per-field precision/recall/F1
             )
 
             logger.debug(
@@ -1784,9 +1788,35 @@ class EvaluationService:
             total_tp = total_fp = total_fn = total_tn = total_fp1 = total_fp2 = 0
 
             # Create a list of section pairs to evaluate
+            # Skip sections whose class is marked as excluded — those sections
+            # have no extraction / assessment output by design, so including
+            # them would make accuracy metrics meaningless. We track them
+            # separately so the markdown report can annotate which sections
+            # were intentionally skipped.
+            from idp_common.section_exclusion import is_section_excluded
+
             section_pairs = []
+            excluded_sections_info: List[Dict[str, Any]] = []
             for actual_section in actual_document.sections:
                 section_id = actual_section.section_id
+
+                if is_section_excluded(actual_section):
+                    logger.info(
+                        "Evaluation skipped for excluded section %s "
+                        "(class=%s, reason=%s)",
+                        section_id,
+                        actual_section.classification,
+                        actual_section.exclusion_reason or "excluded",
+                    )
+                    excluded_sections_info.append(
+                        {
+                            "section_id": section_id,
+                            "classification": actual_section.classification,
+                            "exclusion_reason": actual_section.exclusion_reason,
+                            "page_ids": list(actual_section.page_ids or []),
+                        }
+                    )
+                    continue
 
                 # Find corresponding section in expected document
                 expected_section = next(
@@ -1900,13 +1930,15 @@ class EvaluationService:
             if not actual_document.input_key:
                 raise ValueError("Input key is required for storing results")
 
-            # Create evaluation result with doc split metrics
+            # Create evaluation result with doc split metrics and any
+            # excluded sections that were intentionally skipped.
             evaluation_result = DocumentEvaluationResult(
                 document_id=actual_document.id,
                 section_results=section_results,
                 overall_metrics=overall_metrics,
                 execution_time=execution_time,
                 doc_split_metrics=doc_split_metrics_obj,
+                excluded_sections=excluded_sections_info,
             )
 
             # Store results if requested

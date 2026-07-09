@@ -199,7 +199,7 @@ text = client.extract_text_from_response(response)
 
 ## Guardrail Support
 
-This module includes built-in support for Amazon Bedrock Guardrails, which help enforce content safety, security, and policy compliance across all Bedrock model interactions.
+This module includes built-in support for Amazon Bedrock Guardrails, which help enforce content safety, security, and policy compliance across all Bedrock model interactions. Since the integration passes the Guardrail ID and version directly to Bedrock API calls, all Guardrail policy types are supported — including content filters, topic restrictions, PII detection, and [Automated Reasoning Checks](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-automated-reasoning.html) for formal verification of model outputs.
 
 ### Configuring Guardrails
 

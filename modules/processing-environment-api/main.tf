@@ -51,6 +51,14 @@ locals {
   encryption_key_arn = var.encryption_key_arn
   encryption_key_id  = var.encryption_key_arn != null ? element(split("/", var.encryption_key_arn), 1) : null
 
+  # Effective ARN for KMS IAM policy Resource fields. When no customer-managed
+  # key is supplied, var/local.encryption_key_arn is null, which would render an
+  # invalid "Resource": null in a policy document (IAM rejects it). Fall back to
+  # a syntactically-valid placeholder key ARN so the policy is well-formed (and
+  # grants nothing usable, since the key does not exist). Mirrors the inline
+  # guard already used by the appsync_dynamodb_policy KMS statement.
+  kms_policy_resource_arn = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+
   # Knowledge Base - Extract ID from ARN
   knowledge_base_arn = var.knowledge_base.knowledge_base_arn
   knowledge_base_id  = var.knowledge_base.knowledge_base_arn != null ? element(split("/", var.knowledge_base.knowledge_base_arn), 1) : null
@@ -59,12 +67,13 @@ locals {
   guardrail_id  = var.guardrail != null ? var.guardrail.guardrail_id : null
   guardrail_arn = var.guardrail != null ? var.guardrail.guardrail_arn : null
 
-  # Knowledge Base model ARN - build full ARN in Terraform so the Lambda always receives
-  # a ready-made ARN (hits the startswith("arn:") branch) regardless of model ID format.
-  # RetrieveAndGenerate only accepts foundation-model ARNs (no account ID, no inference-profile).
+  # Knowledge Base model id for the query_knowledgebase_resolver. That vendored
+  # Lambda builds the modelArn as `inference-profile/{MODEL_ID}`, so MODEL_ID must
+  # be a BARE inference-profile id (e.g. us.amazon.nova-pro-v1:0), NOT an ARN —
+  # passing an ARN produces a nested, invalid modelArn that RetrieveAndGenerate
+  # rejects. If given an ARN, use its trailing id segment.
   knowledge_base_model_id = var.knowledge_base.model_id != null ? (
-    startswith(var.knowledge_base.model_id, "arn:") ? var.knowledge_base.model_id :
-    "arn:aws:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
+    startswith(var.knowledge_base.model_id, "arn:") ? element(reverse(split("/", var.knowledge_base.model_id)), 0) : var.knowledge_base.model_id
   ) : null
 
   # Edit Sections Feature
@@ -74,7 +83,7 @@ locals {
   document_queue_url    = var.document_queue_url
   document_queue_arn    = var.document_queue_arn
 
-  # Post-processing decompressor (from processing-environment module, task 4.11)
+  # Post-processing decompressor (from processing-environment module)
   post_processing_decompressor_arn = var.post_processing_decompressor_arn
 }
 
@@ -117,45 +126,12 @@ module "discovery" {
 }
 
 # =============================================================================
-# Chat with Document Sub-module (Optional)
+# Chat with Document — relocated to the chat-with-document feature submodule
 # =============================================================================
-
-module "chat_with_document" {
-  count  = var.chat_with_document.enabled ? 1 : 0
-  source = "./chat-with-document"
-
-  name_prefix              = "chat-${random_string.suffix.result}"
-  tracking_table_name      = local.tracking_table_name
-  tracking_table_arn       = local.tracking_table_arn
-  configuration_table_name = local.configuration_table_name
-  configuration_table_arn  = local.configuration_table_arn
-  appsync_api_id           = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn  = aws_iam_role.appsync_lambda_role.arn
-  idp_common_layer_arn     = var.idp_common_layer_arn
-
-  # S3 bucket access
-  input_bucket_arn   = local.input_bucket_arn
-  output_bucket_arn  = local.output_bucket_arn
-  working_bucket_arn = local.working_bucket_arn
-
-  # Optional Bedrock Guardrail configuration
-  guardrail_id_and_version = var.chat_with_document.guardrail_id_and_version
-
-  # Optional Knowledge Base configuration
-  knowledge_base_arn = local.knowledge_base_id != null ? "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:knowledge-base/${local.knowledge_base_id}" : null
-
-  # Configuration
-  log_level           = var.log_level
-  log_retention_days  = var.log_retention_days
-  encryption_key_arn  = local.encryption_key_arn
-  lambda_tracing_mode = var.lambda_tracing_mode
-
-  # VPC configuration
-  vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
-  vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
-
-  tags = var.tags
-}
+# The legacy synchronous `chatWithDocument` Query and its resolver Lambda were
+# removed upstream at v0.5.12. Chat-with-Document is now an async streaming
+# feature in `modules/features/chat-with-document`, instantiated at the root
+# (features.tf) and composed into this API via `enabled_feature_contracts`.
 
 # =============================================================================
 # PROCESS CHANGES SUB-MODULE
@@ -324,7 +300,7 @@ resource "aws_appsync_graphql_api" "api" {
     }
   }
 
-  schema = file("${path.module}/../../sources/src/api/schema.graphql")
+  schema = file("${path.module}/../../sources/nested/appsync/src/api/schema.graphql")
 
   tags = var.tags
 }

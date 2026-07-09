@@ -1,0 +1,22 @@
+query ListDocuments($startDateTime: AWSDateTime, $endDateTime: AWSDateTime, $limit: Int, $nextToken: String) {
+  listDocuments(startDateTime: $startDateTime, endDateTime: $endDateTime, limit: $limit, nextToken: $nextToken) {
+    Documents {
+      PK
+      SK
+      ObjectKey
+      ObjectStatus
+      InitialEventTime
+      CompletionTime
+      ConfigVersion
+      EvaluationStatus
+      HITLStatus
+      HITLTriggered
+      HITLCompleted
+      HITLReviewOwner
+      HITLReviewedBy
+      PageCount
+      ConfidenceAlertCount
+    }
+    nextToken
+  }
+}
