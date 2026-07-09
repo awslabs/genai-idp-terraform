@@ -1,0 +1,37 @@
+# Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Headless dual-mode deployment. Copy to terraform.tfvars and edit:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# Headless dual-mode:
+#   - enable_api = false        -> NO AppSync API; processors run DynamoDB-only
+#   - no web-ui, no chat, no user-identity (Cognito), no vpc-endpoints,
+#     no hitl, no rbac, no gsi-backfill
+#   - ONE processor / ONE state machine, dual-mode:
+#       config-version=default -> Bedrock-LLM branch
+#       config-version=bda     -> BDA branch (use_bda + linked BDA project)
+
+region = "us-east-1"
+prefix = "idp-headless"
+
+# Headless / DynamoDB-only. Keep all API-dependent features off.
+enable_api                = false
+enable_chat_with_document = false
+enable_web_ui             = false
+
+# Self-contained BDA project so the BDA branch works on a clean account.
+# Set false and pass bda_project_arn = "arn:aws:bedrock:...:data-automation-project/..."
+# to link an existing project instead.
+create_bda_project = true
+bda_version_name   = "bda"
+
+# Bedrock-LLM branch models (available in us-east-1).
+classification_model_id = "us.amazon.nova-2-lite-v1:0"
+extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
+
+tags = {
+  Environment = "dev"
+  Project     = "genai-idp-accelerator"
+  Example     = "unified-headless-demo"
+}
