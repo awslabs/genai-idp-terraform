@@ -32,8 +32,10 @@ admin_email = "admin@example.com"
 # knowledge_base_embedding_model_id = "amazon.titan-embed-text-v2:0" # embeddings (foundation model)
 
 # ── Build strategy (optional) ────────────────────────────────────────────────
-# Defaults use AWS CodeBuild (in-cloud). Set lambda_local = true to build
-# Lambda layers and processor images locally with Docker/Podman/Finch.
+# Defaults use AWS CodeBuild (in-cloud). Set lambda_local = true to build the
+# Lambda layer zips locally with Docker/Podman/Finch. No processor container
+# images are built — the engine uses zip Lambdas + shared layers. On Apple
+# Silicon, x86_64 layer builds need amd64 emulation (Rosetta).
 # See docs/content/deployment-guides/local-lambda-build.md.
 # build = {
 #   lambda_local        = false

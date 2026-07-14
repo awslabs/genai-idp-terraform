@@ -481,10 +481,6 @@ module "bda_processor" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
-  # Build strategy (see var.build in variables.tf)
-  lambda_local        = var.build.lambda_local
-  lambda_architecture = var.build.lambda_architecture
-  container_runtime   = var.build.container_runtime
 
   tags = var.tags
 }
@@ -623,10 +619,6 @@ module "sagemaker_udop_processor" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
-  # Build strategy (see var.build in variables.tf)
-  lambda_local        = var.build.lambda_local
-  lambda_architecture = var.build.lambda_architecture
-  container_runtime   = var.build.container_runtime
 
   tags = var.tags
 }
