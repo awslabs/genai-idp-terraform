@@ -179,9 +179,16 @@ resource "aws_s3_bucket_logging" "web_app_bucket" {
 
 # Note: SSL enforcement is now handled in the combined CloudFront policy below
 
-# CloudFront Origin Access Identity
-resource "aws_cloudfront_origin_access_identity" "oai" {
-  comment = "${var.name_prefix} CloudFront OAI for ${local.web_app_bucket.bucket_name}"
+# CloudFront Origin Access Control (OAC) - replaces the legacy Origin Access
+# Identity (OAI). OAC uses SigV4 signing and a bucket policy scoped to the
+# CloudFront service principal, which works under org SCP / data-perimeter
+# guardrails that block legacy OAI requests. Mirrors upstream v0.5.16.
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = "${var.name_prefix}-webui-oac"
+  description                       = "${var.name_prefix} CloudFront OAC for ${local.web_app_bucket.bucket_name}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
 # Grant CloudFront OAI read access to the web app bucket (when we create the bucket)
@@ -195,10 +202,15 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
       {
         Effect = "Allow"
         Principal = {
-          AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
+          Service = "cloudfront.amazonaws.com"
         }
         Action   = "s3:GetObject"
         Resource = "${aws_s3_bucket.web_app_bucket[0].arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "arn:${data.aws_partition.current.partition}:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.web_distribution[0].id}"
+          }
+        }
       },
       {
         Sid       = "DenyInsecureConnections"
@@ -220,7 +232,7 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
 
   depends_on = [
     aws_s3_bucket.web_app_bucket,
-    aws_cloudfront_origin_access_identity.oai
+    aws_cloudfront_distribution.web_distribution
   ]
 }
 
@@ -323,9 +335,7 @@ resource "aws_cloudfront_distribution" "web_distribution" {
     domain_name = "${local.web_app_bucket.bucket_name}.s3.${data.aws_region.current.id}.amazonaws.com"
     origin_id   = "S3-${local.web_app_bucket.bucket_name}"
 
-    s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.oai.cloudfront_access_identity_path
-    }
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
   }
 
   enabled             = true
