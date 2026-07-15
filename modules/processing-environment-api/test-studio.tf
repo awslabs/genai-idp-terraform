@@ -767,6 +767,16 @@ resource "aws_appsync_resolver" "list_test_sets" {
   data_source = aws_appsync_datasource.test_set_resolver[0].name
 }
 
+# Edit test-set metadata (description, classification type). Mirrors upstream
+# v0.5.14 UpdateTestSetResolver (nested/appsync).
+resource "aws_appsync_resolver" "update_test_set" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "updateTestSet"
+  data_source = aws_appsync_datasource.test_set_resolver[0].name
+}
+
 resource "aws_appsync_resolver" "validate_test_file_name" {
   count       = var.enable_test_studio ? 1 : 0
   api_id      = aws_appsync_graphql_api.api.id
