@@ -115,6 +115,13 @@ resource "aws_iam_role_policy" "agentcore_mcp_handler" {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
         Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+      },
+      {
+        # OpenAI GPT-5.x models are served via the bedrock-mantle endpoint
+        # (OpenAI Responses API), a separate IAM action namespace. Mirrors upstream v0.5.16.
+        Effect   = "Allow"
+        Action   = ["bedrock-mantle:CreateInference", "bedrock-mantle:GetProject", "bedrock-mantle:ListProjects", "bedrock-mantle:ListTagsForResources"]
+        Resource = "*"
       }
     ]
   })

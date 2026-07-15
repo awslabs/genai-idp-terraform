@@ -202,6 +202,13 @@ resource "aws_iam_role_policy" "agent_chat_processor" {
         Resource = "*"
       },
       {
+        # OpenAI GPT-5.x via the bedrock-mantle endpoint (OpenAI Responses API),
+        # a separate IAM action namespace. Mirrors upstream v0.5.16.
+        Effect   = "Allow"
+        Action   = ["bedrock-mantle:CreateInference", "bedrock-mantle:GetProject", "bedrock-mantle:ListProjects", "bedrock-mantle:ListTagsForResources"]
+        Resource = "*"
+      },
+      {
         Effect   = "Allow"
         Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
         Resource = "*"

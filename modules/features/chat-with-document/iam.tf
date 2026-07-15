@@ -65,6 +65,19 @@ locals {
         ]
       },
       {
+        Sid = "BedrockMantle"
+        # OpenAI GPT-5.x via the bedrock-mantle endpoint (OpenAI Responses API),
+        # a separate IAM action namespace. Mirrors upstream v0.5.16.
+        Effect = "Allow"
+        Action = [
+          "bedrock-mantle:CreateInference",
+          "bedrock-mantle:GetProject",
+          "bedrock-mantle:ListProjects",
+          "bedrock-mantle:ListTagsForResources",
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "BedrockMarketplace"
         Effect = "Allow"
         Action = [

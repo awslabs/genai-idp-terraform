@@ -76,6 +76,8 @@ resource "aws_iam_role_policy" "rule_validation_policy" {
         Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*",
         local.tracking_table_arn, "${local.tracking_table_arn}/index/*"]
       },
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      local.bedrock_mantle_statement,
       {
         Effect = "Allow"
         Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile"]
