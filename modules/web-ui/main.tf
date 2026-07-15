@@ -505,8 +505,9 @@ data "archive_file" "ui_source" {
   depends_on = [null_resource.create_module_build_dir]
 }
 
-# S3 deployment for React app source code
+# S3 deployment for React app source code (CodeBuild path only)
 resource "aws_s3_object" "react_app_source" {
+  count  = var.ui_local ? 0 : 1
   bucket = local.web_app_bucket.bucket_name
   key    = "code/ui-source.zip"
   source = data.archive_file.ui_source.output_path
@@ -520,6 +521,7 @@ resource "aws_s3_object" "react_app_source" {
 # We reach propagation issue, where IAM role and policy were created, CodeBuild was able to use it within its execution.
 # The execution was failing, as mentioned policies takes no effect yet.
 resource "time_sleep" "wait_for_iam_propagation" {
+  count = var.ui_local ? 0 : 1
   depends_on = [
     aws_iam_role.codebuild_role,
     aws_iam_role_policy.codebuild_policy
@@ -532,9 +534,10 @@ resource "time_sleep" "wait_for_iam_propagation" {
 # No additional testing needed with Lambda-based approach
 
 resource "aws_codebuild_project" "ui_build" {
+  count         = var.ui_local ? 0 : 1
   name          = "${var.name_prefix}-webui-build"
   description   = "Web UI build for GenAIDP stack - ${var.name_prefix}"
-  service_role  = aws_iam_role.codebuild_role.arn
+  service_role  = aws_iam_role.codebuild_role[0].arn
   build_timeout = 30
 
   depends_on = [
@@ -659,7 +662,8 @@ resource "aws_codebuild_project" "ui_build" {
 
 # CloudWatch Log Group for CodeBuild - Let CodeBuild auto-create this
 resource "aws_iam_role" "codebuild_role" {
-  name = "${var.name_prefix}-codebuild-role"
+  count = var.ui_local ? 0 : 1
+  name  = "${var.name_prefix}-codebuild-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -679,8 +683,9 @@ resource "aws_iam_role" "codebuild_role" {
 
 # IAM Policy for CodeBuild
 resource "aws_iam_role_policy" "codebuild_policy" {
-  name = "${var.name_prefix}-codebuild-policy"
-  role = aws_iam_role.codebuild_role.id
+  count = var.ui_local ? 0 : 1
+  name  = "${var.name_prefix}-codebuild-policy"
+  role  = aws_iam_role.codebuild_role[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -741,16 +746,18 @@ resource "aws_iam_role_policy" "codebuild_policy" {
 
 # Attach VPC execution role if needed
 resource "aws_iam_role_policy_attachment" "codebuild_vpc_execution" {
-  count      = local.has_network_environment ? 1 : 0
-  role       = aws_iam_role.codebuild_role.name
+  count      = !var.ui_local && local.has_network_environment ? 1 : 0
+  role       = aws_iam_role.codebuild_role[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSCodeBuildVPCAccessExecutionRole"
 }
 
 # UI CodeBuild triggering is now handled by Lambda function in lambda.tf
 # See aws_lambda_invocation.trigger_ui_codebuild resource
 
-# Optional: Cleanup old build artifacts
+# Optional: Cleanup old build artifacts (CodeBuild path only)
 resource "null_resource" "cleanup_build_artifacts" {
+  count = var.ui_local ? 0 : 1
+
   depends_on = [
     # This will be triggered after successful Lambda-based deployments
     aws_lambda_invocation.trigger_ui_codebuild

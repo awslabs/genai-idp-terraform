@@ -45,11 +45,16 @@ output "settings_parameter" {
 }
 
 output "codebuild_project" {
-  description = "CodeBuild project for building and deploying the web UI"
-  value = {
-    project_name = aws_codebuild_project.ui_build.name
-    project_arn  = aws_codebuild_project.ui_build.arn
-  }
+  description = "CodeBuild project for building and deploying the web UI (null when ui_local = true)"
+  value = !var.ui_local ? {
+    project_name = aws_codebuild_project.ui_build[0].name
+    project_arn  = aws_codebuild_project.ui_build[0].arn
+  } : null
+}
+
+output "build_mode" {
+  description = "Active build mode: codebuild or local."
+  value       = var.ui_local ? "local" : "codebuild"
 }
 
 output "web_ui_test_env_file" {
