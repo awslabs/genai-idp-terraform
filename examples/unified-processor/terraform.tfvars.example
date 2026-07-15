@@ -50,3 +50,13 @@ create_bda_project = true # let this example create + link one
 #   container_runtime   = "auto"    # auto | docker | podman | finch
 #   ui_local            = false     # true -> local npm web UI build
 # }
+
+# Agent features (Web UI). All default off.
+#   enable_agent_companion_chat = true  # the "Agent Companion Chat" panel
+#   enable_agent_analytics      = true  # the analytics agent ("Available Agents");
+#                                       # provisions a reporting S3 bucket + Glue DB
+#                                       # and wires the reporting module
+#   enable_mcp                  = true  # custom MCP agents (Bedrock AgentCore Gateway)
+# enable_agent_companion_chat = false
+# enable_agent_analytics      = false
+# enable_mcp                  = false

@@ -223,3 +223,25 @@ variable "build" {
     ui_local            = false
   }
 }
+
+# =============================================================================
+# Agent features (Web UI). All default off.
+# =============================================================================
+
+variable "enable_agent_companion_chat" {
+  description = "Enable the Agent Companion Chat panel in the Web UI (multi-agent chat sessions)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_agent_analytics" {
+  description = "Enable the Agent Analytics agent (populates the Web UI 'Available Agents' list). Requires reporting; when true the example provisions a reporting S3 bucket + Glue database and wires the reporting module."
+  type        = bool
+  default     = false
+}
+
+variable "enable_mcp" {
+  description = "Enable custom MCP agents via Bedrock AgentCore Gateway."
+  type        = bool
+  default     = false
+}

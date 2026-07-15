@@ -182,6 +182,24 @@ resource "aws_s3_bucket" "working_bucket" {
   tags          = var.tags
 }
 
+# Reporting/analytics bucket. Created only when agent analytics is enabled:
+# the reporting module lands Parquet + Glue/Athena results here and the
+# analytics agent queries them via Athena.
+resource "aws_s3_bucket" "reporting_bucket" {
+  count         = var.enable_agent_analytics ? 1 : 0
+  bucket        = "${var.prefix}-reporting-${random_string.suffix.result}"
+  force_destroy = true
+  tags          = var.tags
+}
+
+# Glue catalog database for reporting/analytics. The reporting module creates
+# the Glue *tables* and crawler but not the database itself, so the caller must
+# provide it. Referencing .name below wires the ordering dependency.
+resource "aws_glue_catalog_database" "reporting" {
+  count = var.enable_agent_analytics ? 1 : 0
+  name  = "${replace(var.prefix, "-", "_")}_reporting"
+}
+
 # Optional logging bucket (created conditionally)
 resource "aws_s3_bucket" "logging_bucket" {
   count         = var.web_ui.logging_enabled ? 1 : 0
@@ -494,7 +512,25 @@ module "genai_idp_accelerator" {
     }
     # Discovery feature (Web UI "Discovery" tab); provisions the discovery pipeline.
     discovery = { enabled = var.create_discovery }
+
+    # Agent Companion Chat: the Web UI agent chat panel + the agents that
+    # populate "Available Agents".
+    #   enable_agent_companion_chat -> the chat panel backend
+    #   agent_analytics             -> the analytics agent (requires reporting below)
+    #   enable_mcp                  -> custom MCP agents (AgentCore Gateway)
+    enable_agent_companion_chat = var.enable_agent_companion_chat
+    agent_analytics             = { enabled = var.enable_agent_analytics }
+    enable_mcp                  = var.enable_mcp
   }
+
+  # Reporting is required by agent_analytics (analytics agent queries via Athena).
+  # Created only when analytics is enabled; the bucket + Glue DB above are gated
+  # on the same flag.
+  reporting = var.enable_agent_analytics ? {
+    enabled       = true
+    bucket_arn    = aws_s3_bucket.reporting_bucket[0].arn
+    database_name = aws_glue_catalog_database.reporting[0].name
+  } : { enabled = false }
 
   rbac = var.rbac
 
