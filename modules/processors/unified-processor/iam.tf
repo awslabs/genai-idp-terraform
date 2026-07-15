@@ -40,6 +40,7 @@ resource "aws_iam_role_policy" "state_machine" {
           aws_lambda_function.classification.arn,
           aws_lambda_function.extraction.arn,
           aws_lambda_function.process_results.arn,
+          aws_lambda_function.pipeline_hooks_dispatcher.arn,
           var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "",
           aws_lambda_function.assessment.arn,
           var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : "",
