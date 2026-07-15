@@ -35,3 +35,34 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+#
+# Build strategy pass-through (see root var.build in variables.tf)
+#
+variable "lambda_local" {
+  description = "When true, build Lambda layers locally using a container runtime instead of via AWS CodeBuild. See root var.build.lambda_local."
+  type        = bool
+  default     = false
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture. Propagates to compatible_architectures on the layer and to the local/CodeBuild build-host platform."
+  type        = string
+  default     = "x86_64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
+variable "container_runtime" {
+  description = "Container runtime to use when lambda_local = true. \"auto\" probes docker -> podman -> finch."
+  type        = string
+  default     = "auto"
+
+  validation {
+    condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
+    error_message = "container_runtime must be one of: auto, docker, podman, finch."
+  }
+}

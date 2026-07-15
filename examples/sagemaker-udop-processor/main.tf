@@ -516,5 +516,8 @@ module "genai_idp_accelerator" {
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
 
+  # Build strategy (CodeBuild by default; flip to local-build via tfvars)
+  build = var.build
+
   tags = var.tags
 }

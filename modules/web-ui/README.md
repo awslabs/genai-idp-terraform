@@ -56,6 +56,7 @@ No modules.
 | [null_resource.cleanup_build_artifacts](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.create_lambda_build_dir](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.create_module_build_dir](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.local_ui_build](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.build_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
 | [time_sleep.wait_for_iam_propagation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
@@ -84,7 +85,7 @@ No modules.
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket for input files | `string` | n/a | yes |
 | <a name="input_knowledge_base_enabled"></a> [knowledge\_base\_enabled](#input\_knowledge\_base\_enabled) | Whether Knowledge Base functionality is enabled | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
-| <a name="input_logging_bucket"></a> [logging\_bucket](#input\_logging\_bucket) | Optional S3 bucket for storing CloudFront and S3 access logs (only used when create\_infrastructure is true) | <pre>object({<br>    bucket_name = string<br>    bucket_arn  = string<br>  })</pre> | `null` | no |
+| <a name="input_logging_bucket"></a> [logging\_bucket](#input\_logging\_bucket) | Optional S3 bucket for storing CloudFront and S3 access logs (only used when create\_infrastructure is true) | <pre>object({<br/>    bucket_name = string<br/>    bucket_arn  = string<br/>  })</pre> | `null` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource naming | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket for output files | `string` | n/a | yes |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix for resource names | `string` | n/a | yes |
@@ -93,7 +94,8 @@ No modules.
 | <a name="input_should_allow_sign_up_email_domain"></a> [should\_allow\_sign\_up\_email\_domain](#input\_should\_allow\_sign\_up\_email\_domain) | Controls whether the UI allows users to sign up with any email domain | `bool` | `false` | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | List of subnet IDs for network integration | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
-| <a name="input_user_identity"></a> [user\_identity](#input\_user\_identity) | The user identity management system that handles authentication and authorization | <pre>object({<br>    user_pool = object({<br>      user_pool_id  = string<br>      user_pool_arn = string<br>      endpoint      = string<br>    })<br>    user_pool_client = object({<br>      user_pool_client_id = string<br>    })<br>    identity_pool = object({<br>      identity_pool_id       = string<br>      authenticated_role_arn = string<br>    })<br>  })</pre> | n/a | yes |
+| <a name="input_ui_local"></a> [ui\_local](#input\_ui\_local) | When true, build the web UI locally via npm instead of using AWS CodeBuild. Requires Node.js >= 18 on the deploy host. | `bool` | `false` | no |
+| <a name="input_user_identity"></a> [user\_identity](#input\_user\_identity) | The user identity management system that handles authentication and authorization | <pre>object({<br/>    user_pool = object({<br/>      user_pool_id  = string<br/>      user_pool_arn = string<br/>      endpoint      = string<br/>    })<br/>    user_pool_client = object({<br/>      user_pool_client_id = string<br/>    })<br/>    identity_pool = object({<br/>      identity_pool_id       = string<br/>      authenticated_role_arn = string<br/>    })<br/>  })</pre> | n/a | yes |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC for network integration | `string` | `null` | no |
 | <a name="input_waf_rate_limit"></a> [waf\_rate\_limit](#input\_waf\_rate\_limit) | Rate limit for WAF (requests per 5-minute period, only used when create\_infrastructure is true) | `number` | `2000` | no |
 | <a name="input_web_app_bucket_name"></a> [web\_app\_bucket\_name](#input\_web\_app\_bucket\_name) | Name of S3 bucket for hosting the web application (required when create\_infrastructure is false) | `string` | `null` | no |
@@ -104,9 +106,10 @@ No modules.
 |------|-------------|
 | <a name="output_application_url"></a> [application\_url](#output\_application\_url) | URL of the web application (when create\_infrastructure is true) |
 | <a name="output_bucket"></a> [bucket](#output\_bucket) | The S3 bucket where the web application assets are deployed |
+| <a name="output_build_mode"></a> [build\_mode](#output\_build\_mode) | Active build mode: codebuild or local. |
 | <a name="output_cloudfront_distribution_domain_name"></a> [cloudfront\_distribution\_domain\_name](#output\_cloudfront\_distribution\_domain\_name) | CloudFront distribution domain name |
 | <a name="output_cloudfront_distribution_id"></a> [cloudfront\_distribution\_id](#output\_cloudfront\_distribution\_id) | CloudFront distribution ID |
-| <a name="output_codebuild_project"></a> [codebuild\_project](#output\_codebuild\_project) | CodeBuild project for building and deploying the web UI |
+| <a name="output_codebuild_project"></a> [codebuild\_project](#output\_codebuild\_project) | CodeBuild project for building and deploying the web UI (null when ui\_local = true) |
 | <a name="output_distribution"></a> [distribution](#output\_distribution) | The CloudFront distribution that serves the web application (when create\_infrastructure is true) |
 | <a name="output_settings_parameter"></a> [settings\_parameter](#output\_settings\_parameter) | SSM Parameter for Web UI settings |
 | <a name="output_web_ui_test_env_file"></a> [web\_ui\_test\_env\_file](#output\_web\_ui\_test\_env\_file) | Environment file content for local UI development |

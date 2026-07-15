@@ -200,6 +200,12 @@ variable "lambda_tracing_mode" {
   default     = "Active"
 }
 
+variable "ui_local" {
+  description = "When true, build the web UI locally via npm instead of using AWS CodeBuild. Requires Node.js >= 18 on the deploy host."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

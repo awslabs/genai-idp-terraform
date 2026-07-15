@@ -11,9 +11,9 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.51.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | 0.14.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
+| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9 |
 
 ## Modules
 

@@ -9,7 +9,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.51.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
 
 ## Modules
 
@@ -30,7 +30,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_enable_dynamodb_gateway"></a> [enable\_dynamodb\_gateway](#input\_enable\_dynamodb\_gateway) | Whether to create the DynamoDB gateway endpoint. | `bool` | `true` | no |
 | <a name="input_enable_s3_gateway"></a> [enable\_s3\_gateway](#input\_enable\_s3\_gateway) | Whether to create the S3 gateway endpoint. | `bool` | `true` | no |
-| <a name="input_enabled_interface_endpoints"></a> [enabled\_interface\_endpoints](#input\_enabled\_interface\_endpoints) | Map of interface endpoint service keys to a boolean enabling each one. The key is the<br>AWS service suffix as it appears in the PrivateLink service name<br>(`com.amazonaws.<region>.<key>`), so it is partition-portable. Set a key to `false`<br>(or omit it) to skip provisioning that endpoint. The default covers the full set IDP<br>can require; consumers typically narrow it to the services their enabled processors<br>and features actually use. | `map(bool)` | <pre>{<br>  "appsync-api": true,<br>  "bedrock": true,<br>  "bedrock-agent-runtime": true,<br>  "bedrock-runtime": true,<br>  "codebuild": true,<br>  "ec2messages": true,<br>  "events": true,<br>  "kms": true,<br>  "lambda": true,<br>  "logs": true,<br>  "monitoring": true,<br>  "sqs": true,<br>  "ssm": true,<br>  "ssmmessages": true,<br>  "states": true,<br>  "sts": true,<br>  "textract": true<br>}</pre> | no |
+| <a name="input_enabled_interface_endpoints"></a> [enabled\_interface\_endpoints](#input\_enabled\_interface\_endpoints) | Map of interface endpoint service keys to a boolean enabling each one. The key is the<br/>AWS service suffix as it appears in the PrivateLink service name<br/>(`com.amazonaws.<region>.<key>`), so it is partition-portable. Set a key to `false`<br/>(or omit it) to skip provisioning that endpoint. The default covers the full set IDP<br/>can require; consumers typically narrow it to the services their enabled processors<br/>and features actually use. | `map(bool)` | <pre>{<br/>  "appsync-api": true,<br/>  "bedrock": true,<br/>  "bedrock-agent-runtime": true,<br/>  "bedrock-runtime": true,<br/>  "codebuild": true,<br/>  "ec2messages": true,<br/>  "events": true,<br/>  "kms": true,<br/>  "lambda": true,<br/>  "logs": true,<br/>  "monitoring": true,<br/>  "sqs": true,<br/>  "ssm": true,<br/>  "ssmmessages": true,<br/>  "states": true,<br/>  "sts": true,<br/>  "textract": true<br/>}</pre> | no |
 | <a name="input_private_dns_enabled"></a> [private\_dns\_enabled](#input\_private\_dns\_enabled) | Whether to enable private DNS for the interface endpoints. Enabled by default; supported by all services in the default endpoint set. | `bool` | `true` | no |
 | <a name="input_route_table_ids"></a> [route\_table\_ids](#input\_route\_table\_ids) | List of route table IDs to associate with the S3 and DynamoDB gateway endpoints. Required when either gateway endpoint is enabled. | `list(string)` | `[]` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | List of security group IDs to associate with the interface endpoints. Typically a single SG allowing HTTPS (443) from the VPC. | `list(string)` | `[]` | no |

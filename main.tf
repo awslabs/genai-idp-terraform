@@ -90,6 +90,35 @@ resource "random_string" "suffix" {
 }
 
 #
+# Build runtime check
+#
+# Probes the deploy host for a usable container runtime (Docker / Podman /
+# Finch) when var.build.lambda_local = true. The check {} block inside
+# this module fails plan with per-OS install instructions if no runtime is
+# available. When lambda_local = false the probe runs but is non-fatal.
+#
+module "build_runtime_check" {
+  count  = var.build.lambda_local ? 1 : 0
+  source = "./modules/build-runtime-check"
+
+  lambda_local      = var.build.lambda_local
+  container_runtime = var.build.container_runtime
+}
+
+# Web UI build check
+#
+# Probes the deploy host for Node.js >= 18 when var.build.ui_local = true
+# and the web UI is enabled. The check {} block inside this module fails
+# plan with install instructions if Node.js is missing or too old.
+#
+module "web_ui_build_check" {
+  count  = var.build.ui_local && var.web_ui.enabled ? 1 : 0
+  source = "./modules/web-ui-build-check"
+
+  ui_local = var.build.ui_local
+}
+
+#
 # Shared assets bucket for Lambda layers, UI assets, and deployment artifacts.
 #
 module "assets_bucket" {
@@ -116,6 +145,11 @@ module "idp_common_layer" {
   idp_common_extras        = local.idp_common_layer_extras
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
@@ -128,6 +162,11 @@ module "idp_base_layer" {
   idp_common_extras        = ["docs_service"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Reporting layer: reporting extras — used by save_reporting_data function (v0.4.11+)
@@ -139,6 +178,11 @@ module "idp_reporting_layer" {
   idp_common_extras        = ["reporting"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Agents layer: agents extras — used by agent companion chat and agent analytics functions (v0.4.11+)
@@ -150,6 +194,11 @@ module "idp_agents_layer" {
   idp_common_extras        = ["agents"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Evaluation layer: evaluation + docs_service extras for the per-processor
@@ -163,6 +212,11 @@ module "idp_evaluation_layer" {
   idp_common_extras        = ["evaluation", "docs_service"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 #
@@ -235,6 +289,11 @@ module "processing_environment" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 
   tags = var.tags
 }
@@ -360,6 +419,11 @@ module "processing_environment_api" {
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
+
   # Feature-plugin contracts from features.tf. Resolves to {} when all features
   # are off (no-op, default-off preserved).
   enabled_feature_contracts = local.enabled_feature_contracts
@@ -429,6 +493,7 @@ module "bda_processor" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
+
 
   tags = var.tags
 }
@@ -567,6 +632,7 @@ module "sagemaker_udop_processor" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
+
   tags = var.tags
 }
 
@@ -638,6 +704,9 @@ module "web_ui" {
 
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
+
+  # Build strategy
+  ui_local = var.build.ui_local
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

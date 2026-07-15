@@ -3,4 +3,5 @@ nav:
   - environment-setup.md
   - monitoring.md
   - best-practices.md
+  - local-lambda-build.md
   - troubleshooting.md

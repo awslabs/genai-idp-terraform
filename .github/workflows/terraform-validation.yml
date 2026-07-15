@@ -102,11 +102,11 @@ jobs:
 
       - name: tfsec per module
         # tfsec 1.28.x cannot parse Terraform 1.5+ check{} blocks used at the
-        # repo root and in sagemaker-udop-processor/main.tf. --exclude-path
-        # at the root level still parses these files first and aborts the
-        # scan, so we run tfsec per-module instead. The root + that one
-        # module are intentionally not scanned here; module scans cover the
-        # same code from the consumer side.
+        # repo root and in sagemaker-udop-processor/main.tf and
+        # build-runtime-check/main.tf. --exclude-path at the root level still
+        # parses these files first and aborts the scan, so we use
+        # --ignore-hcl-errors alongside the exclude-paths. The root is not
+        # scanned here; module scans cover the same code from the consumer side.
         #
         # soft_fail today: there are pre-existing findings unrelated to
         # this PR (DynamoDB encryption, S3 logging, IAM SID wildcards, ...).
@@ -114,7 +114,7 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: modules
-          additional_args: --config-file ../.tfsec/config.yml --exclude-path processors/sagemaker-udop-processor/main.tf
+          additional_args: --config-file ../.tfsec/config.yml --ignore-hcl-errors --exclude-path processors/sagemaker-udop-processor/main.tf --exclude-path build-runtime-check/main.tf
           soft_fail: true
 
   checkov:

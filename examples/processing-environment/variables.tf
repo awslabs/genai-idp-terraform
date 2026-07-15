@@ -87,3 +87,24 @@ variable "tags" {
     Project     = "GenAI-IDP"
   }
 }
+
+#
+# Build strategy. Threaded to processing-environment and idp-common-layer.
+# Defaults preserve the historical CodeBuild path.
+# See docs/content/deployment-guides/local-lambda-build.md.
+#
+variable "build" {
+  description = "Build strategy for Lambda layers."
+  type = object({
+    lambda_local        = optional(bool, false)
+    lambda_architecture = optional(string, "x86_64")
+    container_runtime   = optional(string, "auto")
+    ui_local            = optional(bool, false)
+  })
+  default = {
+    lambda_local        = false
+    lambda_architecture = "x86_64"
+    container_runtime   = "auto"
+    ui_local            = false
+  }
+}

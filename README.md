@@ -124,7 +124,11 @@ Before deploying the solution, ensure you have:
 
 - **[Terraform](https://www.terraform.io/)**: Version 1.0 or later
 - **[AWS CLI](https://aws.amazon.com/cli/)**: Configured with appropriate credentials
-- **[Docker](https://www.docker.com/)**: For building Lambda deployment packages (if needed)
+- **Container runtime (optional)**: [Docker](https://www.docker.com/), [Podman](https://podman.io/),
+  or [Finch](https://runfinch.com/) is required **only if** you opt into local Lambda
+  builds via `build.lambda_local = true`. By default the wrapper builds Lambda
+  artifacts in AWS CodeBuild and the deploy host needs no container runtime.
+  See [docs/content/deployment-guides/local-lambda-build.md](docs/content/deployment-guides/local-lambda-build.md).
 
 ### AWS Requirements
 
@@ -272,7 +276,28 @@ extraction_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
 # Optional: Performance tuning
 max_processing_concurrency = 50
 classification_max_workers = 20
+
+# Build strategy (CodeBuild by default; flip to local-build via tfvars)
+# See docs/content/deployment-guides/local-lambda-build.md.
+build = {
+  lambda_local        = false      # set to true for host-side Docker builds
+  lambda_architecture = "x86_64"   # or "arm64" for Graviton Lambdas
+  container_runtime   = "auto"     # auto-detect docker/podman/finch
+}
 ```
+
+### Local Lambda Build
+
+The default deploy path uses AWS CodeBuild to build Lambda layer zips and
+processor container images. Set `build.lambda_local = true` to instead
+build artifacts on the deploy host using Docker, Podman, or Finch. This
+drops the per-apply CodeBuild cost and shortens iteration time from
+minutes to seconds, at the cost of needing a container runtime on your
+machine. The flag is non-breaking; defaults preserve the historical
+behavior.
+
+See [docs/content/deployment-guides/local-lambda-build.md](docs/content/deployment-guides/local-lambda-build.md)
+for prerequisites, architecture selection, and migration guidance.
 
 ### Advanced Configuration
 

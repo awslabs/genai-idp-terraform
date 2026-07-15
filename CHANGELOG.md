@@ -6,6 +6,140 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [Unreleased]
+
+### Summary
+
+Adds the `var.build` object, introducing an opt-in path that builds
+Lambda layers and processor container images locally on the deploy host
+using Docker / Podman / Finch, replacing AWS CodeBuild for those steps.
+Non-breaking: defaults preserve the historical CodeBuild path
+bit-for-bit. Set `build.lambda_local = true` to opt in.
+
+Activates `build.ui_local` (previously reserved): when `true`, the web UI
+React/Vite build runs locally via `npm ci && npm run build` on the deploy
+host with direct S3 sync + CloudFront invalidation, eliminating the last
+CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
+
+### Added
+
+- **`var.build` (root)** — new object with fields:
+  - `lambda_local` (bool, default `false`) — when `true`, all Lambda
+    layers and processor container images build locally on the deploy
+    host; AWS CodeBuild infrastructure collapses to `count = 0`.
+  - `lambda_architecture` (string, default `"x86_64"`, validated against
+    `["x86_64", "arm64"]`) — target Lambda architecture, honored by
+    both CodeBuild and local-build paths. The CodeBuild path now gains
+    arm64 support (previously hardcoded x86_64).
+  - `container_runtime` (string, default `"auto"`, validated against
+    `["auto", "docker", "podman", "finch"]`) — runtime selector when
+    `lambda_local = true`. `"auto"` probes docker → podman → finch.
+  - `ui_local` (bool, default `false`) — when `true`, builds the web
+    UI locally on the deploy host via `npm ci && npm run build`,
+    syncs to S3, and invalidates CloudFront — eliminating the UI
+    CodeBuild project, trigger Lambda, and supporting IAM. Requires
+    Node.js >= 18.
+- **New modules**:
+  - `modules/build-runtime-check` — probes the host for an available
+    container runtime via a `data "external"` invocation of
+    `scripts/detect-container-runtime.sh`; fails plan with per-OS
+    install instructions when `lambda_local = true` and no runtime
+    is detected.
+  - `modules/lambda-layer-local-build` — provider-driven local builder
+    for Python pip Lambda layers. Used internally by
+    `modules/lambda-layer-codebuild` when `lambda_local = true`.
+  - `modules/lambda-image-local-build` — provider-driven local builder
+    for OCI Lambda container images using `kreuzwerker/docker ~> 3.0`.
+    Currently unused at root (preserved as a building block for future
+    single-image consumers).
+- **New output `build_mode`** — added to layer and processor modules.
+  Returns `"codebuild"` or `"local"`. Lets consumers see which path is
+  active.
+- **Documentation page** `docs/content/deployment-guides/local-lambda-build.md`
+  covering prerequisites per OS, architecture selection, migration
+  plan, and troubleshooting.
+- **Local-dev example tfvars** `examples/bedrock-llm-processor/terraform.tfvars.local-dev.example`
+  showing a typical local-build dev-loop configuration.
+- **Detection script** `scripts/detect-container-runtime.sh` plus
+  `tests/validate-build-runtime-check.sh` unit test.
+- **`modules/web-ui-build-check`** — probes the host for Node.js >= 18
+  via `scripts/detect-node-runtime.sh`; fails plan with per-OS install
+  instructions when `ui_local = true` and Node.js is missing or too old.
+- **Build script** `scripts/build-web-ui.sh` — runs `npm ci && npm run
+  build` in `sources/src/ui/`, syncs `build/` to S3, and invalidates
+  CloudFront.
+- **Detection script** `scripts/detect-node-runtime.sh` plus
+  `tests/validate-web-ui-build-check.sh` unit test.
+- **Documentation page** `docs/content/deployment-guides/local-web-ui-build.md`
+  covering Node.js prerequisites and the local UI build flow.
+
+### Changed
+
+- **CodeBuild path now respects `var.build.lambda_architecture`.**
+  Previously hardcoded to x86_64; setting `arm64` now switches the
+  CodeBuild image to `aws/codebuild/amazonlinux2-aarch64-standard:3.0`
+  and sets `environment.type = "ARM_CONTAINER"`. Applies to both
+  layer-build and processor-image-build CodeBuild projects.
+- **CodeBuild-specific outputs return `null` when `lambda_local = true`.**
+  Affects `codebuild_project_name`,
+  `codebuild_trigger_lambda_function_name`, `build_result`,
+  `build_success` on `lambda-layer-codebuild`;
+  `codebuild_project`, `build_trigger_lambda`, `build_result` on
+  `lambda-layer-codebuild-idp`. Mode-agnostic outputs (`layer_arns`,
+  `s3_bucket`, `layer_suffix`, …) are populated in both modes.
+- **Module READMEs** for `lambda-layer-codebuild`,
+  `lambda-layer-codebuild-idp`, BDA and SageMaker UDOP processors gain
+  preambles documenting the two build modes. terraform-docs Inputs /
+  Outputs tables regenerated.
+- **Top-level README** Prerequisites section now lists container
+  runtime as optional; Configuration Options section gains a
+  `build = { ... }` example and a "Local Lambda Build" subsection
+  linking to the dedicated docs page.
+
+### Migration
+
+**No action required for users keeping the default.** With
+`build.lambda_local = false` (or omitted), plan shows no diff beyond the
+new variable.
+
+**Opting into local builds** on an existing deployment produces a
+destroy plan for the CodeBuild infrastructure (CodeBuild projects,
+trigger Lambdas, IAM roles, log groups, buildspec S3 objects) and a
+replace plan for `aws_lambda_layer_version` resources (the S3 key
+changes between paths). `aws_ecr_repository` resources are preserved
+across the switch. `aws_lambda_function` resources update in place to
+reference the new layer/image; the functions themselves are not
+replaced. Lambda hot-swaps layer references on the next cold start, so
+the replacement is zero-downtime.
+
+To roll back, flip the flag back to `false` and apply again.
+
+### Skipped (documented deviations)
+
+- The root config does **not** declare the `kreuzwerker/docker`
+  provider as a `configuration_aliases` optional provider (design.md
+  Decision 4). The processor image build path landed using
+  `null_resource + local-exec docker buildx` rather than the docker
+  provider's `docker_image` / `docker_registry_image` resources,
+  because the multi-image-per-repo pattern (5 BDA images, 7 UDOP
+  images) doesn't fit the docker provider's single-tag-per-resource
+  model cleanly. `modules/lambda-image-local-build` (which DOES use the
+  docker provider) is preserved as a building block for future
+  single-image consumers; the root provider declaration can land
+  alongside the first such consumer.
+- Lambda layer local builds use **`null_resource + local-exec`** running
+  `scripts/build-layer.sh` (or `scripts/build-idp-layer.sh`) inside the
+  AWS SAM build image, rather than `terraform-aws-modules/lambda ~> 7.0`
+  with `build_in_docker = true` as originally proposed (design.md
+  Decision 2). Reason: the dispatcher pattern has the wrapper module
+  (`lambda-layer-codebuild`) owning the `aws_lambda_layer_version`
+  resource — we only need build+upload from the local-build module.
+  Hand-rolled HCL matches the existing CodeBuild module's style and
+  avoids adding a third-party module dependency. The SAM build image
+  produces the same hermetic environment either way.
+
+---
+
 ## [0.5.12-tf.0] - 2026-07-02
 
 ### Summary
@@ -292,7 +426,6 @@ Key steps:
 5. **No tfvars changes required for the transition.** `var.api.*` flags are still
    forwarded to the new feature-plugins, so existing tfvars keep working; migrate to
    feature-plugin wiring at your own pace.
-
 ---
 
 ## [0.4.16-tf.2] - 2026-05-27

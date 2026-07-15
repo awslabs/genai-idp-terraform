@@ -38,3 +38,15 @@ tags = {
   Project     = "GenAI-IDP"
   Owner       = "Data Processing Team"
 }
+
+# Build strategy
+#
+# Defaults preserve the historical AWS CodeBuild path bit-for-bit.
+# Set lambda_local = true to build artifacts locally with Docker/Podman/Finch.
+# See docs/content/deployment-guides/local-lambda-build.md.
+build = {
+  lambda_local        = false
+  lambda_architecture = "x86_64"
+  container_runtime   = "auto"
+  ui_local            = false
+}

@@ -275,6 +275,28 @@ variable "force_layer_rebuild" {
   default     = false
 }
 
+#
+# Build strategy. Forwarded verbatim to the wrapper's var.build. Defaults
+# preserve the historical CodeBuild path; set lambda_local = true to opt
+# into the local-build path (requires Docker/Podman/Finch on the deploy
+# host). See docs/content/deployment-guides/local-lambda-build.md.
+#
+variable "build" {
+  description = "Build strategy for Lambda layers and processor container images."
+  type = object({
+    lambda_local        = optional(bool, false)
+    lambda_architecture = optional(string, "x86_64")
+    container_runtime   = optional(string, "auto")
+    ui_local            = optional(bool, false)
+  })
+  default = {
+    lambda_local        = false
+    lambda_architecture = "x86_64"
+    container_runtime   = "auto"
+    ui_local            = false
+  }
+}
+
 variable "rbac" {
   description = "Configuration for the RBAC feature plugin. Default-off. When enabled, wires module.rbac through the feature-plugin path."
   type = object({

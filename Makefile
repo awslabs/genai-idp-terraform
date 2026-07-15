@@ -119,6 +119,7 @@ security: ## Run TFSec security scan
 	@# directory individually (the form of exclusion that actually works in 1.28.x) and
 	@# skip the directories whose .tf files contain check{}/removed{} blocks, which are
 	@# validation/state-migration glue with no scannable resources of their own.
+	@# build-runtime-check/main.tf also uses check{} (added by local-lambda-build).
 	@set -e; \
 	for dir in $$(find modules -name main.tf -exec dirname {} \; | sort -u); do \
 		if grep -qE '^[[:space:]]*(check|removed)[[:space:]]' "$$dir"/*.tf 2>/dev/null; then \

@@ -13,7 +13,7 @@
 | Name | Version |
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.49.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | 3.3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
 
@@ -69,7 +69,7 @@ No modules.
 | <a name="input_metric_namespace"></a> [metric\_namespace](#input\_metric\_namespace) | The namespace for CloudWatch metrics emitted by the document processing system | `string` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name prefix for resources | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket where processed documents and extraction results are stored | `string` | n/a | yes |
-| <a name="input_processor"></a> [processor](#input\_processor) | Processor configuration | <pre>object({<br>    state_machine_arn          = string<br>    max_processing_concurrency = number<br>  })</pre> | n/a | yes |
+| <a name="input_processor"></a> [processor](#input\_processor) | Processor configuration | <pre>object({<br/>    state_machine_arn          = string<br/>    max_processing_concurrency = number<br/>  })</pre> | n/a | yes |
 | <a name="input_queue_sender_function_arn"></a> [queue\_sender\_function\_arn](#input\_queue\_sender\_function\_arn) | ARN of the Lambda function that sends documents to the processing queue | `string` | n/a | yes |
 | <a name="input_queue_sender_function_name"></a> [queue\_sender\_function\_name](#input\_queue\_sender\_function\_name) | Name of the Lambda function that sends documents to the processing queue | `string` | n/a | yes |
 | <a name="input_s3_prefix"></a> [s3\_prefix](#input\_s3\_prefix) | Optional S3 prefix to filter documents for processing | `string` | `null` | no |
