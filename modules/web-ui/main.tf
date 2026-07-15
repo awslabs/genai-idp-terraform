@@ -83,6 +83,8 @@ locals {
     ShouldUseDocumentKnowledgeBase = var.knowledge_base_enabled ? "true" : "false"
     Version                        = var.idp_version
     StackName                      = var.display_name != null ? var.display_name : "${var.name_prefix}-processor"
+    # Top-navigation banner title, read by GenAIIDPTopNavigation. Mirrors upstream ConsoleTitle.
+    ConsoleTitle = var.console_title
     # Add other settings as needed
   }
 }

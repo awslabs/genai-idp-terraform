@@ -357,6 +357,7 @@ variable "web_ui" {
     logging_bucket_arn         = optional(string, null)
     enable_signup              = optional(string, "")
     display_name               = optional(string, null)
+    console_title              = optional(string, "IDP Accelerator Console")
   })
   default = {
     enabled                    = true

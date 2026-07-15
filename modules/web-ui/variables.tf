@@ -48,6 +48,12 @@ variable "idp_pattern" {
   default     = ""
 }
 
+variable "console_title" {
+  description = "Title shown in the Web UI top-navigation banner. Mirrors upstream ConsoleTitle."
+  type        = string
+  default     = "IDP Accelerator Console"
+}
+
 variable "idp_version" {
   description = "Upstream IDP version string surfaced in the Web UI Deployment Info panel. Should track the IDP_VERSION file at the repo root."
   type        = string

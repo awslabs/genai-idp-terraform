@@ -647,10 +647,11 @@ module "web_ui" {
     aws.us-east-1 = aws.us-east-1
   }
 
-  name_prefix  = "${local.name_prefix}-web-ui"
-  prefix       = var.prefix
-  display_name = var.web_ui.display_name != null ? var.web_ui.display_name : local.name_prefix
-  idp_version  = trimspace(file("${path.module}/IDP_VERSION"))
+  name_prefix   = "${local.name_prefix}-web-ui"
+  prefix        = var.prefix
+  display_name  = var.web_ui.display_name != null ? var.web_ui.display_name : local.name_prefix
+  console_title = var.web_ui.console_title
+  idp_version   = trimspace(file("${path.module}/IDP_VERSION"))
 
   # User identity
   user_identity = {
