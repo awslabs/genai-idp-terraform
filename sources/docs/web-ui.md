@@ -104,6 +104,7 @@ The Edit Pages feature provides an intelligent interface for modifying individua
 ### Key Capabilities
 
 - **View Page Text**: Access clean, readable page text without JSON formatting in a modal editor
+- **Visual Editor**: Default view — the page image on the left and OCR text lines on the right; click a line to highlight its bounding box on the image (when the OCR backend provides geometry). Supports mouse-wheel zoom, click-drag pan, and Next/Previous page navigation across the document
 - **Classification Reset**: Reset page classifications to force reclassification during reprocessing
 - **Text Editing**: Modify page OCR text with immediate S3 saves to prevent data loss
 - **Confidence Editing**: Edit OCR confidence data displayed as markdown tables
@@ -122,8 +123,9 @@ The Edit Pages feature provides an intelligent interface for modifying individua
 
 ##### View Mode (Default)
 - Click "View Page Text" button to view page content in read-only mode
-- Modal displays text with live markdown preview
-- Switch to "Text + Confidence" view to see OCR confidence table
+- The modal opens on the **Visual Editor** view: the page image on the left and the OCR text lines (with per-line confidence) on the right. Click a text line to draw its bounding box on the image; zoom with the mouse wheel, pan by dragging, and move between pages with the Next/Previous arrows. (Bounding boxes require an OCR backend that provides geometry, e.g. Textract or the Mistral hook; otherwise the lines are shown without overlays.)
+- Switch to "Text + Markdown" to read the page text with live markdown preview
+- Switch to "Text + Confidence" view to see the OCR confidence table
 
 ##### Edit Mode
 1. **Click "Edit Pages"**: Activates edit mode for all pages
@@ -304,7 +306,7 @@ A self-describing `manifest.json` is written at the ZIP root capturing the expor
 
 ### Scope options
 
-- **Download All (ZIP)** — every output artifact for the document (summary, evaluation & rule-validation reports, per-section predictions, baselines when available, per-page text and confidence). The options dialog offers two checkboxes:
+- **Download All (ZIP)** — every output artifact for the document (summary, evaluation & rule-validation reports, per-section predictions, baselines when available, per-page text, confidence, and consolidated OCR page data). The options dialog offers two checkboxes:
   - **Include page images** (off by default) — includes the rendered page image for each page (can significantly increase archive size).
   - **Include source document** (off by default) — includes the original uploaded file from the **InputBucket** under `input/<key>`.
 - **Download Predictions (ZIP)** — only the per-section `sections/<id>/result.json` files (under `output/`) plus the `manifest.json` and `document-attributes.json`.
@@ -320,9 +322,11 @@ The "Chat with Document" feature is available at the bottom of the Document Deta
 
 ### Model selection
 
-Chat has its own dedicated configuration section (**Configuration tab → "Chat-with-Document Configuration"**) — it is **independent from summarization**. This is important because chat sends the entire document text to the model in a single prompt, so a large-context model (such as `us.anthropic.claude-opus-4-7:1m` — the default — or `us.anthropic.claude-sonnet-4-6:1m`) is usually the best choice, even if you've configured a smaller, cheaper model for summarization.
+Chat has its own dedicated configuration section (**Configuration tab → "Chat-with-Document Configuration"**) — it is **independent from summarization**. This is important because chat sends the entire document text to the model in a single prompt, so a large-context model (such as `us.anthropic.claude-opus-4-8:1m` — the default — or `us.anthropic.claude-sonnet-4-6:1m`) is usually the best choice, even if you've configured a smaller, cheaper model for summarization.
 
 The Chat panel includes a **Model** selector that defaults to the `chat.model` configured in the version of the config that was used to process the document. You can override the model for the current chat session via the dropdown. The list of selectable models comes from the `chat.model` enum in the configuration schema.
+
+> **OpenAI GPT-5.x in chat:** `openai.gpt-5.4` / `openai.gpt-5.5` are supported for Chat-with-Document and **stream** token-by-token like other models. They run on the `bedrock-mantle` Responses API (US regions only) and are tuned via `chat.reasoning_effort` rather than temperature/top_p. They are hidden from the model selector in EU-region deployments. Note: chat sends the document as **text** (extracted full text), so the PDF-document-block limitation that excludes GPT-5.x from Discovery does not apply here. See [OpenAI GPT-5.x Models](./openai-models.md).
 
 If a document is "too large for chat context window" — i.e. Bedrock returns an `Input Tokens Exceeded` error — pick a larger-context model in the Chat panel's Model selector and retry. For documents that are larger than any single-prompt model can fit, use the [Knowledge Base](./knowledge-base.md) feature instead.
 

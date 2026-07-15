@@ -10,7 +10,6 @@ import { DocumentsContext } from '../../contexts/documents';
 import { Document } from '../../types/documents';
 
 import useNotifications from '../../hooks/use-notifications';
-import useSplitPanel from '../../hooks/use-split-panel';
 import useGraphQlApi from '../../hooks/use-graphql-api';
 import useAppContext from '../../contexts/app';
 
@@ -27,7 +26,6 @@ import { appLayoutLabels } from '../common/labels';
 import Navigation from './navigation';
 import Breadcrumbs from './breadcrumbs';
 import ToolsPanel from './tools-panel';
-import SplitPanel from './documents-split-panel';
 import ConfigurationLayout from '../configuration-layout';
 import PricingLayout from '../pricing-layout';
 import CapacityPlanningLayout from '../capacity-planning/CapacityPlanningLayout';
@@ -40,9 +38,11 @@ const logger = new ConsoleLogger('GenAIIDPLayout');
 
 interface GenAIIDPLayoutProps {
   children?: React.ReactNode;
+  /** Override the right-side info (Tools) panel. Defaults to the document ToolsPanel. */
+  tools?: React.ReactNode;
 }
 
-const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element => {
+const GenAIIDPLayout = ({ children, tools }: GenAIIDPLayoutProps): React.JSX.Element => {
   const { navigationOpen, setNavigationOpen } = useAppContext();
 
   const notifications = useNotifications();
@@ -88,8 +88,6 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
     abortWorkflows,
   } = useGraphQlApi({ initialPeriodsToLoad });
 
-  const { splitPanelOpen, onSplitPanelToggle, splitPanelSize, onSplitPanelResize } = useSplitPanel(selectedItems);
-
   const documentsContextValue = {
     documents,
     getDocumentDetailsFromIds,
@@ -118,14 +116,9 @@ const GenAIIDPLayout = ({ children }: GenAIIDPLayoutProps): React.JSX.Element =>
         onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
         breadcrumbs={<Breadcrumbs />}
         notifications={<Flashbar items={notifications as import('@cloudscape-design/components').FlashbarProps.MessageDefinition[]} />}
-        tools={<ToolsPanel />}
+        tools={tools ?? <ToolsPanel />}
         toolsOpen={toolsOpen}
         onToolsChange={({ detail }) => setToolsOpen(detail.open)}
-        splitPanelOpen={splitPanelOpen}
-        onSplitPanelToggle={onSplitPanelToggle}
-        splitPanelSize={splitPanelSize}
-        onSplitPanelResize={onSplitPanelResize}
-        splitPanel={<SplitPanel />}
         content={
           children || (
             <Routes>

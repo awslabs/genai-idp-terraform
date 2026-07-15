@@ -822,6 +822,7 @@ class GranularAssessmentService:
         top_k: float,
         top_p: float,
         max_tokens: Optional[int],
+        reasoning_effort: Optional[str] = None,
     ) -> AssessmentResult:
         """
         Process a single assessment task.
@@ -836,6 +837,7 @@ class GranularAssessmentService:
             top_k: Top-k parameter
             top_p: Top-p parameter
             max_tokens: Max tokens parameter
+            reasoning_effort: Reasoning effort for OpenAI Responses models
 
         Returns:
             Assessment result
@@ -863,6 +865,7 @@ class GranularAssessmentService:
                 max_tokens=max_tokens,
                 context="GranularAssessment",
                 model_lambda_hook_arn=self.config.assessment.model_lambda_hook_arn,
+                reasoning_effort=reasoning_effort,
             )
 
             # Extract text from response
@@ -1713,6 +1716,7 @@ class GranularAssessmentService:
             temperature = self.config.assessment.temperature
             top_k = self.config.assessment.top_k
             top_p = self.config.assessment.top_p
+            reasoning_effort = self.config.assessment.reasoning_effort
             max_tokens = self.config.assessment.max_tokens
             system_prompt = self.config.assessment.system_prompt
 
@@ -1804,6 +1808,7 @@ class GranularAssessmentService:
                                 top_k,
                                 top_p,
                                 max_tokens,
+                                reasoning_effort,
                             ): task
                             for task in tasks_to_process
                         }
@@ -1856,6 +1861,7 @@ class GranularAssessmentService:
                                 top_k,
                                 top_p,
                                 max_tokens,
+                                reasoning_effort,
                             )
                             all_task_results.append(result)
 
@@ -2016,6 +2022,32 @@ class GranularAssessmentService:
                             f"Primary exception is not throttling-related: {type(primary_exception).__name__}. "
                             f"Document will be marked as failed without retry."
                         )
+
+            # Ground field geometry in real OCR data when enabled (see
+            # AssessmentService for rationale). Applied once on the fully-aggregated
+            # assessment so list/group structure is whole. Safe fallback to LLM boxes
+            # when OCR geometry is unavailable or no value match is found.
+            if self.config.assessment.ground_geometry_in_ocr:
+                try:
+                    from idp_common.assessment.ocr_grounding import (
+                        ground_assessment_geometry,
+                        load_page_ocr_data,
+                    )
+
+                    page_data_by_page = load_page_ocr_data(
+                        document.pages, sorted_page_ids
+                    )
+                    if page_data_by_page:
+                        enhanced_assessment_data = ground_assessment_geometry(
+                            enhanced_assessment_data,
+                            extraction_results,
+                            page_data_by_page,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"OCR geometry grounding failed for section {section_id}; "
+                        f"keeping LLM-estimated boxes: {e}"
+                    )
 
             # Update the existing extraction result with enhanced assessment data
             extraction_data["explainability_info"] = [enhanced_assessment_data]

@@ -823,6 +823,7 @@ class AssessmentService:
             temperature = self.config.assessment.temperature
             top_k = self.config.assessment.top_k
             top_p = self.config.assessment.top_p
+            reasoning_effort = self.config.assessment.reasoning_effort
             max_tokens = self.config.assessment.max_tokens
             system_prompt = self.config.assessment.system_prompt
 
@@ -877,6 +878,7 @@ class AssessmentService:
                 max_tokens=max_tokens,
                 context="Assessment",
                 model_lambda_hook_arn=self.config.assessment.model_lambda_hook_arn,
+                reasoning_effort=reasoning_effort,
             )
 
             total_duration = time.time() - request_start_time
@@ -1069,6 +1071,33 @@ class AssessmentService:
                         "confidence_threshold": attr_threshold,
                     }
                     enhanced_assessment_data[attr_name] = default_assessment
+
+            # Ground field geometry in real OCR data when enabled. This replaces the
+            # LLM-estimated boxes with real OCR boxes from pageData.json where the
+            # extracted value matches an OCR line; it falls back to the LLM box when
+            # OCR geometry is unavailable or no value match is found (so the worst
+            # case is identical to LLM-only behavior).
+            if self.config.assessment.ground_geometry_in_ocr:
+                try:
+                    from idp_common.assessment.ocr_grounding import (
+                        ground_assessment_geometry,
+                        load_page_ocr_data,
+                    )
+
+                    page_data_by_page = load_page_ocr_data(
+                        document.pages, sorted_page_ids
+                    )
+                    if page_data_by_page:
+                        enhanced_assessment_data = ground_assessment_geometry(
+                            enhanced_assessment_data,
+                            extraction_results,
+                            page_data_by_page,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"OCR geometry grounding failed for section {section_id}; "
+                        f"keeping LLM-estimated boxes: {e}"
+                    )
 
             # Update the existing extraction result with enhanced assessment data
             extraction_data["explainability_info"] = [enhanced_assessment_data]

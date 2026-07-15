@@ -52,14 +52,14 @@ extras_require = {
     ],
     # Evaluation module dependencies
     "evaluation": [
-        "stickler-eval==0.1.5",
+        "stickler-eval==0.4.0",
         "genson==1.3.0",
         "munkres>=1.1.4",  # For Hungarian algorithm
         "numpy==1.26.4",  # For numeric operations
     ],
     # Reporting module dependencies
     "reporting": [
-        "pyarrow==20.0.0",  # For Parquet conversion
+        "pyarrow==23.0.1",  # For Parquet conversion
     ],
     # Appsync module dependencies
     "appsync": [
@@ -76,7 +76,7 @@ extras_require = {
         "pytest-cov>=4.1.0",
         "pytest-xdist>=3.3.1",  # For parallel test execution
         "requests>=2.32.3,<3.0.0",
-        "pyarrow==20.0.0",
+        "pyarrow==23.0.1",
         "PyYAML==6.0.2",
         "openpyxl==3.1.5",
         "python-docx==1.2.0",
@@ -96,7 +96,7 @@ extras_require = {
     ],
     # Full package with all dependencies
     "all": [
-        "stickler-eval==0.1.5",
+        "stickler-eval==0.4.0",
         "genson==1.3.0",
         "Pillow==12.1.1",
         "pypdfium2>=5.5.0",
@@ -105,7 +105,7 @@ extras_require = {
         "numpy==1.26.4",
         "pandas==2.2.3",
         "requests==2.32.4",
-        "pyarrow==20.0.0",
+        "pyarrow==23.0.1",
         "openpyxl==3.1.5",
         "python-docx==1.2.0",
         "strands-agents==1.14.0",  # Pin to exact working version
@@ -117,7 +117,7 @@ extras_require = {
 
 setup(
     name="idp_common",
-    version="0.5.12",
+    version="0.5.16",
     packages=find_packages(
         exclude=[
             "build",
