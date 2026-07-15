@@ -13,6 +13,7 @@ locals {
     hitl               = try(var.api.enable_hitl, false)
     rbac               = try(var.rbac.enabled, false)
     federation         = try(var.idp_federation.enabled, false)
+    feature_platform   = try(var.feature_platform.enabled, false)
   }
 }
 
@@ -221,4 +222,36 @@ module "tracking_gsi_backfill" {
   log_retention_days = var.log_retention_days
 
   tags = var.tags
+}
+
+# Feature Platform: installable-feature registry + AppSync operations
+# (catalog / entitlement / install / uninstall / register + config presets).
+# Default-off; requires the API (AppSync) to be enabled. Mirrors upstream v0.5.16.
+module "feature_platform" {
+  source = "./modules/features/feature-platform"
+  count  = local.feature_enable.feature_platform && local.api_enabled ? 1 : 0
+
+  name_prefix     = "${local.name_prefix}-api"
+  main_stack_name = local.name_prefix
+
+  graphql_api_id           = module.processing_environment_api[0].api_id
+  configuration_table_name = module.processing_environment.configuration_table_name
+  configuration_table_arn  = module.processing_environment.configuration_table_arn
+
+  encryption_key_arn = var.encryption_key_arn
+
+  configuration_bucket_name      = try(var.feature_platform.configuration_bucket_name, "")
+  catalog_key                    = try(var.feature_platform.catalog_key, "feature-platform/catalog.json")
+  artifact_region                = try(var.feature_platform.artifact_region, "")
+  simulator_entitlement_endpoint = try(var.feature_platform.simulator_endpoint, "")
+  subscription_mode              = try(var.feature_platform.subscription_mode, "auto-subscribe")
+  default_customer_identifier    = try(var.feature_platform.default_customer_identifier, "")
+  default_buyer_account_id       = try(var.feature_platform.default_buyer_account_id, "")
+  feature_offer_id_map           = try(var.feature_platform.feature_offer_id_map, "{}")
+  admin_group_name               = try(var.feature_platform.admin_group_name, "Admin")
+  seller_bucket_object_arns      = try(var.feature_platform.seller_bucket_object_arns, [])
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+  tags               = var.tags
 }

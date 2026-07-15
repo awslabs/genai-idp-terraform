@@ -657,3 +657,24 @@ variable "seed_managed_configs" {
   type        = bool
   default     = true
 }
+
+# Feature Platform (installable features). Default-off. Requires the API
+# (AppSync) to be enabled. Mirrors upstream IDP v0.5.16 EnableFeaturePlatform +
+# related parameters.
+variable "feature_platform" {
+  description = "Configuration for the Feature Platform (installable features). Default-off; requires the API enabled."
+  type = object({
+    enabled                     = optional(bool, false)
+    simulator_endpoint          = optional(string, "")
+    subscription_mode           = optional(string, "auto-subscribe")
+    default_customer_identifier = optional(string, "")
+    default_buyer_account_id    = optional(string, "")
+    feature_offer_id_map        = optional(string, "{}")
+    admin_group_name            = optional(string, "Admin")
+    configuration_bucket_name   = optional(string, "")
+    catalog_key                 = optional(string, "feature-platform/catalog.json")
+    artifact_region             = optional(string, "")
+    seller_bucket_object_arns   = optional(list(string), [])
+  })
+  default = {}
+}
