@@ -26,8 +26,9 @@ output "user_identity" {
 output "api" {
   description = "API resources (if enabled)"
   value = local.api_enabled ? {
-    api_id      = module.processing_environment_api[0].api_id
-    graphql_url = module.processing_environment_api[0].graphql_url
+    api_id                   = module.processing_environment_api[0].api_id
+    graphql_url              = module.processing_environment_api[0].graphql_url
+    appsync_endpoint_for_dns = module.processing_environment_api[0].appsync_endpoint_for_dns
   } : null
 }
 
