@@ -81,8 +81,3 @@ output "evaluation_function_arn" {
   description = "ARN of the evaluation Lambda function (used by the Step Functions state machine when evaluation is enabled). Null when evaluation is disabled."
   value       = module.engine.evaluation_function_arn
 }
-
-output "build_mode" {
-  description = "Active build path for the processor's container images: \"codebuild\" or \"local\"."
-  value       = var.lambda_local ? "local" : "codebuild"
-}

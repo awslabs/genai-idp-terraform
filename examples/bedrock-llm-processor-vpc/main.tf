@@ -394,6 +394,10 @@ module "genai_idp_accelerator" {
     aws.us-east-1 = aws.us-east-1
   }
 
+  # Build strategy (CodeBuild by default; local Docker/npm when build.lambda_local /
+  # build.ui_local are true). Threaded to the layer, env, api, and web-ui builds.
+  build = var.build
+
   # Processor configuration
   bedrock_llm_processor = {
     classification_model_id = var.classification_model_id

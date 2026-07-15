@@ -33,11 +33,6 @@ output "data_automation_project_arn" {
   value       = var.data_automation_project_arn
 }
 
-output "build_mode" {
-  description = "Active build path for the processor's container images: \"codebuild\" or \"local\"."
-  value       = var.lambda_local ? "local" : "codebuild"
-}
-
 output "configuration" {
   description = "Effective configuration for the BDA processor (from the shared engine)"
   value       = module.engine.configuration
