@@ -550,7 +550,7 @@ variable "build" {
     # every layer, architectures on every function this module owns, the
     # --platform linux/${arch} flag on local Docker builds, and the
     # CodeBuild image selection on the CodeBuild path. Honored by BOTH paths.
-    lambda_architecture = optional(string, "x86_64")
+    lambda_architecture = optional(string, "arm64")
 
     # Container runtime selector when lambda_local = true. "auto" probes in
     # order: docker -> podman -> finch. Explicit values skip auto-detection.
@@ -563,7 +563,7 @@ variable "build" {
 
   default = {
     lambda_local        = false
-    lambda_architecture = "x86_64"
+    lambda_architecture = "arm64"
     container_runtime   = "auto"
     ui_local            = false
   }
