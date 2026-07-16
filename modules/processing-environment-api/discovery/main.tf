@@ -382,6 +382,11 @@ resource "aws_lambda_function" "discovery_processor" {
       BEDROCK_LOG_LEVEL        = var.log_level
       DISCOVERY_TRACKING_TABLE = aws_dynamodb_table.discovery_tracking.name
       APPSYNC_API_URL          = var.appsync_api_url
+      # ClassesDiscovery loads the selected config version from the
+      # configuration table; without this the processor raises
+      # "Configuration table name not provided" and marks the job FAILED.
+      # Matches the reference CFN DiscoveryProcessorFunction env.
+      CONFIGURATION_TABLE_NAME = element(split("/", var.configuration_table_arn), 1)
     }
   }
 
