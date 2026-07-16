@@ -477,6 +477,8 @@ module "bda_processor" {
   source = "./modules/processors/bda-processor"
   count  = var.bda_processor != null ? 1 : 0
 
+  lambda_architecture = var.build.lambda_architecture
+
   name = "${local.name_prefix}-processor"
 
   # Shared assets bucket for Lambda layers
@@ -538,6 +540,8 @@ module "bda_processor" {
 module "bedrock_llm_processor" {
   source = "./modules/processors/bedrock-llm-processor"
   count  = var.bedrock_llm_processor != null ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   name = "${local.name_prefix}-processor"
 
@@ -611,6 +615,8 @@ module "sagemaker_udop_processor" {
   source = "./modules/processors/sagemaker-udop-processor"
   count  = var.sagemaker_udop_processor != null ? 1 : 0
 
+  lambda_architecture = var.build.lambda_architecture
+
   name = "${local.name_prefix}-processor"
 
   # API configuration (if enabled)
@@ -678,6 +684,8 @@ module "sagemaker_udop_processor" {
 module "web_ui" {
   count  = var.web_ui.enabled ? 1 : 0
   source = "./modules/web-ui"
+
+  lambda_architecture = var.build.lambda_architecture
 
   providers = {
     aws.us-east-1 = aws.us-east-1
@@ -858,6 +866,8 @@ module "reporting" {
   count  = var.reporting.enabled ? 1 : 0
   source = "./modules/reporting"
 
+  lambda_architecture = var.build.lambda_architecture
+
   name_prefix             = "${local.name_prefix}-reporting"
   reporting_database_name = var.reporting.database_name
   reporting_bucket_arn    = var.reporting.bucket_arn
@@ -900,6 +910,8 @@ module "reporting" {
 module "processor_attachment" {
   source = "./modules/processor-attachment"
   count  = local.processor_type != null ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   name = "${local.name_prefix}-processor"
 

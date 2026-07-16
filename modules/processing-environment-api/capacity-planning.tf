@@ -99,6 +99,7 @@ data "archive_file" "calculate_capacity" {
 }
 
 resource "aws_lambda_function" "calculate_capacity" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_capacity_planning ? 1 : 0
   function_name    = "${local.api_name}-calculate-capacity"
   role             = aws_iam_role.capacity_planning[0].arn
@@ -155,6 +156,7 @@ data "archive_file" "calculate_capacity_resolver" {
 }
 
 resource "aws_lambda_function" "calculate_capacity_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_capacity_planning ? 1 : 0
   function_name    = "${local.api_name}-calculate-capacity-resolver"
   role             = aws_iam_role.capacity_planning[0].arn

@@ -131,6 +131,7 @@ resource "aws_cloudwatch_log_group" "ui_codebuild_trigger_lambda_logs" {
 
 # Lambda function for triggering UI CodeBuild
 resource "aws_lambda_function" "ui_codebuild_trigger" {
+  architectures = [var.lambda_architecture]
   count         = var.ui_local ? 0 : 1
   filename      = data.archive_file.ui_codebuild_trigger_lambda[0].output_path
   function_name = "${var.name_prefix}-ui-cb-trigger-${random_string.suffix.result}"

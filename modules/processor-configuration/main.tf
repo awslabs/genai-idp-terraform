@@ -3,6 +3,7 @@
 
 # Lambda function for configuration seeding
 resource "aws_lambda_function" "configuration_seeder" {
+  architectures = [var.lambda_architecture]
   filename      = data.archive_file.lambda_zip.output_path
   function_name = "${var.name_prefix}-configuration-seeder"
   role          = aws_iam_role.lambda_execution.arn

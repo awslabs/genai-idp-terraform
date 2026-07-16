@@ -248,6 +248,7 @@ data "archive_file" "discovery_upload_resolver_code" {
 
 # Discovery Upload Resolver Lambda function
 resource "aws_lambda_function" "discovery_upload_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-discovery-upload-${local.suffix}"
 
   filename         = data.archive_file.discovery_upload_resolver_code.output_path
@@ -320,6 +321,7 @@ data "archive_file" "discovery_processor_code" {
 
 # Discovery Processor Lambda function
 resource "aws_lambda_function" "discovery_processor" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-discovery-processor-${local.suffix}"
 
   filename         = data.archive_file.discovery_processor_code.output_path

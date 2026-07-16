@@ -215,7 +215,8 @@ data "archive_file" "feature" {
 }
 
 resource "aws_lambda_function" "feature" {
-  for_each = local.functions
+  architectures = [var.lambda_architecture]
+  for_each      = local.functions
 
   function_name = "${var.name_prefix}-fp-${replace(each.key, "_", "-")}"
   role          = aws_iam_role.lambda.arn

@@ -221,6 +221,7 @@ data "archive_file" "agent_request_handler_code" {
 
 # Agent Request Handler Lambda function
 resource "aws_lambda_function" "agent_request_handler" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-agent-request-${local.suffix}"
 
   filename         = data.archive_file.agent_request_handler_code.output_path
@@ -295,6 +296,7 @@ data "archive_file" "agent_processor_code" {
 
 # Agent Processor Lambda function
 resource "aws_lambda_function" "agent_processor" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-agent-processor-${local.suffix}"
 
   filename         = data.archive_file.agent_processor_code.output_path
@@ -377,6 +379,7 @@ data "archive_file" "list_available_agents_code" {
 
 # List Available Agents Lambda function
 resource "aws_lambda_function" "list_available_agents" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-list-agents-${local.suffix}"
 
   filename         = data.archive_file.list_available_agents_code.output_path

@@ -5,6 +5,7 @@
 
 # OCR Function
 resource "aws_lambda_function" "ocr" {
+  architectures = [var.lambda_architecture]
   function_name = "${local.name_prefix}-ocr"
   role          = aws_iam_role.ocr_lambda.arn
   handler       = "index.handler"
@@ -49,6 +50,7 @@ resource "aws_lambda_function" "ocr" {
 
 # Classification Function
 resource "aws_lambda_function" "classification" {
+  architectures = [var.lambda_architecture]
   function_name = "${local.name_prefix}-classification"
   role          = aws_iam_role.classification_lambda.arn
   handler       = "index.handler"
@@ -99,6 +101,7 @@ resource "aws_lambda_function" "classification" {
 
 # Extraction Function
 resource "aws_lambda_function" "extraction" {
+  architectures = [var.lambda_architecture]
   function_name = "${local.name_prefix}-extraction"
   role          = aws_iam_role.extraction_lambda.arn
   handler       = "index.handler"
@@ -143,6 +146,7 @@ resource "aws_lambda_function" "extraction" {
 
 # Process Results Function
 resource "aws_lambda_function" "process_results" {
+  architectures = [var.lambda_architecture]
   function_name = "${local.name_prefix}-process-results"
   role          = aws_iam_role.process_results_lambda.arn
   handler       = "index.handler"
@@ -187,7 +191,8 @@ resource "aws_lambda_function" "process_results" {
 
 # Summarization Function (conditional)
 resource "aws_lambda_function" "summarization" {
-  count = var.is_summarization_enabled ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.is_summarization_enabled ? 1 : 0
 
   function_name = "${local.name_prefix}-summarization"
   role          = aws_iam_role.summarization_lambda[0].arn
@@ -276,6 +281,7 @@ resource "aws_cloudwatch_log_group" "summarization_lambda" {
 
 # Assessment Function (always deployed, controlled by configuration)
 resource "aws_lambda_function" "assessment" {
+  architectures = [var.lambda_architecture]
   function_name = "${local.name_prefix}-assessment"
   role          = aws_iam_role.assessment_lambda.arn
   handler       = "index.handler"
@@ -403,7 +409,8 @@ data "archive_file" "evaluation_lambda" {
 }
 
 resource "aws_lambda_function" "evaluation_function" {
-  count = var.evaluation_enabled ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.evaluation_enabled ? 1 : 0
 
   function_name = "${local.name_prefix}-evaluation"
   role          = aws_iam_role.evaluation_lambda[0].arn

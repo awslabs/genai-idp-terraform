@@ -96,7 +96,8 @@ resource "aws_cloudwatch_log_group" "codebuild_trigger_lambda_logs" {
 }
 
 resource "aws_lambda_function" "codebuild_trigger" {
-  count = local.use_local_build ? 0 : 1
+  architectures = [var.lambda_architecture]
+  count         = local.use_local_build ? 0 : 1
 
   filename      = data.archive_file.codebuild_trigger_lambda.output_path
   function_name = "${var.layer_prefix}-cb-trigger-${random_string.layer_suffix.result}"

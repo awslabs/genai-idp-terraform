@@ -106,6 +106,7 @@ resource "aws_iam_role_policy" "version_check_resolver" {
 }
 
 resource "aws_lambda_function" "version_check_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = local.version_check_enabled ? 1 : 0
   function_name    = "${local.api_name}-version-check-resolver"
   role             = aws_iam_role.version_check_resolver[0].arn

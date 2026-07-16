@@ -688,6 +688,7 @@ resource "aws_glue_crawler" "document_sections_crawler" {
 
 # Lambda function for saving reporting data
 resource "aws_lambda_function" "save_reporting_data" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-save-reporting-data-${random_string.suffix.result}"
 
   filename         = data.archive_file.save_reporting_data_code.output_path

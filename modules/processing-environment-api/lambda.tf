@@ -48,6 +48,7 @@ data "archive_file" "upload_resolver_code" {
 }
 
 resource "aws_lambda_function" "upload_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "UploadDocumentResolver-${random_string.suffix.result}"
 
   filename         = data.archive_file.upload_resolver_code.output_path
@@ -96,6 +97,7 @@ data "archive_file" "delete_document_resolver_code" {
 }
 
 resource "aws_lambda_function" "delete_document_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "DeleteDocumentResolver-${random_string.suffix.result}"
 
   filename         = data.archive_file.delete_document_resolver_code.output_path
@@ -144,6 +146,7 @@ data "archive_file" "reprocess_document_resolver_code" {
 }
 
 resource "aws_lambda_function" "reprocess_document_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "ReprocessDocumentResolver-${random_string.suffix.result}"
 
   filename         = data.archive_file.reprocess_document_resolver_code.output_path
@@ -201,6 +204,7 @@ data "archive_file" "get_file_contents_resolver_code" {
 }
 
 resource "aws_lambda_function" "get_file_contents_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "GetFileContentsResolver-${random_string.suffix.result}"
 
   filename         = data.archive_file.get_file_contents_resolver_code.output_path
@@ -251,6 +255,7 @@ data "archive_file" "configuration_resolver_code" {
 }
 
 resource "aws_lambda_function" "configuration_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "ConfigurationResolver-${random_string.suffix.result}"
 
   filename         = data.archive_file.configuration_resolver_code.output_path
@@ -306,6 +311,7 @@ data "archive_file" "get_stepfunction_execution_resolver_code" {
 }
 
 resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "GetStepFunctionExecutionResolver-${random_string.suffix.result}"
 
   filename         = data.archive_file.get_stepfunction_execution_resolver_code.output_path
@@ -362,6 +368,7 @@ data "archive_file" "query_knowledge_base_resolver_code" {
 }
 
 resource "aws_lambda_function" "query_knowledge_base_resolver" {
+  architectures = [var.lambda_architecture]
   for_each      = var.knowledge_base.enabled ? toset(["enabled"]) : toset([])
   function_name = "QueryKnowledgeBaseResolver-${random_string.suffix.result}"
 
@@ -418,6 +425,7 @@ data "archive_file" "copy_to_baseline_resolver_code" {
 }
 
 resource "aws_lambda_function" "copy_to_baseline_resolver" {
+  architectures = [var.lambda_architecture]
   for_each      = var.evaluation_enabled ? { "enabled" = true } : {}
   function_name = "CopyToBaselineResolver-${random_string.suffix.result}"
 

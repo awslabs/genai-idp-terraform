@@ -101,8 +101,11 @@ module "processor_configuration" {
 
   # Layers required so the seeder Lambda merges user config with system
   # defaults; without them the runtime crashes with "No system_prompt found".
+  # The seeder must run on the same architecture the layers were built for,
+  # otherwise idp_common's native deps (pydantic_core) fail to import.
   base_layer_arn       = var.base_layer_arn
   idp_common_layer_arn = var.idp_common_layer_arn
+  lambda_architecture  = var.lambda_architecture
 
   vpc_config          = local.vpc_config
   lambda_tracing_mode = var.lambda_tracing_mode

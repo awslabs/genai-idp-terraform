@@ -287,7 +287,8 @@ data "archive_file" "user_management" {
 }
 
 resource "aws_lambda_function" "user_management" {
-  depends_on = [time_sleep.wait_for_iam_propagation]
+  architectures = [var.lambda_architecture]
+  depends_on    = [time_sleep.wait_for_iam_propagation]
 
   function_name    = local.user_management_function_name
   role             = aws_iam_role.user_management.arn

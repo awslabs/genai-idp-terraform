@@ -87,6 +87,7 @@ resource "aws_iam_role_policy" "pipeline_hooks_dispatcher" {
 }
 
 resource "aws_lambda_function" "pipeline_hooks_dispatcher" {
+  architectures = [var.lambda_architecture]
   function_name = "${local.name_prefix}-pipeline-hooks-dispatcher"
   role          = aws_iam_role.pipeline_hooks_dispatcher.arn
   handler       = "index.lambda_handler"

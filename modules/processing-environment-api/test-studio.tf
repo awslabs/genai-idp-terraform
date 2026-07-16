@@ -256,6 +256,7 @@ data "archive_file" "test_runner" {
 }
 
 resource "aws_lambda_function" "test_runner" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-runner"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -299,6 +300,7 @@ data "archive_file" "test_results_resolver" {
 }
 
 resource "aws_lambda_function" "test_results_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-results-resolver"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -341,6 +343,7 @@ data "archive_file" "test_set_resolver" {
 }
 
 resource "aws_lambda_function" "test_set_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-set-resolver"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -384,6 +387,7 @@ data "archive_file" "test_set_zip_extractor" {
 }
 
 resource "aws_lambda_function" "test_set_zip_extractor" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-set-zip-extractor"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -427,6 +431,7 @@ data "archive_file" "test_file_copier" {
 }
 
 resource "aws_lambda_function" "test_file_copier" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-file-copier"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -469,6 +474,7 @@ data "archive_file" "test_set_file_copier" {
 }
 
 resource "aws_lambda_function" "test_set_file_copier" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-set-file-copier"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -511,6 +517,7 @@ data "archive_file" "delete_tests" {
 }
 
 resource "aws_lambda_function" "delete_tests" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-delete-tests"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -553,6 +560,7 @@ data "archive_file" "fcc_dataset_deployer" {
 }
 
 resource "aws_lambda_function" "fcc_dataset_deployer" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio && var.enable_fcc_dataset ? 1 : 0
   function_name    = "${local.api_name}-fcc-dataset-deployer"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -603,6 +611,7 @@ data "archive_file" "w2_dataset_deployer" {
 }
 
 resource "aws_lambda_function" "w2_dataset_deployer" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0
   function_name    = "${local.api_name}-w2-dataset-deployer"
   role             = aws_iam_role.test_studio_lambdas[0].arn
