@@ -52,9 +52,25 @@ locals {
     bucket_arn  = "arn:${data.aws_partition.current.partition}:s3:::${var.web_app_bucket_name}"
   }
 
+  # Hosting mode gates. CloudFront resources exist only when we create
+  # infrastructure AND hosting is CloudFront; in ALB mode the bucket is still
+  # created but served by the ALB (see modules/web-ui-alb) via an S3 VPCE.
+  is_cloudfront     = var.hosting == "CloudFront"
+  is_alb            = var.hosting == "ALB"
+  create_cloudfront = var.create_infrastructure && local.is_cloudfront
+
   # Determine CloudFront distribution ID based on mode
-  cloudfront_distribution_id = var.create_infrastructure ? aws_cloudfront_distribution.web_distribution[0].id : var.cloudfront_distribution_id
-  cloudfront_domain_name     = var.create_infrastructure ? aws_cloudfront_distribution.web_distribution[0].domain_name : null
+  cloudfront_distribution_id = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].id : var.cloudfront_distribution_id
+  cloudfront_domain_name     = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].domain_name : null
+
+  # Public app URL: CloudFront domain in CloudFront mode; the supplied custom
+  # domain URL (fronting the ALB) in ALB mode. Drives CORS + UI build env.
+  app_url = local.create_cloudfront ? "https://${aws_cloudfront_distribution.web_distribution[0].domain_name}" : var.web_ui_url
+
+  # CORS allowed origins for the browser-accessed input/output buckets. Falls
+  # back to "*" when no concrete URL is known (BYO infra or ALB without a
+  # custom domain).
+  cors_allowed_origins = local.app_url != null ? [local.app_url] : ["*"]
 }
 
 # Random string for unique resource names
@@ -193,9 +209,11 @@ resource "aws_cloudfront_origin_access_control" "oac" {
   signing_protocol                  = "sigv4"
 }
 
-# Grant CloudFront OAI read access to the web app bucket (when we create the bucket)
+# Grant CloudFront OAC read access to the web app bucket (CloudFront mode only).
+# In ALB mode the bucket policy is created at the root (it must reference the S3
+# VPC endpoint id from the web-ui-alb module, which would otherwise cycle).
 resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
-  count  = var.create_infrastructure ? 1 : 0
+  count  = local.create_cloudfront ? 1 : 0
   bucket = aws_s3_bucket.web_app_bucket[0].id
 
   policy = jsonencode({
@@ -242,7 +260,7 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
 # WAF Web ACL for CloudFront protection
 # Note: CloudFront WAF must be created in us-east-1 region
 resource "aws_wafv2_web_acl" "cloudfront_waf" {
-  count    = var.enable_waf ? 1 : 0
+  count    = local.create_cloudfront && var.enable_waf ? 1 : 0
   provider = aws.us-east-1
 
   name  = "${var.name_prefix}-cloudfront-waf"
@@ -331,7 +349,7 @@ resource "aws_wafv2_web_acl" "cloudfront_waf" {
 }
 
 resource "aws_cloudfront_distribution" "web_distribution" {
-  count = var.create_infrastructure ? 1 : 0
+  count = local.create_cloudfront ? 1 : 0
 
   origin {
     domain_name = "${local.web_app_bucket.bucket_name}.s3.${data.aws_region.current.id}.amazonaws.com"
@@ -459,7 +477,7 @@ resource "aws_s3_bucket_cors_configuration" "input_bucket_cors" {
       "x-amz-security-token"
     ]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = var.create_infrastructure ? ["https://${aws_cloudfront_distribution.web_distribution[0].domain_name}"] : ["*"]
+    allowed_origins = local.cors_allowed_origins
     expose_headers  = ["ETag", "x-amz-server-side-encryption"]
     max_age_seconds = 3000
   }
@@ -477,7 +495,7 @@ resource "aws_s3_bucket_cors_configuration" "output_bucket_cors" {
       "x-amz-security-token"
     ]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = var.create_infrastructure ? ["https://${aws_cloudfront_distribution.web_distribution[0].domain_name}"] : ["*"]
+    allowed_origins = local.cors_allowed_origins
     expose_headers  = ["ETag", "x-amz-server-side-encryption"]
     max_age_seconds = 3000
   }
@@ -633,7 +651,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "VITE_CLOUDFRONT_DOMAIN"
-      value = local.cloudfront_domain_name != null ? "https://${local.cloudfront_domain_name}/" : ""
+      value = local.app_url != null ? "${local.app_url}/" : ""
     }
   }
 
@@ -750,7 +768,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Action = [
           "cloudfront:CreateInvalidation"
         ]
-        Resource = var.create_infrastructure ? aws_cloudfront_distribution.web_distribution[0].arn : "*"
+        Resource = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].arn : "*"
       }
     ] : [])
   })

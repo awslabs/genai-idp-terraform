@@ -41,6 +41,23 @@ output "web_ui" {
   } : null
 }
 
+output "web_ui_alb" {
+  description = <<-EOT
+    ALB hosting details (only when web_ui.hosting = "ALB"). Point your custom
+    domain DNS at alb_dns_name (alias/CNAME). Feed s3_vpc_endpoint_dns_name
+    into web_ui.s3_vpc_endpoint_dns_name_override if enabling presigned URLs
+    via the VPC endpoint.
+  EOT
+  value = length(module.web_ui_alb) > 0 ? {
+    web_ui_url               = module.web_ui_alb[0].web_ui_url
+    alb_dns_name             = module.web_ui_alb[0].alb_dns_name
+    alb_arn                  = module.web_ui_alb[0].alb_arn
+    alb_hosted_zone_id       = module.web_ui_alb[0].alb_hosted_zone_id
+    s3_vpc_endpoint_id       = module.web_ui_alb[0].s3_vpc_endpoint_id
+    s3_vpc_endpoint_dns_name = module.web_ui_alb[0].s3_vpc_endpoint_dns_name
+  } : null
+}
+
 output "processor_type" {
   description = "Type of document processor used"
   value       = local.processor_type

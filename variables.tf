@@ -358,6 +358,38 @@ variable "web_ui" {
     enable_signup              = optional(string, "")
     display_name               = optional(string, null)
     console_title              = optional(string, "IDP Accelerator Console")
+
+    # Hosting mode. "CloudFront" (default) fronts the web app bucket with a
+    # CloudFront distribution. "ALB" skips CloudFront and serves the bucket via
+    # an internal Application Load Balancer + S3 interface VPC endpoint (for
+    # private-network / GovCloud deployments). Mirrors upstream WebUIHosting.
+    hosting = optional(string, "CloudFront")
+
+    # Public URL fronting the ALB (custom domain). Drives input/output bucket
+    # CORS and Cognito callback/logout URLs. Mirrors upstream CustomDomainUrl.
+    # Only used when hosting = "ALB"; when null, CORS falls back to "*".
+    custom_domain_url = optional(string, null)
+
+    # ALB hosting settings (required when hosting = "ALB").
+    alb = optional(object({
+      vpc_id                   = optional(string, null)
+      subnet_ids               = optional(list(string), [])
+      certificate_arn          = optional(string, null)
+      scheme                   = optional(string, "internal")
+      allowed_cidrs            = optional(list(string), [])
+      lambda_security_group_id = optional(string, null)
+    }), {})
+
+    # Presigned-URL-via-VPCE settings (mirrors upstream
+    # S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride). When
+    # enabled, presigner Lambdas generate S3 URLs targeting the VPC interface
+    # endpoint. Non-breaking default: off (presigned URLs use global S3).
+    # Because the ALB-created VPCE cannot feed back into the API module without
+    # a dependency cycle, supply the DNS name/id here (or from the web-ui-alb
+    # module outputs at the example level).
+    s3_presigned_url_via_vpc_endpoint = optional(bool, false)
+    s3_vpc_endpoint_dns_name_override = optional(string, null)
+    s3_vpc_endpoint_id_override       = optional(string, null)
   })
   default = {
     enabled                    = true

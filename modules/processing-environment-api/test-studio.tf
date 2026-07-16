@@ -350,7 +350,8 @@ resource "aws_lambda_function" "test_set_resolver" {
   runtime          = "python3.12"
   timeout          = 30
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
-  environment { variables = local.test_studio_env }
+  # Presigner: honor S3_ENDPOINT_URL for VPCE-targeted presigned URLs.
+  environment { variables = merge(local.test_studio_env, local.s3_endpoint_url_env) }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
     for_each = var.vpc_config != null ? [var.vpc_config] : []
@@ -561,7 +562,8 @@ resource "aws_lambda_function" "fcc_dataset_deployer" {
   runtime          = "python3.12"
   timeout          = 300
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
-  environment { variables = local.test_studio_env }
+  # Deployer issues S3 calls; honor S3_ENDPOINT_URL in private VPC mode.
+  environment { variables = merge(local.test_studio_env, local.s3_endpoint_url_env) }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
     for_each = var.vpc_config != null ? [var.vpc_config] : []

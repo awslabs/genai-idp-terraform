@@ -116,3 +116,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "s3_endpoint_url" {
+  description = "Optional S3 endpoint URL (VPC interface endpoint) for the discovery upload presigner. When set, presigned URLs target the VPCE via virtual-host addressing. Null (default) uses the global regional S3 endpoint."
+  type        = string
+  default     = null
+}

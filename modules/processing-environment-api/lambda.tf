@@ -64,11 +64,11 @@ resource "aws_lambda_function" "upload_resolver" {
   kms_key_arn = var.encryption_key_arn
 
   environment {
-    variables = {
+    variables = merge({
       INPUT_BUCKET               = local.input_bucket_name
       OUTPUT_BUCKET              = local.output_bucket_name
       EVALUATION_BASELINE_BUCKET = local.evaluation_baseline_bucket_name != null ? local.evaluation_baseline_bucket_name : ""
-    }
+    }, local.s3_endpoint_url_env)
   }
 
   dynamic "vpc_config" {

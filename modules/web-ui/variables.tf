@@ -74,6 +74,33 @@ variable "web_app_bucket_name" {
   default     = null
 }
 
+variable "hosting" {
+  description = <<-EOT
+    Web UI hosting mode. "CloudFront" (default) creates a CloudFront
+    distribution in front of the web app bucket. "ALB" skips CloudFront and
+    expects an Application Load Balancer (see modules/web-ui-alb) to serve the
+    bucket via an S3 interface VPC endpoint. Mirrors upstream WebUIHosting.
+  EOT
+  type        = string
+  default     = "CloudFront"
+  validation {
+    condition     = contains(["CloudFront", "ALB"], var.hosting)
+    error_message = "hosting must be CloudFront or ALB."
+  }
+}
+
+variable "web_ui_url" {
+  description = <<-EOT
+    Public URL the browser uses to reach the Web UI. Used for input/output
+    bucket CORS allowed-origins and the UI build environment. In CloudFront
+    mode this is derived from the distribution; in ALB mode supply the custom
+    domain URL fronting the ALB (mirrors upstream CustomDomainUrl). When null
+    in ALB mode, CORS falls back to "*".
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "cloudfront_distribution_id" {
   description = "CloudFront distribution ID for cache invalidation (optional - skip invalidation if not provided)"
   type        = string

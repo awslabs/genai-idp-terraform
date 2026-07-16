@@ -4,6 +4,11 @@
 # Local values for Processing Environment API
 
 locals {
+  # Presigned-URL-via-VPCE: inject S3_ENDPOINT_URL into presigner/dataset
+  # Lambdas only when an endpoint URL is supplied (opt-in). Empty map is a
+  # no-op merge, so public deployments keep the global regional S3 endpoint.
+  s3_endpoint_url_env = var.s3_endpoint_url != null ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {}
+
   # Helper function to generate model permissions for knowledge base model_id
   # This follows the same pattern as bedrock-llm-processor
   knowledge_base_model_permissions = var.knowledge_base.enabled && var.knowledge_base.model_id != null ? {

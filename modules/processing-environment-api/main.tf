@@ -122,6 +122,9 @@ module "discovery" {
   vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
   vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
 
+  # Presigned-URL-via-VPCE pass-through (discovery upload presigner).
+  s3_endpoint_url = var.s3_endpoint_url
+
   tags = var.tags
 }
 
