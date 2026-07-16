@@ -108,9 +108,16 @@ module "discovery" {
   configuration_table_arn   = local.configuration_table_arn
   appsync_api_url           = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
   appsync_api_id            = aws_appsync_graphql_api.api.id
+  appsync_api_arn           = aws_appsync_graphql_api.api.arn
   appsync_lambda_role_arn   = aws_iam_role.appsync_lambda_role.arn
   appsync_dynamodb_role_arn = aws_iam_role.appsync_dynamodb_role.arn
   idp_common_layer_arn      = var.idp_common_layer_arn
+
+  # Multi-document discovery pipeline (state machine + container-image Lambdas
+  # built via CodeBuild). base_layer_arn feeds the Prepare Lambda;
+  # lambda_layers_bucket_arn stages the Docker build source.
+  base_layer_arn           = var.base_layer_arn
+  lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
 
   # Configuration
   log_level                      = var.log_level

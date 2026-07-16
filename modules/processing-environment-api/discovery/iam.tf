@@ -63,6 +63,14 @@ resource "aws_iam_policy" "discovery_upload_resolver_policy" {
           "sqs:SendMessage"
         ]
         Resource = aws_sqs_queue.discovery_queue.arn
+      },
+      {
+        # startMultiDocDiscovery launches the multi-doc pipeline state machine.
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution"
+        ]
+        Resource = aws_sfn_state_machine.multi_doc_discovery.arn
       }
     ]
   })

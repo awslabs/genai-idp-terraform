@@ -265,10 +265,11 @@ resource "aws_lambda_function" "discovery_upload_resolver" {
 
   environment {
     variables = merge({
-      LOG_LEVEL                = var.log_level
-      DISCOVERY_TRACKING_TABLE = aws_dynamodb_table.discovery_tracking.name
-      DISCOVERY_QUEUE_URL      = aws_sqs_queue.discovery_queue.url
-      DISCOVERY_BUCKET         = aws_s3_bucket.discovery_bucket.id
+      LOG_LEVEL                             = var.log_level
+      DISCOVERY_TRACKING_TABLE              = aws_dynamodb_table.discovery_tracking.name
+      DISCOVERY_QUEUE_URL                   = aws_sqs_queue.discovery_queue.url
+      DISCOVERY_BUCKET                      = aws_s3_bucket.discovery_bucket.id
+      MULTI_DOC_DISCOVERY_STATE_MACHINE_ARN = aws_sfn_state_machine.multi_doc_discovery.arn
     }, var.s3_endpoint_url != null ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {})
   }
 
