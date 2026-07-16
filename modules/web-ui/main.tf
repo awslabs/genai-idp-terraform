@@ -56,7 +56,6 @@ locals {
   # infrastructure AND hosting is CloudFront; in ALB mode the bucket is still
   # created but served by the ALB (see modules/web-ui-alb) via an S3 VPCE.
   is_cloudfront     = var.hosting == "CloudFront"
-  is_alb            = var.hosting == "ALB"
   create_cloudfront = var.create_infrastructure && local.is_cloudfront
 
   # Determine CloudFront distribution ID based on mode

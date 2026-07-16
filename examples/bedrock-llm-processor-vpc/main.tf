@@ -447,6 +447,33 @@ module "genai_idp_accelerator" {
   enable_api = local.api_config.enabled
 
   # Web UI configuration (disabled)
+  #
+  # ALB hosting reference (WebUIHosting=ALB). In a private VPC deployment the
+  # Web UI can be served by an internal Application Load Balancer + S3 interface
+  # VPC endpoint instead of CloudFront. Replace the block below with:
+  #
+  #   web_ui = {
+  #     enabled = true
+  #     hosting = "ALB"
+  #     alb = {
+  #       vpc_id                   = module.vpc.vpc_id
+  #       subnet_ids               = module.vpc.private_subnets   # >= 2 AZs
+  #       certificate_arn          = var.web_ui_alb_certificate_arn
+  #       scheme                   = "internal"
+  #       allowed_cidrs            = [var.vpc_cidr]
+  #       lambda_security_group_id = module.vpc.lambda_security_group_id
+  #     }
+  #     # Optional custom domain (recommended): sets bucket CORS + Cognito
+  #     # callback/logout URLs and the UI build origin. Point its DNS at the
+  #     # ALB (see the web_ui_alb output's alb_dns_name / alb_hosted_zone_id).
+  #     custom_domain_url = "https://idp.internal.example.com"
+  #     logging_enabled    = true
+  #     logging_bucket_arn = var.web_ui_logging_bucket_arn
+  #     # Optional: generate presigned upload URLs through the S3 VPCE. Set the
+  #     # DNS override to the web_ui_alb output s3_vpc_endpoint_dns_name.
+  #     # s3_presigned_url_via_vpc_endpoint = true
+  #     # s3_vpc_endpoint_dns_name_override = "vpce-xxxx.s3.<region>.vpce.amazonaws.com"
+  #   }
   web_ui = {
     enabled = false
   }
