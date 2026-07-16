@@ -163,16 +163,14 @@ resource "aws_s3_bucket_notification" "discovery_bucket_notification" {
 resource "aws_dynamodb_table" "discovery_tracking" {
   name         = "${var.name_prefix}-discovery-tracking-${local.suffix}"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+  # Single-attribute primary key on jobId, matching the discovery upload
+  # resolver Lambda (index.py writes items keyed by jobId) and the reference
+  # CFN template (sources/template.yaml DiscoveryTrackingTable). An earlier
+  # PK/SK schema caused "Missing the key PK in the item" on PutItem.
+  hash_key = "jobId"
 
   attribute {
-    name = "PK"
-    type = "S"
-  }
-
-  attribute {
-    name = "SK"
+    name = "jobId"
     type = "S"
   }
 
@@ -414,7 +412,10 @@ resource "aws_appsync_datasource" "discovery_table" {
   }
 }
 
-# List Discovery Jobs Resolver (Query) - matches existing schema
+# List Discovery Jobs Resolver (Query)
+# Scan the jobId-keyed table and return items verbatim so all fields the UI
+# reads (jobType, currentStep, totalDocuments, etc.) pass through. Matches the
+# reference CFN DiscoveryJobsResolver.
 resource "aws_appsync_resolver" "list_discovery_jobs" {
   api_id      = var.appsync_api_id
   type        = "Query"
@@ -422,48 +423,26 @@ resource "aws_appsync_resolver" "list_discovery_jobs" {
   data_source = aws_appsync_datasource.discovery_table.name
 
   request_template = <<EOF
-#set($userId = $context.identity.username)
-#if(!$userId)
-  #set($userId = $context.identity.sub)
-#end
-#if(!$userId)
-  #set($userId = "anonymous")
-#end
 {
   "version": "2018-05-29",
-  "operation": "Query",
-  "query": {
-    "expression": "PK = :pk",
-    "expressionValues": {
-      ":pk": $util.dynamodb.toDynamoDBJson("discovery#$userId")
-    }
-  },
-  "limit": 20,
-  "scanIndexForward": false
+  "operation": "Scan",
+  "limit": 50,
+  "consistentRead": false,
+  "select": "ALL_ATTRIBUTES"
 }
 EOF
 
   response_template = <<EOF
 {
-  "DiscoveryJobs": [
-    #foreach($item in $ctx.result.items)
-      {
-        "jobId": $util.toJson($item.SK),
-        "documentKey": $util.toJson($item.s3Key),
-        "groundTruthKey": $util.toJson($item.groundTruthKey),
-        "status": $util.toJson($item.status),
-        "createdAt": $util.toJson($item.createdAt),
-        "updatedAt": $util.toJson($item.completedAt),
-        "errorMessage": $util.toJson($item.error)
-      }#if($foreach.hasNext),#end
-    #end
-  ],
+  "DiscoveryJobs": $util.toJson($ctx.result.items),
   "nextToken": $util.toJson($ctx.result.nextToken)
 }
 EOF
 }
 
-# Update Discovery Job Status Resolver (Mutation) - matches existing schema
+# Update Discovery Job Status Resolver (Mutation)
+# Keyed by jobId and supports the full multi-document discovery field set.
+# Matches the reference CFN UpdateDiscoveryJobStatusResolver.
 resource "aws_appsync_resolver" "update_discovery_job_status" {
   api_id      = var.appsync_api_id
   type        = "Mutation"
@@ -471,13 +450,12 @@ resource "aws_appsync_resolver" "update_discovery_job_status" {
   data_source = aws_appsync_datasource.discovery_table.name
 
   request_template = <<EOF
-#set($userId = $context.identity.username)
-#if(!$userId)
-  #set($userId = $context.identity.sub)
+## Validate status is one of the allowed values
+#set($validStatuses = ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "OPTIMIZATION_IN_PROGRESS", "OPTIMIZATION_COMPLETED", "OPTIMIZATION_FAILED", "QUEUED", "PREPARING", "EMBEDDING", "CLUSTERING", "ANALYZING"])
+#if(!$validStatuses.contains($ctx.args.status))
+  $util.error("Invalid status value", "ValidationException")
 #end
-#if(!$userId)
-  #set($userId = "anonymous")
-#end
+
 #set($expNames = {})
 #set($expValues = {})
 
@@ -488,24 +466,79 @@ $util.qr($expValues.put(":status", $util.dynamodb.toDynamoDB($ctx.args.status)))
 
 ## Set errorMessage (optional)
 #if($ctx.args.errorMessage)
-  $util.qr($expNames.put("#errorMessage", "error"))
+  $util.qr($expNames.put("#errorMessage", "errorMessage"))
   $util.qr($expValues.put(":errorMessage", $util.dynamodb.toDynamoDB($ctx.args.errorMessage)))
-  #set($updateExpression = "$updateExpression, #errorMessage = :errorMessage")
+  #set($updateExpression = "$${updateExpression}, #errorMessage = :errorMessage")
 #end
 
-## Set completedAt to current timestamp when status is COMPLETED or FAILED
-#if($ctx.args.status == "COMPLETED" || $ctx.args.status == "FAILED")
+## Set discoveredClassName (optional)
+#if($ctx.args.discoveredClassName)
+  $util.qr($expNames.put("#discoveredClassName", "discoveredClassName"))
+  $util.qr($expValues.put(":discoveredClassName", $util.dynamodb.toDynamoDB($ctx.args.discoveredClassName)))
+  #set($updateExpression = "$${updateExpression}, #discoveredClassName = :discoveredClassName")
+#end
+
+## Set statusMessage (optional)
+#if($ctx.args.statusMessage)
+  $util.qr($expNames.put("#statusMessage", "statusMessage"))
+  $util.qr($expValues.put(":statusMessage", $util.dynamodb.toDynamoDB($ctx.args.statusMessage)))
+  #set($updateExpression = "$${updateExpression}, #statusMessage = :statusMessage")
+#end
+
+## Multi-document discovery fields (optional)
+#if($ctx.args.jobType)
+  $util.qr($expNames.put("#jobType", "jobType"))
+  $util.qr($expValues.put(":jobType", $util.dynamodb.toDynamoDB($ctx.args.jobType)))
+  #set($updateExpression = "$${updateExpression}, #jobType = :jobType")
+#end
+
+#if($ctx.args.currentStep)
+  $util.qr($expNames.put("#currentStep", "currentStep"))
+  $util.qr($expValues.put(":currentStep", $util.dynamodb.toDynamoDB($ctx.args.currentStep)))
+  #set($updateExpression = "$${updateExpression}, #currentStep = :currentStep")
+#end
+
+#if($ctx.args.totalDocuments)
+  $util.qr($expNames.put("#totalDocuments", "totalDocuments"))
+  $util.qr($expValues.put(":totalDocuments", $util.dynamodb.toDynamoDB($ctx.args.totalDocuments)))
+  #set($updateExpression = "$${updateExpression}, #totalDocuments = :totalDocuments")
+#end
+
+#if($ctx.args.clustersFound)
+  $util.qr($expNames.put("#clustersFound", "clustersFound"))
+  $util.qr($expValues.put(":clustersFound", $util.dynamodb.toDynamoDB($ctx.args.clustersFound)))
+  #set($updateExpression = "$${updateExpression}, #clustersFound = :clustersFound")
+#end
+
+#if($ctx.args.discoveredClasses)
+  $util.qr($expNames.put("#discoveredClasses", "discoveredClasses"))
+  $util.qr($expValues.put(":discoveredClasses", $util.dynamodb.toDynamoDB($ctx.args.discoveredClasses)))
+  #set($updateExpression = "$${updateExpression}, #discoveredClasses = :discoveredClasses")
+#end
+
+#if($ctx.args.reflectionReport)
+  $util.qr($expNames.put("#reflectionReport", "reflectionReport"))
+  $util.qr($expValues.put(":reflectionReport", $util.dynamodb.toDynamoDB($ctx.args.reflectionReport)))
+  #set($updateExpression = "$${updateExpression}, #reflectionReport = :reflectionReport")
+#end
+
+## Set updatedAt to current timestamp
+$util.qr($expNames.put("#updatedAt", "updatedAt"))
+$util.qr($expValues.put(":updatedAt", $util.dynamodb.toDynamoDB($util.time.nowISO8601())))
+#set($updateExpression = "$${updateExpression}, #updatedAt = :updatedAt")
+
+## Set completedAt when status is a terminal state
+#if($ctx.args.status == "COMPLETED" || $ctx.args.status == "FAILED" || $ctx.args.status == "OPTIMIZATION_COMPLETED" || $ctx.args.status == "OPTIMIZATION_FAILED")
   $util.qr($expNames.put("#completedAt", "completedAt"))
   $util.qr($expValues.put(":completedAt", $util.dynamodb.toDynamoDB($util.time.nowISO8601())))
-  #set($updateExpression = "$updateExpression, #completedAt = :completedAt")
+  #set($updateExpression = "$${updateExpression}, #completedAt = :completedAt")
 #end
 
 {
   "version": "2018-05-29",
   "operation": "UpdateItem",
   "key": {
-    "PK": $util.dynamodb.toDynamoDBJson("discovery#$userId"),
-    "SK": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
+    "jobId": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
   },
   "update": {
     "expression": "$updateExpression",
@@ -516,19 +549,34 @@ $util.qr($expValues.put(":status", $util.dynamodb.toDynamoDB($ctx.args.status)))
 EOF
 
   response_template = <<EOF
+$util.toJson($ctx.result)
+EOF
+}
+
+# Delete Discovery Job Resolver (Mutation)
+# The UI calls deleteDiscoveryJob when removing jobs. Keyed by jobId, matching
+# the reference CFN DeleteDiscoveryJobResolver.
+resource "aws_appsync_resolver" "delete_discovery_job" {
+  api_id      = var.appsync_api_id
+  type        = "Mutation"
+  field       = "deleteDiscoveryJob"
+  data_source = aws_appsync_datasource.discovery_table.name
+
+  request_template = <<EOF
+{
+  "version": "2018-05-29",
+  "operation": "DeleteItem",
+  "key": {
+    "jobId": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
+  }
+}
+EOF
+
+  response_template = <<EOF
 #if($ctx.error)
   $util.error($ctx.error.message, $ctx.error.type)
-#end
-
-## Return the updated job
-#if(!$ctx.result)
-  null
 #else
-  {
-    "jobId": $util.toJson($ctx.result.SK),
-    "status": $util.toJson($ctx.result.status),
-    "errorMessage": $util.toJson($ctx.result.error)
-  }
+  true
 #end
 EOF
 }
