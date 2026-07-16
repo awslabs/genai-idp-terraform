@@ -57,6 +57,28 @@ resource "aws_iam_policy" "appsync_dynamodb_policy" {
           ])
         }
       ] : [],
+      # Discovery tracking table permissions (conditional). The discovery
+      # AppSync resolvers (listDiscoveryJobs Scan, updateDiscoveryJobStatus
+      # UpdateItem, deleteDiscoveryJob DeleteItem) run under this shared
+      # DynamoDB service role. Without this the resolvers fail authorization
+      # silently — completed jobs stay PENDING and the UI job list is empty.
+      var.discovery.enabled ? [
+        {
+          Action = [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:Query",
+            "dynamodb:Scan"
+          ]
+          Effect = "Allow"
+          Resource = [
+            module.discovery[0].discovery_tracking_table_arn,
+            "${module.discovery[0].discovery_tracking_table_arn}/index/*"
+          ]
+        }
+      ] : [],
       # Agent Analytics DynamoDB permissions (conditional)
       var.agent_analytics.enabled ? [
         {
