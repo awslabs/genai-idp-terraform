@@ -532,3 +532,49 @@ EOF
 #end
 EOF
 }
+
+# =============================================================================
+# Discovery Lambda Resolvers (Mutation)
+#
+# These four mutations are all served by the single discovery upload resolver
+# Lambda (aws_appsync_datasource.discovery_lambda), which dispatches on
+# event.info.fieldName. They use direct Lambda invocation (no VTL mapping
+# templates), matching the reference CFN template
+# (sources/nested/appsync/template.yaml).
+#
+# The AppSync service role's lambda:InvokeFunction permission on this Lambda is
+# granted by the parent module (processing-environment-api/iam.tf), so no IAM
+# changes are required here.
+# =============================================================================
+
+# Presigned URL + discovery job creation for single-document discovery uploads
+resource "aws_appsync_resolver" "upload_discovery_document" {
+  api_id      = var.appsync_api_id
+  type        = "Mutation"
+  field       = "uploadDiscoveryDocument"
+  data_source = aws_appsync_datasource.discovery_lambda.name
+}
+
+# LLM-based section boundary auto-detection for discovery documents
+resource "aws_appsync_resolver" "auto_detect_sections" {
+  api_id      = var.appsync_api_id
+  type        = "Mutation"
+  field       = "autoDetectSections"
+  data_source = aws_appsync_datasource.discovery_lambda.name
+}
+
+# Start the multi-document discovery Step Functions pipeline
+resource "aws_appsync_resolver" "start_multi_doc_discovery" {
+  api_id      = var.appsync_api_id
+  type        = "Mutation"
+  field       = "startMultiDocDiscovery"
+  data_source = aws_appsync_datasource.discovery_lambda.name
+}
+
+# Presigned URL for uploading a zip file of documents for multi-doc discovery
+resource "aws_appsync_resolver" "upload_multi_doc_discovery_zip" {
+  api_id      = var.appsync_api_id
+  type        = "Mutation"
+  field       = "uploadMultiDocDiscoveryZip"
+  data_source = aws_appsync_datasource.discovery_lambda.name
+}
