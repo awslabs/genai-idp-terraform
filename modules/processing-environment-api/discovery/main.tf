@@ -308,13 +308,52 @@ resource "random_id" "processor_build_id" {
   }
 }
 
-# Source code archive for processor
-data "archive_file" "discovery_processor_code" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../sources/src/lambda/discovery_processor"
-  output_path = "${local.module_build_dir}/discovery-processor.zip_${random_id.processor_build_id.hex}"
+# Discovery processor source directory (raw Lambda code + requirements.txt)
+locals {
+  discovery_processor_src = "${path.module}/../../../sources/src/lambda/discovery_processor"
+  # Staging directory where we assemble the source plus pip-installed
+  # dependencies before zipping. The SAM-based reference build installs each
+  # function's requirements.txt automatically; the archive_file approach does
+  # not, so we stage explicitly here.
+  discovery_processor_stage = "${local.module_build_dir}/discovery_processor_pkg"
+}
+
+# Stage processor source and install its requirements.txt (aws-requests-auth,
+# used to SigV4-sign AppSync GraphQL status callbacks). Without this the
+# function crashes at import with "No module named 'aws_requests_auth'".
+resource "null_resource" "discovery_processor_build" {
+  triggers = {
+    # Rebuild when the handler or its requirements change.
+    source_hash       = filesha256("${local.discovery_processor_src}/index.py")
+    requirements_hash = filesha256("${local.discovery_processor_src}/requirements.txt")
+  }
+
+  provisioner "local-exec" {
+    # Clean the staging dir, copy source, then pip-install requirements into it.
+    # aws-requests-auth is pure Python (only needs requests, already in the
+    # idp_common layer), so no platform-specific wheels are required.
+    command = <<-EOT
+      set -e
+      rm -rf "${local.discovery_processor_stage}"
+      mkdir -p "${local.discovery_processor_stage}"
+      cp -r "${local.discovery_processor_src}/." "${local.discovery_processor_stage}/"
+      python3 -m pip install \
+        -r "${local.discovery_processor_src}/requirements.txt" \
+        -t "${local.discovery_processor_stage}" \
+        --no-cache-dir --upgrade
+    EOT
+  }
 
   depends_on = [null_resource.create_module_build_dir]
+}
+
+# Source code archive for processor (staged source + dependencies)
+data "archive_file" "discovery_processor_code" {
+  type        = "zip"
+  source_dir  = local.discovery_processor_stage
+  output_path = "${local.module_build_dir}/discovery-processor.zip_${random_id.processor_build_id.hex}"
+
+  depends_on = [null_resource.discovery_processor_build]
 }
 
 # Discovery Processor Lambda function
