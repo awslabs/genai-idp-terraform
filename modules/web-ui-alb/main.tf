@@ -68,8 +68,11 @@ resource "aws_vpc_security_group_egress_rule" "endpoint_to_alb" {
 }
 
 # Optional: app Lambdas reach S3 through the same VPCE (presigned URLs).
+# Gated on manage_lambda_sg_rules (a plan-known bool) rather than on
+# lambda_security_group_id != null, so the count is determinable even when the
+# Lambda security group is created in the same apply (its id is unknown at plan).
 resource "aws_vpc_security_group_ingress_rule" "endpoint_from_lambda" {
-  count                        = var.lambda_security_group_id != null ? 1 : 0
+  count                        = var.manage_lambda_sg_rules ? 1 : 0
   security_group_id            = aws_security_group.endpoint.id
   ip_protocol                  = "tcp"
   from_port                    = 443
@@ -79,7 +82,7 @@ resource "aws_vpc_security_group_ingress_rule" "endpoint_from_lambda" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "lambda_to_endpoint" {
-  count                        = var.lambda_security_group_id != null ? 1 : 0
+  count                        = var.manage_lambda_sg_rules ? 1 : 0
   security_group_id            = var.lambda_security_group_id
   ip_protocol                  = "tcp"
   from_port                    = 443
@@ -169,11 +172,14 @@ data "aws_network_interface" "vpce" {
 }
 
 resource "aws_lb_target_group_attachment" "s3" {
-  count             = length(var.subnet_ids)
-  target_group_arn  = aws_lb_target_group.s3.arn
-  target_id         = data.aws_network_interface.vpce[count.index].private_ip
-  port              = 443
-  availability_zone = "all"
+  count            = length(var.subnet_ids)
+  target_group_arn = aws_lb_target_group.s3.arn
+  target_id        = data.aws_network_interface.vpce[count.index].private_ip
+  port             = 443
+  # The VPCE ENI IPs are inside the VPC, so the target's AZ must be the ENI's
+  # actual AZ. "all" is only valid for IP targets outside the VPC (on-prem or
+  # peered) and is rejected by ELB for in-VPC IPs.
+  availability_zone = data.aws_network_interface.vpce[count.index].availability_zone
 }
 
 ###########################################################################

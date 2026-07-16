@@ -787,6 +787,7 @@ module "web_ui_alb" {
   web_ui_bucket_name       = module.web_ui[0].bucket.bucket_name
   logging_bucket_name      = var.web_ui.logging_enabled ? local.logging_bucket_name : null
   lambda_security_group_id = var.web_ui.alb.lambda_security_group_id
+  manage_lambda_sg_rules   = var.web_ui.alb.manage_lambda_sg_rules
 
   tags = var.tags
 }

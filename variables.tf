@@ -378,6 +378,10 @@ variable "web_ui" {
       scheme                   = optional(string, "internal")
       allowed_cidrs            = optional(list(string), [])
       lambda_security_group_id = optional(string, null)
+      # Explicit opt-in for the Lambda <-> S3 VPCE 443 rules. Set true (with
+      # lambda_security_group_id) to create them; kept separate from the id so
+      # `count` in the module stays plan-known even for a same-apply Lambda SG.
+      manage_lambda_sg_rules = optional(bool, false)
     }), {})
 
     # Presigned-URL-via-VPCE settings (mirrors upstream

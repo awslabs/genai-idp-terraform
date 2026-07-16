@@ -58,6 +58,12 @@ variable "lambda_security_group_id" {
   default     = null
 }
 
+variable "manage_lambda_sg_rules" {
+  description = "Whether to create the app-Lambda <-> S3 VPC endpoint 443 rules (uses lambda_security_group_id). Kept as an explicit flag rather than deriving it from lambda_security_group_id != null so `count` stays known at plan time even when the Lambda security group is created in the same apply."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags applied to all resources."
   type        = map(string)
