@@ -265,6 +265,16 @@ resource "aws_iam_policy" "discovery_processor_policy" {
           "textract:DetectDocumentText"
         ]
         Resource = "*"
+      },
+      {
+        # The processor publishes Bedrock token/latency metrics via
+        # cloudwatch:PutMetricData. This is best-effort telemetry (jobs still
+        # complete without it), but the missing grant produced AccessDenied
+        # error spam in the logs. PutMetricData does not support resource-level
+        # scoping, so "*" is required.
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
       }
     ]
   })
