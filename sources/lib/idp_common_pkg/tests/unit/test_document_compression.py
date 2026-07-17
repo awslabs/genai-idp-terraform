@@ -169,6 +169,29 @@ class TestDocumentCompression:
         assert restored_document.input_key == self.document.input_key
         assert restored_document.output_bucket == self.document.output_bucket
 
+    @mock_aws
+    def test_round_trip_with_hash_in_document_id(self):
+        """Regression: document ids containing '#' must round-trip.
+
+        decompress() previously used urllib.parse.urlparse to extract the S3
+        key, which treats '#' as a fragment delimiter and silently truncated
+        keys like 'compressed_documents/Borrowing_Notice_#2.pdf/..._state.json',
+        causing a NoSuchKey error on GetObject. Verify a '#' id survives a full
+        compress -> decompress cycle.
+        """
+        s3_client = boto3.client("s3", region_name="us-east-1")
+        s3_client.create_bucket(Bucket=self.bucket)
+
+        self.document.id = "Borrowing_Notice_#2.pdf"
+
+        compressed_data = self.document.compress(self.bucket, "ocr")
+        # The stored key must retain the '#'.
+        assert "#2.pdf" in compressed_data["s3_uri"]
+
+        restored_document = Document.decompress(self.bucket, compressed_data)
+        assert restored_document.id == "Borrowing_Notice_#2.pdf"
+        assert len(restored_document.pages) == len(self.document.pages)
+
     def test_section_ids_preserved_in_compressed_data(self):
         """Test that section IDs are preserved in compressed wrapper for Map step."""
         with patch("boto3.client") as mock_boto3:
