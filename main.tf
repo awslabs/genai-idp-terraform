@@ -309,6 +309,12 @@ module "processing_environment" {
     lambda_functions = module.processing_environment_api[0].lambda_functions
   } : null
 
+  # Optional post-processing Lambda hook. When set, document-completion events
+  # invoke this Lambda (mirrors the upstream PostProcessingLambdaHookFunctionArn
+  # CloudFormation parameter). Configured at deploy time — not editable via the
+  # runtime UI configuration.
+  custom_post_processor_arn = var.custom_post_processor_arn
+
   # Configuration
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days

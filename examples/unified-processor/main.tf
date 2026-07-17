@@ -595,5 +595,8 @@ module "genai_idp_accelerator" {
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
 
+  # Optional post-processing Lambda hook (deploy-time; see variable docs).
+  custom_post_processor_arn = var.custom_post_processor_arn
+
   tags = var.tags
 }

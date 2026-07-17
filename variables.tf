@@ -194,6 +194,19 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "custom_post_processor_arn" {
+  description = <<-EOT
+    Optional ARN of a custom Lambda function to invoke after document processing
+    completes (post-processing hook). Equivalent to the upstream
+    PostProcessingLambdaHookFunctionArn CloudFormation parameter. When set, the
+    processing environment grants invoke permission and passes the ARN to the
+    post-processing decompressor via CUSTOM_POST_PROCESSOR_ARN. Leave null to
+    disable. This is a deploy-time setting, not editable in the runtime UI.
+  EOT
+  type        = string
+  default     = null
+}
+
 #
 # Custom Configuration
 #

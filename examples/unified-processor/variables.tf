@@ -45,6 +45,18 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "custom_post_processor_arn" {
+  description = <<-EOT
+    Optional ARN of a custom Lambda function to invoke after document processing
+    completes (post-processing hook). Equivalent to the upstream
+    PostProcessingLambdaHookFunctionArn CloudFormation parameter. Leave null to
+    disable. Deploy-time setting — not editable in the runtime UI. See
+    docs/post-processing-lambda-hook.md.
+  EOT
+  type        = string
+  default     = null
+}
+
 # --------------------------------------------------------------------------
 # Dual-mode routing configuration
 # --------------------------------------------------------------------------
