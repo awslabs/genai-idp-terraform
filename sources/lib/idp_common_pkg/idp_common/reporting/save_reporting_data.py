@@ -11,7 +11,6 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 import boto3
 import pyarrow as pa
@@ -126,13 +125,15 @@ class SaveReportingData:
         Returns:
             Tuple of (bucket, key)
         """
-        parsed = urlparse(uri)
-        if parsed.scheme != "s3":
+        # Split on the first '/' rather than using urllib.parse.urlparse:
+        # object keys can contain '#' (e.g. "Report_#2.pdf/..."), which urlparse
+        # treats as a URL fragment delimiter and silently truncates.
+        if not uri.startswith("s3://"):
             raise ValueError(f"Not an S3 URI: {uri}")
 
-        bucket = parsed.netloc
-        # Remove leading slash from key
-        key = parsed.path.lstrip("/")
+        parts = uri[len("s3://"):].split("/", 1)
+        bucket = parts[0]
+        key = parts[1] if len(parts) > 1 else ""
 
         return bucket, key
 
