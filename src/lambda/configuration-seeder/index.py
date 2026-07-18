@@ -227,6 +227,23 @@ def _put_schema(table, schema: Dict[str, Any]) -> Dict[str, Any]:
     return table.put_item(Item=item)
 
 
+def _put_default_pricing(table, pricing: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Write the DefaultPricing item read by the getPricing resolver.
+
+    Mirrors upstream, which loads config_library/pricing.yaml into the
+    ConfigurationTable as ``Configuration = "DefaultPricing"`` at deploy time.
+    The pricing.yaml top-level is ``{"pricing": [ ... ]}``; the config item
+    stores that dict directly. Numeric prices are stringified to match how the
+    rest of the configuration is persisted (idp_common coerces them back).
+    """
+    item = {
+        "Configuration": "DefaultPricing",
+        **_stringify_values(pricing),
+    }
+    return table.put_item(Item=item)
+
+
 def _delete_legacy_default_if_present(table) -> Optional[Dict[str, Any]]:
     """
     Remove the v0.4.8 legacy ``Default`` item if it exists.
@@ -261,6 +278,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
       ``Configuration = "Default"`` item for fresh-deploy recovery.
     * ``{"Key": "Schema", "Value": {...schema dict...}}`` — writes
       ``Configuration = "Schema"``.
+    * ``{"Key": "DefaultPricing", "Value": {"pricing": [...]}}`` — writes
+      ``Configuration = "DefaultPricing"`` (parsed config_library/pricing.yaml),
+      read by the getPricing resolver for the UI Pricing page.
 
     Optional fields on a Default invocation:
 
@@ -278,8 +298,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         value = event["Value"]
         table_name = os.environ["TABLE_NAME"]
 
-        if key not in {"Default", "Schema"}:
-            raise ValueError(f"Invalid Key: {key!r}. Must be 'Default' or 'Schema'.")
+        if key not in {"Default", "Schema", "DefaultPricing"}:
+            raise ValueError(
+                f"Invalid Key: {key!r}. Must be 'Default', 'Schema', or "
+                "'DefaultPricing'."
+            )
 
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(table_name)
@@ -290,6 +313,25 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "statusCode": 200,
                 "body": json.dumps(
                     {"message": "Stored Schema", "key": "Schema", "response": response},
+                    default=str,
+                ),
+            }
+
+        if key == "DefaultPricing":
+            if not isinstance(value, dict) or "pricing" not in value:
+                raise ValueError(
+                    "DefaultPricing Value must be a dict with a 'pricing' key "
+                    f"(the parsed pricing.yaml); got {type(value).__name__}."
+                )
+            response = _put_default_pricing(table, value)
+            return {
+                "statusCode": 200,
+                "body": json.dumps(
+                    {
+                        "message": "Stored DefaultPricing",
+                        "key": "DefaultPricing",
+                        "response": response,
+                    },
                     default=str,
                 ),
             }
