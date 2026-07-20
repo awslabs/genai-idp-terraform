@@ -932,6 +932,13 @@ module "processor_attachment" {
   workflow_tracker_function_arn  = module.processing_environment.workflow_tracker_function_arn
   workflow_tracker_function_name = module.processing_environment.workflow_tracker_function_name
 
+  # Post-processing Lambda hook: when custom_post_processor_arn is set, the
+  # attachment creates the EventBridge rule that fires the decompressor (which
+  # then invokes the hook) on workflow completion.
+  post_processing_decompressor_function_arn  = module.processing_environment.post_processing_decompressor_function_arn
+  post_processing_decompressor_function_name = module.processing_environment.post_processing_decompressor_function_name
+  custom_post_processor_arn                  = var.custom_post_processor_arn
+
   # S3 bucket configuration
   input_bucket_arn   = var.input_bucket_arn
   output_bucket_arn  = var.output_bucket_arn
