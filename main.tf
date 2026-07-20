@@ -423,8 +423,12 @@ module "processing_environment_api" {
 
   # Process Changes configuration (Edit Sections feature)
   enable_edit_sections = local.process_changes_config.enabled
-  document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
-  document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
+  # Pass the document queue unconditionally: the reprocess resolver re-enqueues
+  # documents and needs QUEUE_URL regardless of the Edit Sections feature. The
+  # edit-sections feature stays independently gated on enable_edit_sections in
+  # the API module, so this does not enable it.
+  document_queue_url = module.processing_environment.document_queue_url
+  document_queue_arn = module.processing_environment.document_queue_arn
 
   # v0.4.8 feature flags
   enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
