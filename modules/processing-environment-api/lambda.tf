@@ -164,7 +164,18 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
 
   environment {
     variables = {
-      INPUT_BUCKET = local.input_bucket_name
+      # The resolver builds an AppSync document service at import time
+      # (create_document_service defaults to AppSync mode), which requires
+      # APPSYNC_API_URL — without it the Lambda crashes at init with
+      # "AppSync API URL must be provided...", so Reprocess fails. uris["GRAPHQL"]
+      # already includes the https:// scheme and /graphql path, so pass it bare.
+      # It also re-enqueues the document (QUEUE_URL), clears prior output
+      # (OUTPUT_BUCKET), and stamps a TTL (DATA_RETENTION_IN_DAYS).
+      APPSYNC_API_URL        = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+      INPUT_BUCKET           = local.input_bucket_name
+      OUTPUT_BUCKET          = local.output_bucket_name
+      QUEUE_URL              = local.document_queue_url != null ? local.document_queue_url : ""
+      DATA_RETENTION_IN_DAYS = tostring(var.data_retention_in_days)
     }
   }
 
@@ -185,6 +196,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
   depends_on = [
     aws_iam_role_policy_attachment.reprocess_document_resolver_logs_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_s3_attachment,
+    aws_iam_role_policy_attachment.reprocess_document_resolver_queue_appsync_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_kms_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_vpc_attachment
   ]
