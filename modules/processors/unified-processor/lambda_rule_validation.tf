@@ -149,7 +149,7 @@ resource "aws_lambda_function" "rule_validation_function" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 900
-  memory_size      = 4096
+  memory_size      = var.rule_validation_memory_size
   filename         = data.archive_file.rule_validation_lambda[0].output_path
   source_code_hash = data.archive_file.rule_validation_lambda[0].output_base64sha256
 
@@ -193,7 +193,7 @@ resource "aws_lambda_function" "rule_validation_orchestration_function" {
   handler          = "index.handler"
   runtime          = "python3.12"
   timeout          = 900
-  memory_size      = 4096
+  memory_size      = var.rule_validation_memory_size
   filename         = data.archive_file.rule_validation_orchestration_lambda[0].output_path
   source_code_hash = data.archive_file.rule_validation_orchestration_lambda[0].output_base64sha256
 

@@ -475,7 +475,8 @@ module "genai_idp_accelerator" {
   # "Document KB" tool can query ingested documents. chat_with_document is left to
   # the root default (on), which pairs with the KB for retrieval-backed Q&A.
   api = {
-    enabled = true
+    enabled            = true
+    chat_with_document = var.api.chat_with_document
     knowledge_base = {
       enabled            = var.create_knowledge_base
       knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)

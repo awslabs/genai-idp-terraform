@@ -126,6 +126,12 @@ variable "enable_rule_validation" {
   default     = false
 }
 
+variable "rule_validation_memory_size" {
+  description = "Memory (MB) for the rule-validation Lambdas (only created when enable_rule_validation = true). Defaults to 4096; lower for accounts whose Lambda memory quota caps below 4096 MB."
+  type        = number
+  default     = 4096
+}
+
 # =============================================================================
 # LAMBDA HOOK INFERENCE VARIABLES (v0.4.15+)
 # =============================================================================
