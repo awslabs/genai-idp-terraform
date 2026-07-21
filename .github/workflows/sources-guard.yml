@@ -1,0 +1,52 @@
+# Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Guard: `sources/` is a read-only, 1:1 vendored snapshot of the upstream
+# CloudFormation IDP accelerator. It may only change via the isolated upstream
+# sync process (branch `chore/sync-sources-*` or a PR labelled `upstream-sync`).
+# Any other PR that modifies `sources/` fails this required check.
+name: sources-guard
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  no-sources-edits:
+    name: no-sources-edits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Block edits to vendored sources/
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          # Allow the isolated upstream-sync path only.
+          if [[ "$HEAD_REF" == chore/sync-sources-* ]] || [[ ",$LABELS," == *",upstream-sync,"* ]]; then
+            echo "Sync PR detected (branch=$HEAD_REF labels=$LABELS) -- sources/ edits allowed."
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "$BASE_SHA"...HEAD -- sources/ || true)"
+          if [[ -n "$changed" ]]; then
+            echo "::error::This PR modifies sources/, which is a read-only vendored snapshot."
+            echo "Offending files:"
+            echo "$changed" | sed 's/^/  - /'
+            echo ""
+            echo "sources/ may only change via the upstream-sync process:"
+            echo "  - branch named chore/sync-sources-*, or"
+            echo "  - a PR labelled 'upstream-sync'."
+            exit 1
+          fi
+
+          echo "No sources/ edits detected -- OK."

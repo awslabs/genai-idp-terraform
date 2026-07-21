@@ -1,0 +1,37 @@
+# Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Auto-close Dependabot PRs that target the vendored `sources/` tree.
+#
+# Dependabot *security* updates fire off the whole-repo dependency graph and
+# ignore the scoping in dependabot.yml, so they open PRs against lockfiles
+# inside `sources/` (e.g. dependabot/npm_and_yarn/sources/src/ui/axios-*).
+# Dependency fixes under `sources/` must come from an upstream re-sync, never a
+# standalone Dependabot PR, so we close these automatically.
+#
+# `pull_request_target` runs from the base branch (no untrusted checkout) and
+# gives the token write access to close/comment.
+name: dependabot-sources-autoclose
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  autoclose:
+    if: >
+      github.actor == 'dependabot[bot]' &&
+      contains(github.head_ref, '/sources/')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Comment and close
+        run: |
+          gh pr comment "$PR" --body "Auto-closing: this PR modifies \`sources/\`, the vendored 1:1 snapshot of the upstream CloudFormation IDP accelerator. Dependency fixes under \`sources/\` must come from an upstream re-sync (see the upstream-sync process), not a standalone Dependabot PR."
+          gh pr close "$PR"

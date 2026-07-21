@@ -1,23 +1,26 @@
 # Dependabot configuration
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
-# IMPORTANT: every ecosystem must exclude `sources/**`. The `sources/`
-# directory is a snapshot of the upstream CloudFormation IDP repo
-# (`accelerated-intelligent-document-processing-on-aws`) at a specific
-# release. Dependency updates inside `sources/` MUST come from a fresh
-# upstream sync, not from independent Dependabot PRs against this repo.
+# IMPORTANT: `sources/` is a 1:1 vendored snapshot of the upstream CloudFormation
+# IDP repo (`accelerated-intelligent-document-processing-on-aws`) at a specific
+# release. Dependency updates inside `sources/` MUST come from a fresh upstream
+# sync, not from independent Dependabot PRs against this repo.
+#
+# Version updates below are scoped (via `directories`) so they never touch
+# `sources/`. Dependabot *security* updates ignore this scoping and run off the
+# whole-repo dependency graph, so any security PR they open against a lockfile
+# under `sources/` is auto-closed by
+# .github/workflows/dependabot-sources-autoclose.yml.
 
 version: 2
 updates:
   # Terraform configuration in /, /modules/**, and /examples/**.
-  # No .tf files exist under sources/, but exclude defensively.
+  # No .tf files exist under sources/, so this scoping never reaches it.
   - package-ecosystem: "terraform"
     directories:
       - "/"
       - "/modules/**"
       - "/examples/**"
-    exclude-paths:
-      - "sources/**"
     schedule:
       interval: "weekly"
     labels:
@@ -27,8 +30,6 @@ updates:
   # GitHub Actions workflows under .github/workflows.
   - package-ecosystem: "github-actions"
     directory: "/"
-    exclude-paths:
-      - "sources/**"
     schedule:
       interval: "weekly"
     labels:
@@ -37,11 +38,9 @@ updates:
 
   # Python: only the docs site requirements. Lambda function
   # requirements.txt files all live under sources/ and are managed
-  # upstream — those must be excluded.
+  # upstream, so they are intentionally not registered here.
   - package-ecosystem: "pip"
     directory: "/docs"
-    exclude-paths:
-      - "sources/**"
     schedule:
       interval: "weekly"
     labels:
