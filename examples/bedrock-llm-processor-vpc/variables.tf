@@ -149,6 +149,7 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, false)
       guardrail_id_and_version = optional(string, null)
+      processor_memory_size    = optional(number, 4096)
     }), { enabled = false })
 
     process_changes = optional(object({

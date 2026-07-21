@@ -218,7 +218,7 @@ resource "aws_lambda_function" "chat_processor" {
   handler     = "index.handler"
   runtime     = "python3.12"
   timeout     = 900
-  memory_size = 4096
+  memory_size = var.processor_memory_size
   description = "Long-running Chat-with-Document processor (streams Bedrock tokens via AppSync)"
 
   layers      = local.layers

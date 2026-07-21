@@ -85,6 +85,7 @@ module "chat_with_document" {
 
   config                   = local.chat_with_document_processor_config
   guardrail_id_and_version = local.chat_with_document_config.guardrail_id_and_version
+  processor_memory_size    = try(local.chat_with_document_config.processor_memory_size, 4096)
 
   encryption_key_arn  = var.encryption_key_arn
   data_retention_days = var.data_tracking_retention_days
