@@ -113,6 +113,13 @@ to enrich, validate, or react to results mid-pipeline. The host's
 `PipelineHooksDispatcherFunction` invokes registered hooks after each step; the
 mechanism is inert until a feature registers one.
 
+> **Terraform deployments:** the unified processor state machine currently
+> wires five of these points (`postOcr`, `postClassification`,
+> `postExtraction`, `postAssessment`, `postSummarization`).
+> `postRuleValidation` is not wired because the Terraform workflow has no
+> rule-validation state, so a feature registering a `postRuleValidation` hook
+> is accepted but never invoked on that deployment.
+
 **1. Write the hook Lambda.** It's invoked synchronously with:
 
 ```json

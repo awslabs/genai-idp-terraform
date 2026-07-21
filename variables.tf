@@ -378,6 +378,10 @@ variable "web_ui" {
       scheme                   = optional(string, "internal")
       allowed_cidrs            = optional(list(string), [])
       lambda_security_group_id = optional(string, null)
+      # Explicit opt-in for the Lambda <-> S3 VPCE 443 rules. Set true (with
+      # lambda_security_group_id) to create them; kept separate from the id so
+      # `count` in the module stays plan-known even for a same-apply Lambda SG.
+      manage_lambda_sg_rules = optional(bool, false)
     }), {})
 
     # Presigned-URL-via-VPCE settings (mirrors upstream
@@ -690,13 +694,15 @@ variable "seed_managed_configs" {
   default     = true
 }
 
-# Feature Platform (installable features). Default-off. Requires the API
-# (AppSync) to be enabled. Mirrors upstream IDP v0.5.16 EnableFeaturePlatform +
-# related parameters.
+# Feature Platform (installable features). Default-ON to match upstream IDP
+# v0.5.16 (EnableFeaturePlatform defaults to 'true'). Requires the API
+# (AppSync) to be enabled, which is the default (`api.enabled = true`). Set
+# `enabled = false` to remove the platform entirely (no platform resources
+# are created). Mirrors upstream EnableFeaturePlatform + related parameters.
 variable "feature_platform" {
-  description = "Configuration for the Feature Platform (installable features). Default-off; requires the API enabled."
+  description = "Configuration for the Feature Platform (installable features). Enabled by default to match upstream; requires the API enabled. Set enabled=false to remove the platform entirely."
   type = object({
-    enabled                     = optional(bool, false)
+    enabled                     = optional(bool, true)
     simulator_endpoint          = optional(string, "")
     subscription_mode           = optional(string, "auto-subscribe")
     default_customer_identifier = optional(string, "")

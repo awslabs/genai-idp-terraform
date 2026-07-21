@@ -231,3 +231,9 @@ variable "build" {
     ui_local            = false
   }
 }
+
+variable "web_ui_alb_certificate_arn" {
+  description = "ACM certificate ARN for the internal ALB HTTPS listener. When set, the Web UI is served via ALB hosting (WebUIHosting=ALB) in this isolated VPC; when null, the Web UI is disabled."
+  type        = string
+  default     = null
+}

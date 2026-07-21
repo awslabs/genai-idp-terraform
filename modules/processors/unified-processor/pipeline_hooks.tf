@@ -3,13 +3,22 @@
 #
 # Pipeline Hooks Dispatcher
 #
-# Invoked by the state machine at post-step extension points (postOcr,
-# postClassification, postExtraction, postAssessment, postRuleValidation,
-# postSummarization). Reads the active configuration version's
-# `<step>.postHook` list from the ConfigurationTable and fans out to the
-# registered hook Lambdas in order. Inert by default: with no `postHook`
-# config the dispatcher returns after a single config read and the pipeline
-# is unchanged. Mirrors upstream IDP v0.5.16 (patterns/unified).
+# The dispatcher Lambda itself understands all six upstream post-step
+# extension points (postOcr, postClassification, postExtraction,
+# postAssessment, postRuleValidation, postSummarization). It reads the active
+# configuration version's `<step>.postHook` list from the ConfigurationTable
+# and fans out to the registered hook Lambdas in order. Inert by default:
+# with no `postHook` config the dispatcher returns after a single config read
+# and the pipeline is unchanged. Mirrors upstream IDP v0.5.16 (patterns/unified).
+#
+# NOTE: this workflow's state machine (main.tf) wires only FIVE of the six
+# points — postOcr, postClassification, postExtraction, postAssessment,
+# postSummarization. `postRuleValidation` is intentionally NOT wired because
+# the Terraform-authored unified workflow has no rule-validation state to hang
+# it on (upstream's ASL has RuleValidation -> RuleValidationOrchestration ->
+# PostRuleValidationHook; those states are not ported here). If the
+# rule-validation step is added to main.tf, wire its postRuleValidation hook
+# the same way as the other five.
 
 data "archive_file" "pipeline_hooks_dispatcher" {
   type        = "zip"

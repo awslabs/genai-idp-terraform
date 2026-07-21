@@ -54,9 +54,13 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
   name  = "UICodeBuildTriggerLambdaPolicy"
   role  = aws_iam_role.ui_codebuild_trigger_lambda_role[0].id
 
+  # The CloudFront invalidation statement is appended via concat() only when a
+  # distribution exists (CloudFront hosting). In ALB mode there is no
+  # distribution, so the statement is omitted entirely rather than emitted with
+  # an empty Resource list (IAM rejects statements without resources).
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect = "Allow"
         Action = [
@@ -98,23 +102,25 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
       {
         Effect = "Allow"
         Action = [
-          "cloudfront:ListInvalidations",
-          "cloudfront:GetInvalidation"
-        ]
-        Resource = local.cloudfront_distribution_id != null ? [
-          "arn:${data.aws_partition.current.partition}:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${local.cloudfront_distribution_id}"
-        ] : []
-      },
-      {
-        Effect = "Allow"
-        Action = [
           "ssm:GetParameter"
         ]
         Resource = [
           aws_ssm_parameter.web_ui_settings.arn
         ]
       }
-    ]
+      ],
+      local.cloudfront_distribution_id != null ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "cloudfront:ListInvalidations",
+            "cloudfront:GetInvalidation"
+          ]
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${local.cloudfront_distribution_id}"
+          ]
+        }
+    ] : [])
   })
 }
 
