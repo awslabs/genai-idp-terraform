@@ -145,6 +145,12 @@ variable "chat_with_document_enabled" {
   default     = true
 }
 
+variable "chat_processor_memory_size" {
+  description = "Memory (MB) for the Chat-with-Document processor Lambda. Defaults to 4096 (upstream). Lower to 3008 for accounts whose Lambda memory service quota caps below 4096 MB."
+  type        = number
+  default     = 4096
+}
+
 variable "create_discovery" {
   description = "Enable the Discovery feature (Web UI 'Discovery' tab). Provisions the discovery S3 bucket, tracking table, SQS queue, upload/processor Lambdas, and AppSync resolvers, and populates the UI's DiscoveryBucket setting. Discovery uses Bedrock to auto-detect document classes/schemas from uploaded samples; with no discovery.* model configured it defaults to global.anthropic.claude-sonnet-4-6 (must be enabled in Bedrock for this region). Default on."
   type        = bool

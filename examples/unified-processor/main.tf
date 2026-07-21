@@ -541,8 +541,11 @@ module "genai_idp_accelerator" {
   # false the KB is not created and knowledge_base_arn is null, leaving
   # chat-with-document to operate without a KB.
   api = {
-    enabled            = true
-    chat_with_document = { enabled = var.chat_with_document_enabled }
+    enabled = true
+    chat_with_document = {
+      enabled               = var.chat_with_document_enabled
+      processor_memory_size = var.chat_processor_memory_size
+    }
     knowledge_base = {
       enabled            = var.create_knowledge_base
       knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)
