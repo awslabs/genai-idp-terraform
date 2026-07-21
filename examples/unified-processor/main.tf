@@ -182,6 +182,63 @@ resource "aws_s3_bucket" "working_bucket" {
   tags          = var.tags
 }
 
+# Reporting/analytics bucket. Created only when agent analytics is enabled:
+# the reporting module lands Parquet + Glue/Athena results here and the
+# analytics agent queries them via Athena.
+resource "aws_s3_bucket" "reporting_bucket" {
+  count         = var.enable_agent_analytics ? 1 : 0
+  bucket        = "${var.prefix}-reporting-${random_string.suffix.result}"
+  force_destroy = true
+  tags          = var.tags
+}
+
+# Harden the reporting bucket to match the processing-environment example:
+# versioning, KMS encryption, and a public access block.
+resource "aws_s3_bucket_versioning" "reporting_bucket" {
+  count  = var.enable_agent_analytics ? 1 : 0
+  bucket = aws_s3_bucket.reporting_bucket[0].id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "reporting_bucket" {
+  count  = var.enable_agent_analytics ? 1 : 0
+  bucket = aws_s3_bucket.reporting_bucket[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.encryption_key.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "reporting_bucket" {
+  count  = var.enable_agent_analytics ? 1 : 0
+  bucket = aws_s3_bucket.reporting_bucket[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Glue catalog database for reporting/analytics. The reporting module creates
+# the Glue *tables* and crawler but not the database itself, so the caller must
+# provide it. Referencing .name below wires the ordering dependency.
+#
+# The suffix keeps the DB name unique so multiple stacks can coexist in one
+# account/region (matches the processing-environment example). Hyphens in the
+# prefix are replaced with underscores because Glue database names disallow them.
+resource "aws_glue_catalog_database" "reporting" {
+  count       = var.enable_agent_analytics ? 1 : 0
+  name        = "${replace(var.prefix, "-", "_")}_reporting_${random_string.suffix.result}"
+  description = "Reporting/analytics database for the unified-processor example (Glue tables + Athena)"
+  tags        = var.tags
+}
+
 # Optional logging bucket (created conditionally)
 resource "aws_s3_bucket" "logging_bucket" {
   count         = var.web_ui.logging_enabled ? 1 : 0
@@ -494,7 +551,25 @@ module "genai_idp_accelerator" {
     }
     # Discovery feature (Web UI "Discovery" tab); provisions the discovery pipeline.
     discovery = { enabled = var.create_discovery }
+
+    # Agent Companion Chat: the Web UI agent chat panel + the agents that
+    # populate "Available Agents".
+    #   enable_agent_companion_chat -> the chat panel backend
+    #   agent_analytics             -> the analytics agent (requires reporting below)
+    #   enable_mcp                  -> custom MCP agents (AgentCore Gateway)
+    enable_agent_companion_chat = var.enable_agent_companion_chat
+    agent_analytics             = { enabled = var.enable_agent_analytics }
+    enable_mcp                  = var.enable_mcp
   }
+
+  # Reporting is required by agent_analytics (analytics agent queries via Athena).
+  # Created only when analytics is enabled; the bucket + Glue DB above are gated
+  # on the same flag.
+  reporting = var.enable_agent_analytics ? {
+    enabled       = true
+    bucket_arn    = aws_s3_bucket.reporting_bucket[0].arn
+    database_name = aws_glue_catalog_database.reporting[0].name
+  } : { enabled = false }
 
   rbac = var.rbac
 
