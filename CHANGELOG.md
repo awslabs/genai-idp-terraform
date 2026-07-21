@@ -79,6 +79,24 @@ CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
   `tests/validate-web-ui-build-check.sh` unit test.
 - **Documentation page** `docs/content/deployment-guides/local-web-ui-build.md`
   covering Node.js prerequisites and the local UI build flow.
+- **Configurable Chat-with-Document and rule-validation Lambda memory** (#157).
+  The Chat-with-Document processor Lambda and the two rule-validation
+  Lambdas previously hardcoded `memory_size = 4096`, which fails
+  `CreateFunction` on accounts whose per-function Lambda memory service
+  quota is below 4096 MB (some sandbox accounts cap at 3008), blocking a
+  vanilla deploy of any example that enables chat (on by default). Now
+  configurable, defaulting to 4096 so existing behavior is unchanged:
+  - `modules/features/chat-with-document` — new `processor_memory_size`
+    variable (default `4096`, validated `128`-`10240`) drives the
+    processor Lambda memory; surfaced on the root module via
+    `api.chat_with_document.processor_memory_size`.
+  - All processor examples accept it through their `api.chat_with_document`
+    object type; `examples/unified-processor` adds a
+    `chat_processor_memory_size` convenience variable.
+  - `modules/processors/unified-processor` — new
+    `rule_validation_memory_size` variable (default `4096`) for the
+    rule-validation Lambdas (created only when `enable_rule_validation =
+    true`), threaded through the `bedrock-llm-processor` wrapper.
 
 ### Changed
 
