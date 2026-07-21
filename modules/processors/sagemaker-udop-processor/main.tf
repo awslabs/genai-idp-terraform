@@ -45,6 +45,9 @@ module "engine" {
 
   name = var.name
 
+  # Lambda architecture (must match the idp_common layer build architecture).
+  lambda_architecture = var.lambda_architecture
+
   classification_backend                = "sagemaker"
   classification_sagemaker_endpoint_arn = var.classification_endpoint_arn
 

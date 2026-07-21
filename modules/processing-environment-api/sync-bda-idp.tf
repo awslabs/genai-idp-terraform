@@ -88,6 +88,7 @@ data "archive_file" "sync_bda_idp" {
 }
 
 resource "aws_lambda_function" "sync_bda_idp" {
+  architectures    = [var.lambda_architecture]
   function_name    = "${local.api_name}-sync-bda-idp"
   role             = aws_iam_role.sync_bda_idp.arn
   filename         = data.archive_file.sync_bda_idp.output_path

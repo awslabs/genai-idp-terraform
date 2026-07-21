@@ -27,6 +27,7 @@ from botocore.exceptions import (
 from urllib3.exceptions import ReadTimeoutError as Urllib3ReadTimeoutError
 
 from .model_utils import parse_model_id
+from .openai_responses import invoke_responses_api, is_openai_responses_model
 from .session import get_bedrock_session
 
 # Sentinel value for LambdaHook model selection
@@ -67,9 +68,11 @@ DEFAULT_INITIAL_BACKOFF = 2  # seconds
 DEFAULT_MAX_BACKOFF = 300  # 5 minutes
 
 
-# Claude 4.7+ model base names that don't support temperature/top_k/top_p parameters.
-# These parameters are deprecated for these models and cause runtime errors.
-# Add new model base names here as needed (e.g., sonnet-4-7, haiku-4-7).
+# Claude 4.7 and later model base names that don't support
+# temperature/top_k/top_p parameters. These parameters are deprecated for these
+# models and cause runtime errors. The set covers Claude 4.7, 4.8, and any
+# future generations with the same behavior — add new base names here as
+# needed (e.g., sonnet-4-7, haiku-4-7, opus-4-9).
 #
 # NOTE: This set is consulted by BOTH the traditional Bedrock invocation path
 # (this file's BedrockClient.invoke_model) AND the agentic extraction path
@@ -77,6 +80,7 @@ DEFAULT_MAX_BACKOFF = 300  # 5 minutes
 # a new Claude 4.7+ variant here, no other code changes are required.
 _CLAUDE_4_7_BASE_NAMES = {
     "anthropic.claude-opus-4-7",
+    "anthropic.claude-opus-4-8",
 }
 
 
@@ -112,7 +116,11 @@ _is_claude_4_7_model = is_claude_4_7_model
 # Used to check inference profiles by resolving their underlying foundation model
 _CACHEPOINT_BASE_MODELS = set()
 
-# Models that support cachePoint functionality
+# Models that support cachePoint functionality.
+# NOTE: OpenAI GPT-5.x models (openai.gpt-5.*) are intentionally NOT listed here.
+# They are served via the bedrock-mantle Responses API (see openai_responses.py)
+# and do not support Bedrock prompt-prefix caching; <<CACHEPOINT>> markers are
+# stripped for them during request translation.
 CACHEPOINT_SUPPORTED_MODELS = [
     "us.anthropic.claude-3-5-haiku-20241022-v1:0",
     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -122,6 +130,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "us.anthropic.claude-opus-4-6-v1:1m",
     "us.anthropic.claude-opus-4-7",
     "us.anthropic.claude-opus-4-7:1m",
+    "us.anthropic.claude-opus-4-8",
+    "us.anthropic.claude-opus-4-8:1m",
     "us.anthropic.claude-opus-4-1-20250805-v1:0",
     "us.anthropic.claude-opus-4-20250514-v1:0",
     "us.anthropic.claude-sonnet-4-20250514-v1:0",
@@ -144,6 +154,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "eu.anthropic.claude-opus-4-6-v1:1m",
     "eu.anthropic.claude-opus-4-7",
     "eu.anthropic.claude-opus-4-7:1m",
+    "eu.anthropic.claude-opus-4-8",
+    "eu.anthropic.claude-opus-4-8:1m",
     "eu.amazon.nova-lite-v1:0",
     "eu.amazon.nova-pro-v1:0",
     "eu.amazon.nova-2-lite-v1:0",
@@ -161,6 +173,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "global.anthropic.claude-opus-4-6-v1:1m",
     "global.anthropic.claude-opus-4-7",
     "global.anthropic.claude-opus-4-7:1m",
+    "global.anthropic.claude-opus-4-8",
+    "global.anthropic.claude-opus-4-8:1m",
 ]
 
 # Build set of base model names (without region/tier prefixes) for inference profile resolution.
@@ -352,6 +366,7 @@ class BedrockClient:
         context: str = "Unspecified",
         service_tier: Optional[str] = None,
         model_lambda_hook_arn: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Make the instance callable with the same signature as the original function.
@@ -389,6 +404,7 @@ class BedrockClient:
             context=context,
             service_tier=service_tier,
             model_lambda_hook_arn=model_lambda_hook_arn,
+            reasoning_effort=reasoning_effort,
         )
 
     def _preprocess_content_for_cachepoint(
@@ -480,6 +496,7 @@ class BedrockClient:
         context: str = "Unspecified",
         service_tier: Optional[str] = None,
         model_lambda_hook_arn: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Invoke a Bedrock model or custom Lambda hook with retry logic.
@@ -500,6 +517,8 @@ class BedrockClient:
             max_retries: Optional override for the instance's max_retries setting
             service_tier: Optional service tier (priority, standard, flex)
             model_lambda_hook_arn: Lambda function ARN (required when model_id is 'LambdaHook')
+            reasoning_effort: Reasoning effort for OpenAI Responses models
+                (minimal/low/medium/high). Ignored by other model families.
 
         Returns:
             Response object with metering information (same format for both Bedrock and Lambda)
@@ -518,13 +537,32 @@ class BedrockClient:
                 context=context,
             )
 
-        # Track total requests
-        self._put_metric("BedrockRequestsTotal", 1)
-
         # Use instance max_retries if not overridden
         effective_max_retries = (
             max_retries if max_retries is not None else self.max_retries
         )
+
+        # Route OpenAI GPT-5.x models to the bedrock-mantle Responses API. These
+        # models do NOT support the Converse API used below; they are served via
+        # an OpenAI-compatible REST endpoint. The backend translates the same
+        # (system_prompt, content) inputs and returns the identical
+        # {"response": ..., "metering": ...} structure, so callers are unaffected.
+        # <<CACHEPOINT>> markers are stripped during translation (prompt caching
+        # is not supported for these models).
+        if is_openai_responses_model(model_id):
+            return invoke_responses_api(
+                client=self,
+                model_id=model_id,
+                system_prompt=system_prompt,
+                content=content,
+                max_tokens=max_tokens,
+                max_retries=effective_max_retries,
+                context=context,
+                reasoning_effort=reasoning_effort,
+            )
+
+        # Track total requests
+        self._put_metric("BedrockRequestsTotal", 1)
 
         # Format system prompt if needed
         if isinstance(system_prompt, str):

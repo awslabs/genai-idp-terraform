@@ -21,6 +21,15 @@ output "graphql_url" {
   value       = aws_appsync_graphql_api.api.uris["GRAPHQL"]
 }
 
+# Fully-qualified AppSync GraphQL hostname (host portion of the GraphQL URL),
+# for Route 53 Private Hosted Zone setup in private-network (cross-VPC / hybrid)
+# topologies. Mirrors upstream v0.5.15 AppSyncEndpointForDNS. See
+# docs/deployment-private-network.md.
+output "appsync_endpoint_for_dns" {
+  description = "Fully-qualified AppSync GraphQL hostname for Route 53 Private Hosted Zone setup in private-network topologies."
+  value       = split("/", aws_appsync_graphql_api.api.uris["GRAPHQL"])[2]
+}
+
 output "realtime_url" {
   description = "The URL endpoint for the Realtime API"
   value       = aws_appsync_graphql_api.api.uris["REALTIME"]

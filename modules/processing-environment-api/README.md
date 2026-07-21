@@ -14,7 +14,7 @@
 | Name | Version |
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
 | <a name="provider_local"></a> [local](#provider\_local) | 2.9.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | 3.3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
@@ -115,6 +115,7 @@
 | [aws_appsync_resolver.update_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.update_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.update_pricing](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
+| [aws_appsync_resolver.update_test_set](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.upload_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.upload_test_set](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
 | [aws_appsync_resolver.validate_test_file_name](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appsync_resolver) | resource |
@@ -402,7 +403,7 @@
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket where source documents are stored | `string` | `null` | no |
 | <a name="input_introspection_config"></a> [introspection\_config](#input\_introspection\_config) | A value indicating whether the API to enable (ENABLED) or disable (DISABLED) introspection | `string` | `"ENABLED"` | no |
 | <a name="input_knowledge_base"></a> [knowledge\_base](#input\_knowledge\_base) | Knowledge base configuration object | <pre>object({<br/>    enabled                  = bool<br/>    knowledge_base_arn       = optional(string)<br/>    model_id                 = optional(string)<br/>    guardrail_id_and_version = optional(string)<br/>  })</pre> | <pre>{<br/>  "enabled": false,<br/>  "guardrail_id_and_version": null,<br/>  "knowledge_base_arn": null,<br/>  "model_id": null<br/>}</pre> | no |
-| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). | `string` | `"x86_64"` | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). | `string` | `"arm64"` | no |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket for Lambda layers | `string` | `null` | no |
 | <a name="input_lambda_local"></a> [lambda\_local](#input\_lambda\_local) | When true, build Lambda layers locally using a container runtime instead of via AWS CodeBuild. | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
@@ -419,6 +420,7 @@
 | <a name="input_public_artifacts_region"></a> [public\_artifacts\_region](#input\_public\_artifacts\_region) | Region of public\_artifacts\_bucket, threaded into the resolver's PUBLIC\_ARTIFACTS\_REGION env var. When empty, the shipped resolver defaults to AWS\_REGION. Only used when public\_artifacts\_bucket is set. | `string` | `""` | no |
 | <a name="input_query_depth_limit"></a> [query\_depth\_limit](#input\_query\_depth\_limit) | A number indicating the maximum depth resolvers should be accepted when handling queries | `number` | `0` | no |
 | <a name="input_resolver_count_limit"></a> [resolver\_count\_limit](#input\_resolver\_count\_limit) | A number indicating the maximum number of resolvers that should be accepted when handling queries | `number` | `0` | no |
+| <a name="input_s3_endpoint_url"></a> [s3\_endpoint\_url](#input\_s3\_endpoint\_url) | Optional S3 endpoint URL for presigner/dataset Lambdas. When set (e.g.<br/>"https://bucket.vpce-abc123.s3.us-east-1.vpce.amazonaws.com"), those<br/>Lambdas generate presigned URLs and issue S3 calls against the S3 interface<br/>VPC endpoint using virtual-host addressing (private-network path). When<br/>null (default), presigned URLs use the global regional S3 endpoint.<br/>Mirrors upstream S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride. | `string` | `null` | no |
 | <a name="input_state_machine_arn"></a> [state\_machine\_arn](#input\_state\_machine\_arn) | ARN of the Step Functions state machine (used by Error Analyzer) | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | A map of tags to add to all resources | `map(string)` | `{}` | no |
 | <a name="input_tracking_table"></a> [tracking\_table](#input\_tracking\_table) | The DynamoDB table for tracking document processing status (Legacy format - use tracking\_table\_arn instead) | <pre>object({<br/>    table_name = string<br/>    table_arn  = string<br/>  })</pre> | `null` | no |
@@ -440,6 +442,7 @@
 | <a name="output_api_id"></a> [api\_id](#output\_api\_id) | The ID of the AppSync GraphQL API |
 | <a name="output_api_key"></a> [api\_key](#output\_api\_key) | The API key for the GraphQL API (if API key authentication is enabled) |
 | <a name="output_api_name"></a> [api\_name](#output\_api\_name) | The name of the AppSync GraphQL API |
+| <a name="output_appsync_endpoint_for_dns"></a> [appsync\_endpoint\_for\_dns](#output\_appsync\_endpoint\_for\_dns) | Fully-qualified AppSync GraphQL hostname for Route 53 Private Hosted Zone setup in private-network topologies. |
 | <a name="output_discovery_bucket_arn"></a> [discovery\_bucket\_arn](#output\_discovery\_bucket\_arn) | ARN of the discovery S3 bucket (if discovery is enabled) |
 | <a name="output_discovery_bucket_name"></a> [discovery\_bucket\_name](#output\_discovery\_bucket\_name) | Name of the discovery S3 bucket (if discovery is enabled) |
 | <a name="output_edit_sections_enabled"></a> [edit\_sections\_enabled](#output\_edit\_sections\_enabled) | Whether the Edit Sections feature is enabled |

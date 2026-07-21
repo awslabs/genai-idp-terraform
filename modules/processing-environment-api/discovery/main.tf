@@ -248,6 +248,7 @@ data "archive_file" "discovery_upload_resolver_code" {
 
 # Discovery Upload Resolver Lambda function
 resource "aws_lambda_function" "discovery_upload_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-discovery-upload-${local.suffix}"
 
   filename         = data.archive_file.discovery_upload_resolver_code.output_path
@@ -265,12 +266,12 @@ resource "aws_lambda_function" "discovery_upload_resolver" {
   kms_key_arn = var.encryption_key_arn
 
   environment {
-    variables = {
+    variables = merge({
       LOG_LEVEL                = var.log_level
       DISCOVERY_TRACKING_TABLE = aws_dynamodb_table.discovery_tracking.name
       DISCOVERY_QUEUE_URL      = aws_sqs_queue.discovery_queue.url
       DISCOVERY_BUCKET         = aws_s3_bucket.discovery_bucket.id
-    }
+    }, var.s3_endpoint_url != null ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {})
   }
 
   dynamic "vpc_config" {
@@ -320,6 +321,7 @@ data "archive_file" "discovery_processor_code" {
 
 # Discovery Processor Lambda function
 resource "aws_lambda_function" "discovery_processor" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-discovery-processor-${local.suffix}"
 
   filename         = data.archive_file.discovery_processor_code.output_path

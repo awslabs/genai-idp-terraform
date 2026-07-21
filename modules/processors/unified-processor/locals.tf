@@ -60,4 +60,19 @@ locals {
 
     } : null
   }
+
+  # OpenAI GPT-5.x models are served via the bedrock-mantle endpoint (OpenAI
+  # Responses API) and use a separate IAM action namespace. Model-independent
+  # (Resource "*"), so granted as a flat statement to every model-invoking role.
+  # Mirrors upstream IDP v0.5.16.
+  bedrock_mantle_statement = {
+    Effect = "Allow"
+    Action = [
+      "bedrock-mantle:CreateInference",
+      "bedrock-mantle:GetProject",
+      "bedrock-mantle:ListProjects",
+      "bedrock-mantle:ListTagsForResources",
+    ]
+    Resource = "*"
+  }
 }

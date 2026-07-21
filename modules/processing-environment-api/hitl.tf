@@ -111,6 +111,7 @@ data "archive_file" "complete_section_review" {
 }
 
 resource "aws_lambda_function" "complete_section_review" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_hitl ? 1 : 0
   function_name    = "${local.api_name}-complete-section-review"
   role             = aws_iam_role.complete_section_review[0].arn

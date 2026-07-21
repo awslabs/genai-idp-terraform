@@ -29,7 +29,7 @@ No modules.
 | Name | Type |
 |------|------|
 | [aws_cloudfront_distribution.web_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) | resource |
-| [aws_cloudfront_origin_access_identity.oai](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_origin_access_identity) | resource |
+| [aws_cloudfront_origin_access_control.oac](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_origin_access_control) | resource |
 | [aws_cloudfront_response_headers_policy.security_headers](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_response_headers_policy) | resource |
 | [aws_cloudwatch_log_group.ui_codebuild_trigger_lambda_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_codebuild_project.ui_build](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codebuild_project) | resource |
@@ -73,6 +73,7 @@ No modules.
 | <a name="input_acm_certificate_arn"></a> [acm\_certificate\_arn](#input\_acm\_certificate\_arn) | ARN of ACM certificate for custom domain (must be in us-east-1, only used when create\_infrastructure is true) | `string` | `null` | no |
 | <a name="input_api_url"></a> [api\_url](#input\_api\_url) | The GraphQL API URL for the processing environment | `string` | n/a | yes |
 | <a name="input_cloudfront_distribution_id"></a> [cloudfront\_distribution\_id](#input\_cloudfront\_distribution\_id) | CloudFront distribution ID for cache invalidation (optional - skip invalidation if not provided) | `string` | `null` | no |
+| <a name="input_console_title"></a> [console\_title](#input\_console\_title) | Title shown in the Web UI top-navigation banner. Mirrors upstream ConsoleTitle. | `string` | `"IDP Accelerator Console"` | no |
 | <a name="input_create_infrastructure"></a> [create\_infrastructure](#input\_create\_infrastructure) | Whether to create CloudFront distribution and web app bucket with default settings | `bool` | `true` | no |
 | <a name="input_custom_domain_name"></a> [custom\_domain\_name](#input\_custom\_domain\_name) | Custom domain name for CloudFront distribution (only used when create\_infrastructure is true) | `string` | `null` | no |
 | <a name="input_discovery_bucket_name"></a> [discovery\_bucket\_name](#input\_discovery\_bucket\_name) | Name of the discovery S3 bucket (if discovery is enabled) | `string` | `null` | no |
@@ -80,6 +81,7 @@ No modules.
 | <a name="input_enable_waf"></a> [enable\_waf](#input\_enable\_waf) | Enable WAF protection for CloudFront distribution (only used when create\_infrastructure is true) | `bool` | `true` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encryption | `string` | n/a | yes |
 | <a name="input_evaluation_baseline_bucket_name"></a> [evaluation\_baseline\_bucket\_name](#input\_evaluation\_baseline\_bucket\_name) | Name of the evaluation baseline S3 bucket (extracted from evaluation baseline bucket ARN) | `string` | `""` | no |
+| <a name="input_hosting"></a> [hosting](#input\_hosting) | Web UI hosting mode. "CloudFront" (default) creates a CloudFront<br/>distribution in front of the web app bucket. "ALB" skips CloudFront and<br/>expects an Application Load Balancer (see modules/web-ui-alb) to serve the<br/>bucket via an S3 interface VPC endpoint. Mirrors upstream WebUIHosting. | `string` | `"CloudFront"` | no |
 | <a name="input_idp_pattern"></a> [idp\_pattern](#input\_idp\_pattern) | IDP processing pattern name (mapped from processor type) | `string` | `""` | no |
 | <a name="input_idp_version"></a> [idp\_version](#input\_idp\_version) | Upstream IDP version string surfaced in the Web UI Deployment Info panel. Should track the IDP\_VERSION file at the repo root. | `string` | n/a | yes |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket for input files | `string` | n/a | yes |
@@ -99,17 +101,18 @@ No modules.
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC for network integration | `string` | `null` | no |
 | <a name="input_waf_rate_limit"></a> [waf\_rate\_limit](#input\_waf\_rate\_limit) | Rate limit for WAF (requests per 5-minute period, only used when create\_infrastructure is true) | `number` | `2000` | no |
 | <a name="input_web_app_bucket_name"></a> [web\_app\_bucket\_name](#input\_web\_app\_bucket\_name) | Name of S3 bucket for hosting the web application (required when create\_infrastructure is false) | `string` | `null` | no |
+| <a name="input_web_ui_url"></a> [web\_ui\_url](#input\_web\_ui\_url) | Public URL the browser uses to reach the Web UI. Used for input/output<br/>bucket CORS allowed-origins and the UI build environment. In CloudFront<br/>mode this is derived from the distribution; in ALB mode supply the custom<br/>domain URL fronting the ALB (mirrors upstream CustomDomainUrl). When null<br/>in ALB mode, CORS falls back to "*". | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_application_url"></a> [application\_url](#output\_application\_url) | URL of the web application (when create\_infrastructure is true) |
+| <a name="output_application_url"></a> [application\_url](#output\_application\_url) | URL of the web application (CloudFront domain in CloudFront mode; the supplied web\_ui\_url in ALB mode) |
 | <a name="output_bucket"></a> [bucket](#output\_bucket) | The S3 bucket where the web application assets are deployed |
 | <a name="output_build_mode"></a> [build\_mode](#output\_build\_mode) | Active build mode: codebuild or local. |
 | <a name="output_cloudfront_distribution_domain_name"></a> [cloudfront\_distribution\_domain\_name](#output\_cloudfront\_distribution\_domain\_name) | CloudFront distribution domain name |
 | <a name="output_cloudfront_distribution_id"></a> [cloudfront\_distribution\_id](#output\_cloudfront\_distribution\_id) | CloudFront distribution ID |
 | <a name="output_codebuild_project"></a> [codebuild\_project](#output\_codebuild\_project) | CodeBuild project for building and deploying the web UI (null when ui\_local = true) |
-| <a name="output_distribution"></a> [distribution](#output\_distribution) | The CloudFront distribution that serves the web application (when create\_infrastructure is true) |
+| <a name="output_distribution"></a> [distribution](#output\_distribution) | The CloudFront distribution that serves the web application (CloudFront hosting mode only) |
 | <a name="output_settings_parameter"></a> [settings\_parameter](#output\_settings\_parameter) | SSM Parameter for Web UI settings |
 | <a name="output_web_ui_test_env_file"></a> [web\_ui\_test\_env\_file](#output\_web\_ui\_test\_env\_file) | Environment file content for local UI development |

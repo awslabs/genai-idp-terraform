@@ -38,6 +38,7 @@ data "archive_file" "queue_processor_code" {
 
 # Queue Processor Lambda Function
 resource "aws_lambda_function" "queue_processor" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name}-queue-processor-${random_string.suffix.result}"
 
   filename         = data.archive_file.queue_processor_code.output_path

@@ -50,7 +50,7 @@ class HeadlessTemplateTransformer:
 
         self.ui_resources: Set[str] = {
             "CloudFrontDistribution",
-            "CloudFrontOriginAccessIdentity",
+            "CloudFrontOriginAccessControl",
             "SecurityHeadersPolicy",
             "WebUIBucket",
             "WebUIBucketPolicy",
@@ -190,6 +190,19 @@ class HeadlessTemplateTransformer:
             "DOCUMENTKB",
         }
 
+        # Feature Platform nested stack — gated on EnableFeaturePlatform=true.
+        # Its parameters wire in GraphQLApi (ApiId/Arn/GraphQLUrl), UserPool,
+        # UserPoolClient, WebUIBucket, and DiscoveryBucket — all removed in
+        # headless mode — and it DependsOn the (removed) APPSYNCSTACK. Left in
+        # place, its dangling `!GetAtt GraphQLApi.*` refs cause
+        # "Template error: instance of Fn::GetAtt references undefined resource
+        # GraphQLApi" at deploy time. EnableFeaturePlatform is forced to
+        # 'false' in _remove_parameters so the IsFeaturePlatformDisabled-gated
+        # TrackingTableName export stays active.
+        self.feature_platform_resources: Set[str] = {
+            "FeaturePlatformStack",
+        }
+
         self.discovery_resources: Set[str] = {
             "DiscoveryBucket",
             "DiscoveryBucketPolicy",
@@ -212,6 +225,12 @@ class HeadlessTemplateTransformer:
             "StepFunctionSubscriptionPublisherLogGroup",
             "StepFunctionSubscriptionRule",
             "StepFunctionSubscriptionPublisherPermission",
+            # Invoked async only by an AppSync resolver in the (removed)
+            # APPSYNCSTACK; with no resolver caller, the function and its
+            # log group are dead weight in headless mode and their dangling
+            # refs to UsersTable/GraphQLApi block stack updates.
+            "ChatWithDocumentProcessorFunction",
+            "ChatWithDocumentProcessorLogGroup",
         }
 
         # ---- Parameters to remove ----
@@ -271,6 +290,8 @@ class HeadlessTemplateTransformer:
             "MCPConnectorClientSecret",
             "S3DiscoveryBucketName",
             "S3DiscoveryBucketConsoleURL",
+            # References !GetAtt GraphQLApi.GraphQLUrl (AppSync removed headless)
+            "AppSyncEndpointForDNS",
         }
 
         # ---- Conditions to remove ----
@@ -291,6 +312,8 @@ class HeadlessTemplateTransformer:
             "HasExternalIdPGroupMapping",
             "ShouldMapExternalIdPGroups",
             "CreateExternalAppClient",
+            # Used only by the removed VersionCheckResolverFunction (AppSync UI feature)
+            "HasPublicArtifactsBucket",
         }
 
         # ---- Rules to remove ----
@@ -323,6 +346,7 @@ class HeadlessTemplateTransformer:
             | self.hitl_resources
             | self.kb_resources
             | self.discovery_resources
+            | self.feature_platform_resources
         )
 
     # ---- Public API ----
@@ -512,6 +536,15 @@ class HeadlessTemplateTransformer:
             parameters["EnableMCP"]["Default"] = "false"
             logger.info("Modified EnableMCP parameter default to 'false'")
 
+        # Force Feature Platform off — its nested stack (removed above) wires
+        # in AppSync/Cognito/WebUI/Discovery resources that don't exist in
+        # headless mode. Setting the default to 'false' keeps
+        # IsFeaturePlatformDisabled true so the main stack's
+        # TrackingTableName export (gated on that condition) stays active.
+        if "EnableFeaturePlatform" in parameters:
+            parameters["EnableFeaturePlatform"]["Default"] = "false"
+            logger.info("Modified EnableFeaturePlatform parameter default to 'false'")
+
         logger.info(
             f"Removed {len(removed)} parameters ({original_count} → {len(parameters)})"
         )
@@ -650,6 +683,11 @@ class HeadlessTemplateTransformer:
             "AgentChatProcessorFunction",
             "AgentProcessorFunction",
             "DiscoveryProcessorFunction",
+            # Publishes circuit-breaker status to AppSync mutations for the
+            # UI; the function still has work to do (state management,
+            # alarm processing) in headless mode, so we keep it but strip
+            # the APPSYNC_API_URL env var and appsync:GraphQL policy.
+            "CircuitBreakerManagerFunction",
         ]
         for func_name in functions_to_convert:
             if func_name in resources:

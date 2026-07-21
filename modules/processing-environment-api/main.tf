@@ -101,6 +101,8 @@ module "discovery" {
   count  = var.discovery.enabled ? 1 : 0
   source = "./discovery"
 
+  lambda_architecture = var.lambda_architecture
+
   name_prefix               = "discovery-${random_string.suffix.result}"
   input_bucket_arn          = local.input_bucket_arn
   configuration_table_arn   = local.configuration_table_arn
@@ -122,6 +124,9 @@ module "discovery" {
   vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
   vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
 
+  # Presigned-URL-via-VPCE pass-through (discovery upload presigner).
+  s3_endpoint_url = var.s3_endpoint_url
+
   tags = var.tags
 }
 
@@ -140,6 +145,8 @@ module "discovery" {
 module "process_changes" {
   count  = var.enable_edit_sections ? 1 : 0
   source = "./process-changes"
+
+  lambda_architecture = var.lambda_architecture
 
   name_prefix             = "process-changes-${random_string.suffix.result}"
   appsync_api_id          = aws_appsync_graphql_api.api.id

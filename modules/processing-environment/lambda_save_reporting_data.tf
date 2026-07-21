@@ -42,7 +42,8 @@ data "archive_file" "save_reporting_data_code" {
 
 # Save Reporting Data Lambda Function
 resource "aws_lambda_function" "save_reporting_data" {
-  count = var.enable_reporting ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.enable_reporting ? 1 : 0
 
   function_name = "idp-save-reporting-data-${random_string.suffix.result}"
 

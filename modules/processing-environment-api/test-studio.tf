@@ -256,6 +256,7 @@ data "archive_file" "test_runner" {
 }
 
 resource "aws_lambda_function" "test_runner" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-runner"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -299,6 +300,7 @@ data "archive_file" "test_results_resolver" {
 }
 
 resource "aws_lambda_function" "test_results_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-results-resolver"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -341,6 +343,7 @@ data "archive_file" "test_set_resolver" {
 }
 
 resource "aws_lambda_function" "test_set_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-set-resolver"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -350,7 +353,8 @@ resource "aws_lambda_function" "test_set_resolver" {
   runtime          = "python3.12"
   timeout          = 30
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
-  environment { variables = local.test_studio_env }
+  # Presigner: honor S3_ENDPOINT_URL for VPCE-targeted presigned URLs.
+  environment { variables = merge(local.test_studio_env, local.s3_endpoint_url_env) }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
     for_each = var.vpc_config != null ? [var.vpc_config] : []
@@ -383,6 +387,7 @@ data "archive_file" "test_set_zip_extractor" {
 }
 
 resource "aws_lambda_function" "test_set_zip_extractor" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-set-zip-extractor"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -426,6 +431,7 @@ data "archive_file" "test_file_copier" {
 }
 
 resource "aws_lambda_function" "test_file_copier" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-file-copier"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -468,6 +474,7 @@ data "archive_file" "test_set_file_copier" {
 }
 
 resource "aws_lambda_function" "test_set_file_copier" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-test-set-file-copier"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -510,6 +517,7 @@ data "archive_file" "delete_tests" {
 }
 
 resource "aws_lambda_function" "delete_tests" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio ? 1 : 0
   function_name    = "${local.api_name}-delete-tests"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -552,6 +560,7 @@ data "archive_file" "fcc_dataset_deployer" {
 }
 
 resource "aws_lambda_function" "fcc_dataset_deployer" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio && var.enable_fcc_dataset ? 1 : 0
   function_name    = "${local.api_name}-fcc-dataset-deployer"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -561,7 +570,8 @@ resource "aws_lambda_function" "fcc_dataset_deployer" {
   runtime          = "python3.12"
   timeout          = 300
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
-  environment { variables = local.test_studio_env }
+  # Deployer issues S3 calls; honor S3_ENDPOINT_URL in private VPC mode.
+  environment { variables = merge(local.test_studio_env, local.s3_endpoint_url_env) }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
     for_each = var.vpc_config != null ? [var.vpc_config] : []
@@ -601,6 +611,7 @@ data "archive_file" "w2_dataset_deployer" {
 }
 
 resource "aws_lambda_function" "w2_dataset_deployer" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0
   function_name    = "${local.api_name}-w2-dataset-deployer"
   role             = aws_iam_role.test_studio_lambdas[0].arn
@@ -764,6 +775,16 @@ resource "aws_appsync_resolver" "list_test_sets" {
   api_id      = aws_appsync_graphql_api.api.id
   type        = "Query"
   field       = "getTestSets"
+  data_source = aws_appsync_datasource.test_set_resolver[0].name
+}
+
+# Edit test-set metadata (description, classification type). Mirrors upstream
+# v0.5.14 UpdateTestSetResolver (nested/appsync).
+resource "aws_appsync_resolver" "update_test_set" {
+  count       = var.enable_test_studio ? 1 : 0
+  api_id      = aws_appsync_graphql_api.api.id
+  type        = "Mutation"
+  field       = "updateTestSet"
   data_source = aws_appsync_datasource.test_set_resolver[0].name
 }
 

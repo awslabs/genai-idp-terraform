@@ -51,7 +51,7 @@ variable "lambda_tracing_mode" {
 variable "lambda_architecture" {
   description = "Target Lambda architecture. Drives both the SAM build image tag (latest-x86_64 vs latest-arm64) and compatible_architectures on the produced aws_lambda_layer_version."
   type        = string
-  default     = "x86_64"
+  default     = "arm64"
 
   validation {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)

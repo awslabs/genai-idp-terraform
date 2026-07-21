@@ -59,6 +59,7 @@ data "archive_file" "process_changes_resolver_code" {
 
 # Process Changes Resolver Lambda function
 resource "aws_lambda_function" "process_changes_resolver" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-process-changes-${local.suffix}"
 
   filename         = data.archive_file.process_changes_resolver_code.output_path

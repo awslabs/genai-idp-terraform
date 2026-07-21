@@ -195,9 +195,10 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
     "profile"
   ]
 
-  # Callback URLs will be set by the web application module
-  callback_urls = ["https://localhost:3000"]
-  logout_urls   = ["https://localhost:3000"]
+  # Localhost is retained for local UI development; the Web UI custom domain /
+  # ALB URL (when set) is appended so hosted-UI OAuth redirects are accepted.
+  callback_urls = distinct(concat(["https://localhost:3000"], var.additional_callback_urls))
+  logout_urls   = distinct(concat(["https://localhost:3000"], var.additional_logout_urls))
 }
 # Cognito Identity Pool following CDK configuration
 resource "aws_cognito_identity_pool" "identity_pool" {

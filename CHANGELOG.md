@@ -6,7 +6,12 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
-## [Unreleased]
+## [0.5.16-tf.0]
+
+> This release bundles two tracks: the **local-build** work (`var.build`,
+> below) that landed on `v0.5.16-rc`, and the **upstream v0.5.16 parity
+> upgrade** (sources snapshot + feature parity), documented in its own block
+> at the end of this release's notes.
 
 ### Summary
 
@@ -27,10 +32,12 @@ CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
   - `lambda_local` (bool, default `false`) — when `true`, all Lambda
     layers and processor container images build locally on the deploy
     host; AWS CodeBuild infrastructure collapses to `count = 0`.
-  - `lambda_architecture` (string, default `"x86_64"`, validated against
+  - `lambda_architecture` (string, default `"arm64"`, validated against
     `["x86_64", "arm64"]`) — target Lambda architecture, honored by
     both CodeBuild and local-build paths. The CodeBuild path now gains
-    arm64 support (previously hardcoded x86_64).
+    arm64 support (previously hardcoded x86_64). The default was flipped
+    from `x86_64` to `arm64` in this release to match upstream v0.5.16
+    (see the parity-upgrade block below for the migration note).
   - `container_runtime` (string, default `"auto"`, validated against
     `["auto", "docker", "podman", "finch"]`) — runtime selector when
     `lambda_local = true`. `"auto"` probes docker → podman → finch.
@@ -137,6 +144,72 @@ To roll back, flip the flag back to `false` and apply again.
   Hand-rolled HCL matches the existing CodeBuild module's style and
   avoids adding a third-party module dependency. The SAM build image
   produces the same hermetic environment either way.
+
+---
+
+### Upstream v0.5.16 parity upgrade
+
+#### Summary
+Advances the vendored `sources/` tree from upstream `0.5.12` to `0.5.16` and
+reimplements the Terraform-side feature parity across `0.5.13–0.5.16`: web-UI
+CloudFront OAC, arm64 Lambda default, OpenAI GPT-5.x IAM, pipeline hooks, the
+Feature Platform, and ALB hosting. The `sources/` snapshot also carries
+upstream runtime behavior for those versions regardless of Terraform wiring.
+
+#### Added
+- **Web UI ALB hosting** (`web_ui.hosting = "ALB"`): new `modules/web-ui-alb`
+  serves the web app bucket through an internal Application Load Balancer + S3
+  interface VPC endpoint (host-header/url rewrite via `aws_lb_listener_rule`
+  `transform` blocks), for private-network / GovCloud deployments. New
+  `web_ui.alb` inputs (`vpc_id`, `subnet_ids`, `certificate_arn`, `scheme`,
+  `allowed_cidrs`, `lambda_security_group_id`), `web_ui.custom_domain_url`
+  (CORS + Cognito callback/logout URLs), and `web_ui.s3_presigned_url_via_vpc_endpoint`
+  / `s3_vpc_endpoint_dns_name_override` / `s3_vpc_endpoint_id_override`
+  (presigned URLs via the VPCE). New `web_ui_alb` root output. Mirrors upstream
+  `WebUIHosting` / `CustomDomainUrl` / `S3PresignedUrlViaVpcEndpoint`.
+- **Feature Platform** (`feature_platform.enabled`, default `false`): optional
+  `modules/features/feature-platform` (InstalledFeatures table + 9 Lambdas + 9
+  AppSync datasources + 12 resolvers) for installable feature catalog /
+  entitlement / install / register operations.
+- **Pipeline hooks**: a dispatcher Lambda wired into the Step Functions
+  workflow at five inert-by-default extension points (`postOcr`,
+  `postClassification`, `postExtraction`, `postAssessment`,
+  `postSummarization`).
+- **OpenAI GPT-5.x IAM**: `bedrock-mantle:*` permissions on all 11
+  model-invoking roles so GPT-5.x models served via bedrock-mantle can be used.
+- **`web_ui.console_title`** (default `"IDP Accelerator Console"`): top-nav
+  banner title (upstream `ConsoleTitle`).
+- **`updateTestSet`** AppSync resolver (Test Studio).
+- **`api.appsync_endpoint_for_dns`** output for private-DNS wiring.
+- **`user-identity`**: `additional_callback_urls` / `additional_logout_urls`
+  to register the Web UI custom domain with Cognito.
+
+#### Changed
+- **CloudFront OAI → OAC**: the web-UI distribution now uses an Origin Access
+  Control (sigv4) with a bucket policy scoped to the distribution ARN,
+  replacing the legacy Origin Access Identity.
+- **`build.lambda_architecture` default `x86_64` → `arm64`** to match upstream
+  v0.5.16 (both values remain selectable).
+- **Config defaults (D5)**: `classification.enforceValidClasses` and
+  `assessment.ground_geometry_in_ocr` are default-on, carried by the vendored
+  `idp_common` system defaults and merged into every seeded config by the
+  configuration seeder (no Terraform change).
+
+#### Migration
+- **arm64 default**: existing deployments that omit `build.lambda_architecture`
+  will rebuild/replace Lambda layers and container images for arm64 on the next
+  apply. Pin `build = { lambda_architecture = "x86_64" }` to keep the previous
+  architecture.
+- **OAI → OAC**: plan shows the OAI destroyed and an OAC created; the CloudFront
+  distribution updates in place (no replacement). Review the plan to confirm.
+- **ALB hosting** requires `web_ui.alb.vpc_id`, ≥2 `subnet_ids`, and an ACM
+  `certificate_arn`; point the custom domain DNS at the `web_ui_alb` output
+  `alb_dns_name` / `alb_hosted_zone_id`. The ALB path is acyclic: the custom
+  domain URL and the presign VPCE DNS name are supplied as inputs, not derived
+  from the ALB module.
+- **Snapshot-carried behavior**: the `0.5.13–0.5.16` `sources/` refresh changes
+  runtime behavior (prompts, default model IDs, granular assessment) regardless
+  of Terraform variables.
 
 ---
 

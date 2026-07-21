@@ -325,6 +325,7 @@ resource "time_sleep" "wait_for_iam_propagation" {
 }
 
 resource "aws_lambda_function" "group_mapping" {
+  architectures = [var.lambda_architecture]
   count         = local.enable_group_mapping ? 1 : 0
   function_name = local.group_mapping_function_name
   role          = aws_iam_role.group_mapping[0].arn

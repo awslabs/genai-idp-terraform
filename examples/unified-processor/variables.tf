@@ -212,13 +212,13 @@ variable "build" {
   description = "Build strategy for Lambda layers and the web UI (CodeBuild by default; local Docker/npm when the *_local flags are true)."
   type = object({
     lambda_local        = optional(bool, false)
-    lambda_architecture = optional(string, "x86_64")
+    lambda_architecture = optional(string, "arm64")
     container_runtime   = optional(string, "auto")
     ui_local            = optional(bool, false)
   })
   default = {
     lambda_local        = false
-    lambda_architecture = "x86_64"
+    lambda_architecture = "arm64"
     container_runtime   = "auto"
     ui_local            = false
   }

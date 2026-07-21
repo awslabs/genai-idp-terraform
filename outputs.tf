@@ -26,8 +26,9 @@ output "user_identity" {
 output "api" {
   description = "API resources (if enabled)"
   value = local.api_enabled ? {
-    api_id      = module.processing_environment_api[0].api_id
-    graphql_url = module.processing_environment_api[0].graphql_url
+    api_id                   = module.processing_environment_api[0].api_id
+    graphql_url              = module.processing_environment_api[0].graphql_url
+    appsync_endpoint_for_dns = module.processing_environment_api[0].appsync_endpoint_for_dns
   } : null
 }
 
@@ -37,6 +38,23 @@ output "web_ui" {
     cloudfront_distribution_id = module.web_ui[0].cloudfront_distribution_id
     bucket                     = module.web_ui[0].bucket
     url                        = module.web_ui[0].application_url
+  } : null
+}
+
+output "web_ui_alb" {
+  description = <<-EOT
+    ALB hosting details (only when web_ui.hosting = "ALB"). Point your custom
+    domain DNS at alb_dns_name (alias/CNAME). Feed s3_vpc_endpoint_dns_name
+    into web_ui.s3_vpc_endpoint_dns_name_override if enabling presigned URLs
+    via the VPC endpoint.
+  EOT
+  value = length(module.web_ui_alb) > 0 ? {
+    web_ui_url               = module.web_ui_alb[0].web_ui_url
+    alb_dns_name             = module.web_ui_alb[0].alb_dns_name
+    alb_arn                  = module.web_ui_alb[0].alb_arn
+    alb_hosted_zone_id       = module.web_ui_alb[0].alb_hosted_zone_id
+    s3_vpc_endpoint_id       = module.web_ui_alb[0].s3_vpc_endpoint_id
+    s3_vpc_endpoint_dns_name = module.web_ui_alb[0].s3_vpc_endpoint_dns_name
   } : null
 }
 

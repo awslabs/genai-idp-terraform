@@ -76,6 +76,8 @@ resource "aws_iam_role_policy" "rule_validation_policy" {
         Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*",
         local.tracking_table_arn, "${local.tracking_table_arn}/index/*"]
       },
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      local.bedrock_mantle_statement,
       {
         Effect = "Allow"
         Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile"]
@@ -139,7 +141,8 @@ resource "aws_iam_role_policy" "rule_validation_kms" {
 # Lambda Functions
 
 resource "aws_lambda_function" "rule_validation_function" {
-  count = var.enable_rule_validation ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.enable_rule_validation ? 1 : 0
 
   function_name    = "${local.name_prefix}-rule-validation"
   role             = aws_iam_role.rule_validation_role[0].arn
@@ -182,7 +185,8 @@ resource "aws_lambda_function" "rule_validation_function" {
 }
 
 resource "aws_lambda_function" "rule_validation_orchestration_function" {
-  count = var.enable_rule_validation ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.enable_rule_validation ? 1 : 0
 
   function_name    = "${local.name_prefix}-rule-validation-orchestration"
   role             = aws_iam_role.rule_validation_role[0].arn

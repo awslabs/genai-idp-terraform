@@ -48,7 +48,7 @@ variable "lambda_local" {
 variable "lambda_architecture" {
   description = "Target Lambda architecture. Propagates to compatible_architectures on the layer and to the local/CodeBuild build-host platform."
   type        = string
-  default     = "x86_64"
+  default     = "arm64"
 
   validation {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)

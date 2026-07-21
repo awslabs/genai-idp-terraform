@@ -202,6 +202,13 @@ resource "aws_iam_role_policy" "agent_chat_processor" {
         Resource = "*"
       },
       {
+        # OpenAI GPT-5.x via the bedrock-mantle endpoint (OpenAI Responses API),
+        # a separate IAM action namespace. Mirrors upstream v0.5.16.
+        Effect   = "Allow"
+        Action   = ["bedrock-mantle:CreateInference", "bedrock-mantle:GetProject", "bedrock-mantle:ListProjects", "bedrock-mantle:ListTagsForResources"]
+        Resource = "*"
+      },
+      {
         Effect   = "Allow"
         Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
         Resource = "*"
@@ -390,7 +397,8 @@ data "local_file" "agent_chat_processor_hash" {
 }
 
 resource "aws_lambda_function" "agent_chat_processor" {
-  count = var.enable_agent_companion_chat ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.enable_agent_companion_chat ? 1 : 0
 
   function_name    = "${local.api_name}-agent-chat-processor"
   role             = aws_iam_role.agent_chat_processor[0].arn
@@ -535,7 +543,8 @@ data "archive_file" "agent_chat_resolver" {
 }
 
 resource "aws_lambda_function" "agent_chat_resolver" {
-  count = var.enable_agent_companion_chat ? 1 : 0
+  architectures = [var.lambda_architecture]
+  count         = var.enable_agent_companion_chat ? 1 : 0
 
   function_name    = "${local.api_name}-agent-chat-resolver"
   role             = aws_iam_role.agent_chat_resolver[0].arn
@@ -655,6 +664,7 @@ data "archive_file" "create_chat_session_resolver" {
 }
 
 resource "aws_lambda_function" "create_chat_session_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_agent_companion_chat ? 1 : 0
   function_name    = "${local.api_name}-create-chat-session-resolver"
   role             = aws_iam_role.chat_session_resolvers[0].arn
@@ -699,6 +709,7 @@ data "archive_file" "list_agent_chat_sessions_resolver" {
 }
 
 resource "aws_lambda_function" "list_agent_chat_sessions_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_agent_companion_chat ? 1 : 0
   function_name    = "${local.api_name}-list-chat-sessions-resolver"
   role             = aws_iam_role.chat_session_resolvers[0].arn
@@ -743,6 +754,7 @@ data "archive_file" "get_agent_chat_messages_resolver" {
 }
 
 resource "aws_lambda_function" "get_agent_chat_messages_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_agent_companion_chat ? 1 : 0
   function_name    = "${local.api_name}-get-chat-messages-resolver"
   role             = aws_iam_role.chat_session_resolvers[0].arn
@@ -787,6 +799,7 @@ data "archive_file" "delete_agent_chat_session_resolver" {
 }
 
 resource "aws_lambda_function" "delete_agent_chat_session_resolver" {
+  architectures    = [var.lambda_architecture]
   count            = var.enable_agent_companion_chat ? 1 : 0
   function_name    = "${local.api_name}-delete-chat-session-resolver"
   role             = aws_iam_role.chat_session_resolvers[0].arn

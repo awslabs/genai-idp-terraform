@@ -210,3 +210,13 @@ variable "seed_managed_configs" {
   type        = bool
   default     = true
 }
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64), forwarded to the shared engine so function architectures match the idp_common layers."
+  type        = string
+  default     = "arm64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}

@@ -179,7 +179,7 @@ variable "lambda_local" {
 variable "lambda_architecture" {
   description = "Target Lambda architecture for layers/functions owned by this module."
   type        = string
-  default     = "x86_64"
+  default     = "arm64"
 
   validation {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)

@@ -227,6 +227,19 @@ resource "aws_iam_policy" "discovery_processor_policy" {
         ]
       },
       {
+        # OpenAI GPT-5.x via the bedrock-mantle endpoint (OpenAI Responses API).
+        # Mirrors upstream v0.5.16 (granted for consistency even though GPT-5.x is
+        # not currently offered for Discovery).
+        Effect = "Allow"
+        Action = [
+          "bedrock-mantle:CreateInference",
+          "bedrock-mantle:GetProject",
+          "bedrock-mantle:ListProjects",
+          "bedrock-mantle:ListTagsForResources"
+        ]
+        Resource = "*"
+      },
+      {
         Effect = "Allow"
         Action = [
           "bedrock:GetInferenceProfile",

@@ -128,6 +128,11 @@ class TestGetModelMaxOutputTokens:
         assert get_model_max_output_tokens("eu.amazon.nova-2-lite-v1:0") == 10_000
         assert get_model_max_output_tokens("global.amazon.nova-2-lite-v1:0") == 10_000
 
+    def test_openai_gpt5_models_return_128k(self):
+        """Test OpenAI GPT-5.x models return 128,000 max tokens."""
+        assert get_model_max_output_tokens("openai.gpt-5.4") == 128_000
+        assert get_model_max_output_tokens("openai.gpt-5.5") == 128_000
+
     def test_unknown_model_raises_error(self):
         """Test unknown models raise ValueError instead of returning default."""
         with pytest.raises(ValueError, match="Unsupported model ID"):
@@ -171,6 +176,18 @@ class TestGetModelMaxOutputTokens:
             get_model_max_output_tokens("us.anthropic.claude-opus-4-7-20250514-v1:0:1m")
             == 128_000
         )
+
+    def test_opus_4_8_returns_128k(self):
+        """Test Claude Opus 4.8 returns 128,000 max tokens."""
+        assert (
+            get_model_max_output_tokens("us.anthropic.claude-opus-4-8-20251201-v1:0")
+            == 128_000
+        )
+        assert (
+            get_model_max_output_tokens("global.anthropic.claude-opus-4-8") == 128_000
+        )
+        # With :1m suffix
+        assert get_model_max_output_tokens("us.anthropic.claude-opus-4-8:1m") == 128_000
 
     def test_older_opus_versions_return_64k(self):
         """Test Claude Opus 4.5/4.6 return 64,000 max tokens."""
