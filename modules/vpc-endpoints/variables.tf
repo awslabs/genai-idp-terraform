@@ -13,7 +13,16 @@ variable "subnet_ids" {
 }
 
 variable "security_group_ids" {
-  description = "List of security group IDs to associate with the interface endpoints. Typically a single SG allowing HTTPS (443) from the VPC."
+  description = <<-EOT
+    List of security group IDs to associate with the interface endpoints. This module does
+    not manage the security group; the caller owns it. The SG MUST allow inbound HTTPS (TCP
+    443) from the VPC CIDR, not just from the Lambda SG. In-VPC browser clients (WorkSpaces,
+    VPN, bastion) send AppSync GraphQL requests directly to the `appsync-api` interface
+    endpoint rather than through the ALB, so an SG that only permits 443 from the Lambda SG
+    leaves the UI hanging when `api.visibility = "PRIVATE"` (this is the upstream IDP 0.5.15
+    "VpcCidr" fix). See `examples/bedrock-llm-processor-vpc` for a reference SG that opens
+    443 from the VPC CIDR.
+  EOT
   type        = list(string)
   default     = []
 }
