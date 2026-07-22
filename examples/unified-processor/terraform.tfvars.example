@@ -17,6 +17,10 @@ create_bda_project = true # let this example create + link one
 # web_ui = { enabled = true }              # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
+# Bundle assembler — merge loose files under a staging prefix into one bundle.
+# See docs/plans/2026-07-21-bundle-assembler-design.md.
+# enable_bundle_assembler       = true
+# bundle_default_config_version = "default"
 
 # ── Knowledge Base + chat (both ON by default) ──────────────────────────────
 # create_knowledge_base provisions the OpenSearch + Bedrock KB backend and
