@@ -41,6 +41,14 @@ resource "aws_iam_role_policy" "assembler" {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
         Resource = "${var.idp_input_bucket_arn}/*"
+      },
+      {
+        # ListBucket on the input bucket so the idempotency head_object on a
+        # MISSING key returns 404 (not 403 Forbidden). Without this S3 masks a
+        # missing object as Forbidden and the assembler fails on first run.
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = var.idp_input_bucket_arn
       }
       ], var.encryption_key_arn != null ? [{
         Effect   = "Allow"
