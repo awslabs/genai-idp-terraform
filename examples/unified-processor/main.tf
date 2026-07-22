@@ -362,6 +362,50 @@ resource "aws_cognito_user_pool" "user_pool" {
   }
 }
 
+# REGIONAL WAF Web ACL on the Cognito user pool (Wiz IDP-007). This example
+# creates its own user pool (rather than the user-identity module), so the WAF
+# is attached here to the example-local pool.
+resource "aws_wafv2_web_acl" "cognito" {
+  name  = "${local.name_prefix}-cognito-waf"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name_prefix}-cognito-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${local.name_prefix}-cognito-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = var.tags
+}
+
+resource "aws_wafv2_web_acl_association" "cognito" {
+  resource_arn = aws_cognito_user_pool.user_pool.arn
+  web_acl_arn  = aws_wafv2_web_acl.cognito.arn
+}
+
 resource "aws_cognito_user_pool_client" "user_pool_client" {
   name         = "${local.name_prefix}-user-pool-client"
   user_pool_id = aws_cognito_user_pool.user_pool.id
