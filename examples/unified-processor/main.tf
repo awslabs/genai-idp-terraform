@@ -514,3 +514,21 @@ module "genai_idp_accelerator" {
 
   tags = var.tags
 }
+
+# Optional bundle assembler: merges prefix-grouped loose files (staged in its own
+# bucket) into one multi-page PDF, then drops it into the IDP input bucket so the
+# accelerator processes them as a single bundle. See
+# docs/plans/2026-07-21-bundle-assembler-design.md.
+module "bundle_assembler" {
+  count  = var.enable_bundle_assembler ? 1 : 0
+  source = "../../modules/bundle-assembler"
+
+  name_prefix            = "${var.prefix}-bundle"
+  idp_input_bucket_arn   = aws_s3_bucket.input_bucket.arn
+  idp_input_bucket_name  = aws_s3_bucket.input_bucket.id
+  default_config_version = var.bundle_default_config_version
+  encryption_key_arn     = aws_kms_key.encryption_key.arn
+  log_retention_days     = var.log_retention_days
+
+  tags = var.tags
+}

@@ -45,6 +45,18 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "enable_bundle_assembler" {
+  description = "Deploy the bundle assembler: merges prefix-grouped loose files (staged in a separate bucket) into one multi-page PDF before IDP ingestion. Default off."
+  type        = bool
+  default     = false
+}
+
+variable "bundle_default_config_version" {
+  description = "Config version stamped on merged bundles when a manifest omits config_version."
+  type        = string
+  default     = "default"
+}
+
 # --------------------------------------------------------------------------
 # Dual-mode routing configuration
 # --------------------------------------------------------------------------
