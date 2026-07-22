@@ -357,6 +357,43 @@ variable "web_ui" {
     logging_bucket_arn         = optional(string, null)
     enable_signup              = optional(string, "")
     display_name               = optional(string, null)
+    console_title              = optional(string, "IDP Accelerator Console")
+
+    # Hosting mode. "CloudFront" (default) fronts the web app bucket with a
+    # CloudFront distribution. "ALB" skips CloudFront and serves the bucket via
+    # an internal Application Load Balancer + S3 interface VPC endpoint (for
+    # private-network / GovCloud deployments). Mirrors upstream WebUIHosting.
+    hosting = optional(string, "CloudFront")
+
+    # Public URL fronting the ALB (custom domain). Drives input/output bucket
+    # CORS and Cognito callback/logout URLs. Mirrors upstream CustomDomainUrl.
+    # Only used when hosting = "ALB"; when null, CORS falls back to "*".
+    custom_domain_url = optional(string, null)
+
+    # ALB hosting settings (required when hosting = "ALB").
+    alb = optional(object({
+      vpc_id                   = optional(string, null)
+      subnet_ids               = optional(list(string), [])
+      certificate_arn          = optional(string, null)
+      scheme                   = optional(string, "internal")
+      allowed_cidrs            = optional(list(string), [])
+      lambda_security_group_id = optional(string, null)
+      # Explicit opt-in for the Lambda <-> S3 VPCE 443 rules. Set true (with
+      # lambda_security_group_id) to create them; kept separate from the id so
+      # `count` in the module stays plan-known even for a same-apply Lambda SG.
+      manage_lambda_sg_rules = optional(bool, false)
+    }), {})
+
+    # Presigned-URL-via-VPCE settings (mirrors upstream
+    # S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride). When
+    # enabled, presigner Lambdas generate S3 URLs targeting the VPC interface
+    # endpoint. Non-breaking default: off (presigned URLs use global S3).
+    # Because the ALB-created VPCE cannot feed back into the API module without
+    # a dependency cycle, supply the DNS name/id here (or from the web-ui-alb
+    # module outputs at the example level).
+    s3_presigned_url_via_vpc_endpoint = optional(bool, false)
+    s3_vpc_endpoint_dns_name_override = optional(string, null)
+    s3_vpc_endpoint_id_override       = optional(string, null)
   })
   default = {
     enabled                    = true
@@ -395,6 +432,7 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
+      processor_memory_size    = optional(number, 4096)
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -526,6 +564,60 @@ variable "lambda_tracing_mode" {
 # See locals.tf for processor validation logic
 
 #
+# Build Configuration (Lambda artifact build strategy)
+#
+# Controls how Lambda layers and processor container images are built:
+#   - lambda_local = false (default): AWS CodeBuild builds artifacts in-cloud
+#     on every apply. Preserves existing behavior bit-for-bit.
+#   - lambda_local = true: artifacts are built locally on the deploy host
+#     using a container runtime (Docker / Podman / Finch). Eliminates
+#     CodeBuild infrastructure (projects, trigger Lambdas, IAM roles,
+#     log groups) entirely. Requires a container runtime on the host.
+#
+# See docs/content/deployment-guides/local-lambda-build.md for details.
+#
+variable "build" {
+  description = "Build strategy for Lambda layers and processor container images. Controls whether artifacts are built via AWS CodeBuild (default) or locally on the deploy host using Docker/Podman/Finch."
+  type = object({
+    # When true, build Lambda artifacts locally instead of via AWS CodeBuild.
+    # Non-breaking: defaults to false (CodeBuild path). When true a container
+    # runtime is required on the host (var.build.container_runtime selects it).
+    lambda_local = optional(bool, false)
+
+    # Target Lambda architecture. Propagates to compatible_architectures on
+    # every layer, architectures on every function this module owns, the
+    # --platform linux/${arch} flag on local Docker builds, and the
+    # CodeBuild image selection on the CodeBuild path. Honored by BOTH paths.
+    lambda_architecture = optional(string, "arm64")
+
+    # Container runtime selector when lambda_local = true. "auto" probes in
+    # order: docker -> podman -> finch. Explicit values skip auto-detection.
+    container_runtime = optional(string, "auto")
+
+    # When true, build the web UI locally on the deploy host via npm
+    # instead of using AWS CodeBuild. Requires Node.js >= 18.
+    ui_local = optional(bool, false)
+  })
+
+  default = {
+    lambda_local        = false
+    lambda_architecture = "arm64"
+    container_runtime   = "auto"
+    ui_local            = false
+  }
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.build.lambda_architecture)
+    error_message = "build.lambda_architecture must be one of: x86_64, arm64."
+  }
+
+  validation {
+    condition     = contains(["auto", "docker", "podman", "finch"], var.build.container_runtime)
+    error_message = "build.container_runtime must be one of: auto, docker, podman, finch."
+  }
+}
+
+#
 # RBAC feature plugin
 #
 # Role-based access control modeled as a feature-plugin submodule
@@ -601,4 +693,27 @@ variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions (sources/config_library/managed_config) as non-active, non-editable reference rows. Set false to skip them."
   type        = bool
   default     = true
+}
+
+# Feature Platform (installable features). Default-ON to match upstream IDP
+# v0.5.16 (EnableFeaturePlatform defaults to 'true'). Requires the API
+# (AppSync) to be enabled, which is the default (`api.enabled = true`). Set
+# `enabled = false` to remove the platform entirely (no platform resources
+# are created). Mirrors upstream EnableFeaturePlatform + related parameters.
+variable "feature_platform" {
+  description = "Configuration for the Feature Platform (installable features). Enabled by default to match upstream; requires the API enabled. Set enabled=false to remove the platform entirely."
+  type = object({
+    enabled                     = optional(bool, true)
+    simulator_endpoint          = optional(string, "")
+    subscription_mode           = optional(string, "auto-subscribe")
+    default_customer_identifier = optional(string, "")
+    default_buyer_account_id    = optional(string, "")
+    feature_offer_id_map        = optional(string, "{}")
+    admin_group_name            = optional(string, "Admin")
+    configuration_bucket_name   = optional(string, "")
+    catalog_key                 = optional(string, "feature-platform/catalog.json")
+    artifact_region             = optional(string, "")
+    seller_bucket_object_arns   = optional(list(string), [])
+  })
+  default = {}
 }

@@ -191,6 +191,13 @@ resource "aws_iam_policy" "agent_processor_policy" {
         Effect   = local.bedrock_model_permissions.foundation_statement.effect
         Action   = local.bedrock_model_permissions.foundation_statement.actions
         Resource = local.bedrock_model_permissions.foundation_statement.resources
+      },
+      # OpenAI GPT-5.x via the bedrock-mantle endpoint (OpenAI Responses API),
+      # a separate IAM action namespace. Mirrors upstream v0.5.16.
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock-mantle:CreateInference", "bedrock-mantle:GetProject", "bedrock-mantle:ListProjects", "bedrock-mantle:ListTagsForResources"]
+        Resource = "*"
       }],
       # Inference profile permissions (only for cross-region inference profiles)
       local.bedrock_model_permissions.inference_profile_statement != null ? [{

@@ -68,6 +68,7 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
+      processor_memory_size    = optional(number, 4096)
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -356,6 +357,28 @@ variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
   default     = {}
+}
+
+#
+# Build strategy. Forwarded verbatim to the wrapper's var.build. Defaults
+# preserve the historical CodeBuild path; set lambda_local = true to opt
+# into the local-build path (requires Docker/Podman/Finch on the deploy
+# host). See docs/content/deployment-guides/local-lambda-build.md.
+#
+variable "build" {
+  description = "Build strategy for Lambda layers and processor container images."
+  type = object({
+    lambda_local        = optional(bool, false)
+    lambda_architecture = optional(string, "arm64")
+    container_runtime   = optional(string, "auto")
+    ui_local            = optional(bool, false)
+  })
+  default = {
+    lambda_local        = false
+    lambda_architecture = "arm64"
+    container_runtime   = "auto"
+    ui_local            = false
+  }
 }
 
 variable "seed_managed_configs" {

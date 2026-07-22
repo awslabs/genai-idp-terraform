@@ -124,6 +124,31 @@ class TestConfigModels:
         assert config.extraction.top_p == 0.1
         assert config.extraction.max_tokens == 10000
 
+    def test_classification_valid_class_enforcement_defaults(self):
+        """New class-enforcement fields default to enabled with sane values."""
+        from idp_common.config.models import ClassificationConfig
+
+        cfg = ClassificationConfig()
+        assert cfg.enforceValidClasses is True
+        assert cfg.maxValidationRetries == 2
+        assert cfg.invalidClassFallback == "unclassified"
+
+    def test_classification_valid_class_enforcement_parsing(self):
+        """String-typed stored config values parse into the correct types."""
+        from idp_common.config.models import ClassificationConfig
+
+        cfg = ClassificationConfig(
+            enforceValidClasses="false",
+            maxValidationRetries="3",
+            invalidClassFallback="other",
+        )
+        assert cfg.enforceValidClasses is False
+        assert cfg.maxValidationRetries == 3
+        assert cfg.invalidClassFallback == "other"
+
+        # Negative retries are clamped to 0.
+        assert ClassificationConfig(maxValidationRetries="-1").maxValidationRetries == 0
+
     def test_config_type_hints(self):
         """Test that config can be used as type hint"""
 
@@ -196,7 +221,7 @@ class TestChatConfig:
 
         assert cfg.enabled is True
         # Default should be a large-context Opus model (see decision in CHANGELOG).
-        assert cfg.model == "us.anthropic.claude-opus-4-7:1m"
+        assert cfg.model == "us.anthropic.claude-opus-4-8:1m"
         assert cfg.temperature == 0.0
         assert cfg.max_tokens == 4096
         assert cfg.system_prompt  # non-empty
@@ -236,3 +261,60 @@ class TestChatConfig:
         """temperature must be within [0, 1] like other model sections."""
         with pytest.raises(Exception):  # Pydantic ValidationError
             ChatConfig.model_validate({"temperature": 2.0})
+
+
+class TestPipelineHookPreservation:
+    """Feature Platform pipeline hooks are stored inline in a config version
+    under `<step>.postHook`. The host's dispatcher reads them from the raw
+    DynamoDB row, but several write paths round-trip the config through
+    IDPConfig validation (Save-as-Version, updateConfiguration, and the
+    sparse-config auto-migration in ConfigurationManager). If `postHook` were
+    not a declared field, extra="ignore" would silently drop it on those
+    round-trips, leaving the dispatcher with no hook to invoke (symptom: a
+    feature's post-step hook never fires, e.g. the Claims Dashboard stays
+    empty). These tests lock the field in on every hookable step.
+    """
+
+    _HOOK = {
+        "featureId": "sample-health-insurance-review",
+        "arn": "arn:aws:lambda:us-west-2:111122223333:function:ClaimStatusHook",
+        "order": 100,
+        "onError": "continue",
+        "enabled": True,
+    }
+    _STEPS = [
+        "ocr",
+        "classification",
+        "extraction",
+        "assessment",
+        "rule_validation",
+        "summarization",
+    ]
+
+    def test_post_hook_survives_idp_config_round_trip_all_steps(self):
+        cfg_dict = {step: {"postHook": [self._HOOK]} for step in self._STEPS}
+        dumped = IDPConfig.model_validate(cfg_dict).model_dump(mode="python")
+        for step in self._STEPS:
+            hooks = dumped[step]["postHook"]
+            assert len(hooks) == 1, f"{step}.postHook dropped on round-trip"
+            assert hooks[0]["arn"].endswith(":ClaimStatusHook")
+            assert hooks[0]["featureId"] == "sample-health-insurance-review"
+            assert hooks[0]["onError"] == "continue"
+            assert hooks[0]["enabled"] is True
+
+    def test_post_hook_defaults_to_empty_list(self):
+        """No hooks configured → empty list, never None (dispatcher iterates it)."""
+        cfg = IDPConfig.model_validate({})
+        assert cfg.rule_validation.postHook == []
+        assert cfg.classification.postHook == []
+
+    def test_sparse_rule_validation_overlay_keeps_hook_and_merges_defaults(self):
+        """The real failure mode: a sparse preset overlay carrying only
+        rule_validation.postHook must keep the hook AND inherit classification
+        defaults (system_prompt) once merged into a full IDPConfig."""
+        cfg = IDPConfig.model_validate(
+            {"rule_validation": {"enabled": True, "postHook": [self._HOOK]}}
+        )
+        assert len(cfg.rule_validation.postHook) == 1
+        # classification still has its default model (not wiped out).
+        assert cfg.classification.model

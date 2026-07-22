@@ -110,6 +110,11 @@ module "agent_analytics_idp_layer" {
 
   # Force rebuild if needed
   force_rebuild = false
+
+  # Build strategy (see root var.build)
+  lambda_local        = var.lambda_local
+  lambda_architecture = var.lambda_architecture
+  container_runtime   = var.container_runtime
 }
 
 # =============================================================================
@@ -145,6 +150,11 @@ module "agent_dependencies_layer" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
+
+  # Build strategy (see root var.build)
+  lambda_local        = var.lambda_local
+  lambda_architecture = var.lambda_architecture
+  container_runtime   = var.container_runtime
 }
 
 
@@ -211,6 +221,7 @@ data "archive_file" "agent_request_handler_code" {
 
 # Agent Request Handler Lambda function
 resource "aws_lambda_function" "agent_request_handler" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-agent-request-${local.suffix}"
 
   filename         = data.archive_file.agent_request_handler_code.output_path
@@ -285,6 +296,7 @@ data "archive_file" "agent_processor_code" {
 
 # Agent Processor Lambda function
 resource "aws_lambda_function" "agent_processor" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-agent-processor-${local.suffix}"
 
   filename         = data.archive_file.agent_processor_code.output_path
@@ -367,6 +379,7 @@ data "archive_file" "list_available_agents_code" {
 
 # List Available Agents Lambda function
 resource "aws_lambda_function" "list_available_agents" {
+  architectures = [var.lambda_architecture]
   function_name = "${var.name_prefix}-list-agents-${local.suffix}"
 
   filename         = data.archive_file.list_available_agents_code.output_path

@@ -153,6 +153,523 @@ class TestSticklerEvaluationService:
         assert extraction_data == {"invoice_number": "INV-123", "total_amount": 100.00}
         assert "invoice_number" in confidence_scores
 
+    def test_flatten_confidence_scores(self, service):
+        """Test flattening confidence scores from assessment explainability format."""
+        # Real-world confidence structure from assessment service with geometry and thresholds
+        confidence_scores = {
+            "Agency": {
+                "confidence": 0.99,
+                "geometry": [
+                    {
+                        "boundingBox": {
+                            "top": 0.215,
+                            "left": 0.15,
+                            "width": 0.249,
+                            "height": 0.014,
+                        },
+                        "page": 1,
+                    }
+                ],
+                "confidence_threshold": 0.8,
+            },
+            "Advertiser": {
+                "confidence": 1.0,
+                "geometry": [
+                    {
+                        "boundingBox": {
+                            "top": 0.183,
+                            "left": 0.46,
+                            "width": 0.158,
+                            "height": 0.012,
+                        },
+                        "page": 1,
+                    }
+                ],
+                "confidence_threshold": 0.8,
+            },
+            "GrossTotal": {
+                "confidence": 0.99,
+                "geometry": [
+                    {
+                        "boundingBox": {
+                            "top": 0.725,
+                            "left": 0.873,
+                            "width": 0.07,
+                            "height": 0.012,
+                        },
+                        "page": 2,
+                    }
+                ],
+                "confidence_threshold": 0.8,
+            },
+            "LineItems": [
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [
+                            {
+                                "boundingBox": {
+                                    "top": 0.47,
+                                    "left": 0.754,
+                                    "width": 0.052,
+                                    "height": 0.013,
+                                },
+                                "page": 1,
+                            }
+                        ],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [
+                            {
+                                "boundingBox": {
+                                    "top": 0.47,
+                                    "left": 0.5,
+                                    "width": 0.05,
+                                    "height": 0.013,
+                                },
+                                "page": 1,
+                            }
+                        ],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDescription": {
+                        "confidence": 0.9,
+                        "geometry": [
+                            {
+                                "boundingBox": {
+                                    "top": 0.47,
+                                    "left": 0.228,
+                                    "width": 0.098,
+                                    "height": 0.013,
+                                },
+                                "page": 1,
+                            }
+                        ],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [
+                            {
+                                "boundingBox": {
+                                    "top": 0.469,
+                                    "left": 0.754,
+                                    "width": 0.05,
+                                    "height": 0.013,
+                                },
+                                "page": 1,
+                            }
+                        ],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [
+                            {
+                                "boundingBox": {
+                                    "top": 0.469,
+                                    "left": 0.5,
+                                    "width": 0.049,
+                                    "height": 0.013,
+                                },
+                                "page": 1,
+                            }
+                        ],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+            ],
+        }
+
+        # Test Rich Value conversion
+        inference_result = {
+            "Agency": "BUYING TIME, LLC",
+            "Advertiser": "ACME CORP",
+            "GrossTotal": 15185.0,
+            "LineItems": [
+                {
+                    "LineItemRate": 600.0,
+                    "LineItemDays": "MTWT---",
+                    "LineItemDescription": "Ad spot",
+                },
+                {"LineItemRate": 500.0, "LineItemDays": "MTWT---"},
+            ],
+        }
+
+        rich_values = service._convert_to_rich_values(
+            inference_result, confidence_scores
+        )
+
+        # Verify top-level fields have rich values with confidence
+        assert rich_values["Agency"] == {
+            "_value": "BUYING TIME, LLC",
+            "_confidence": 0.99,
+        }
+        assert rich_values["Advertiser"] == {"_value": "ACME CORP", "_confidence": 1.0}
+        assert rich_values["GrossTotal"] == {"_value": 15185.0, "_confidence": 0.99}
+
+        # Verify array items have rich values with confidence
+        assert rich_values["LineItems"][0]["LineItemRate"] == {
+            "_value": 600.0,
+            "_confidence": 1.0,
+        }
+        assert rich_values["LineItems"][0]["LineItemDays"] == {
+            "_value": "MTWT---",
+            "_confidence": 0.8,
+        }
+        assert rich_values["LineItems"][0]["LineItemDescription"] == {
+            "_value": "Ad spot",
+            "_confidence": 0.9,
+        }
+        assert rich_values["LineItems"][1]["LineItemRate"] == {
+            "_value": 500.0,
+            "_confidence": 1.0,
+        }
+        assert rich_values["LineItems"][1]["LineItemDays"] == {
+            "_value": "MTWT---",
+            "_confidence": 0.8,
+        }
+
+    def test_flatten_confidence_scores_with_wrapper_keys(self, service):
+        """Test flattening confidence scores when array elements have wrapper keys.
+
+        This reproduces the production scenario where explainability_info contains
+        wrapper keys like 'Item #6' that don't exist in the inference_result.
+        """
+        # Production data structure: LineItems[5] has a wrapper key 'Item #6'
+        confidence_scores = {
+            "Agency": {
+                "confidence": 0.99,
+                "geometry": [
+                    {
+                        "boundingBox": {
+                            "top": 0.215,
+                            "left": 0.15,
+                            "width": 0.249,
+                            "height": 0.014,
+                        },
+                        "page": 1,
+                    }
+                ],
+                "confidence_threshold": 0.8,
+            },
+            "LineItems": [
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+                {
+                    "LineItemRate": {
+                        "confidence": 1.0,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                    "LineItemDays": {
+                        "confidence": 0.8,
+                        "geometry": [],
+                        "confidence_threshold": 0.9,
+                    },
+                },
+                # Element 5: Has wrapper key 'Item #6'
+                {
+                    "Item #6": {
+                        "LineItemRate": {
+                            "confidence": 1.0,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDays": {
+                            "confidence": 0.8,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                    }
+                },
+            ],
+        }
+
+        # Inference result: Clean data without wrapper keys
+        inference_result = {
+            "Agency": "BUYING TIME, LLC",
+            "LineItems": [
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "------S"},  # Element 5
+            ],
+        }
+
+        # This should handle the wrapper key scenario without KeyError
+        rich_values = service._convert_to_rich_values(
+            inference_result, confidence_scores
+        )
+
+        # Verify top-level field
+        assert rich_values["Agency"] == {
+            "_value": "BUYING TIME, LLC",
+            "_confidence": 0.99,
+        }
+
+        # Verify clean array elements (0-4)
+        for i in range(5):
+            assert rich_values["LineItems"][i]["LineItemRate"]["_value"] == 1000.0
+            assert rich_values["LineItems"][i]["LineItemRate"]["_confidence"] == 1.0
+            assert rich_values["LineItems"][i]["LineItemDays"]["_confidence"] == 0.8
+
+        # Verify element 5 with wrapper key - should unwrap automatically
+        assert rich_values["LineItems"][5]["LineItemRate"]["_value"] == 1000.0
+        assert rich_values["LineItems"][5]["LineItemRate"]["_confidence"] == 1.0
+        assert rich_values["LineItems"][5]["LineItemDays"]["_value"] == "------S"
+        assert rich_values["LineItems"][5]["LineItemDays"]["_confidence"] == 0.8
+
+    def test_production_scenario_exact_data(self, service):
+        """Test with exact production data that caused KeyError: 0.
+
+        Uses actual data structure from production S3 file where evaluation failed.
+        """
+        # Exact production confidence structure (explainability_info is a list with one element)
+        explainability_info = [
+            {
+                "Agency": {
+                    "confidence": 0.99,
+                    "geometry": [
+                        {
+                            "boundingBox": {
+                                "top": 0.215,
+                                "left": 0.15,
+                                "width": 0.249,
+                                "height": 0.014,
+                            },
+                            "page": 1,
+                        }
+                    ],
+                    "confidence_threshold": 0.8,
+                },
+                "Advertiser": {
+                    "confidence": 1.0,
+                    "geometry": [
+                        {
+                            "boundingBox": {
+                                "top": 0.183,
+                                "left": 0.46,
+                                "width": 0.158,
+                                "height": 0.012,
+                            },
+                            "page": 1,
+                        }
+                    ],
+                    "confidence_threshold": 0.8,
+                },
+                "GrossTotal": {
+                    "confidence": 0.99,
+                    "geometry": [
+                        {
+                            "boundingBox": {
+                                "top": 0.725,
+                                "left": 0.873,
+                                "width": 0.07,
+                                "height": 0.012,
+                            },
+                            "page": 2,
+                        }
+                    ],
+                    "confidence_threshold": 0.8,
+                },
+                "LineItems": [
+                    {
+                        "LineItemRate": {
+                            "confidence": 1.0,
+                            "geometry": [
+                                {
+                                    "boundingBox": {
+                                        "top": 0.47,
+                                        "left": 0.754,
+                                        "width": 0.052,
+                                        "height": 0.013,
+                                    },
+                                    "page": 1,
+                                }
+                            ],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDays": {
+                            "confidence": 0.8,
+                            "geometry": [
+                                {
+                                    "boundingBox": {
+                                        "top": 0.47,
+                                        "left": 0.5,
+                                        "width": 0.05,
+                                        "height": 0.013,
+                                    },
+                                    "page": 1,
+                                }
+                            ],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDescription": {
+                            "confidence": 0.9,
+                            "geometry": [
+                                {
+                                    "boundingBox": {
+                                        "top": 0.47,
+                                        "left": 0.228,
+                                        "width": 0.098,
+                                        "height": 0.013,
+                                    },
+                                    "page": 1,
+                                }
+                            ],
+                            "confidence_threshold": 0.9,
+                        },
+                    },
+                    {
+                        "LineItemRate": {
+                            "confidence": 1.0,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDays": {
+                            "confidence": 0.8,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                    },
+                    {
+                        "LineItemRate": {
+                            "confidence": 1.0,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDays": {
+                            "confidence": 0.8,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                    },
+                    {
+                        "LineItemRate": {
+                            "confidence": 1.0,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDays": {
+                            "confidence": 0.8,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                    },
+                    {
+                        "LineItemRate": {
+                            "confidence": 1.0,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                        "LineItemDays": {
+                            "confidence": 0.8,
+                            "geometry": [],
+                            "confidence_threshold": 0.9,
+                        },
+                    },
+                    {
+                        "Item #6": {
+                            "LineItemRate": {
+                                "confidence": 1.0,
+                                "geometry": [],
+                                "confidence_threshold": 0.9,
+                            },
+                            "LineItemDays": {
+                                "confidence": 0.8,
+                                "geometry": [],
+                                "confidence_threshold": 0.9,
+                            },
+                        }
+                    },
+                ],
+            }
+        ]
+
+        # Exact production inference_result
+        inference_result = {
+            "Agency": "BUYING TIME, LLC",
+            "Advertiser": "ACME CORP",
+            "GrossTotal": 15185.0,
+            "LineItems": [
+                {
+                    "LineItemRate": 1000.0,
+                    "LineItemDays": "MTWT---",
+                    "LineItemDescription": "Ad spot",
+                },
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "MTWT---"},
+                {"LineItemRate": 1000.0, "LineItemDays": "------S"},
+            ],
+        }
+
+        # This should NOT raise KeyError: 0
+        # Pass the unwrapped dict (mimicking what _prepare_stickler_data does)
+        rich_values = service._convert_to_rich_values(
+            inference_result, explainability_info[0]
+        )
+
+        # Verify structure is correct
+        assert rich_values["Agency"]["_value"] == "BUYING TIME, LLC"
+        assert rich_values["Agency"]["_confidence"] == 0.99
+        assert len(rich_values["LineItems"]) == 6
+        assert rich_values["LineItems"][5]["LineItemRate"]["_value"] == 1000.0
+
     def test_get_nested_value(self, service):
         """Test getting nested values from Stickler model instances."""
         # Create a mock object with nested attributes
@@ -334,6 +851,143 @@ class TestSticklerEvaluationService:
                 # Verify Stickler was used
                 mock_get_model.assert_called_once()
                 mock_instance.compare_with.assert_called_once()
+
+    @pytest.fixture
+    def nested_optional_config(self):
+        """Config with a nested object whose fields have no 'required' array.
+
+        Mirrors real auto/manual schemas (e.g. URLA) where every field is
+        optional and may be None.
+        """
+        return {
+            "classes": [
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "form",
+                    "x-aws-idp-document-type": "Form",
+                    "type": "object",
+                    "properties": {
+                        "Contact": {"$ref": "#/$defs/Contact"},
+                    },
+                    "$defs": {
+                        "Contact": {
+                            "type": "object",
+                            "properties": {
+                                "HomePhone": {"type": "string"},
+                                "WorkPhone": {"type": "string"},
+                                "Email": {"type": "string"},
+                            },
+                        }
+                    },
+                }
+            ]
+        }
+
+    def test_evaluate_section_none_in_nested_optional_with_confidence(
+        self, nested_optional_config
+    ):
+        """Regression: None values in nested optional fields must not fail eval.
+
+        Stickler's JsonSchemaFieldConverter builds optional fields with a None
+        default but a non-nullable annotation (e.g. ``str``). The confidence
+        path round-trips data through ``from_json``/``model_dump``, which
+        materializes None for missing fields and re-validates, previously
+        raising "Input should be a valid string [input_value=None]" and
+        surfacing as a misleading "Schema configuration error". The service
+        widens every field to Optional so this path succeeds.
+        """
+        service = EvaluationService(
+            region="us-west-2", config=nested_optional_config, max_workers=1
+        )
+        section = Section(section_id="1", classification="Form", page_ids=["1"])
+
+        # WorkPhone is None (not extracted) in both baseline and prediction
+        expected = {
+            "Contact": {"HomePhone": "555-1", "WorkPhone": None, "Email": "a@b.c"}
+        }
+        actual = {
+            "Contact": {"HomePhone": "555-1", "WorkPhone": None, "Email": "a@b.c"}
+        }
+        confidence = {
+            "Contact": {
+                "HomePhone": {"confidence": 0.95},
+                "Email": {"confidence": 0.95},
+            }
+        }
+
+        result = service.evaluate_section(
+            section=section,
+            expected_results=expected,
+            actual_results=actual,
+            confidence_scores=confidence,
+        )
+
+        # Must not be flagged as a failed evaluation
+        assert not result.metrics.get("evaluation_failed")
+        assert result.document_class == "Form"
+
+    def test_evaluate_section_blast_radius_limited_to_bad_field(self):
+        """A single unparseable field must not zero out the whole section.
+
+        The tolerant build drops only the offending field (from both sides) and
+        still evaluates the rest, instead of raising and failing every attribute.
+        """
+        config = {
+            "classes": [
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$id": "t",
+                    "x-aws-idp-document-type": "T",
+                    "type": "object",
+                    "properties": {
+                        "Good": {"type": "string"},
+                        # numeric field; a dict value can't be coerced and will
+                        # fail Pydantic validation
+                        "Amount": {"type": "number"},
+                    },
+                }
+            ]
+        }
+        service = EvaluationService(region="us-west-2", config=config, max_workers=1)
+        section = Section(section_id="1", classification="T", page_ids=["1"])
+
+        expected = {"Good": "hello", "Amount": {"nested": "oops"}}
+        actual = {"Good": "hello", "Amount": {"nested": "oops2"}}
+
+        result = service.evaluate_section(section, expected, actual, None)
+
+        # Section did NOT hard-fail; the good field was still scored
+        assert not result.metrics.get("evaluation_failed")
+        good = next((a for a in result.attributes if a.name == "Good"), None)
+        assert good is not None and good.matched
+        # The bad field is reported as skipped, not silently dropped
+        assert result.metrics.get("skipped_field_count") == 1
+        assert any(a.name.startswith("__SKIPPED__") for a in result.attributes)
+
+    def test_drop_field_at_path_nested_and_list(self):
+        """_drop_field_at_path removes the right leaf for dict and list paths."""
+        service = EvaluationService(
+            region="us-west-2", config={"classes": []}, max_workers=1
+        )
+        data = {
+            "A": {"B": {"C": "x", "D": "y"}},
+            "Items": [{"k": 1}, {"k": 2}],
+        }
+
+        # Nested dict path
+        out = service._drop_field_at_path(data, ("A", "B", "C"))
+        assert "C" not in out["A"]["B"]
+        assert out["A"]["B"]["D"] == "y"
+        assert data["A"]["B"]["C"] == "x"  # original untouched (deep copy)
+
+        # List index path
+        out2 = service._drop_field_at_path(data, ("Items", 0, "k"))
+        assert "k" not in out2["Items"][0]
+        assert out2["Items"][1]["k"] == 2
+
+        # Non-existent path is a no-op
+        out3 = service._drop_field_at_path(data, ("Nope", "Missing"))
+        assert out3 == data
 
 
 @pytest.mark.unit

@@ -205,6 +205,7 @@ resource "aws_cloudwatch_log_group" "chat_processor" {
 }
 
 resource "aws_lambda_function" "chat_processor" {
+  architectures = [var.lambda_architecture]
   #checkov:skip=CKV_AWS_116:DLQ not required — invoked async by resolver; failures published to UI as assistant_error
   #checkov:skip=CKV_AWS_117:VPC access is optional (driven by var.vpc_subnet_ids)
   #checkov:skip=CKV_AWS_115:Reserved concurrency not required — scales on demand
@@ -217,7 +218,7 @@ resource "aws_lambda_function" "chat_processor" {
   handler     = "index.handler"
   runtime     = "python3.12"
   timeout     = 900
-  memory_size = 4096
+  memory_size = var.processor_memory_size
   description = "Long-running Chat-with-Document processor (streams Bedrock tokens via AppSync)"
 
   layers      = local.layers
@@ -316,6 +317,7 @@ resource "aws_cloudwatch_log_group" "chat_resolver" {
 }
 
 resource "aws_lambda_function" "chat_resolver" {
+  architectures = [var.lambda_architecture]
   #checkov:skip=CKV_AWS_116:DLQ not required for AppSync resolver function
   #checkov:skip=CKV_AWS_117:VPC access is optional (driven by var.vpc_subnet_ids)
   #checkov:skip=CKV_AWS_115:Reserved concurrency not required — scales on demand

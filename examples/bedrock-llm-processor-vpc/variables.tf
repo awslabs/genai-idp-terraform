@@ -149,6 +149,7 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, false)
       guardrail_id_and_version = optional(string, null)
+      processor_memory_size    = optional(number, 4096)
     }), { enabled = false })
 
     process_changes = optional(object({
@@ -212,6 +213,28 @@ variable "process_changes" {
 
 variable "admin_email" {
   description = "Administrator email address for notifications and access"
+  type        = string
+  default     = null
+}
+
+variable "build" {
+  description = "Build strategy for Lambda layers and the web UI (CodeBuild by default; local Docker/npm when the *_local flags are true)."
+  type = object({
+    lambda_local        = optional(bool, false)
+    lambda_architecture = optional(string, "arm64")
+    container_runtime   = optional(string, "auto")
+    ui_local            = optional(bool, false)
+  })
+  default = {
+    lambda_local        = false
+    lambda_architecture = "arm64"
+    container_runtime   = "auto"
+    ui_local            = false
+  }
+}
+
+variable "web_ui_alb_certificate_arn" {
+  description = "ACM certificate ARN for the internal ALB HTTPS listener. When set, the Web UI is served via ALB hosting (WebUIHosting=ALB) in this isolated VPC; when null, the Web UI is disabled."
   type        = string
   default     = null
 }

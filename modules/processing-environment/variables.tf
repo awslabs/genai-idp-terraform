@@ -166,3 +166,34 @@ variable "custom_post_processor_arn" {
   type        = string
   default     = null
 }
+
+#
+# Build strategy pass-through (see root var.build in variables.tf)
+#
+variable "lambda_local" {
+  description = "When true, build Lambda layers locally using a container runtime instead of via AWS CodeBuild. See root var.build.lambda_local."
+  type        = bool
+  default     = false
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture for layers/functions owned by this module."
+  type        = string
+  default     = "arm64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
+variable "container_runtime" {
+  description = "Container runtime for local builds (auto|docker|podman|finch)."
+  type        = string
+  default     = "auto"
+
+  validation {
+    condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
+    error_message = "container_runtime must be one of: auto, docker, podman, finch."
+  }
+}

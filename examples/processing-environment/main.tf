@@ -234,6 +234,11 @@ module "idp_common_layer" {
 
   # Optional: Force rebuild if needed
   force_rebuild = var.force_layer_rebuild
+
+  # Build strategy (CodeBuild by default; flip to local-build via tfvars)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Create the Processing Environment
@@ -263,6 +268,11 @@ module "processing_environment" {
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
+
+  # Build strategy (CodeBuild by default; flip to local-build via tfvars)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 
   tags = var.tags
 }

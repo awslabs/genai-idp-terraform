@@ -40,6 +40,7 @@ resource "aws_iam_role_policy" "state_machine" {
           aws_lambda_function.classification.arn,
           aws_lambda_function.extraction.arn,
           aws_lambda_function.process_results.arn,
+          aws_lambda_function.pipeline_hooks_dispatcher.arn,
           var.is_summarization_enabled ? aws_lambda_function.summarization[0].arn : "",
           aws_lambda_function.assessment.arn,
           var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : "",
@@ -313,6 +314,8 @@ resource "aws_iam_role_policy" "classification_lambda" {
     Version = "2012-10-17"
     Statement = concat(
       # Foundation model permissions (always included)
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      [local.bedrock_mantle_statement],
       local.bedrock_model_permissions.classification != null ? [{
         Effect   = local.bedrock_model_permissions.classification.foundation_statement.effect
         Action   = local.bedrock_model_permissions.classification.foundation_statement.actions
@@ -417,6 +420,8 @@ resource "aws_iam_role_policy" "extraction_lambda" {
     Version = "2012-10-17"
     Statement = concat(
       # Foundation model permissions (always included)
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      [local.bedrock_mantle_statement],
       local.bedrock_model_permissions.extraction != null ? [{
         Effect   = local.bedrock_model_permissions.extraction.foundation_statement.effect
         Action   = local.bedrock_model_permissions.extraction.foundation_statement.actions
@@ -625,6 +630,8 @@ resource "aws_iam_role_policy" "summarization_lambda" {
     Version = "2012-10-17"
     Statement = concat(
       # Foundation model permissions (always included)
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      [local.bedrock_mantle_statement],
       local.bedrock_model_permissions.summarization != null ? [{
         Effect   = local.bedrock_model_permissions.summarization.foundation_statement.effect
         Action   = local.bedrock_model_permissions.summarization.foundation_statement.actions
@@ -850,6 +857,8 @@ resource "aws_iam_role_policy" "assessment_lambda" {
           "${local.tracking_table_arn}/index/*"
         ]
       }],
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      [local.bedrock_mantle_statement],
       # Foundation model permissions
       local.bedrock_model_permissions.assessment != null ? [{
         Effect   = local.bedrock_model_permissions.assessment.foundation_statement.effect
@@ -1026,6 +1035,8 @@ resource "aws_iam_role_policy" "evaluation_lambda" {
         Action   = ["dynamodb:GetItem", "dynamodb:Query"]
         Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*"]
       },
+      # OpenAI GPT-5.x (bedrock-mantle) permissions
+      local.bedrock_mantle_statement,
       {
         Effect = "Allow"
         Action = ["bedrock:InvokeModel", "bedrock:GetInferenceProfile"]

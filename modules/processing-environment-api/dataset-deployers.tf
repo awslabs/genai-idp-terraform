@@ -90,6 +90,7 @@ data "archive_file" "ocr_benchmark_deployer" {
 }
 
 resource "aws_lambda_function" "ocr_benchmark_deployer" {
+  architectures    = [var.lambda_architecture]
   count            = local.enable_ocr_benchmark_deployer ? 1 : 0
   function_name    = "${local.api_name}-ocr-benchmark-deployer"
   role             = aws_iam_role.dataset_deployers[0].arn
@@ -142,6 +143,7 @@ data "archive_file" "docsplit_testset_deployer" {
 }
 
 resource "aws_lambda_function" "docsplit_testset_deployer" {
+  architectures    = [var.lambda_architecture]
   count            = local.enable_docsplit_testset_deployer ? 1 : 0
   function_name    = "${local.api_name}-docsplit-testset-deployer"
   role             = aws_iam_role.dataset_deployers[0].arn

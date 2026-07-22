@@ -78,6 +78,7 @@ data "archive_file" "abort_workflow" {
 }
 
 resource "aws_lambda_function" "abort_workflow" {
+  architectures    = [var.lambda_architecture]
   function_name    = "${local.api_name}-abort-workflow"
   role             = aws_iam_role.abort_workflow.arn
   filename         = data.archive_file.abort_workflow.output_path

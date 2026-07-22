@@ -24,6 +24,9 @@ module "engine" {
   # The engine resources adopt the façade's name.
   name = var.name
 
+  # Lambda architecture (must match the idp_common layer build architecture).
+  lambda_architecture = var.lambda_architecture
+
   # API wiring
   enable_api      = var.enable_api
   api_id          = var.api_id
@@ -57,7 +60,8 @@ module "engine" {
   evaluation_layer_arn = var.evaluation_layer_arn
 
   # Rule validation
-  enable_rule_validation = var.enable_rule_validation
+  enable_rule_validation      = var.enable_rule_validation
+  rule_validation_memory_size = var.rule_validation_memory_size
 
   # Lambda hook inference (v0.4.15+)
   lambda_hook_ocr            = var.lambda_hook_ocr

@@ -101,8 +101,11 @@ module "processor_configuration" {
 
   # Layers required so the seeder Lambda merges user config with system
   # defaults; without them the runtime crashes with "No system_prompt found".
+  # The seeder must run on the same architecture the layers were built for,
+  # otherwise idp_common's native deps (pydantic_core) fail to import.
   base_layer_arn       = var.base_layer_arn
   idp_common_layer_arn = var.idp_common_layer_arn
+  lambda_architecture  = var.lambda_architecture
 
   vpc_config          = local.vpc_config
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -228,7 +231,11 @@ locals {
     }
   } : {}
 
-  summ_states = local.summ_enabled ? {
+  # merge([for ...]...) rather than a ternary: SummarizationStep and
+  # PostSummarizationHook are heterogeneously shaped, so a ternary against an
+  # empty object fails type unification; the single-element comprehension folds
+  # into the populated map (same pattern as the BDA states below).
+  summ_states = merge([for _ in(local.summ_enabled ? [1] : []) : {
     SummarizationStep = {
       Type     = "Task"
       Resource = aws_lambda_function.summarization[0].arn
@@ -239,9 +246,36 @@ locals {
       ResultPath = "$.Result"
       OutputPath = "$.Result.document"
       Retry      = local.standard_retry
-      Next       = local.post_summ_next
+      Next       = "PostSummarizationHook"
     }
-  } : {}
+    # Pipeline hook: postSummarization. ResultPath null so the summarized
+    # document passes through unchanged to the next state.
+    PostSummarizationHook = {
+      Type     = "Task"
+      Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+      Parameters = {
+        FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+        Payload = {
+          "hookPoint"      = "postSummarization"
+          "executionArn.$" = "$$.Execution.Id"
+          "document.$"     = "$"
+        }
+      }
+      ResultPath = null
+      Retry = [{
+        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+        IntervalSeconds = 2
+        MaxAttempts     = 3
+        BackoffRate     = 2
+      }]
+      Catch = [{
+        ErrorEquals = ["States.ALL"]
+        ResultPath  = null
+        Next        = local.post_summ_next
+      }]
+      Next = local.post_summ_next
+    }
+  }]...)
 
   eval_states = local.eval_enabled ? {
     EvaluationStep = {
@@ -402,6 +436,34 @@ locals {
             BackoffRate     = 2
           }
         ]
+        Next = "PostOcrHook"
+      }
+
+      # Pipeline hook: postOcr. Inert unless the active config defines
+      # ocr.postHook. Catch-all so a hook failure never breaks the pipeline.
+      PostOcrHook = {
+        Type     = "Task"
+        Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+          Payload = {
+            "hookPoint"      = "postOcr"
+            "executionArn.$" = "$$.Execution.Id"
+            "document.$"     = "$.OCRResult.document"
+          }
+        }
+        ResultPath = "$.HookResults.postOcr"
+        Retry = [{
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          IntervalSeconds = 2
+          MaxAttempts     = 3
+          BackoffRate     = 2
+        }]
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = "$.HookResults.postOcr.error"
+          Next        = "ClassificationStep"
+        }]
         Next = "ClassificationStep"
       }
 
@@ -414,7 +476,35 @@ locals {
         }
         ResultPath = "$.ClassificationResult"
         Retry      = local.standard_retry
-        Next       = "ProcessSections"
+        Next       = "PostClassificationHook"
+      }
+
+      # Pipeline hook: postClassification. Inert unless the active config
+      # defines classification.postHook.
+      PostClassificationHook = {
+        Type     = "Task"
+        Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+          Payload = {
+            "hookPoint"      = "postClassification"
+            "executionArn.$" = "$$.Execution.Id"
+            "document.$"     = "$.ClassificationResult.document"
+          }
+        }
+        ResultPath = "$.HookResults.postClassification"
+        Retry = [{
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          IntervalSeconds = 2
+          MaxAttempts     = 3
+          BackoffRate     = 2
+        }]
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = "$.HookResults.postClassification.error"
+          Next        = "ProcessSections"
+        }]
+        Next = "ProcessSections"
       }
 
       ProcessSections = {
@@ -433,7 +523,34 @@ locals {
               Type     = "Task"
               Resource = aws_lambda_function.extraction.arn
               Retry    = local.standard_retry
-              Next     = "AssessmentStep"
+              Next     = "PostExtractionHook"
+            }
+            # Pipeline hook: postExtraction (per-section, inside the Map).
+            PostExtractionHook = {
+              Type     = "Task"
+              Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+              Parameters = {
+                FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+                Payload = {
+                  "hookPoint"      = "postExtraction"
+                  "executionArn.$" = "$$.Execution.Id"
+                  "document.$"     = "$.document"
+                  "section_id.$"   = "$.section_id"
+                }
+              }
+              ResultPath = "$.HookResults.postExtraction"
+              Retry = [{
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                IntervalSeconds = 2
+                MaxAttempts     = 3
+                BackoffRate     = 2
+              }]
+              Catch = [{
+                ErrorEquals = ["States.ALL"]
+                ResultPath  = "$.HookResults.postExtraction.error"
+                Next        = "AssessmentStep"
+              }]
+              Next = "AssessmentStep"
             }
             AssessmentStep = {
               Type     = "Task"
@@ -445,7 +562,33 @@ locals {
               }
               ResultPath = "$"
               Retry      = local.standard_retry
-              Next       = "SectionComplete"
+              Next       = "PostAssessmentHook"
+            }
+            # Pipeline hook: postAssessment (per-section, inside the Map).
+            PostAssessmentHook = {
+              Type     = "Task"
+              Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+              Parameters = {
+                FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+                Payload = {
+                  "hookPoint"      = "postAssessment"
+                  "executionArn.$" = "$$.Execution.Id"
+                  "document.$"     = "$.document"
+                }
+              }
+              ResultPath = "$.HookResults.postAssessment"
+              Retry = [{
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                IntervalSeconds = 2
+                MaxAttempts     = 3
+                BackoffRate     = 2
+              }]
+              Catch = [{
+                ErrorEquals = ["States.ALL"]
+                ResultPath  = "$.HookResults.postAssessment.error"
+                Next        = "SectionComplete"
+              }]
+              Next = "SectionComplete"
             }
             SectionComplete = {
               Type = "Pass"

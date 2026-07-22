@@ -108,6 +108,7 @@ resource "aws_iam_role_policy" "backfill_worker" {
 # =============================================================================
 
 resource "aws_lambda_function" "backfill_worker" {
+  architectures    = [var.lambda_architecture]
   function_name    = "${var.name_prefix}-gsi-backfill-worker"
   role             = aws_iam_role.backfill_worker.arn
   filename         = data.archive_file.backfill_worker.output_path

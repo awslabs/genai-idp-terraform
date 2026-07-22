@@ -496,3 +496,51 @@ variable "has_feature_iam" {
   type        = bool
   default     = false
 }
+
+#
+# Build strategy pass-through (see root var.build in variables.tf)
+#
+variable "lambda_local" {
+  description = "When true, build Lambda layers locally using a container runtime instead of via AWS CodeBuild."
+  type        = bool
+  default     = false
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64)."
+  type        = string
+  default     = "arm64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
+variable "container_runtime" {
+  description = "Container runtime for local builds (auto|docker|podman|finch)."
+  type        = string
+  default     = "auto"
+
+  validation {
+    condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
+    error_message = "container_runtime must be one of: auto, docker, podman, finch."
+  }
+}
+
+# =============================================================================
+# PRESIGNED-URL-VIA-VPCE (v0.5.16)
+# =============================================================================
+
+variable "s3_endpoint_url" {
+  description = <<-EOT
+    Optional S3 endpoint URL for presigner/dataset Lambdas. When set (e.g.
+    "https://bucket.vpce-abc123.s3.us-east-1.vpce.amazonaws.com"), those
+    Lambdas generate presigned URLs and issue S3 calls against the S3 interface
+    VPC endpoint using virtual-host addressing (private-network path). When
+    null (default), presigned URLs use the global regional S3 endpoint.
+    Mirrors upstream S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride.
+  EOT
+  type        = string
+  default     = null
+}

@@ -145,6 +145,12 @@ variable "chat_with_document_enabled" {
   default     = true
 }
 
+variable "chat_processor_memory_size" {
+  description = "Memory (MB) for the Chat-with-Document processor Lambda. Defaults to 4096 (upstream). Lower to 3008 for accounts whose Lambda memory service quota caps below 4096 MB."
+  type        = number
+  default     = 4096
+}
+
 variable "create_discovery" {
   description = "Enable the Discovery feature (Web UI 'Discovery' tab). Provisions the discovery S3 bucket, tracking table, SQS queue, upload/processor Lambdas, and AppSync resolvers, and populates the UI's DiscoveryBucket setting. Discovery uses Bedrock to auto-detect document classes/schemas from uploaded samples; with no discovery.* model configured it defaults to global.anthropic.claude-sonnet-4-6 (must be enabled in Bedrock for this region). Default on."
   type        = bool
@@ -204,6 +210,44 @@ variable "rbac" {
 
 variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
+  type        = bool
+  default     = false
+}
+
+variable "build" {
+  description = "Build strategy for Lambda layers and the web UI (CodeBuild by default; local Docker/npm when the *_local flags are true)."
+  type = object({
+    lambda_local        = optional(bool, false)
+    lambda_architecture = optional(string, "arm64")
+    container_runtime   = optional(string, "auto")
+    ui_local            = optional(bool, false)
+  })
+  default = {
+    lambda_local        = false
+    lambda_architecture = "arm64"
+    container_runtime   = "auto"
+    ui_local            = false
+  }
+}
+
+# =============================================================================
+# Agent features (Web UI). All default off.
+# =============================================================================
+
+variable "enable_agent_companion_chat" {
+  description = "Enable the Agent Companion Chat panel in the Web UI (multi-agent chat sessions)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_agent_analytics" {
+  description = "Enable the Agent Analytics agent (populates the Web UI 'Available Agents' list). Requires reporting; when true the example provisions a reporting S3 bucket + Glue database and wires the reporting module."
+  type        = bool
+  default     = false
+}
+
+variable "enable_mcp" {
+  description = "Enable custom MCP agents via Bedrock AgentCore Gateway."
   type        = bool
   default     = false
 }

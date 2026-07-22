@@ -13,6 +13,7 @@ locals {
     hitl               = try(var.api.enable_hitl, false)
     rbac               = try(var.rbac.enabled, false)
     federation         = try(var.idp_federation.enabled, false)
+    feature_platform   = try(var.feature_platform.enabled, false)
   }
 }
 
@@ -30,6 +31,8 @@ check "rbac_requires_cognito" {
 module "mcp_integration" {
   source = "./modules/features/mcp-integration"
   count  = local.feature_enable.mcp ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   enabled     = true
   name_prefix = "${local.name_prefix}-api"
@@ -63,6 +66,8 @@ module "chat_with_document" {
   source = "./modules/features/chat-with-document"
   count  = local.feature_enable.chat_with_document ? 1 : 0
 
+  lambda_architecture = var.build.lambda_architecture
+
   name_prefix = "${local.name_prefix}-api"
 
   appsync_api_id          = module.processing_environment_api[0].api_id
@@ -80,6 +85,7 @@ module "chat_with_document" {
 
   config                   = local.chat_with_document_processor_config
   guardrail_id_and_version = local.chat_with_document_config.guardrail_id_and_version
+  processor_memory_size    = try(local.chat_with_document_config.processor_memory_size, 4096)
 
   encryption_key_arn  = var.encryption_key_arn
   data_retention_days = var.data_tracking_retention_days
@@ -98,6 +104,8 @@ module "chat_with_document" {
 module "rbac" {
   source = "./modules/features/rbac"
   count  = local.feature_enable.rbac ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   enabled     = true
   name_prefix = "${local.name_prefix}-api"
@@ -134,6 +142,8 @@ module "rbac" {
 module "idp_federation" {
   source = "./modules/features/idp-federation"
   count  = local.feature_enable.federation ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   enabled = true
 
@@ -207,6 +217,8 @@ module "tracking_gsi_backfill" {
   source = "./modules/tracking-gsi-backfill"
   count  = try(var.tracking.enable_gsi_backfill, false) ? 1 : 0
 
+  lambda_architecture = var.build.lambda_architecture
+
   name_prefix = local.name_prefix
 
   tracking_table_name = module.processing_environment.tracking_table_name
@@ -221,4 +233,38 @@ module "tracking_gsi_backfill" {
   log_retention_days = var.log_retention_days
 
   tags = var.tags
+}
+
+# Feature Platform: installable-feature registry + AppSync operations
+# (catalog / entitlement / install / uninstall / register + config presets).
+# Default-off; requires the API (AppSync) to be enabled. Mirrors upstream v0.5.16.
+module "feature_platform" {
+  source = "./modules/features/feature-platform"
+  count  = local.feature_enable.feature_platform && local.api_enabled ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
+
+  name_prefix     = "${local.name_prefix}-api"
+  main_stack_name = local.name_prefix
+
+  graphql_api_id           = module.processing_environment_api[0].api_id
+  configuration_table_name = module.processing_environment.configuration_table_name
+  configuration_table_arn  = module.processing_environment.configuration_table_arn
+
+  encryption_key_arn = var.encryption_key_arn
+
+  configuration_bucket_name      = try(var.feature_platform.configuration_bucket_name, "")
+  catalog_key                    = try(var.feature_platform.catalog_key, "feature-platform/catalog.json")
+  artifact_region                = try(var.feature_platform.artifact_region, "")
+  simulator_entitlement_endpoint = try(var.feature_platform.simulator_endpoint, "")
+  subscription_mode              = try(var.feature_platform.subscription_mode, "auto-subscribe")
+  default_customer_identifier    = try(var.feature_platform.default_customer_identifier, "")
+  default_buyer_account_id       = try(var.feature_platform.default_buyer_account_id, "")
+  feature_offer_id_map           = try(var.feature_platform.feature_offer_id_map, "{}")
+  admin_group_name               = try(var.feature_platform.admin_group_name, "Admin")
+  seller_bucket_object_arns      = try(var.feature_platform.seller_bucket_object_arns, [])
+
+  log_level          = var.log_level
+  log_retention_days = var.log_retention_days
+  tags               = var.tags
 }

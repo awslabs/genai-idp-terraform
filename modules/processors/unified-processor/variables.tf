@@ -130,6 +130,22 @@ variable "enable_rule_validation" {
   default     = false
 }
 
+variable "rule_validation_memory_size" {
+  description = <<-EOT
+    Memory (MB) for the rule-validation and rule-validation-orchestration Lambdas
+    (only created when enable_rule_validation = true). Defaults to 4096 (upstream).
+    Lower it for accounts whose Lambda per-function memory service quota is below
+    4096 MB (some sandbox accounts cap at 3008 MB).
+  EOT
+  type        = number
+  default     = 4096
+
+  validation {
+    condition     = var.rule_validation_memory_size >= 128 && var.rule_validation_memory_size <= 10240
+    error_message = "rule_validation_memory_size must be between 128 and 10240 MB (and within the account's Lambda memory service quota)."
+  }
+}
+
 # Lambda hook inference variables (v0.4.15+). Pre-grant Step Functions
 # InvokeFunction for custom hooks; ARNs are stored in DynamoDB config
 # (model_lambda_hook_arn) and used when model_id = "LambdaHook". Names must start
@@ -421,4 +437,14 @@ variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions as non-active reference rows."
   type        = bool
   default     = true
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64). Must match the architecture the idp_common layers were built for; mismatches break native deps (e.g. pydantic_core)."
+  type        = string
+  default     = "arm64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
 }

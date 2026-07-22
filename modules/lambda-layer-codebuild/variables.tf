@@ -43,3 +43,41 @@ variable "lambda_tracing_mode" {
     error_message = "lambda_tracing_mode must be either 'Active' or 'PassThrough'."
   }
 }
+
+#
+# Build strategy (controls dispatcher in main.tf)
+#
+# When lambda_local = false (default), this module behaves bit-for-bit as before:
+# it provisions an aws_codebuild_project, an IAM role/policy, a trigger Lambda,
+# CloudWatch log group, time_sleep IAM-propagation guard, and uploads requirements
+# to S3. When lambda_local = true, all those CodeBuild resources collapse to
+# count = 0 and a sub-module modules/lambda-layer-local-build is instantiated
+# instead, producing equivalent layer artifacts via Docker on the deploy host.
+#
+variable "lambda_local" {
+  description = "When true, build the Lambda layer locally on the deploy host instead of via AWS CodeBuild. See modules/lambda-layer-local-build."
+  type        = bool
+  default     = false
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64). Sets compatible_architectures on the produced aws_lambda_layer_version regardless of build path."
+  type        = string
+  default     = "arm64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
+variable "container_runtime" {
+  description = "Container runtime for local builds (auto|docker|podman|finch). Ignored when lambda_local = false."
+  type        = string
+  default     = "auto"
+
+  validation {
+    condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
+    error_message = "container_runtime must be one of: auto, docker, podman, finch."
+  }
+}

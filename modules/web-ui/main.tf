@@ -52,9 +52,24 @@ locals {
     bucket_arn  = "arn:${data.aws_partition.current.partition}:s3:::${var.web_app_bucket_name}"
   }
 
+  # Hosting mode gates. CloudFront resources exist only when we create
+  # infrastructure AND hosting is CloudFront; in ALB mode the bucket is still
+  # created but served by the ALB (see modules/web-ui-alb) via an S3 VPCE.
+  is_cloudfront     = var.hosting == "CloudFront"
+  create_cloudfront = var.create_infrastructure && local.is_cloudfront
+
   # Determine CloudFront distribution ID based on mode
-  cloudfront_distribution_id = var.create_infrastructure ? aws_cloudfront_distribution.web_distribution[0].id : var.cloudfront_distribution_id
-  cloudfront_domain_name     = var.create_infrastructure ? aws_cloudfront_distribution.web_distribution[0].domain_name : null
+  cloudfront_distribution_id = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].id : var.cloudfront_distribution_id
+  cloudfront_domain_name     = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].domain_name : null
+
+  # Public app URL: CloudFront domain in CloudFront mode; the supplied custom
+  # domain URL (fronting the ALB) in ALB mode. Drives CORS + UI build env.
+  app_url = local.create_cloudfront ? "https://${aws_cloudfront_distribution.web_distribution[0].domain_name}" : var.web_ui_url
+
+  # CORS allowed origins for the browser-accessed input/output buckets. Falls
+  # back to "*" when no concrete URL is known (BYO infra or ALB without a
+  # custom domain).
+  cors_allowed_origins = local.app_url != null ? [local.app_url] : ["*"]
 }
 
 # Random string for unique resource names
@@ -83,6 +98,8 @@ locals {
     ShouldUseDocumentKnowledgeBase = var.knowledge_base_enabled ? "true" : "false"
     Version                        = var.idp_version
     StackName                      = var.display_name != null ? var.display_name : "${var.name_prefix}-processor"
+    # Top-navigation banner title, read by GenAIIDPTopNavigation. Mirrors upstream ConsoleTitle.
+    ConsoleTitle = var.console_title
     # Add other settings as needed
   }
 }
@@ -179,14 +196,23 @@ resource "aws_s3_bucket_logging" "web_app_bucket" {
 
 # Note: SSL enforcement is now handled in the combined CloudFront policy below
 
-# CloudFront Origin Access Identity
-resource "aws_cloudfront_origin_access_identity" "oai" {
-  comment = "${var.name_prefix} CloudFront OAI for ${local.web_app_bucket.bucket_name}"
+# CloudFront Origin Access Control (OAC) - replaces the legacy Origin Access
+# Identity (OAI). OAC uses SigV4 signing and a bucket policy scoped to the
+# CloudFront service principal, which works under org SCP / data-perimeter
+# guardrails that block legacy OAI requests. Mirrors upstream v0.5.16.
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = "${var.name_prefix}-webui-oac"
+  description                       = "${var.name_prefix} CloudFront OAC for ${local.web_app_bucket.bucket_name}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
-# Grant CloudFront OAI read access to the web app bucket (when we create the bucket)
+# Grant CloudFront OAC read access to the web app bucket (CloudFront mode only).
+# In ALB mode the bucket policy is created at the root (it must reference the S3
+# VPC endpoint id from the web-ui-alb module, which would otherwise cycle).
 resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
-  count  = var.create_infrastructure ? 1 : 0
+  count  = local.create_cloudfront ? 1 : 0
   bucket = aws_s3_bucket.web_app_bucket[0].id
 
   policy = jsonencode({
@@ -195,10 +221,15 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
       {
         Effect = "Allow"
         Principal = {
-          AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
+          Service = "cloudfront.amazonaws.com"
         }
         Action   = "s3:GetObject"
         Resource = "${aws_s3_bucket.web_app_bucket[0].arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "arn:${data.aws_partition.current.partition}:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.web_distribution[0].id}"
+          }
+        }
       },
       {
         Sid       = "DenyInsecureConnections"
@@ -220,7 +251,7 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
 
   depends_on = [
     aws_s3_bucket.web_app_bucket,
-    aws_cloudfront_origin_access_identity.oai
+    aws_cloudfront_distribution.web_distribution
   ]
 }
 
@@ -228,7 +259,7 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
 # WAF Web ACL for CloudFront protection
 # Note: CloudFront WAF must be created in us-east-1 region
 resource "aws_wafv2_web_acl" "cloudfront_waf" {
-  count    = var.enable_waf ? 1 : 0
+  count    = local.create_cloudfront && var.enable_waf ? 1 : 0
   provider = aws.us-east-1
 
   name  = "${var.name_prefix}-cloudfront-waf"
@@ -317,15 +348,13 @@ resource "aws_wafv2_web_acl" "cloudfront_waf" {
 }
 
 resource "aws_cloudfront_distribution" "web_distribution" {
-  count = var.create_infrastructure ? 1 : 0
+  count = local.create_cloudfront ? 1 : 0
 
   origin {
     domain_name = "${local.web_app_bucket.bucket_name}.s3.${data.aws_region.current.id}.amazonaws.com"
     origin_id   = "S3-${local.web_app_bucket.bucket_name}"
 
-    s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.oai.cloudfront_access_identity_path
-    }
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
   }
 
   enabled             = true
@@ -447,7 +476,7 @@ resource "aws_s3_bucket_cors_configuration" "input_bucket_cors" {
       "x-amz-security-token"
     ]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = var.create_infrastructure ? ["https://${aws_cloudfront_distribution.web_distribution[0].domain_name}"] : ["*"]
+    allowed_origins = local.cors_allowed_origins
     expose_headers  = ["ETag", "x-amz-server-side-encryption"]
     max_age_seconds = 3000
   }
@@ -465,7 +494,7 @@ resource "aws_s3_bucket_cors_configuration" "output_bucket_cors" {
       "x-amz-security-token"
     ]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = var.create_infrastructure ? ["https://${aws_cloudfront_distribution.web_distribution[0].domain_name}"] : ["*"]
+    allowed_origins = local.cors_allowed_origins
     expose_headers  = ["ETag", "x-amz-server-side-encryption"]
     max_age_seconds = 3000
   }
@@ -505,8 +534,9 @@ data "archive_file" "ui_source" {
   depends_on = [null_resource.create_module_build_dir]
 }
 
-# S3 deployment for React app source code
+# S3 deployment for React app source code (CodeBuild path only)
 resource "aws_s3_object" "react_app_source" {
+  count  = var.ui_local ? 0 : 1
   bucket = local.web_app_bucket.bucket_name
   key    = "code/ui-source.zip"
   source = data.archive_file.ui_source.output_path
@@ -520,6 +550,7 @@ resource "aws_s3_object" "react_app_source" {
 # We reach propagation issue, where IAM role and policy were created, CodeBuild was able to use it within its execution.
 # The execution was failing, as mentioned policies takes no effect yet.
 resource "time_sleep" "wait_for_iam_propagation" {
+  count = var.ui_local ? 0 : 1
   depends_on = [
     aws_iam_role.codebuild_role,
     aws_iam_role_policy.codebuild_policy
@@ -532,9 +563,10 @@ resource "time_sleep" "wait_for_iam_propagation" {
 # No additional testing needed with Lambda-based approach
 
 resource "aws_codebuild_project" "ui_build" {
+  count         = var.ui_local ? 0 : 1
   name          = "${var.name_prefix}-webui-build"
   description   = "Web UI build for GenAIDP stack - ${var.name_prefix}"
-  service_role  = aws_iam_role.codebuild_role.arn
+  service_role  = aws_iam_role.codebuild_role[0].arn
   build_timeout = 30
 
   depends_on = [
@@ -618,7 +650,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "VITE_CLOUDFRONT_DOMAIN"
-      value = local.cloudfront_domain_name != null ? "https://${local.cloudfront_domain_name}/" : ""
+      value = local.app_url != null ? "${local.app_url}/" : ""
     }
   }
 
@@ -659,7 +691,8 @@ resource "aws_codebuild_project" "ui_build" {
 
 # CloudWatch Log Group for CodeBuild - Let CodeBuild auto-create this
 resource "aws_iam_role" "codebuild_role" {
-  name = "${var.name_prefix}-codebuild-role"
+  count = var.ui_local ? 0 : 1
+  name  = "${var.name_prefix}-codebuild-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -679,8 +712,9 @@ resource "aws_iam_role" "codebuild_role" {
 
 # IAM Policy for CodeBuild
 resource "aws_iam_role_policy" "codebuild_policy" {
-  name = "${var.name_prefix}-codebuild-policy"
-  role = aws_iam_role.codebuild_role.id
+  count = var.ui_local ? 0 : 1
+  name  = "${var.name_prefix}-codebuild-policy"
+  role  = aws_iam_role.codebuild_role[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -733,7 +767,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Action = [
           "cloudfront:CreateInvalidation"
         ]
-        Resource = var.create_infrastructure ? aws_cloudfront_distribution.web_distribution[0].arn : "*"
+        Resource = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].arn : "*"
       }
     ] : [])
   })
@@ -741,16 +775,18 @@ resource "aws_iam_role_policy" "codebuild_policy" {
 
 # Attach VPC execution role if needed
 resource "aws_iam_role_policy_attachment" "codebuild_vpc_execution" {
-  count      = local.has_network_environment ? 1 : 0
-  role       = aws_iam_role.codebuild_role.name
+  count      = !var.ui_local && local.has_network_environment ? 1 : 0
+  role       = aws_iam_role.codebuild_role[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSCodeBuildVPCAccessExecutionRole"
 }
 
 # UI CodeBuild triggering is now handled by Lambda function in lambda.tf
 # See aws_lambda_invocation.trigger_ui_codebuild resource
 
-# Optional: Cleanup old build artifacts
+# Optional: Cleanup old build artifacts (CodeBuild path only)
 resource "null_resource" "cleanup_build_artifacts" {
+  count = var.ui_local ? 0 : 1
+
   depends_on = [
     # This will be triggered after successful Lambda-based deployments
     aws_lambda_invocation.trigger_ui_codebuild

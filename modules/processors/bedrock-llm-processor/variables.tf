@@ -126,6 +126,12 @@ variable "enable_rule_validation" {
   default     = false
 }
 
+variable "rule_validation_memory_size" {
+  description = "Memory (MB) for the rule-validation Lambdas (only created when enable_rule_validation = true). Defaults to 4096; lower for accounts whose Lambda memory quota caps below 4096 MB."
+  type        = number
+  default     = 4096
+}
+
 # =============================================================================
 # LAMBDA HOOK INFERENCE VARIABLES (v0.4.15+)
 # =============================================================================
@@ -374,4 +380,14 @@ variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions as non-active reference rows."
   type        = bool
   default     = true
+}
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64), forwarded to the shared engine so function architectures match the idp_common layers."
+  type        = string
+  default     = "arm64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
 }

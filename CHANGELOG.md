@@ -6,6 +6,231 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.5.16-tf.0]
+
+> This release bundles two tracks: the **local-build** work (`var.build`,
+> below) that landed on `v0.5.16-rc`, and the **upstream v0.5.16 parity
+> upgrade** (sources snapshot + feature parity), documented in its own block
+> at the end of this release's notes.
+
+### Summary
+
+Adds the `var.build` object, introducing an opt-in path that builds
+Lambda layers and processor container images locally on the deploy host
+using Docker / Podman / Finch, replacing AWS CodeBuild for those steps.
+Non-breaking: defaults preserve the historical CodeBuild path
+bit-for-bit. Set `build.lambda_local = true` to opt in.
+
+Activates `build.ui_local` (previously reserved): when `true`, the web UI
+React/Vite build runs locally via `npm ci && npm run build` on the deploy
+host with direct S3 sync + CloudFront invalidation, eliminating the last
+CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
+
+### Added
+
+- **`var.build` (root)** — new object with fields:
+  - `lambda_local` (bool, default `false`) — when `true`, all Lambda
+    layers and processor container images build locally on the deploy
+    host; AWS CodeBuild infrastructure collapses to `count = 0`.
+  - `lambda_architecture` (string, default `"arm64"`, validated against
+    `["x86_64", "arm64"]`) — target Lambda architecture, honored by
+    both CodeBuild and local-build paths. The CodeBuild path now gains
+    arm64 support (previously hardcoded x86_64). The default was flipped
+    from `x86_64` to `arm64` in this release to match upstream v0.5.16
+    (see the parity-upgrade block below for the migration note).
+  - `container_runtime` (string, default `"auto"`, validated against
+    `["auto", "docker", "podman", "finch"]`) — runtime selector when
+    `lambda_local = true`. `"auto"` probes docker → podman → finch.
+  - `ui_local` (bool, default `false`) — when `true`, builds the web
+    UI locally on the deploy host via `npm ci && npm run build`,
+    syncs to S3, and invalidates CloudFront — eliminating the UI
+    CodeBuild project, trigger Lambda, and supporting IAM. Requires
+    Node.js >= 18.
+- **New modules**:
+  - `modules/build-runtime-check` — probes the host for an available
+    container runtime via a `data "external"` invocation of
+    `scripts/detect-container-runtime.sh`; fails plan with per-OS
+    install instructions when `lambda_local = true` and no runtime
+    is detected.
+  - `modules/lambda-layer-local-build` — provider-driven local builder
+    for Python pip Lambda layers. Used internally by
+    `modules/lambda-layer-codebuild` when `lambda_local = true`.
+  - `modules/lambda-image-local-build` — provider-driven local builder
+    for OCI Lambda container images using `kreuzwerker/docker ~> 3.0`.
+    Currently unused at root (preserved as a building block for future
+    single-image consumers).
+- **New output `build_mode`** — added to layer and processor modules.
+  Returns `"codebuild"` or `"local"`. Lets consumers see which path is
+  active.
+- **Documentation page** `docs/content/deployment-guides/local-lambda-build.md`
+  covering prerequisites per OS, architecture selection, migration
+  plan, and troubleshooting.
+- **Local-dev example tfvars** `examples/bedrock-llm-processor/terraform.tfvars.local-dev.example`
+  showing a typical local-build dev-loop configuration.
+- **Detection script** `scripts/detect-container-runtime.sh` plus
+  `tests/validate-build-runtime-check.sh` unit test.
+- **`modules/web-ui-build-check`** — probes the host for Node.js >= 18
+  via `scripts/detect-node-runtime.sh`; fails plan with per-OS install
+  instructions when `ui_local = true` and Node.js is missing or too old.
+- **Build script** `scripts/build-web-ui.sh` — runs `npm ci && npm run
+  build` in `sources/src/ui/`, syncs `build/` to S3, and invalidates
+  CloudFront.
+- **Detection script** `scripts/detect-node-runtime.sh` plus
+  `tests/validate-web-ui-build-check.sh` unit test.
+- **Documentation page** `docs/content/deployment-guides/local-web-ui-build.md`
+  covering Node.js prerequisites and the local UI build flow.
+- **Configurable Chat-with-Document and rule-validation Lambda memory** (#157).
+  The Chat-with-Document processor Lambda and the two rule-validation
+  Lambdas previously hardcoded `memory_size = 4096`, which fails
+  `CreateFunction` on accounts whose per-function Lambda memory service
+  quota is below 4096 MB (some sandbox accounts cap at 3008), blocking a
+  vanilla deploy of any example that enables chat (on by default). Now
+  configurable, defaulting to 4096 so existing behavior is unchanged:
+  - `modules/features/chat-with-document` — new `processor_memory_size`
+    variable (default `4096`, validated `128`-`10240`) drives the
+    processor Lambda memory; surfaced on the root module via
+    `api.chat_with_document.processor_memory_size`.
+  - All processor examples accept it through their `api.chat_with_document`
+    object type; `examples/unified-processor` adds a
+    `chat_processor_memory_size` convenience variable.
+  - `modules/processors/unified-processor` — new
+    `rule_validation_memory_size` variable (default `4096`) for the
+    rule-validation Lambdas (created only when `enable_rule_validation =
+    true`), threaded through the `bedrock-llm-processor` wrapper.
+
+### Changed
+
+- **CodeBuild path now respects `var.build.lambda_architecture`.**
+  Previously hardcoded to x86_64; setting `arm64` now switches the
+  CodeBuild image to `aws/codebuild/amazonlinux2-aarch64-standard:3.0`
+  and sets `environment.type = "ARM_CONTAINER"`. Applies to both
+  layer-build and processor-image-build CodeBuild projects.
+- **CodeBuild-specific outputs return `null` when `lambda_local = true`.**
+  Affects `codebuild_project_name`,
+  `codebuild_trigger_lambda_function_name`, `build_result`,
+  `build_success` on `lambda-layer-codebuild`;
+  `codebuild_project`, `build_trigger_lambda`, `build_result` on
+  `lambda-layer-codebuild-idp`. Mode-agnostic outputs (`layer_arns`,
+  `s3_bucket`, `layer_suffix`, …) are populated in both modes.
+- **Module READMEs** for `lambda-layer-codebuild`,
+  `lambda-layer-codebuild-idp`, BDA and SageMaker UDOP processors gain
+  preambles documenting the two build modes. terraform-docs Inputs /
+  Outputs tables regenerated.
+- **Top-level README** Prerequisites section now lists container
+  runtime as optional; Configuration Options section gains a
+  `build = { ... }` example and a "Local Lambda Build" subsection
+  linking to the dedicated docs page.
+
+### Migration
+
+**No action required for users keeping the default.** With
+`build.lambda_local = false` (or omitted), plan shows no diff beyond the
+new variable.
+
+**Opting into local builds** on an existing deployment produces a
+destroy plan for the CodeBuild infrastructure (CodeBuild projects,
+trigger Lambdas, IAM roles, log groups, buildspec S3 objects) and a
+replace plan for `aws_lambda_layer_version` resources (the S3 key
+changes between paths). `aws_ecr_repository` resources are preserved
+across the switch. `aws_lambda_function` resources update in place to
+reference the new layer/image; the functions themselves are not
+replaced. Lambda hot-swaps layer references on the next cold start, so
+the replacement is zero-downtime.
+
+To roll back, flip the flag back to `false` and apply again.
+
+### Skipped (documented deviations)
+
+- The root config does **not** declare the `kreuzwerker/docker`
+  provider as a `configuration_aliases` optional provider (design.md
+  Decision 4). The processor image build path landed using
+  `null_resource + local-exec docker buildx` rather than the docker
+  provider's `docker_image` / `docker_registry_image` resources,
+  because the multi-image-per-repo pattern (5 BDA images, 7 UDOP
+  images) doesn't fit the docker provider's single-tag-per-resource
+  model cleanly. `modules/lambda-image-local-build` (which DOES use the
+  docker provider) is preserved as a building block for future
+  single-image consumers; the root provider declaration can land
+  alongside the first such consumer.
+- Lambda layer local builds use **`null_resource + local-exec`** running
+  `scripts/build-layer.sh` (or `scripts/build-idp-layer.sh`) inside the
+  AWS SAM build image, rather than `terraform-aws-modules/lambda ~> 7.0`
+  with `build_in_docker = true` as originally proposed (design.md
+  Decision 2). Reason: the dispatcher pattern has the wrapper module
+  (`lambda-layer-codebuild`) owning the `aws_lambda_layer_version`
+  resource — we only need build+upload from the local-build module.
+  Hand-rolled HCL matches the existing CodeBuild module's style and
+  avoids adding a third-party module dependency. The SAM build image
+  produces the same hermetic environment either way.
+
+---
+
+### Upstream v0.5.16 parity upgrade
+
+#### Summary
+Advances the vendored `sources/` tree from upstream `0.5.12` to `0.5.16` and
+reimplements the Terraform-side feature parity across `0.5.13–0.5.16`: web-UI
+CloudFront OAC, arm64 Lambda default, OpenAI GPT-5.x IAM, pipeline hooks, the
+Feature Platform, and ALB hosting. The `sources/` snapshot also carries
+upstream runtime behavior for those versions regardless of Terraform wiring.
+
+#### Added
+- **Web UI ALB hosting** (`web_ui.hosting = "ALB"`): new `modules/web-ui-alb`
+  serves the web app bucket through an internal Application Load Balancer + S3
+  interface VPC endpoint (host-header/url rewrite via `aws_lb_listener_rule`
+  `transform` blocks), for private-network / GovCloud deployments. New
+  `web_ui.alb` inputs (`vpc_id`, `subnet_ids`, `certificate_arn`, `scheme`,
+  `allowed_cidrs`, `lambda_security_group_id`), `web_ui.custom_domain_url`
+  (CORS + Cognito callback/logout URLs), and `web_ui.s3_presigned_url_via_vpc_endpoint`
+  / `s3_vpc_endpoint_dns_name_override` / `s3_vpc_endpoint_id_override`
+  (presigned URLs via the VPCE). New `web_ui_alb` root output. Mirrors upstream
+  `WebUIHosting` / `CustomDomainUrl` / `S3PresignedUrlViaVpcEndpoint`.
+- **Feature Platform** (`feature_platform.enabled`, default `false`): optional
+  `modules/features/feature-platform` (InstalledFeatures table + 9 Lambdas + 9
+  AppSync datasources + 12 resolvers) for installable feature catalog /
+  entitlement / install / register operations.
+- **Pipeline hooks**: a dispatcher Lambda wired into the Step Functions
+  workflow at five inert-by-default extension points (`postOcr`,
+  `postClassification`, `postExtraction`, `postAssessment`,
+  `postSummarization`).
+- **OpenAI GPT-5.x IAM**: `bedrock-mantle:*` permissions on all 11
+  model-invoking roles so GPT-5.x models served via bedrock-mantle can be used.
+- **`web_ui.console_title`** (default `"IDP Accelerator Console"`): top-nav
+  banner title (upstream `ConsoleTitle`).
+- **`updateTestSet`** AppSync resolver (Test Studio).
+- **`api.appsync_endpoint_for_dns`** output for private-DNS wiring.
+- **`user-identity`**: `additional_callback_urls` / `additional_logout_urls`
+  to register the Web UI custom domain with Cognito.
+
+#### Changed
+- **CloudFront OAI → OAC**: the web-UI distribution now uses an Origin Access
+  Control (sigv4) with a bucket policy scoped to the distribution ARN,
+  replacing the legacy Origin Access Identity.
+- **`build.lambda_architecture` default `x86_64` → `arm64`** to match upstream
+  v0.5.16 (both values remain selectable).
+- **Config defaults (D5)**: `classification.enforceValidClasses` and
+  `assessment.ground_geometry_in_ocr` are default-on, carried by the vendored
+  `idp_common` system defaults and merged into every seeded config by the
+  configuration seeder (no Terraform change).
+
+#### Migration
+- **arm64 default**: existing deployments that omit `build.lambda_architecture`
+  will rebuild/replace Lambda layers and container images for arm64 on the next
+  apply. Pin `build = { lambda_architecture = "x86_64" }` to keep the previous
+  architecture.
+- **OAI → OAC**: plan shows the OAI destroyed and an OAC created; the CloudFront
+  distribution updates in place (no replacement). Review the plan to confirm.
+- **ALB hosting** requires `web_ui.alb.vpc_id`, ≥2 `subnet_ids`, and an ACM
+  `certificate_arn`; point the custom domain DNS at the `web_ui_alb` output
+  `alb_dns_name` / `alb_hosted_zone_id`. The ALB path is acyclic: the custom
+  domain URL and the presign VPCE DNS name are supplied as inputs, not derived
+  from the ALB module.
+- **Snapshot-carried behavior**: the `0.5.13–0.5.16` `sources/` refresh changes
+  runtime behavior (prompts, default model IDs, granular assessment) regardless
+  of Terraform variables.
+
+---
+
 ## [0.5.12-tf.0] - 2026-07-02
 
 ### Summary
@@ -292,7 +517,6 @@ Key steps:
 5. **No tfvars changes required for the transition.** `var.api.*` flags are still
    forwarded to the new feature-plugins, so existing tfvars keep working; migrate to
    feature-plugin wiring at your own pace.
-
 ---
 
 ## [0.4.16-tf.2] - 2026-05-27

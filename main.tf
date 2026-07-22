@@ -70,6 +70,31 @@ check "web_ui_logging_bucket" {
   }
 }
 
+# Validation: ALB hosting mode requires VPC, subnets, and an ACM certificate.
+#tfsec:ignore:*
+check "web_ui_alb_inputs" {
+  assert {
+    condition = !(var.web_ui.enabled && var.web_ui.hosting == "ALB") || (
+      var.web_ui.alb.vpc_id != null &&
+      length(var.web_ui.alb.subnet_ids) >= 2 &&
+      var.web_ui.alb.certificate_arn != null
+    )
+    error_message = "When web_ui.hosting is \"ALB\", web_ui.alb.vpc_id, at least two web_ui.alb.subnet_ids, and web_ui.alb.certificate_arn are required."
+  }
+}
+
+# Validation: presigned-URL-via-VPCE requires a supplied endpoint DNS name.
+# The ALB-created VPCE DNS cannot be auto-wired here without a dependency cycle,
+# so the DNS name (web-ui-alb output s3_vpc_endpoint_dns_name) must be supplied
+# via web_ui.s3_vpc_endpoint_dns_name_override. Mirrors upstream override rule.
+#tfsec:ignore:*
+check "web_ui_presign_vpce_dns" {
+  assert {
+    condition     = !var.web_ui.s3_presigned_url_via_vpc_endpoint || var.web_ui.s3_vpc_endpoint_dns_name_override != null
+    error_message = "web_ui.s3_vpc_endpoint_dns_name_override is required when web_ui.s3_presigned_url_via_vpc_endpoint is true (set it to the web_ui_alb output s3_vpc_endpoint_dns_name)."
+  }
+}
+
 # Validation: SageMaker UDOP processor endpoint ARN requirement
 #tfsec:ignore:*
 check "sagemaker_processor_endpoint_arn" {
@@ -87,6 +112,35 @@ resource "random_string" "suffix" {
   length  = 8
   special = false
   upper   = false
+}
+
+#
+# Build runtime check
+#
+# Probes the deploy host for a usable container runtime (Docker / Podman /
+# Finch) when var.build.lambda_local = true. The check {} block inside
+# this module fails plan with per-OS install instructions if no runtime is
+# available. When lambda_local = false the probe runs but is non-fatal.
+#
+module "build_runtime_check" {
+  count  = var.build.lambda_local ? 1 : 0
+  source = "./modules/build-runtime-check"
+
+  lambda_local      = var.build.lambda_local
+  container_runtime = var.build.container_runtime
+}
+
+# Web UI build check
+#
+# Probes the deploy host for Node.js >= 18 when var.build.ui_local = true
+# and the web UI is enabled. The check {} block inside this module fails
+# plan with install instructions if Node.js is missing or too old.
+#
+module "web_ui_build_check" {
+  count  = var.build.ui_local && var.web_ui.enabled ? 1 : 0
+  source = "./modules/web-ui-build-check"
+
+  ui_local = var.build.ui_local
 }
 
 #
@@ -116,6 +170,11 @@ module "idp_common_layer" {
   idp_common_extras        = local.idp_common_layer_extras
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
@@ -128,6 +187,11 @@ module "idp_base_layer" {
   idp_common_extras        = ["docs_service"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Reporting layer: reporting extras — used by save_reporting_data function (v0.4.11+)
@@ -139,6 +203,11 @@ module "idp_reporting_layer" {
   idp_common_extras        = ["reporting"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Agents layer: agents extras — used by agent companion chat and agent analytics functions (v0.4.11+)
@@ -150,6 +219,11 @@ module "idp_agents_layer" {
   idp_common_extras        = ["agents"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 # Evaluation layer: evaluation + docs_service extras for the per-processor
@@ -163,6 +237,11 @@ module "idp_evaluation_layer" {
   idp_common_extras        = ["evaluation", "docs_service"]
   force_rebuild            = var.force_rebuild_layers
   lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
 }
 
 #
@@ -175,6 +254,12 @@ module "user_identity" {
   name_prefix                 = "${local.name_prefix}-user-identity"
   allowed_signup_email_domain = var.web_ui.enable_signup
   deletion_protection         = var.deletion_protection
+
+  # Register the Web UI custom domain / ALB URL as an OAuth callback+logout URL
+  # so hosted-UI redirects succeed. CloudFront domains are not known until the
+  # distribution exists, so only the explicit custom_domain_url is wired here.
+  additional_callback_urls = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
+  additional_logout_urls   = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
 
   tags = var.tags
 }
@@ -236,6 +321,11 @@ module "processing_environment" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
+
   tags = var.tags
 }
 
@@ -247,6 +337,11 @@ module "processing_environment_api" {
   source = "./modules/processing-environment-api"
 
   name = "${local.name_prefix}-api"
+
+  # Presigned-URL-via-VPCE (v0.5.16). When enabled with a supplied endpoint DNS
+  # name, presigner Lambdas target the S3 interface VPC endpoint. Supplied as an
+  # input (not derived from the web-ui-alb module) to keep the graph acyclic.
+  s3_endpoint_url = local.web_ui_s3_endpoint_url
 
   # User identity - Dynamic authorization based on user_identity availability
   authorization_config = {
@@ -360,6 +455,11 @@ module "processing_environment_api" {
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
 
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
+
   # Feature-plugin contracts from features.tf. Resolves to {} when all features
   # are off (no-op, default-off preserved).
   enabled_feature_contracts = local.enabled_feature_contracts
@@ -376,6 +476,8 @@ module "processing_environment_api" {
 module "bda_processor" {
   source = "./modules/processors/bda-processor"
   count  = var.bda_processor != null ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   name = "${local.name_prefix}-processor"
 
@@ -430,6 +532,7 @@ module "bda_processor" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
+
   tags = var.tags
 }
 
@@ -437,6 +540,8 @@ module "bda_processor" {
 module "bedrock_llm_processor" {
   source = "./modules/processors/bedrock-llm-processor"
   count  = var.bedrock_llm_processor != null ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   name = "${local.name_prefix}-processor"
 
@@ -510,6 +615,8 @@ module "sagemaker_udop_processor" {
   source = "./modules/processors/sagemaker-udop-processor"
   count  = var.sagemaker_udop_processor != null ? 1 : 0
 
+  lambda_architecture = var.build.lambda_architecture
+
   name = "${local.name_prefix}-processor"
 
   # API configuration (if enabled)
@@ -567,6 +674,7 @@ module "sagemaker_udop_processor" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
+
   tags = var.tags
 }
 
@@ -577,14 +685,17 @@ module "web_ui" {
   count  = var.web_ui.enabled ? 1 : 0
   source = "./modules/web-ui"
 
+  lambda_architecture = var.build.lambda_architecture
+
   providers = {
     aws.us-east-1 = aws.us-east-1
   }
 
-  name_prefix  = "${local.name_prefix}-web-ui"
-  prefix       = var.prefix
-  display_name = var.web_ui.display_name != null ? var.web_ui.display_name : local.name_prefix
-  idp_version  = trimspace(file("${path.module}/IDP_VERSION"))
+  name_prefix   = "${local.name_prefix}-web-ui"
+  prefix        = var.prefix
+  display_name  = var.web_ui.display_name != null ? var.web_ui.display_name : local.name_prefix
+  console_title = var.web_ui.console_title
+  idp_version   = trimspace(file("${path.module}/IDP_VERSION"))
 
   # User identity
   user_identity = {
@@ -636,13 +747,92 @@ module "web_ui" {
   cloudfront_distribution_id        = var.web_ui.cloudfront_distribution_id
   should_allow_sign_up_email_domain = var.web_ui.enable_signup != ""
 
+  # Hosting mode (CloudFront vs. ALB) + public URL for CORS / UI build env.
+  # In ALB mode the CloudFront distribution is not created; the web-ui-alb
+  # module (below) serves the bucket via an internal ALB + S3 VPC endpoint.
+  hosting    = var.web_ui.hosting
+  web_ui_url = var.web_ui.custom_domain_url
+
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
+
+  # Build strategy
+  ui_local = var.build.ui_local
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
   tags = var.tags
+}
+
+#
+# Web UI ALB hosting (Optional — when web_ui.hosting = "ALB")
+#
+# Serves the web app bucket through an internal Application Load Balancer and an
+# S3 interface VPC endpoint instead of CloudFront (private-network / GovCloud).
+# Depends on module.web_ui for the bucket name; the bucket *policy* granting
+# VPCE access is created below at the root (referencing this module's endpoint
+# id) to keep the dependency acyclic.
+#
+module "web_ui_alb" {
+  count  = var.web_ui.enabled && var.web_ui.hosting == "ALB" ? 1 : 0
+  source = "./modules/web-ui-alb"
+
+  name_prefix              = local.name_prefix
+  vpc_id                   = var.web_ui.alb.vpc_id
+  subnet_ids               = var.web_ui.alb.subnet_ids
+  certificate_arn          = var.web_ui.alb.certificate_arn
+  alb_scheme               = var.web_ui.alb.scheme
+  alb_allowed_cidrs        = var.web_ui.alb.allowed_cidrs
+  web_ui_bucket_name       = module.web_ui[0].bucket.bucket_name
+  logging_bucket_name      = var.web_ui.logging_enabled ? local.logging_bucket_name : null
+  lambda_security_group_id = var.web_ui.alb.lambda_security_group_id
+  manage_lambda_sg_rules   = var.web_ui.alb.manage_lambda_sg_rules
+
+  tags = var.tags
+}
+
+# Web UI bucket policy for ALB hosting: allow anonymous GetObject only through
+# the S3 interface VPC endpoint, and deny insecure transport. Mirrors upstream
+# WebUIBucketPolicy (UseALBHosting branch). Created at the root so it can
+# reference both module.web_ui (bucket) and module.web_ui_alb (endpoint id)
+# without a module cycle.
+resource "aws_s3_bucket_policy" "web_ui_alb" {
+  count  = var.web_ui.enabled && var.web_ui.hosting == "ALB" && var.web_ui.create_infrastructure ? 1 : 0
+  bucket = module.web_ui[0].bucket.bucket_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowALBViaVpcEndpoint"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${module.web_ui[0].bucket.bucket_arn}/*"
+        Condition = {
+          StringEquals = {
+            "aws:sourceVpce" = module.web_ui_alb[0].s3_vpc_endpoint_id
+          }
+        }
+      },
+      {
+        Sid       = "DenyInsecureConnections"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          module.web_ui[0].bucket.bucket_arn,
+          "${module.web_ui[0].bucket.bucket_arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
 }
 
 #
@@ -676,6 +866,8 @@ resource "aws_iam_role_policy" "authenticated_user_permissions" {
 module "reporting" {
   count  = var.reporting.enabled ? 1 : 0
   source = "./modules/reporting"
+
+  lambda_architecture = var.build.lambda_architecture
 
   name_prefix             = "${local.name_prefix}-reporting"
   reporting_database_name = var.reporting.database_name
@@ -719,6 +911,8 @@ module "reporting" {
 module "processor_attachment" {
   source = "./modules/processor-attachment"
   count  = local.processor_type != null ? 1 : 0
+
+  lambda_architecture = var.build.lambda_architecture
 
   name = "${local.name_prefix}-processor"
 

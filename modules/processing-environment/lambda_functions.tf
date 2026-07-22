@@ -21,6 +21,11 @@ module "lambda_layers" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
+
+  # Build strategy (see root var.build)
+  lambda_local        = var.lambda_local
+  lambda_architecture = var.lambda_architecture
+  container_runtime   = var.container_runtime
 }
 
 # CloudWatch Log Groups for Lambda functions
@@ -89,6 +94,7 @@ data "archive_file" "queue_sender_code" {
 
 # QueueSender Lambda Function
 resource "aws_lambda_function" "queue_sender" {
+  architectures = [var.lambda_architecture]
   function_name = local.queue_sender_function_name
 
   filename         = data.archive_file.queue_sender_code.output_path
@@ -167,6 +173,7 @@ data "archive_file" "workflow_tracker_code" {
 
 # WorkflowTracker Lambda Function
 resource "aws_lambda_function" "workflow_tracker" {
+  architectures = [var.lambda_architecture]
   function_name = "idp-workflow-tracker-${random_string.suffix.result}"
 
   filename         = data.archive_file.workflow_tracker_code.output_path
@@ -247,6 +254,7 @@ data "archive_file" "lookup_function_code" {
 
 # LookupFunction Lambda Function
 resource "aws_lambda_function" "lookup_function" {
+  architectures = [var.lambda_architecture]
   function_name = "idp-lookup-function-${random_string.suffix.result}"
 
   filename         = data.archive_file.lookup_function_code.output_path
@@ -312,6 +320,7 @@ data "archive_file" "update_configuration_code" {
 
 # UpdateConfiguration Lambda Function
 resource "aws_lambda_function" "update_configuration" {
+  architectures = [var.lambda_architecture]
   function_name = "idp-update-configuration-${random_string.suffix.result}"
 
   filename         = data.archive_file.update_configuration_code.output_path
@@ -371,6 +380,7 @@ data "archive_file" "post_processing_decompressor_code" {
 }
 
 resource "aws_lambda_function" "post_processing_decompressor" {
+  architectures = [var.lambda_architecture]
   function_name = "idp-post-processing-decompressor-${random_string.suffix.result}"
 
   filename         = data.archive_file.post_processing_decompressor_code.output_path

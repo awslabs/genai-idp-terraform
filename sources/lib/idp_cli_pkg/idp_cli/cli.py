@@ -237,7 +237,7 @@ TEMPLATE_URLS = {
 
 
 @click.group()
-@click.version_option(version="0.5.12")
+@click.version_option(version="0.5.16")
 def cli():
     """
     IDP CLI - Batch document processing for IDP Accelerator
@@ -627,10 +627,13 @@ def deploy(
                 value = match.group(2).strip().rstrip(",")
                 additional_params[key] = value
 
-        # When --headless is used, auto-set EnableHeadless=true stack parameter so
-        # users don't need to pass it twice. Explicit --parameters values win.
-        if headless and "EnableHeadless" not in additional_params:
-            additional_params["EnableHeadless"] = "true"
+        # Note: --headless (the CLI flag) controls TEMPLATE TRANSFORMATION
+        # — strip UI / AppSync / Cognito / WAF / Agents / HITL / KB from the
+        # template. The CFN parameter `EnableHeadless=true` is a separate
+        # opt-in for the Private API Gateway (/jobs REST API), which by
+        # design requires a VPC + ApiGatewayVpcEndpointId. Users who want
+        # the Jobs API must pass `--parameters EnableHeadless=true,...VPC params`
+        # explicitly.
 
         # Deploy stack via SDK (build_parameters is called internally by client.stack.deploy)
         # Debug: show custom config path hint before deploy
@@ -3072,7 +3075,7 @@ def _invoke_test_set_resolver(
         (
             f["FunctionName"]
             for f in all_functions
-            if stack_name in f["FunctionName"]
+            if f["FunctionName"].startswith(f"{stack_name}-APPSYNCSTACK-")
             and "TestSetResolverFunction" in f["FunctionName"]
         ),
         None,
@@ -3096,11 +3099,21 @@ def _invoke_test_set_resolver(
 
         result = json.loads(response["Payload"].read())
 
+        # Check for Lambda function errors (AWS returns StatusCode=200 for invocation success,
+        # but function errors are indicated by errorMessage in the payload)
+        if "errorMessage" in result:
+            error_type = result.get("errorType", "Unknown")
+            error_msg = result["errorMessage"]
+            console.print(
+                f"[yellow]Warning: Test set resolver failed ({error_type}): {error_msg}[/yellow]"
+            )
+            return
+
         if response["StatusCode"] == 200:
             console.print("[green]✓ Test set auto-detection completed[/green]")
         else:
             console.print(
-                f"[yellow]Warning: Test set resolver failed: {result}[/yellow]"
+                f"[yellow]Warning: Test set resolver invocation failed with status {response['StatusCode']}[/yellow]"
             )
 
     except Exception as e:
@@ -3120,6 +3133,7 @@ def _invoke_test_runner(
     import json
 
     # Find test runner function by name pattern
+    # Match: <stack_name>-APPSYNCSTACK-*-TestRunnerFunction-*
     lambda_client = boto3.client("lambda", region_name=region)
 
     # Handle pagination to get all functions
@@ -3132,7 +3146,7 @@ def _invoke_test_runner(
         (
             f["FunctionName"]
             for f in all_functions
-            if stack_name in f["FunctionName"]
+            if f["FunctionName"].startswith(f"{stack_name}-APPSYNCSTACK-")
             and "TestRunnerFunction" in f["FunctionName"]
         ),
         None,
@@ -3174,8 +3188,17 @@ def _invoke_test_runner(
     # Parse response
     result = json.loads(response["Payload"].read())
 
+    # Check for Lambda function errors (AWS returns StatusCode=200 for invocation success,
+    # but function errors are indicated by errorMessage in the payload)
+    if "errorMessage" in result:
+        error_type = result.get("errorType", "Unknown")
+        error_msg = result["errorMessage"]
+        raise ValueError(f"Test runner execution failed ({error_type}): {error_msg}")
+
     if response["StatusCode"] != 200:
-        raise ValueError(f"Test runner invocation failed: {result}")
+        raise ValueError(
+            f"Test runner invocation failed with status {response['StatusCode']}"
+        )
 
     console.print(f"[green]✓ Test run started: {result['testRunId']}[/green]")
     return result

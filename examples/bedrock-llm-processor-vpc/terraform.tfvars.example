@@ -35,3 +35,24 @@ vpc_cidr = "10.0.0.0/16"
 # }
 #
 # Advanced feature toggles also live under the `api` object — see variables.tf.
+
+# Build strategy (optional) — defaults to AWS CodeBuild, preserved bit-for-bit.
+#
+# Uncomment the block below to build artifacts locally on the deploy host
+# instead of via AWS CodeBuild. This removes the CodeBuild infrastructure and
+# shortens apply time:
+#   - lambda_local = true  builds the Lambda layer zips locally with a
+#                          container runtime (Docker / Podman / Finch).
+#   - ui_local     = true  builds the web UI bundle locally with Node / npm.
+#
+# On Apple Silicon, x86_64 layer builds need amd64 emulation (podman machine
+# with Rosetta, or Docker Desktop with Rosetta). lambda_architecture only sets
+# the layers' compatible_architectures; the processor Lambda functions are
+# x86_64. See docs/content/deployment-guides/local-lambda-build.md.
+#
+# build = {
+#   lambda_local        = false     # true -> local container layer build
+#   lambda_architecture = "x86_64"  # x86_64 | arm64 (layer compatible arch)
+#   container_runtime   = "auto"    # auto | docker | podman | finch
+#   ui_local            = false     # true -> local npm web UI build
+# }

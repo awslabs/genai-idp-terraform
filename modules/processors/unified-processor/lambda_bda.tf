@@ -43,7 +43,8 @@ data "archive_file" "bda_completion_lambda" {
 # Functions task token so the completion function can resume the workflow.
 
 resource "aws_lambda_function" "bda_invoke" {
-  count = 1
+  architectures = [var.lambda_architecture]
+  count         = 1
 
   function_name = "${local.name_prefix}-bda-invoke"
   role          = aws_iam_role.bda_invoke_lambda[0].arn
@@ -97,7 +98,8 @@ resource "aws_cloudwatch_log_group" "bda_invoke_lambda" {
 # builds the Document sections (used by both fresh-job and reprocessing paths).
 
 resource "aws_lambda_function" "bda_process_results" {
-  count = 1
+  architectures = [var.lambda_architecture]
+  count         = 1
 
   function_name = "${local.name_prefix}-bda-process-results"
   role          = aws_iam_role.bda_process_results_lambda[0].arn
@@ -184,7 +186,8 @@ resource "aws_sqs_queue_policy" "bda_completion_dlq" {
 }
 
 resource "aws_lambda_function" "bda_completion" {
-  count = 1
+  architectures = [var.lambda_architecture]
+  count         = 1
 
   function_name = "${local.name_prefix}-bda-completion"
   role          = aws_iam_role.bda_completion_lambda[0].arn

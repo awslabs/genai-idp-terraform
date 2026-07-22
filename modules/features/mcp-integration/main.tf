@@ -115,6 +115,13 @@ resource "aws_iam_role_policy" "agentcore_mcp_handler" {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
         Resource = "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+      },
+      {
+        # OpenAI GPT-5.x models are served via the bedrock-mantle endpoint
+        # (OpenAI Responses API), a separate IAM action namespace. Mirrors upstream v0.5.16.
+        Effect   = "Allow"
+        Action   = ["bedrock-mantle:CreateInference", "bedrock-mantle:GetProject", "bedrock-mantle:ListProjects", "bedrock-mantle:ListTagsForResources"]
+        Resource = "*"
       }
     ]
   })
@@ -153,6 +160,7 @@ data "archive_file" "agentcore_mcp_handler" {
 }
 
 resource "aws_lambda_function" "agentcore_mcp_handler" {
+  architectures = [var.lambda_architecture]
   count         = local.enable_mcp_effective ? 1 : 0
   function_name = local.mcp_handler_function_name
   role          = aws_iam_role.agentcore_mcp_handler[0].arn
@@ -400,6 +408,7 @@ resource "null_resource" "build_agentcore_gateway_manager" {
 }
 
 resource "aws_lambda_function" "agentcore_gateway_manager" {
+  architectures    = [var.lambda_architecture]
   count            = local.enable_mcp_effective ? 1 : 0
   function_name    = "${local.api_name}-agentcore-gateway-mgr"
   role             = aws_iam_role.agentcore_gateway_manager[0].arn

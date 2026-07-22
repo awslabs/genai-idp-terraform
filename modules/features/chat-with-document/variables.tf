@@ -188,3 +188,29 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "lambda_architecture" {
+  description = "Target Lambda architecture (x86_64 | arm64). Must match the architecture the idp_common layers were built for; mismatches break native deps (e.g. pydantic_core)."
+  type        = string
+  default     = "arm64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
+variable "processor_memory_size" {
+  description = <<-EOT
+    Memory (MB) for the long-running Chat-with-Document processor Lambda. Defaults
+    to 4096 (upstream value, sized for large-context chat models). Lower it for
+    accounts whose Lambda per-function memory service quota is below 4096 MB
+    (some sandbox accounts cap at 3008 MB), or raise it up to the account limit.
+  EOT
+  type        = number
+  default     = 4096
+
+  validation {
+    condition     = var.processor_memory_size >= 128 && var.processor_memory_size <= 10240
+    error_message = "processor_memory_size must be between 128 and 10240 MB (and within the account's Lambda memory service quota)."
+  }
+}
