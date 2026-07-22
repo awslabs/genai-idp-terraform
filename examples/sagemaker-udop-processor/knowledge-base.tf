@@ -193,6 +193,14 @@ resource "aws_iam_role" "knowledge_base_role" {
         Principal = {
           Service = "bedrock.amazonaws.com"
         }
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
+          }
+        }
       }
     ]
   })
