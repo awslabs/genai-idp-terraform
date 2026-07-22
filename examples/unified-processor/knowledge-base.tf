@@ -194,6 +194,16 @@ resource "aws_iam_role" "knowledge_base_role" {
         Principal = {
           Service = "bedrock.amazonaws.com"
         }
+        # Prevent the confused-deputy problem (Wiz IAM-236): only allow Bedrock
+        # to assume this role on behalf of THIS account's knowledge bases.
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
+          }
+        }
       }
     ]
   })

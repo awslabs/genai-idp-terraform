@@ -117,9 +117,10 @@ resource "aws_s3_bucket_cors_configuration" "discovery_bucket_cors" {
       "x-amz-security-token"
     ]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = [
-      "*" # Will be restricted by bucket policy and IAM
-    ]
+    # Restrict to the configured app origin(s) (Wiz S3-036). Falls back to "*"
+    # only when no origin is supplied, preserving prior behavior; deployers set
+    # allowed_cors_origins to the CloudFront/app origin to close the finding.
+    allowed_origins = length(var.allowed_cors_origins) > 0 ? var.allowed_cors_origins : ["*"]
     expose_headers = [
       "ETag",
       "x-amz-server-side-encryption"

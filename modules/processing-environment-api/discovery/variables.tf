@@ -34,6 +34,12 @@ variable "appsync_api_url" {
   default     = null
 }
 
+variable "allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery bucket (the web-UI / CloudFront app origin). Empty list falls back to [\"*\"] for backward compatibility (Wiz S3-036)."
+  type        = list(string)
+  default     = []
+}
+
 variable "appsync_api_id" {
   description = "ID of the AppSync GraphQL API"
   type        = string

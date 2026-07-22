@@ -45,6 +45,12 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "discovery_allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery upload bucket. Set to the deployed web-UI origin (e.g. [\"https://xxxx.cloudfront.net\"]) to close Wiz S3-036. Empty falls back to [\"*\"]."
+  type        = list(string)
+  default     = []
+}
+
 # --------------------------------------------------------------------------
 # Dual-mode routing configuration
 # --------------------------------------------------------------------------

@@ -104,6 +104,7 @@ module "discovery" {
   lambda_architecture = var.lambda_architecture
 
   name_prefix               = "discovery-${random_string.suffix.result}"
+  allowed_cors_origins      = var.discovery_allowed_cors_origins
   input_bucket_arn          = local.input_bucket_arn
   configuration_table_arn   = local.configuration_table_arn
   appsync_api_url           = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
