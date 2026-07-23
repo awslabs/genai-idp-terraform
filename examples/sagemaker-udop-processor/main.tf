@@ -127,6 +127,33 @@ resource "aws_s3_bucket" "working_bucket" {
   tags          = var.tags
 }
 
+# Block all public access on the document buckets (Wiz S3-046 public read,
+# S3-047 public write). These buckets are only accessed by the IDP pipeline and
+# the UI via presigned URLs / IAM — they must never be public.
+resource "aws_s3_bucket_public_access_block" "input_bucket" {
+  bucket                  = aws_s3_bucket.input_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_public_access_block" "output_bucket" {
+  bucket                  = aws_s3_bucket.output_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_public_access_block" "working_bucket" {
+  bucket                  = aws_s3_bucket.working_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # Optional buckets (created conditionally)
 resource "aws_s3_bucket" "logging_bucket" {
   count         = var.web_ui.logging_enabled ? 1 : 0
@@ -227,6 +254,50 @@ resource "aws_cognito_user_pool" "user_pool" {
   tags = {
     Name = "${local.name_prefix}-user-pool"
   }
+}
+
+# REGIONAL WAF Web ACL on the Cognito user pool (Wiz IDP-007). This example
+# creates its own user pool (rather than the user-identity module), so the WAF
+# is attached here to the example-local pool.
+resource "aws_wafv2_web_acl" "cognito" {
+  name  = "${local.name_prefix}-cognito-waf"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name_prefix}-cognito-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${local.name_prefix}-cognito-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = var.tags
+}
+
+resource "aws_wafv2_web_acl_association" "cognito" {
+  resource_arn = aws_cognito_user_pool.user_pool.arn
+  web_acl_arn  = aws_wafv2_web_acl.cognito.arn
 }
 
 # Cognito User Pool Client

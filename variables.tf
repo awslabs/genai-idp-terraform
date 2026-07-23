@@ -528,6 +528,12 @@ variable "discovery" {
   default = null
 }
 
+variable "discovery_allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery upload bucket (set to the web-UI / CloudFront app origin, e.g. [\"https://xxxx.cloudfront.net\"]). Empty list falls back to [\"*\"] (Wiz S3-036)."
+  type        = list(string)
+  default     = []
+}
+
 variable "chat_with_document" {
   description = "DEPRECATED: Use api.chat_with_document instead. Configuration for chat with document functionality"
   type = object({

@@ -369,4 +369,58 @@ resource "aws_cognito_identity_pool_roles_attachment" "identity_pool_roles" {
   )
 }
 
+# =============================================================================
+# Cognito User Pool WAF (Wiz IDP-007)
+#
+# Attach a REGIONAL WAFv2 Web ACL (AWS managed common rule set) to the Cognito
+# user pool. Gated on the pool actually being created here (var.user_pool ==
+# null) and the enable_cognito_waf toggle.
+# =============================================================================
+locals {
+  cognito_waf_enabled = var.enable_cognito_waf && var.user_pool == null
+}
+
+resource "aws_wafv2_web_acl" "cognito" {
+  count = local.cognito_waf_enabled ? 1 : 0
+  name  = "${var.name_prefix}-cognito-waf"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${var.name_prefix}-cognito-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.name_prefix}-cognito-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = var.tags
+}
+
+resource "aws_wafv2_web_acl_association" "cognito" {
+  count        = local.cognito_waf_enabled ? 1 : 0
+  resource_arn = aws_cognito_user_pool.user_pool[0].arn
+  web_acl_arn  = aws_wafv2_web_acl.cognito[0].arn
+}
+
 # Admin user and group creation is now handled externally

@@ -291,6 +291,12 @@ variable "discovery" {
   default = { enabled = false }
 }
 
+variable "discovery_allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery upload bucket (the web-UI / CloudFront app origin). Empty falls back to [\"*\"] (Wiz S3-036)."
+  type        = list(string)
+  default     = []
+}
+
 variable "chat_with_document" {
   description = "Chat with Document functionality configuration"
   type = object({

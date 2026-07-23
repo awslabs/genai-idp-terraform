@@ -408,6 +408,8 @@ module "processing_environment_api" {
   discovery = local.discovery_config.enabled ? {
     enabled = true
   } : { enabled = false }
+  # Restrict discovery upload bucket CORS to the app origin(s) (Wiz S3-036).
+  discovery_allowed_cors_origins = var.discovery_allowed_cors_origins
 
   # Chat with Document configuration
   chat_with_document = local.chat_with_document_config.enabled ? {

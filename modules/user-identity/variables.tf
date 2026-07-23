@@ -63,3 +63,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_cognito_waf" {
+  description = "Attach a REGIONAL WAFv2 Web ACL (AWS managed common rule set) to the Cognito user pool (Wiz IDP-007)."
+  type        = bool
+  default     = true
+}
