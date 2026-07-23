@@ -81,6 +81,27 @@ variable "workflow_tracker_function_arn" {
   type        = string
 }
 
+# Post-processing Lambda hook wiring. When custom_post_processor_arn is set, an
+# EventBridge rule fires the post-processing decompressor on state-machine
+# SUCCEEDED events; the decompressor then invokes the customer hook.
+variable "post_processing_decompressor_function_arn" {
+  description = "ARN of the post-processing decompressor Lambda (invoked on workflow completion when a post-processing hook is configured)"
+  type        = string
+  default     = null
+}
+
+variable "post_processing_decompressor_function_name" {
+  description = "Name of the post-processing decompressor Lambda"
+  type        = string
+  default     = null
+}
+
+variable "custom_post_processor_arn" {
+  description = "ARN of the customer post-processing hook Lambda. When non-null, the decompressor EventBridge trigger is created."
+  type        = string
+  default     = null
+}
+
 variable "metric_namespace" {
   description = "The namespace for CloudWatch metrics emitted by the document processing system"
   type        = string

@@ -54,6 +54,51 @@ variable "idp_common_layer_arn" {
   type        = string
 }
 
+variable "base_layer_arn" {
+  description = "ARN of the IDP base Lambda layer (used by the multi-doc Prepare Lambda)"
+  type        = string
+}
+
+variable "appsync_api_arn" {
+  description = "ARN of the AppSync GraphQL API (for multi-doc Lambda IAM permissions)"
+  type        = string
+}
+
+variable "lambda_layers_bucket_arn" {
+  description = "ARN of the assets/lambda-layers S3 bucket used to stage CodeBuild source for the multi-doc Docker image build"
+  type        = string
+}
+
+variable "test_set_bucket_name" {
+  description = "Name of the test-set S3 bucket read by multi-doc discovery. Empty string when test sets are not deployed."
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_hub_role_arn" {
+  description = "Optional IAM role ARN in a centralized hub account to assume for Bedrock invocations in multi-doc discovery Lambdas"
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_hub_role_external_id" {
+  description = "Optional ExternalId for sts:AssumeRole into the Bedrock hub-account role"
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_hub_role_session_name" {
+  description = "Optional session name for sts:AssumeRole into the Bedrock hub-account role"
+  type        = string
+  default     = ""
+}
+
+variable "force_rebuild_multi_doc_image" {
+  description = "Force a rebuild of the multi-doc discovery Docker image regardless of source changes"
+  type        = bool
+  default     = false
+}
+
 variable "log_level" {
   description = "Log level for Lambda functions"
   type        = string

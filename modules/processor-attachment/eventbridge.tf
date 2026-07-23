@@ -96,3 +96,57 @@ resource "aws_lambda_permission" "allow_eventbridge_to_invoke_workflow_tracker" 
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.workflow_state_change_rule.arn
 }
+
+# =============================================================================
+# Post-Processing Lambda Hook trigger
+#
+# Mirrors the upstream PostProcessingLambdaHookRule: on a SUCCEEDED execution of
+# the processor state machine, invoke the post-processing decompressor, which in
+# turn invokes the customer hook (CUSTOM_POST_PROCESSOR_ARN). Created only when a
+# hook is configured. Without this rule the decompressor is never triggered, so
+# the hook never fires.
+# =============================================================================
+locals {
+  post_processing_hook_enabled = var.custom_post_processor_arn != null && var.custom_post_processor_arn != ""
+}
+
+resource "aws_cloudwatch_event_rule" "post_processing_hook_rule" {
+  count = local.post_processing_hook_enabled ? 1 : 0
+
+  name        = "${var.name}-post-hook-rule-${random_string.suffix.result}"
+  description = "Fire the post-processing decompressor on state-machine SUCCEEDED (post-processing Lambda hook)"
+
+  event_pattern = jsonencode({
+    source        = ["aws.states"]
+    "detail-type" = ["Step Functions Execution Status Change"]
+    detail = {
+      stateMachineArn = [var.processor.state_machine_arn]
+      status          = ["SUCCEEDED"]
+    }
+  })
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_event_target" "post_processing_hook_target" {
+  count = local.post_processing_hook_enabled ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.post_processing_hook_rule[0].name
+  target_id = "PostProcessingDecompressor"
+  arn       = var.post_processing_decompressor_function_arn
+
+  retry_policy {
+    maximum_event_age_in_seconds = 7200 # 2 hours
+    maximum_retry_attempts       = 3
+  }
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_to_invoke_decompressor" {
+  count = local.post_processing_hook_enabled ? 1 : 0
+
+  statement_id  = "AllowExecutionFromEventBridge-PostHook-${random_string.suffix.result}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.post_processing_decompressor_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.post_processing_hook_rule[0].arn
+}

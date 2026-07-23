@@ -57,6 +57,28 @@ resource "aws_iam_policy" "appsync_dynamodb_policy" {
           ])
         }
       ] : [],
+      # Discovery tracking table permissions (conditional). The discovery
+      # AppSync resolvers (listDiscoveryJobs Scan, updateDiscoveryJobStatus
+      # UpdateItem, deleteDiscoveryJob DeleteItem) run under this shared
+      # DynamoDB service role. Without this the resolvers fail authorization
+      # silently — completed jobs stay PENDING and the UI job list is empty.
+      var.discovery.enabled ? [
+        {
+          Action = [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:Query",
+            "dynamodb:Scan"
+          ]
+          Effect = "Allow"
+          Resource = [
+            module.discovery[0].discovery_tracking_table_arn,
+            "${module.discovery[0].discovery_tracking_table_arn}/index/*"
+          ]
+        }
+      ] : [],
       # Agent Analytics DynamoDB permissions (conditional)
       var.agent_analytics.enabled ? [
         {
@@ -1076,6 +1098,9 @@ resource "aws_iam_policy" "reprocess_document_resolver_s3_policy" {
   name        = "ReprocessDocumentResolverS3Policy-${random_string.suffix.result}"
   description = "Policy for Reprocess Document Resolver Lambda to access S3 buckets"
 
+  # Full reprocessing lists+deletes prior output from the output bucket
+  # (_delete_output_data) so OCR re-runs from scratch, in addition to reading
+  # the source from the input bucket.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -1090,8 +1115,48 @@ resource "aws_iam_policy" "reprocess_document_resolver_s3_policy" {
           local.input_bucket_arn,
           local.input_bucket_arn != null ? "${local.input_bucket_arn}/*" : null
         ])
+      },
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Effect = "Allow"
+        Resource = compact([
+          local.output_bucket_arn,
+          local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null
+        ])
       }
     ]
+  })
+}
+
+# Reprocess re-enqueues the document to the processing queue (SQS SendMessage)
+# and writes document status back through AppSync (create_document_service ->
+# appsync:GraphQL). Without these the resolver fails after the env fix.
+resource "aws_iam_policy" "reprocess_document_resolver_queue_appsync_policy" {
+  name        = "ReprocessDocumentResolverQueueAppSyncPolicy-${random_string.suffix.result}"
+  description = "Policy for Reprocess Document Resolver Lambda to enqueue documents and update AppSync"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      local.document_queue_arn != null ? [
+        {
+          Action   = ["sqs:SendMessage"]
+          Effect   = "Allow"
+          Resource = local.document_queue_arn
+        }
+      ] : [],
+      [
+        {
+          Action   = "appsync:GraphQL"
+          Effect   = "Allow"
+          Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/*/types/Mutation/*"
+        }
+      ]
+    )
   })
 }
 resource "aws_iam_policy" "reprocess_document_resolver_kms_policy" {
@@ -1142,6 +1207,10 @@ resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_logs_atta
 resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_s3_attachment" {
   role       = aws_iam_role.reprocess_document_resolver_role.name
   policy_arn = aws_iam_policy.reprocess_document_resolver_s3_policy.arn
+}
+resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_queue_appsync_attachment" {
+  role       = aws_iam_role.reprocess_document_resolver_role.name
+  policy_arn = aws_iam_policy.reprocess_document_resolver_queue_appsync_policy.arn
 }
 resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_kms_attachment" {
   for_each   = toset(["enabled"])

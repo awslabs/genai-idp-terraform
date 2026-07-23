@@ -17,6 +17,9 @@ create_bda_project = true # let this example create + link one
 # web_ui = { enabled = true }              # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
+# Post-processing Lambda hook — invoked on document completion (deploy-time,
+# not editable in the UI). See docs/post-processing-lambda-hook.md.
+# custom_post_processor_arn = "arn:aws:lambda:us-east-1:111122223333:function:my-post-processor"
 
 # ── Knowledge Base + chat (both ON by default) ──────────────────────────────
 # create_knowledge_base provisions the OpenSearch + Bedrock KB backend and

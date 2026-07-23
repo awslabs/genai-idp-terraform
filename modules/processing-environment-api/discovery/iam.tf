@@ -63,6 +63,14 @@ resource "aws_iam_policy" "discovery_upload_resolver_policy" {
           "sqs:SendMessage"
         ]
         Resource = aws_sqs_queue.discovery_queue.arn
+      },
+      {
+        # startMultiDocDiscovery launches the multi-doc pipeline state machine.
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution"
+        ]
+        Resource = aws_sfn_state_machine.multi_doc_discovery.arn
       }
     ]
   })
@@ -256,6 +264,16 @@ resource "aws_iam_policy" "discovery_processor_policy" {
           "textract:AnalyzeDocument",
           "textract:DetectDocumentText"
         ]
+        Resource = "*"
+      },
+      {
+        # The processor publishes Bedrock token/latency metrics via
+        # cloudwatch:PutMetricData. This is best-effort telemetry (jobs still
+        # complete without it), but the missing grant produced AccessDenied
+        # error spam in the logs. PutMetricData does not support resource-level
+        # scoping, so "*" is required.
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
         Resource = "*"
       }
     ]

@@ -102,6 +102,39 @@ resource "aws_lambda_invocation" "seed_schema" {
 }
 
 # ----------------------------------------------------------------------------
+# Seed DefaultPricing.
+#
+# Upstream loads config_library/pricing.yaml into the ConfigurationTable as a
+# `DefaultPricing` record at deploy time; the getPricing resolver reads it (plus
+# CustomPricing deltas) for the UI Pricing page. Without this seed the page
+# shows "No pricing data configured". The record is a single fixed key, so
+# seeding it from each processor engine is idempotent (identical content).
+# ----------------------------------------------------------------------------
+locals {
+  pricing_yaml_path = "${path.module}/../../sources/config_library/pricing.yaml"
+  default_pricing   = yamldecode(file(local.pricing_yaml_path))
+}
+
+resource "aws_lambda_invocation" "seed_pricing" {
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key   = "DefaultPricing"
+    Value = local.default_pricing
+  })
+
+  triggers = {
+    pricing_hash       = filesha256(local.pricing_yaml_path)
+    seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}
+
+# ----------------------------------------------------------------------------
 # Managed baseline configurations
 #
 # Seed the upstream managed-config baselines

@@ -103,14 +103,25 @@ module "discovery" {
 
   lambda_architecture = var.lambda_architecture
 
-  name_prefix               = "discovery-${random_string.suffix.result}"
-  input_bucket_arn          = local.input_bucket_arn
-  configuration_table_arn   = local.configuration_table_arn
-  appsync_api_url           = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
+  name_prefix             = "discovery-${random_string.suffix.result}"
+  input_bucket_arn        = local.input_bucket_arn
+  configuration_table_arn = local.configuration_table_arn
+  # uris["GRAPHQL"] already includes the https:// scheme and /graphql path, so
+  # it must be passed bare. Prefixing another "https://" produced
+  # "https://https://...", which broke the discovery processor's AppSync status
+  # callback (DNS resolution of host 'https') and the multi-doc handlers.
+  appsync_api_url           = aws_appsync_graphql_api.api.uris["GRAPHQL"]
   appsync_api_id            = aws_appsync_graphql_api.api.id
+  appsync_api_arn           = aws_appsync_graphql_api.api.arn
   appsync_lambda_role_arn   = aws_iam_role.appsync_lambda_role.arn
   appsync_dynamodb_role_arn = aws_iam_role.appsync_dynamodb_role.arn
   idp_common_layer_arn      = var.idp_common_layer_arn
+
+  # Multi-document discovery pipeline (state machine + container-image Lambdas
+  # built via CodeBuild). base_layer_arn feeds the Prepare Lambda;
+  # lambda_layers_bucket_arn stages the Docker build source.
+  base_layer_arn           = var.base_layer_arn
+  lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
 
   # Configuration
   log_level                      = var.log_level

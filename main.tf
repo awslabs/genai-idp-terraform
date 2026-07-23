@@ -309,6 +309,12 @@ module "processing_environment" {
     lambda_functions = module.processing_environment_api[0].lambda_functions
   } : null
 
+  # Optional post-processing Lambda hook. When set, document-completion events
+  # invoke this Lambda (mirrors the upstream PostProcessingLambdaHookFunctionArn
+  # CloudFormation parameter). Configured at deploy time — not editable via the
+  # runtime UI configuration.
+  custom_post_processor_arn = var.custom_post_processor_arn
+
   # Configuration
   log_level                    = var.log_level
   log_retention_days           = var.log_retention_days
@@ -417,8 +423,12 @@ module "processing_environment_api" {
 
   # Process Changes configuration (Edit Sections feature)
   enable_edit_sections = local.process_changes_config.enabled
-  document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
-  document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
+  # Pass the document queue unconditionally: the reprocess resolver re-enqueues
+  # documents and needs QUEUE_URL regardless of the Edit Sections feature. The
+  # edit-sections feature stays independently gated on enable_edit_sections in
+  # the API module, so this does not enable it.
+  document_queue_url = module.processing_environment.document_queue_url
+  document_queue_arn = module.processing_environment.document_queue_arn
 
   # v0.4.8 feature flags
   enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
@@ -925,6 +935,13 @@ module "processor_attachment" {
   queue_sender_function_name     = module.processing_environment.queue_sender_function_name
   workflow_tracker_function_arn  = module.processing_environment.workflow_tracker_function_arn
   workflow_tracker_function_name = module.processing_environment.workflow_tracker_function_name
+
+  # Post-processing Lambda hook: when custom_post_processor_arn is set, the
+  # attachment creates the EventBridge rule that fires the decompressor (which
+  # then invokes the hook) on workflow completion.
+  post_processing_decompressor_function_arn  = module.processing_environment.post_processing_decompressor_function_arn
+  post_processing_decompressor_function_name = module.processing_environment.post_processing_decompressor_function_name
+  custom_post_processor_arn                  = var.custom_post_processor_arn
 
   # S3 bucket configuration
   input_bucket_arn   = var.input_bucket_arn
