@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 import os
+from urllib.parse import urlparse
 
 import boto3
 from botocore.exceptions import ClientError
@@ -134,20 +135,11 @@ def handler(event, context):
         # form `s3://<bucket>/<key>`. We intentionally do NOT accept
         # virtual-hosted-style HTTPS URIs here because they require a
         # completely different parsing path.
-        #
-        # Parse with a plain string split rather than urllib.parse.urlparse:
-        # object keys may contain '#' (e.g. "Borrowing_Notice_#2.pdf/pages/1/
-        # result.json"), which urlparse treats as a URL fragment delimiter and
-        # silently truncates, producing a wrong key and a NoSuchKey error.
-        if not s3_uri.startswith("s3://"):
+        parsed_uri = urlparse(s3_uri)
+        if parsed_uri.scheme != "s3" or not parsed_uri.netloc:
             raise Exception("Invalid S3 URI: expected s3://<bucket>/<key>")
-        # Strip scheme, then split once into bucket and key.
-        bucket_and_key = s3_uri[len("s3://"):]
-        parts = bucket_and_key.split("/", 1)
-        if len(parts) < 2 or not parts[0]:
-            raise Exception("Invalid S3 URI: expected s3://<bucket>/<key>")
-        bucket = parts[0]
-        key = parts[1]
+        bucket = parsed_uri.netloc
+        key = parsed_uri.path.lstrip('/')  # Remove leading slash from path
         if not key:
             raise Exception("Invalid S3 URI: key is required")
 

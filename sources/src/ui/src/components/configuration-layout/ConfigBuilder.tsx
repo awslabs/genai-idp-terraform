@@ -1600,17 +1600,6 @@ const ConfigBuilder = ({
 
   // Render each top-level property
   const renderTopLevelProperty = ({ key, property }: { key: string; property: SchemaProperty }) => {
-    // Hide the legacy embedded `pricing` section. Pricing is no longer stored
-    // inside the main config object — it lives in separate DefaultPricing /
-    // CustomPricing records and is edited on the dedicated "View / Edit Pricing"
-    // page (see PricingLayout / getPricing). The idp_common config loader even
-    // strips any legacy embedded pricing field on read, so this section is
-    // always empty ("Services (0) — No items added yet") and only confuses
-    // users. Suppress it here.
-    if (key === 'pricing') {
-      return null;
-    }
-
     // Debug info for sections
     console.log(
       `Rendering top level property: ${key}, type: ${property.type}, sectionLabel: ${property.sectionLabel}`, // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring - Debug logging with controlled internal data

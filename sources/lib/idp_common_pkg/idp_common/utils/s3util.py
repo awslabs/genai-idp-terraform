@@ -8,6 +8,7 @@ Utility functions for working with Amazon S3.
 import json
 import boto3
 from typing import Dict, Any, Tuple, Optional, Union
+from urllib.parse import urlparse
 
 
 class S3Util:
@@ -164,15 +165,13 @@ class S3Util:
         if not s3_url.startswith("s3://"):
             raise ValueError(f"Invalid S3 URL format: {s3_url}")
 
-        # Split on the first '/' rather than using urllib.parse.urlparse:
-        # object keys can contain '#' (e.g. "Report_#2.pdf/pages/1/result.json"),
-        # which urlparse treats as a URL fragment delimiter and silently
-        # truncates, yielding a wrong key and a NoSuchKey error downstream.
         parts = s3_url[5:].split("/", 1)
         if len(parts) != 2:
             raise ValueError(f"Invalid S3 URI format: {s3_url}")
 
-        bucket = parts[0]
-        key = parts[1]
+        parsed = urlparse(s3_url)
+        bucket = parsed.netloc
+        # Remove leading slash from key
+        key = parsed.path.lstrip("/")
 
         return bucket, key

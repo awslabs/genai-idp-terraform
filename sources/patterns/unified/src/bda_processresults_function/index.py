@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from decimal import Decimal
+from urllib.parse import urlparse
 
 import boto3
 import pypdfium2 as pdfium
@@ -72,9 +73,10 @@ def create_metadata_file(file_uri, class_type, file_type=None):
         file_type (str, optional): Type of file ('section' or 'page')
     """
     try:
-        # Parse the S3 URI to get bucket and key. Use parse_s3_path (plain
-        # string split) rather than urlparse, which mishandles '#' in keys.
-        bucket, key = parse_s3_path(file_uri)
+        # Parse the S3 URI to get bucket and key
+        parsed_uri = urlparse(file_uri)
+        bucket = parsed_uri.netloc
+        key = parsed_uri.path.lstrip("/")
 
         # Create the metadata key by adding '.metadata.json' to the original key
         metadata_key = f"{key}.metadata.json"
@@ -803,18 +805,9 @@ def process_bda_pages(
 
 
 def parse_s3_path(s3_uri: str) -> (str, str):
-    """Extract bucket and key from s3:// URI.
-
-    Split on the first '/' rather than using urllib.parse.urlparse: object keys
-    can contain '#' (e.g. "Report_#2.pdf/..."), which urlparse treats as a URL
-    fragment delimiter and silently truncates, yielding a wrong key.
-    """
-    if not s3_uri.startswith("s3://"):
-        raise ValueError(f"Invalid S3 URI: {s3_uri}")
-    parts = s3_uri[len("s3://"):].split("/", 1)
-    bucket = parts[0]
-    key = parts[1] if len(parts) > 1 else ""
-    return bucket, key
+    """Extract bucket and key from s3:// URI."""
+    parsed = urlparse(s3_uri)
+    return parsed.netloc, parsed.path.lstrip("/")
 
 
 def download_json(bucket: str, key: str) -> dict:
