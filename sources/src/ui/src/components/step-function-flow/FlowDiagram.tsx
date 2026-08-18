@@ -3,11 +3,13 @@
 
 import React from 'react';
 import { Box, Badge } from '@cloudscape-design/components';
-import useConfiguration from '../../hooks/use-configuration';
 import './FlowDiagram.css';
 
 interface StepConfig {
   summarization?: { enabled?: boolean };
+  // v0.6: confidence enablement lives under extraction.confidence; the slim
+  // assessment carrier still exposes `enabled` for the step itself.
+  extraction?: { confidence?: { enabled?: boolean } };
   assessment?: { enabled?: boolean };
   evaluation?: { enabled?: boolean };
 }
@@ -30,6 +32,11 @@ interface FlowDiagramProps {
   onStepClick: (step: Step) => void;
   selectedStep?: Step | null;
   getStepIcon: (name: string, type: string, status: string) => React.ReactNode;
+  // Merged config for the version this document was processed with (passed
+  // down from DocumentPanel via StepFunctionFlowViewer). Drives step-disabled
+  // rendering so a historical run's greyed-out steps reflect the toggles
+  // active AT PROCESSING TIME, not the stack's current live config.
+  mergedConfig?: StepConfig | null;
 }
 
 // Helper function to check if a step is disabled based on configuration
@@ -45,7 +52,7 @@ const isStepDisabled = (stepName: string, config: StepConfig | null): boolean =>
 
   // Check if this is an assessment step
   if (stepNameLower.includes('assessment') || stepNameLower.includes('assess')) {
-    return config.assessment?.enabled === false;
+    return (config.extraction?.confidence?.enabled ?? config.assessment?.enabled) === false;
   }
 
   // Check if this is an evaluation step
@@ -56,10 +63,13 @@ const isStepDisabled = (stepName: string, config: StepConfig | null): boolean =>
   return false;
 };
 
-const FlowDiagram = ({ steps = [], onStepClick, selectedStep = null, getStepIcon }: FlowDiagramProps): React.JSX.Element => {
-  // Use the configuration hook to get mergedConfig
-  const { mergedConfig } = useConfiguration();
-
+const FlowDiagram = ({
+  steps = [],
+  onStepClick,
+  selectedStep = null,
+  getStepIcon,
+  mergedConfig = null,
+}: FlowDiagramProps): React.JSX.Element => {
   if (!steps || steps.length === 0) {
     return (
       <Box textAlign="center" padding="xl">

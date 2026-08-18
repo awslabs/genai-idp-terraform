@@ -106,31 +106,93 @@ idp-feature-cli show-schema          # full feature.yaml schema reference
 
 ### Optional: pipeline hooks
 
-A feature can run a Lambda at any of six **post-step extension points** in the
-document-processing workflow — `postOcr`, `postClassification`,
-`postExtraction`, `postAssessment`, `postRuleValidation`, `postSummarization` —
-to enrich, validate, or react to results mid-pipeline. The host's
-`PipelineHooksDispatcherFunction` invokes registered hooks after each step; the
-mechanism is inert until a feature registers one.
+A feature can run a Lambda at **extension points** in the document-processing
+workflow. There are two kinds:
 
-> **Terraform deployments:** the unified processor state machine currently
-> wires five of these points (`postOcr`, `postClassification`,
-> `postExtraction`, `postAssessment`, `postSummarization`).
-> `postRuleValidation` is not wired because the Terraform workflow has no
-> rule-validation state, so a feature registering a `postRuleValidation` hook
-> is accepted but never invoked on that deployment.
+- **`preprocessing`** — a **single** hook that runs FIRST, before the
+  BDA/pipeline routing decision (so it fires in both processing modes, even
+  with OCR disabled), operating on the *source document*. While it runs the
+  document's visible status is `PREPROCESSING`.
+- **`postprocessing`** — a **single** hook that runs LAST, after evaluation and
+  before the workflow's terminal state (also on the shared tail, so it too fires
+  in both processing modes), operating on the *finished document*. Its mutation
+  becomes the workflow output, so it reaches the tracking row, reporting, and UI.
+- **Five post-step points** — `postOcr`, `postClassification`,
+  `postExtraction`, `postRuleValidation`, `postSummarization` — a **list** of
+  hooks invoked after the corresponding step, to enrich, validate, or react to
+  results mid-pipeline. (`postAssessment` was removed in v0.6 when assessment
+  folded into extraction.)
+
+The host's `PipelineHooksDispatcherFunction` invokes registered hooks at each
+point; the mechanism is inert until a feature registers one.
 
 **1. Write the hook Lambda.** It's invoked synchronously with:
 
 ```json
 { "hookPoint": "postExtraction", "featureId": "my-feature",
-  "document": { ... }, "section": { ... }, "executionArn": "arn:aws:states:..." }
+  "document": { ... }, "section": { ... }, "executionArn": "arn:aws:states:...",
+  "args": [ { "key": "...", "value": "..." } ], "argsMap": { "...": "..." } }
 ```
 
-Do your work and return any JSON result (surfaced to the workflow under
-`$.HookResults`). The Lambda **must** be tagged `idp:feature-id=<featureId>`
-(the host's dispatcher only invokes tagged or `GENAIIDP-*`-named functions —
-the scaffold tags feature Lambdas for you).
+`args` is the hook entry's generic key/value settings (string values, opaque to
+the platform); `argsMap` is the same list flattened to `{key: value}` for
+convenience. Do your work and return any JSON result (surfaced to the workflow
+under `$.HookResults`). A `preprocessing` hook may return `"halt": true` to
+short-circuit the execution — the document ends in a terminal state instead of
+being processed (e.g. `REDACTED_SUPERSEDED` when the hook spawned a redacted
+copy). The Lambda **must** be tagged `idp:feature-id=<featureId>` (the host's
+dispatcher only invokes tagged or `GENAIIDP-*`-named functions — the scaffold
+tags feature Lambdas for you).
+
+#### Writing a mutating hook
+
+A hook can also **change the document** for the next step to consume, which is
+how a feature injects business logic into the pipeline rather than just
+reacting to it. Return the modified document under `updatedDocument`; use
+`idp_common.hooks` so the round-trip is two calls:
+
+```python
+from idp_common.hooks import load_hook_document, updated_document_result
+
+def lambda_handler(event, context):
+    document = load_hook_document(event)      # resolves compressed refs for you
+
+    # Business logic: anything on the Document model is fair game.
+    for section in document.sections:
+        if section.classification == "Unknown":
+            section.classification = classify_with_my_rules(section)
+
+    return updated_document_result(document, rulesApplied=True)
+```
+
+Requires `idp_common[core]` in the hook's `requirements.txt`, plus the
+`WORKING_BUCKET` env var (import the host's `<MainStackName>-WorkingBucketName`
+export) so compressed documents resolve.
+
+Three things to know:
+
+- **Load, don't build.** Constructing a `Document` from scratch drops
+  `metering`, `errors`, `hitl_metadata`, and `processing_issues`. Always
+  load → mutate → return.
+- **Omitting `updatedDocument` changes nothing.** The document passes through
+  byte-identical, so read-only hooks need no changes.
+- **`postExtraction` is section-scoped** (it runs inside the section Map), so
+  only section-level changes propagate there. Use `postClassification` or
+  `postRuleValidation` for whole-document changes.
+- **`postprocessing` has nothing downstream**, so its mutation matters only
+  because it *is* the workflow output — that is what the tracker persists to
+  DynamoDB, reporting, and the UI. It cannot set a terminal `status`, though: a
+  successful execution is forced to `COMPLETED`.
+- **Make mutations idempotent.** The workflow retries a hook dispatch on
+  transient Lambda faults, so a mutation that *appends* can apply twice while
+  one that *sets* is safe.
+
+The dispatcher refuses an update that changes the document's identity, breaks
+the `sections` list the Map iterates, or exceeds 5 MB inline — keeping the
+pre-hook document and recording the reason under
+`$.HookResults.<point>.Payload.results[].documentUpdateRejected` rather than
+failing the workflow. Full contract and the per-point propagation table:
+[Feature Platform → Pipeline hooks](feature-platform.md#pipeline-hooks).
 
 **2. Declare it in `template.yaml` + the manifest.** Add the hook Lambda to your
 feature's CloudFormation template, then map the hook point to that Lambda's
@@ -147,15 +209,78 @@ logical names to ARNs and calls the host's `registerFeatureHooks` mutation on
 Create (and clears them on Delete) — the same custom-resource pattern as
 `registerFeature`. The host writes them into the active config version's
 `<step>.postHook` lists. Each entry is
-`{ featureId, arn, order (default 100), onError (default continue), enabled }`;
+`{ featureId, arn, order (default 100), onError (default continue), enabled, args }`;
 `onError` is `continue` | `skip-remaining` | `fail`.
 
+**`preprocessing` / `postprocessing` shape.** Unlike the post-step lists, these
+two are standalone top-level config sections each holding ONE flat hook (its
+fields live directly on the section, no list), editable in the View/Edit
+Configuration UI:
+
+```yaml
+preprocessing:
+  enabled: true               # default false
+  featureId: pii-anonymizer   # owner label (for traceability)
+  arn: <hook-lambda-arn>
+  onError: fail               # continue | fail
+  args:
+    - { key: mode, value: redactcopy_and_stop }
+
+postprocessing:
+  enabled: true               # default false
+  featureId: my-delivery
+  arn: <hook-lambda-arn>
+  onError: continue           # continue (recommended) | fail
+  args:
+    - { key: endpoint, value: "https://erp.example/ingest" }
+```
+
+For `preprocessing`, `onError: fail` is terminal: a failed hook ends the
+execution in a `PreprocessingHookFailed` Fail state and **never** falls through
+to processing the un-preprocessed original (essential when the hook gates
+processing, e.g. PII redaction). Use `fail` whenever the hook must gate.
+
+For `postprocessing`, keep the `continue` default unless the hook truly gates
+delivery — `fail` marks a document FAILED after every processing step already
+succeeded. Two more things to know about this point:
+
+- It runs **inside** the execution, so a slow hook extends per-document latency
+  and holds a concurrency slot. For fire-and-forget delivery use the
+  [EventBridge post-processing hook](post-processing-lambda-hook.md) instead.
+- It fires **while HITL review is pending** (and again after review completes),
+  so branch on the document's `hitl_status` / `hitl_triggered` /
+  `hitl_sections_pending` fields — remembering they are omitted when falsy, so
+  absent means "no HITL" — and make the hook idempotent.
+
+Because each of these points holds a *single* hook, only one feature can own it:
+registering over another feature's hook is refused rather than silently
+disabling it.
+
 **Escape hatch (no feature install).** For custom business logic outside the
-feature-install flow, an admin can add `postHook` entries to a config version
-directly (same shape as above). The hook Lambda still needs the
-`idp:feature-id` tag or a `GENAIIDP-*` name to clear the dispatcher's IAM
-check. This is handy for one-off integrations, but installable features should
-use `registerFeatureHooks` so hooks are added/removed with the stack.
+feature-install flow, an admin can add `postHook` entries — or fill in the
+`preprocessing` / `postprocessing` sections — in a config version directly (same
+shapes as above).
+The hook Lambda still needs the `idp:feature-id` tag or a `GENAIIDP-*` name to
+clear the dispatcher's IAM check. This is handy for one-off integrations, but
+installable features should use `registerFeatureHooks` so hooks are
+added/removed with the stack.
+
+**Verifying a hook actually fired.** Asserting on your feature's own output
+cannot distinguish "the hook ran and decided nothing" from "the hook was never
+invoked" — from the feature's data store the two look identical. The dispatcher
+reports both the count and the config version it resolved, so check those
+instead:
+
+```python
+# From the workflow execution history, at the hook state's exit:
+payload = output["HookResults"]["postRuleValidation"]["Payload"]
+assert payload.get("invoked", 0) > 0, "the dispatcher never invoked the hook"
+assert payload["configVersion"] == expected_version
+```
+
+`invoked: 0` with a `configVersion` you did not expect means the hooks are
+registered in a different config version than the one the document resolved —
+activate the right version, or pin it per document via `config_version`.
 
 See [Feature Platform → Pipeline hooks](feature-platform.md#pipeline-hooks) for
 the full contract.
@@ -251,6 +376,17 @@ The host's seller-bucket access also requires:
 > `InstalledFeatures` table) and appears in the **Extensions** nav once
 > installed — no catalog entry needed. Use this for private/internal features
 > you don't want surfaced as installable to every admin.
+
+### Nav visibility before install (`showInNav`)
+
+A catalog feature that is **not yet installed** gets its own entry in the
+**Extensions** side nav (with an Install or Subscribe badge) by default. Set
+`showInNav: false` — in `feature.yaml` for OSS features, or on the entry in
+`extensions-marketplace.yaml` for marketplace features — to keep it off the
+nav until it's installed; it stays discoverable on the **Browse catalog** page
+(`/features`). The two bundled reference samples set `showInNav: false` so
+fresh deployments don't advertise them in the nav. Installed features always
+get a nav entry regardless of this flag.
 
 ### Feature documentation (the "Learn more" link)
 
@@ -359,4 +495,5 @@ the subscription step entirely and go straight to **Install**.
 - [`feature-platform/feature-template/`](../feature-platform/feature-template/) — the scaffold you start from
 - [`feature-platform/sample-feature/`](../feature-platform/sample-feature/) — minimal reference OSS feature (`docs-by-status`): UI + API + registration only
 - [`feature-platform/sample-health-insurance-review/`](../feature-platform/sample-health-insurance-review/) — advanced reference OSS feature (`sample-health-insurance-review`): adds a config preset, a `postRuleValidation` pipeline hook, and host-GraphQL calls from the UI ([docs](extensions/sample-health-insurance-review.md))
+- [`feature-platform/confbench-testset/`](../feature-platform/confbench-testset/) — reference for a **long-running background job** owned by an extension (`confbench-testset`): a Step Functions `Map` ingest that streams a 32.71 GB dataset into the host's Test Set bucket, a shared-catalog Lambda layer (with the SAM `BuildMethod` gotcha documented), and an Admin-gated feature API. Useful pattern when work is too big or too slow to sit inside a CloudFormation custom resource ([docs](extensions/confbench-testset.md))
 - Manifest schema: `lib/idp_feature_sdk/idp_feature_sdk/schemas/feature-manifest.schema.json` (or `idp-feature-cli show-schema`)

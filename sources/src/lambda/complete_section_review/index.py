@@ -100,13 +100,27 @@ def complete_section_review(
 
     # Find the section and get its output URI
     section_output_uri = None
+    section_found = False
     for section in document.sections:
         if section.section_id == section_id:
+            section_found = True
             section_output_uri = section.extraction_result_uri
             break
 
-    # Save edited data to S3 if provided
-    if edited_data and section_output_uri:
+    # If the caller supplied edited data, we MUST be able to persist it. Fail
+    # loudly instead of marking the section reviewed with the edits silently
+    # dropped (which would return success while losing the reviewer's work).
+    if edited_data:
+        if not section_found:
+            raise ValueError(
+                f"Cannot save edited data: section '{section_id}' not found in "
+                f"document '{object_key}'"
+            )
+        if not section_output_uri:
+            raise ValueError(
+                f"Cannot save edited data: section '{section_id}' in document "
+                f"'{object_key}' has no output URI to write to"
+            )
         save_edited_data_to_s3(section_output_uri, edited_data)
 
     # Get current pending and completed sections from document model
@@ -323,6 +337,18 @@ def skip_all_sections_review(object_key, username="", user_email=""):
     )
 
     logger.info(f"All sections skipped for document {object_key}. Skipped: {all_skipped}, Completed: {list(completed)}")
+
+    # Skipping all reviews resolves every pending section, so the document is now
+    # fully reviewed — exactly like completing the final section via
+    # complete_section_review (which calls trigger_reprocessing on all_completed).
+    # Trigger the same downstream reprocessing here so the two "finish review"
+    # paths behave identically: it re-runs Summarization/Evaluation with the
+    # existing (unedited) data and, on workflow success, emits the Step Functions
+    # "SUCCEEDED" event that drives the optional post-processing Lambda hook
+    # (PostProcessingLambdaHookFunctionArn). Without this call, skipping reviews
+    # would finalize the document but never run post-processing — an inconsistency
+    # with the section-by-section completion path.
+    trigger_reprocessing(object_key)
 
     return build_document_response(object_key)
 

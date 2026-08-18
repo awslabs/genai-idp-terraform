@@ -8,6 +8,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from botocore.credentials import DeferredRefreshableCredentials
+
 from idp_common.bedrock import session as bedrock_session
 
 
@@ -69,8 +70,8 @@ class TestGetBedrockSession:
             captured.update(params)
             return lambda: {
                 "access_key": "AKIA",
-                "secret_key": "SECRET",
-                "token": "TOKEN",
+                "secret_key": "SECRET",  # nosec B105 - dummy test credential
+                "token": "TOKEN",  # nosec B105 - dummy test credential
                 "expiry_time": "2099-01-01T00:00:00Z",
             }
 
@@ -98,8 +99,8 @@ class TestGetBedrockSession:
             captured.update(params)
             return lambda: {
                 "access_key": "AKIA",
-                "secret_key": "SECRET",
-                "token": "TOKEN",
+                "secret_key": "SECRET",  # nosec B105 - dummy test credential
+                "token": "TOKEN",  # nosec B105 - dummy test credential
                 "expiry_time": "2099-01-01T00:00:00Z",
             }
 
@@ -123,8 +124,8 @@ class TestGetBedrockSession:
             captured.update(params)
             return lambda: {
                 "access_key": "AKIA",
-                "secret_key": "SECRET",
-                "token": "TOKEN",
+                "secret_key": "SECRET",  # nosec B105 - dummy test credential
+                "token": "TOKEN",  # nosec B105 - dummy test credential
                 "expiry_time": "2099-01-01T00:00:00Z",
             }
 
@@ -149,8 +150,8 @@ class TestGetBedrockSession:
             captured.update(params)
             return lambda: {
                 "access_key": "AKIA",
-                "secret_key": "SECRET",
-                "token": "TOKEN",
+                "secret_key": "SECRET",  # nosec B105 - dummy test credential
+                "token": "TOKEN",  # nosec B105 - dummy test credential
                 "expiry_time": "2099-01-01T00:00:00Z",
             }
 

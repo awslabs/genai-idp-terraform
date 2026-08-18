@@ -31,6 +31,7 @@ The IDP Common library provides these main modules:
 - **[Utils](utils/README.md)**: Common utility functions
 - **[Metrics](metrics/README.md)**: Performance and token tracking
 - **[Config](config/README.md)**: Configuration loading, merging, validation, and typed models
+- **[Hooks](hooks/README.md)**: Helpers for authoring pipeline-hook Lambdas (load / mutate / return a Document)
 - **[Monitoring](monitoring/README.md)**: Shared monitoring foundation (logs, X-Ray, Step Functions, stack discovery)
 
 ## 🗃️ Key Classes
@@ -144,6 +145,7 @@ class Status(Enum):
     """Document processing status."""
     QUEUED = "QUEUED"                                       # Initial state
     RUNNING = "RUNNING"                                     # Workflow started
+    PREPROCESSING = "PREPROCESSING"                         # Preprocessing hook running (e.g. PII redaction)
     OCR = "OCR"                                             # OCR processing
     CLASSIFYING = "CLASSIFYING"                             # Document classification
     EXTRACTING = "EXTRACTING"                               # Information extraction
@@ -157,6 +159,7 @@ class Status(Enum):
     COMPLETED = "COMPLETED"                                 # All processing completed
     FAILED = "FAILED"                                       # Processing failed
     ABORTED = "ABORTED"                                     # User cancelled
+    REDACTED_SUPERSEDED = "REDACTED_SUPERSEDED"             # Original superseded by its redacted copy
 ```
 
 ## 📦 Document Compression for Large Documents

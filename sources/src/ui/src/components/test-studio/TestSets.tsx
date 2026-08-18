@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { SelectProps } from '@cloudscape-design/components';
 import {
   Container,
@@ -19,8 +20,10 @@ import {
   Select,
   DatePicker,
   TimeInput,
+  StatusIndicator,
+  Link,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from '../../api/client-shim';
 import {
   addTestSet,
   addTestSetFromUpload,
@@ -34,6 +37,9 @@ import {
 } from '../../graphql/generated';
 import type { DocumentClassType } from '../../graphql/generated/schema-types';
 import { getErrorMessage } from '../../utils/errorUtils';
+import useSyntheticDataGenerator from '../../hooks/use-synthetic-data-generator';
+import GenerateSyntheticDataModal from './GenerateSyntheticDataModal';
+import { testSetDetailHref } from '../../routes/constants';
 
 const client = generateClient();
 
@@ -90,10 +96,19 @@ const TestSets = (): React.JSX.Element => {
   const [fileCount, setFileCount] = useState(0);
   const [showFilesModal, setShowFilesModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [showBucketHelp, setShowBucketHelp] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [genInitial, setGenInitial] = useState<{ tab?: 'prompt' | 'config'; version?: string; className?: string }>({});
+  const location = useLocation();
+  const navigate = useNavigate();
+  // The synthetic-data generator is an optional extension; the button is only
+  // shown when it's installed (available).
+  const { available: generatorAvailable, getJobStatus, listActiveJobs } = useSyntheticDataGenerator();
+  const [genJobs, setGenJobs] = useState<Record<string, { name: string; status: string; message: string; testSetId?: string }>>({});
   const [warningMessage, setWarningMessage] = useState('');
   const [confirmReplacement, setConfirmReplacement] = useState(false);
   const [showFileStructure, setShowFileStructure] = useState(() => {
@@ -133,6 +148,8 @@ const TestSets = (): React.JSX.Element => {
     } catch (err) {
       console.error('TestSets: Failed to load test sets:', err);
       setError(`Failed to load test sets: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -171,6 +188,85 @@ const TestSets = (): React.JSX.Element => {
       clearInterval(interval);
     };
   }, [testSets]);
+
+  // Poll in-flight synthetic-generation jobs until terminal.
+  React.useEffect(() => {
+    const jobIds = Object.keys(genJobs);
+    if (jobIds.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const jobId of jobIds) {
+        const job = await getJobStatus(jobId);
+        if (!job) continue;
+        if (job.status === 'COMPLETED') {
+          setGenJobs((prev) => {
+            const { [jobId]: _done, ...rest } = prev;
+            return rest;
+          });
+          setSuccessMessage(`Synthetic data generation complete: "${genJobs[jobId]?.name}".`);
+          loadTestSets();
+        } else if (job.status === 'FAILED') {
+          setGenJobs((prev) => {
+            const { [jobId]: _failed, ...rest } = prev;
+            return rest;
+          });
+          setError(`Synthetic data generation failed for "${genJobs[jobId]?.name}": ${job.errorMessage || 'unknown error'}`);
+        } else {
+          setGenJobs((prev) =>
+            prev[jobId]
+              ? { ...prev, [jobId]: { ...prev[jobId], status: job.status, message: job.statusMessage || prev[jobId].message } }
+              : prev,
+          );
+        }
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [genJobs, getJobStatus]);
+
+  // Adopt in-flight generation jobs the page did not itself start (e.g. started
+  // from Quick Start) so they show as GENERATING rows here too.
+  React.useEffect(() => {
+    if (!generatorAvailable) return;
+    let cancelled = false;
+    const adopt = async () => {
+      const jobs = await listActiveJobs();
+      if (cancelled || jobs.length === 0) return;
+      setGenJobs((prev) => {
+        const next = { ...prev };
+        for (const job of jobs) {
+          if (!next[job.jobId]) {
+            next[job.jobId] = {
+              name: job.testSetId || job.configVersion || 'Synthetic documents',
+              status: job.status,
+              message: job.statusMessage || 'Generating…',
+              testSetId: job.testSetId,
+            };
+          }
+        }
+        return next;
+      });
+    };
+    adopt();
+    const interval = setInterval(adopt, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [generatorAvailable, listActiveJobs]);
+
+  // Open the generate modal pre-filled when deep-linked (e.g. from the Schema
+  // Builder "Generate test set for this class" button): ?generate=1&version=&className=
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('generate') !== '1') return;
+    const version = params.get('version') || undefined;
+    const className = params.get('className') || undefined;
+    setGenInitial({ tab: version ? 'config' : 'prompt', version, className });
+    setShowGenerateModal(true);
+    params.delete('generate');
+    params.delete('version');
+    params.delete('className');
+    navigate({ search: params.toString() }, { replace: true });
+  }, [location.search]);
 
   // Separate discovery polling for new test sets (less frequent)
   React.useEffect(() => {
@@ -713,7 +809,20 @@ const TestSets = (): React.JSX.Element => {
     }
   };
 
-  const filteredTestSets = testSets
+  // Suppress an optimistic gen: row once the real registered test set (same
+  // id/name) shows up from getTestSets, to avoid a duplicate row.
+  const realTestSetIds = new Set(testSets.map((ts) => ts.id));
+  const generatingRows: TestSetItem[] = Object.entries(genJobs)
+    .filter(([, j]) => !realTestSetIds.has(j.testSetId || j.name))
+    .map(([jobId, j]) => ({
+      id: `gen:${jobId}`,
+      name: j.name,
+      description: j.message,
+      status: 'GENERATING',
+      createdAt: new Date().toISOString(),
+    }));
+
+  const filteredTestSets = [...generatingRows, ...testSets]
     .filter((item) => item != null)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   console.log('Filtered testSets for Table:', filteredTestSets);
@@ -722,7 +831,7 @@ const TestSets = (): React.JSX.Element => {
     {
       id: 'name',
       header: 'Test Set Name',
-      cell: (item: TestSetItem) => item.name,
+      cell: (item: TestSetItem) => (item.status === 'COMPLETED' ? <Link href={testSetDetailHref(item.id)}>{item.name}</Link> : item.name),
       sortingField: 'name',
     },
     {
@@ -768,6 +877,10 @@ const TestSets = (): React.JSX.Element => {
       header: 'Status',
       cell: (item: TestSetItem) => {
         const status = item.status || '-';
+
+        if (status === 'GENERATING') {
+          return <StatusIndicator type="in-progress">{item.description || 'Generating…'}</StatusIndicator>;
+        }
 
         if (status === 'UPDATING') {
           return <Badge color="blue">Updating...</Badge>;
@@ -817,26 +930,35 @@ const TestSets = (): React.JSX.Element => {
           description="Manage test sets for document processing"
           actions={
             <SpaceBetween direction="horizontal" size="xs">
-              <Button iconName="refresh" loading={refreshing} onClick={handleRefresh}>
-                Refresh
-              </Button>
-              <Button
-                iconName="edit"
-                disabled={selectedItems.length !== 1 || loading}
-                onClick={() => {
-                  const selected = selectedItems[0];
-                  if (selected) {
-                    setEditDescription(selected.description || '');
-                    const classTypeOption =
-                      DOCUMENT_CLASS_TYPE_OPTIONS.find((opt) => opt.value === selected.documentClassType) || DOCUMENT_CLASS_TYPE_OPTIONS[0];
-                    setEditDocumentClassType(classTypeOption);
-                    setShowEditModal(true);
-                  }
-                }}
-              >
-                Edit
-              </Button>
-              <Button iconName="remove" disabled={selectedItems.length === 0 || loading} onClick={() => setShowDeleteModal(true)} />
+              <span title="Refresh test set list">
+                <Button iconName="refresh" loading={refreshing} onClick={handleRefresh} ariaLabel="Refresh" />
+              </span>
+              <span title="Edit selected test set">
+                <Button
+                  iconName="edit"
+                  disabled={selectedItems.length !== 1 || loading}
+                  onClick={() => {
+                    const selected = selectedItems[0];
+                    if (selected) {
+                      setEditDescription(selected.description || '');
+                      const classTypeOption =
+                        DOCUMENT_CLASS_TYPE_OPTIONS.find((opt) => opt.value === selected.documentClassType) ||
+                        DOCUMENT_CLASS_TYPE_OPTIONS[0];
+                      setEditDocumentClassType(classTypeOption);
+                      setShowEditModal(true);
+                    }
+                  }}
+                  ariaLabel="Edit"
+                />
+              </span>
+              <span title="Delete selected test sets">
+                <Button
+                  iconName="remove"
+                  disabled={selectedItems.length === 0 || loading}
+                  onClick={() => setShowDeleteModal(true)}
+                  ariaLabel="Delete"
+                />
+              </span>
               <ButtonDropdown
                 items={[
                   { id: 'docs-pattern', text: 'From Existing Files' },
@@ -862,6 +984,11 @@ const TestSets = (): React.JSX.Element => {
               >
                 Add Documents
               </ButtonDropdown>
+              {generatorAvailable && (
+                <Button iconName="gen-ai" disabled={loading} onClick={() => setShowGenerateModal(true)}>
+                  Generate Test Set
+                </Button>
+              )}
               <ButtonDropdown
                 variant="primary"
                 items={[
@@ -920,6 +1047,8 @@ const TestSets = (): React.JSX.Element => {
         selectedItems={selectedItems}
         onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
         selectionType="multi"
+        loading={initialLoading}
+        loadingText="Loading test sets..."
         isItemDisabled={(item) => item.status !== 'COMPLETED' && item.status !== 'FAILED'}
         empty={
           <Box textAlign="center" color="inherit">
@@ -1693,6 +1822,23 @@ const TestSets = (): React.JSX.Element => {
           </ul>
         </Box>
       </Modal>
+
+      <GenerateSyntheticDataModal
+        visible={showGenerateModal}
+        initialTab={genInitial.tab}
+        initialVersion={genInitial.version}
+        initialClassName={genInitial.className}
+        onDismiss={() => {
+          setShowGenerateModal(false);
+          setGenInitial({});
+        }}
+        onStarted={(jobId, label, testSetId) => {
+          setShowGenerateModal(false);
+          setGenInitial({});
+          setSuccessMessage(`Synthetic data generation started for "${label}". It will appear in the list when it completes.`);
+          setGenJobs((prev) => ({ ...prev, [jobId]: { name: label, status: 'GENERATING', message: 'Starting generation', testSetId } }));
+        }}
+      />
     </Container>
   );
 };

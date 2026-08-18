@@ -10,19 +10,19 @@ The `idp_common` library (`lib/idp_common_pkg/`) is the core shared Python packa
 
 ```bash
 # Minimal installation
-pip install "idp_common[core]"
+pip install -e "lib/idp_common_pkg[core]"
 
 # Install specific modules
-pip install "idp_common[ocr]"
-pip install "idp_common[classification]"
-pip install "idp_common[extraction]"
-pip install "idp_common[evaluation]"
+pip install -e "lib/idp_common_pkg[ocr]"
+pip install -e "lib/idp_common_pkg[classification]"
+pip install -e "lib/idp_common_pkg[extraction]"
+pip install -e "lib/idp_common_pkg[evaluation]"
 
 # Install multi-document discovery (includes scikit-learn, scipy, numpy, strands-agents)
-pip install "idp_common[multi_document_discovery]"
+pip install -e "lib/idp_common_pkg[multi_document_discovery]"
 
 # Install everything
-pip install "idp_common[all]"
+pip install -e "lib/idp_common_pkg[all]"
 ```
 
 ## Quick Start
@@ -110,12 +110,16 @@ Represents a logical group of pages with the same document class.
 ### Status Enum
 
 ```
-QUEUED → RUNNING → OCR → CLASSIFYING → EXTRACTING → ASSESSING →
+QUEUED → RUNNING → PREPROCESSING → OCR → CLASSIFYING → EXTRACTING → ASSESSING →
 HITL_IN_PROGRESS → SUMMARIZING → RULE_VALIDATION →
 RULE_VALIDATION_ORCHESTRATOR → EVALUATING → COMPLETED
 ```
 
-Also: `POSTPROCESSING`, `FAILED`, `ABORTED`
+(`PREPROCESSING` appears only while a preprocessing hook runs — e.g. PII
+redaction; it is skipped when no hook is registered.)
+
+Also: `POSTPROCESSING`, `FAILED`, `ABORTED`, `REDACTED_SUPERSEDED` (a
+redact-copy-and-stop original superseded by its redacted copy)
 
 ## Processing Modules
 
@@ -195,7 +199,7 @@ service = EvaluationService(region="us-east-1", config=config)
 document = service.evaluate_document(actual_document, expected_document)
 ```
 
-**Features:** Multiple comparison methods (EXACT, FUZZY, SEMANTIC, NUMERIC_EXACT, LLM), per-attribute and per-document metrics, visual evaluation reports.
+**Features:** Multiple comparison methods (EXACT, FUZZY, LEVENSHTEIN, SEMANTIC, NUMERIC_EXACT, DATE, LLM, HUNGARIAN), per-attribute and per-document metrics, visual evaluation reports.
 
 ### Rule Validation (`idp_common.rule_validation`)
 
@@ -246,7 +250,7 @@ result = discovery.discovery_classes_with_document(
 
 Discovers document classes from a collection of documents using an embedding-based clustering pipeline: **embed → cluster → analyze → reflect**. Supports both S3-based processing (for Lambda/Step Functions) and local file processing (for CLI/SDK).
 
-> **Requires extra dependencies:** `pip install "idp_common[multi_document_discovery]"` or `make setup` from the project root. This installs scikit-learn, scipy, numpy, strands-agents, and pypdfium2.
+> **Requires extra dependencies:** `pip install -e "lib/idp_common_pkg[multi_document_discovery]"` or `make setup` from the project root. This installs scikit-learn, scipy, numpy, strands-agents, and pypdfium2.
 
 > **Minimum 2 documents per class:** Clusters with fewer than 2 documents are filtered as noise. Ensure you provide at least 2 documents for each expected document type.
 

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """SRT setup script to download and configure the Sample Security Review Tool."""
 
-import sys
-import shutil
-import subprocess
-import platform
-import urllib.request
 import json
 import os
+import platform
+import shlex
+import shutil
+import subprocess
+import sys
+import urllib.request
 from pathlib import Path
 
 
@@ -17,7 +18,9 @@ def run_command(cmd, cwd=None, interactive=False):
         if interactive:
             result = subprocess.run(cmd, shell=True, cwd=cwd, text=True)  # nosec B602 nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true - hardcoded commands, no user input
         else:
-            result = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)  # nosec B602 nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true - hardcoded commands, no user input
+            result = subprocess.run(
+                cmd, shell=True, cwd=cwd, capture_output=True, text=True
+            )  # nosec B602 nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true - hardcoded commands, no user input
         if result.returncode != 0:
             if not interactive:
                 print(f"Error running command: {cmd}")
@@ -104,7 +107,9 @@ def extract_srt(archive_path, srt_dir):
 
     success = False
     if filename.endswith(".tar.gz"):
-        success = run_command(f"tar -xzf {filename}", cwd=srt_dir)
+        # Properly quote the filename to prevent command injection
+        quoted_filename = shlex.quote(filename)
+        success = run_command(f"tar -xzf {quoted_filename}", cwd=srt_dir)
     else:
         print(f"Unsupported archive format: {filename}")
         return False
@@ -114,7 +119,7 @@ def extract_srt(archive_path, srt_dir):
         srt_executable = srt_dir / "srt"
         if srt_executable.exists():
             print("Removing macOS quarantine attribute...")
-            run_command(f"xattr -d com.apple.quarantine ./srt", cwd=srt_dir)
+            run_command("xattr -d com.apple.quarantine ./srt", cwd=srt_dir)
 
     return success
 
@@ -127,7 +132,9 @@ def get_installed_version(srt_dir):
     try:
         result = subprocess.run(
             [str(srt_executable), "--version"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode == 0:
             # Parse version from output like "srt version v0.1.0"
@@ -139,13 +146,30 @@ def get_installed_version(srt_dir):
         return None
 
 
+# The scanners `srt assess` hard-requires. SRT installs these into its OWN
+# managed venv at `.srt/.venv/bin/` (NOT the system PATH) and, at assess time,
+# calls checkAllInstalled() which fails with "Prerequisites not installed."
+# unless EVERY one of these executables is present. `anchore_syft` installs as
+# the `syft` binary. NOTE: contrary to older guidance, semgrep is NOT optional
+# for this SRT version — a missing semgrep blocks the scan just like any other.
+REQUIRED_SCANNERS = ["checkov", "semgrep", "bandit", "syft", "jupyter"]
+
+
+def missing_scanners(srt_dir):
+    """Return the REQUIRED_SCANNERS whose executable is absent from SRT's venv."""
+    venv_bin = srt_dir / ".venv" / "bin"
+    return [tool for tool in REQUIRED_SCANNERS if not (venv_bin / tool).exists()]
+
+
 def main():
     """Setup SRT tool."""
     project_root = Path(__file__).parent.parent.parent
     srt_dir = project_root / ".srt"
 
     # Check if running in CI/CD environment
-    is_ci = bool(os.getenv("CI") or os.getenv("GITLAB_CI") or os.getenv("GITHUB_ACTIONS"))
+    is_ci = bool(
+        os.getenv("CI") or os.getenv("GITLAB_CI") or os.getenv("GITHUB_ACTIONS")
+    )
 
     print("Setting up SRT (Sample Security Review Tool)...")
 
@@ -199,8 +223,7 @@ def main():
         installed_version = get_installed_version(srt_dir)
         if installed_version and installed_version != desired_version:
             print(
-                f"Warning: Expected v{desired_version}, "
-                f"but got v{installed_version}."
+                f"Warning: Expected v{desired_version}, but got v{installed_version}."
             )
 
         print(f"✅ SRT v{desired_version} installed successfully!")
@@ -216,49 +239,126 @@ def main():
     if is_ci:
         # Create config file programmatically for CI/CD
         print("\n✅ Running in CI/CD - creating non-interactive configuration")
+
+        aws_region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+        aws_profile = os.getenv("AWS_PROFILE", "default")
+
+        # Configure AWS CLI first so SRT can detect profiles (skipped when the
+        # CLI isn't installed, e.g. CI images that rely on env-var credentials)
+        if shutil.which("aws"):
+            print(f"   Configuring AWS CLI for profile '{aws_profile}'...")
+            configure_ok = True
+            for args in (
+                ["aws", "configure", "set", "region", aws_region],
+                ["aws", "configure", "set", "output", "json"],
+            ):
+                result = subprocess.run(
+                    [*args, "--profile", aws_profile],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode != 0:
+                    configure_ok = False
+                    print(f"   ⚠️  '{' '.join(args)}' failed: {result.stderr.strip()}")
+            if configure_ok:
+                print(
+                    f"   ✅ AWS CLI configured: profile={aws_profile}, region={aws_region}"
+                )
+        else:
+            print("   ℹ️  AWS CLI not found - skipping profile configuration")
+
         config_data = {
-            "AWS_PROFILE": os.getenv("AWS_PROFILE", "default"),
-            "AWS_REGION": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+            "AWS_PROFILE": aws_profile,
+            "AWS_REGION": aws_region,
             "TELEMETRY_ENABLED": False,
-            "INSTALLATION_ID": os.getenv("CI_COMMIT_SHORT_SHA", "local-dev")
+            "INSTALLATION_ID": os.getenv("CI_COMMIT_SHORT_SHA", "local-dev"),
         }
         config_file.write_text(json.dumps(config_data, indent=2))
         print(f"   AWS Profile: {config_data['AWS_PROFILE']}")
         print(f"   AWS Region: {config_data['AWS_REGION']}")
         print(f"   Installation ID: {config_data['INSTALLATION_ID']}")
 
-        # Install prerequisites non-interactively using yes command
-        print("   Installing SRT prerequisites...")
-        result = subprocess.run(
-            "yes '' | timeout 180 ./srt config",
-            shell=True,
-            cwd=srt_dir,
-            capture_output=True,
-            text=True,
-            check=False
+        # Install prerequisites non-interactively. `srt config` builds a managed
+        # venv and pip-installs all five scanners into it; a COLD install (no pip
+        # cache) of checkov+semgrep+jupyter+syft+bandit routinely needs >10 min,
+        # so give it a generous ceiling. Retry once with --reinstall-prerequisites
+        # if any scanner is missing afterward (partial install / transient PyPI).
+        # `yes ''` feeds Enter to any interactive prompt so it never blocks.
+        config_timeout = (
+            900  # 15 min/attempt; CI job timeout is 50 min (.gitlab-ci.yml)
         )
-        if "Configuration saved!" in result.stdout or result.returncode == 0:
-            print("   ✅ Prerequisites installed successfully")
+        attempts = [
+            f"yes '' | timeout {config_timeout} ./srt config",
+            # Force reinstall on the retry to repair a partially-populated venv.
+            f"yes '' | timeout {config_timeout} ./srt config --reinstall-prerequisites",
+        ]
+        for attempt, cmd in enumerate(attempts, 1):
+            print(
+                f"   Installing SRT prerequisites (attempt {attempt}/{len(attempts)}, "
+                "this may take several minutes)..."
+            )
+            print(f"   Running: {cmd}")
+            result = subprocess.run(
+                cmd,
+                shell=True,  # nosec B602 nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true - hardcoded pipeline, no user input
+                cwd=srt_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            # Log detailed output for debugging (rc 124 == timeout killed it)
+            print(f"   Return code: {result.returncode}")
+            if result.stdout:
+                print("   stdout (last 1500 chars):")
+                print(f"   {result.stdout[-1500:]}")
+            if result.stderr:
+                print("   stderr (last 1500 chars):")
+                print(f"   {result.stderr[-1500:]}")
+
+            # The ONLY reliable success signal is that every scanner executable
+            # now exists in SRT's venv — `srt config`'s exit code / banner is not
+            # trustworthy (it prints a success banner even when a tool failed).
+            missing = missing_scanners(srt_dir)
+            if not missing:
+                print(f"   ✅ All required scanners present: {REQUIRED_SCANNERS}")
+                break
+            print(f"   ⚠️  Missing scanners after attempt {attempt}: {missing}")
         else:
-            print(f"   ⚠️  Prerequisites installation completed with warnings")
-            print(f"      (This is normal - semgrep may fail but SRT will work)")
+            # Exhausted retries with scanners still missing. `srt assess` will
+            # abort with "Prerequisites not installed."; fail loudly HERE so the
+            # setup step surfaces the real cause instead of a misleading
+            # "✅ setup complete" followed by a cryptic scan failure.
+            msg = (
+                f"SRT prerequisite scanners still missing after {len(attempts)} "
+                f"attempts: {missing_scanners(srt_dir)}. "
+                "`srt assess` requires all of "
+                f"{REQUIRED_SCANNERS} in .srt/.venv/bin/. See the './srt config' "
+                "output above for the pip/venv failure."
+            )
+            print(f"   ❌ {msg}")
+            # This block only runs under `if is_ci:`, and in CI a missing scanner
+            # MUST fail the setup step — the scan cannot run without it. Fail here
+            # rather than emit a misleading "✅ setup complete".
+            sys.exit(1)
     else:
         # Interactive configuration for local development
         if not config_file.exists():
             print("\nConfiguring SRT...")
             print("Please follow the prompts to configure SRT with your AWS settings.")
 
-            result = subprocess.run(
-                ["./srt", "config"],
-                cwd=srt_dir,
-                check=False
-            )
+            result = subprocess.run(["./srt", "config"], cwd=srt_dir, check=False)
             if result.returncode != 0:
-                print("⚠️  SRT configuration incomplete. You can run 'cd .srt && ./srt config' later.")
+                print(
+                    "⚠️  SRT configuration incomplete. You can run 'cd .srt && ./srt config' later."
+                )
             else:
                 print("✅ SRT configuration complete!")
         else:
-            print("✅ SRT already configured (run 'cd .srt && ./srt config' to reconfigure)")
+            print(
+                "✅ SRT already configured (run 'cd .srt && ./srt config' to reconfigure)"
+            )
 
     # Copy latest issues.json from scripts/srt to .srt (restore suppressions)
     issues_source = Path(__file__).parent / "issues.json"
@@ -266,7 +366,7 @@ def main():
 
     if issues_source.exists():
         shutil.copy2(issues_source, issues_target)
-        print(f"✅ Copied latest issues.json to .srt/ (restored suppressions)")
+        print("✅ Copied latest issues.json to .srt/ (restored suppressions)")
     else:
         print("ℹ️  No existing issues.json found - this is a fresh SRT setup")
 

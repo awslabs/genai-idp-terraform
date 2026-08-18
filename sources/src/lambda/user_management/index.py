@@ -67,12 +67,13 @@ def handler(event, context):
     arguments = event.get("arguments", {})
 
     # Defense-in-depth authorization. The GraphQL schema restricts these
-    # mutations to the Admin group via @aws_cognito_user_pools(cognito_groups),
-    # but we also enforce the group server-side so the mutating operations are
-    # never reachable by a non-Admin caller even if the schema directive is
-    # missing or misconfigured (e.g. the prior @aws_auth directive, which
-    # AppSync silently ignores on a multi-auth API).
-    if field in ("createUser", "updateUser", "deleteUser"):
+    # operations to the Admin group via @aws_cognito_user_pools(cognito_groups),
+    # but the REST dispatcher's Cognito authorizer only authenticates — it does
+    # not enforce the group — so we also enforce it server-side. listUsers is
+    # included because it exposes every user's email + role; it must be Admin-only
+    # (closes GAP-04, where any authenticated user — incl. Viewer/Reviewer — could
+    # enumerate all users). getMyProfile stays open (a caller reads only itself).
+    if field in ("createUser", "updateUser", "deleteUser", "listUsers"):
         caller = _get_caller_identity(event)
         if not caller["is_admin"]:
             logger.warning(
@@ -356,14 +357,25 @@ def list_users(event):
 
     table = dynamodb.Table(USERS_TABLE_NAME)
 
-    # Scan for all user records
-    response = table.scan(
-        FilterExpression="begins_with(PK, :pk_prefix)",
-        ExpressionAttributeValues={":pk_prefix": "USER#"},
-    )
+    # Scan for all user records. Must paginate: DynamoDB applies the 1MB page
+    # size to the items EXAMINED, not the items matching FilterExpression, so a
+    # single call silently truncates the user list once the table outgrows one
+    # page — the admin sees fewer users than exist, with no error.
+    scan_kwargs = {
+        "FilterExpression": "begins_with(PK, :pk_prefix)",
+        "ExpressionAttributeValues": {":pk_prefix": "USER#"},
+    }
+    items = []
+    while True:
+        response = table.scan(**scan_kwargs)
+        items.extend(response.get("Items", []))
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        scan_kwargs["ExclusiveStartKey"] = last_key
 
     users = []
-    for item in response.get("Items", []):
+    for item in items:
         user = {
             "userId": item["userId"],
             "email": item["email"],
@@ -389,13 +401,27 @@ def sync_cognito_users_to_dynamodb():
 
     table = dynamodb.Table(USERS_TABLE_NAME)
 
-    # Get existing emails in DynamoDB for quick lookup
-    existing_response = table.scan(
-        FilterExpression="begins_with(PK, :pk_prefix)",
-        ExpressionAttributeValues={":pk_prefix": "USER#"},
-        ProjectionExpression="email",
-    )
-    existing_emails = {item["email"] for item in existing_response.get("Items", [])}
+    # Get existing emails in DynamoDB for quick lookup. Must paginate: the 1MB
+    # page size bounds the items EXAMINED, not the items matching
+    # FilterExpression, so a single call yields an INCOMPLETE email set once the
+    # table outgrows one page — and every user missing from it gets re-created
+    # below under a fresh uuid4, duplicating the record. (The Cognito paginator
+    # further down pages Cognito, not this scan.)
+    existing_scan_kwargs = {
+        "FilterExpression": "begins_with(PK, :pk_prefix)",
+        "ExpressionAttributeValues": {":pk_prefix": "USER#"},
+        "ProjectionExpression": "email",
+    }
+    existing_emails = set()
+    while True:
+        existing_response = table.scan(**existing_scan_kwargs)
+        existing_emails.update(
+            item["email"] for item in existing_response.get("Items", [])
+        )
+        last_key = existing_response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        existing_scan_kwargs["ExclusiveStartKey"] = last_key
 
     # List all Cognito users
     paginator = cognito.get_paginator("list_users")

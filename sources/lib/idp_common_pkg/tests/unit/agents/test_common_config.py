@@ -9,6 +9,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+
 from idp_common.agents.common.config import (
     get_environment_config,
     validate_aws_credentials,
@@ -74,7 +75,7 @@ class TestValidateAwsCredentials:
         """Test validation when explicit AWS credentials are available."""
         env_vars = {
             "AWS_ACCESS_KEY_ID": "test_key",
-            "AWS_SECRET_ACCESS_KEY": "test_secret",
+            "AWS_SECRET_ACCESS_KEY": "test_secret",  # nosec B105 - dummy test credential
         }
         with patch.dict(os.environ, env_vars, clear=True):
             assert validate_aws_credentials() is True

@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import React from 'react';
-import { Alert, Box, Button, Container, Header, Link, SpaceBetween, Spinner, StatusIndicator } from '@cloudscape-design/components';
+import { Alert, Box, Button, Container, Header, Link, SpaceBetween, Spinner } from '@cloudscape-design/components';
 
 import type { FeatureEntitlement } from '../../types/feature-platform';
 
 /** "Learn more" external doc link, rendered when a docsUrl is available. */
-const LearnMore: React.FC<{ docsUrl?: string | null }> = ({ docsUrl }) =>
+export const LearnMore: React.FC<{ docsUrl?: string | null }> = ({ docsUrl }) =>
   docsUrl ? (
     <Box>
       <Link href={docsUrl} external externalIconAriaLabel="Opens in a new tab">
@@ -177,9 +177,7 @@ export const UpToDateBanner: React.FC<{ version: string; source: string }> = ({ 
   const showSource = source !== 'auto';
   return (
     <Alert type="success" statusIconAriaLabel="Active" dismissible={false}>
-      <StatusIndicator type="success">
-        v{version} — up to date{showSource ? ` (${source})` : ''}
-      </StatusIndicator>
+      v{version} — up to date{showSource ? ` (${source})` : ''}
     </Alert>
   );
 };

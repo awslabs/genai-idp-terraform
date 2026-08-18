@@ -13,9 +13,11 @@ The GenAIIDP solution includes a built-in evaluation framework to assess the acc
 - Generate detailed evaluation reports using configurable methods and thresholds
 - Track and improve processing accuracy over time
 
-## Enhanced Reporting (stickler-eval v0.4.0+)
+## Enhanced Reporting
 
-**NEW in v0.5.12+**: Upgraded to Stickler v0.4.0 with confidence calibration metrics:
+The evaluation framework runs on the pinned `stickler-eval` release
+(currently 0.5.0 — see `stickler_version.STICKLER_VERSION` for the resolved
+version). Reports include confidence calibration metrics:
 
 - **📊 Confidence Calibration Metrics** - ECE (Expected Calibration Error), Brier score, and AUROC analyze how well-calibrated confidence predictions are
 - **📈 Per-Field Confidence Analysis** - Identify which fields have poorly calibrated confidence scores
@@ -43,7 +45,7 @@ https://github.com/user-attachments/assets/0ff17f3e-1eb5-4883-9d6f-3d4e4e84cbea
 ## Table of Contents
 
 - [Evaluation Framework](#evaluation-framework)
-  - [Enhanced Reporting (sticker-eval v0.1.4+)](#enhanced-reporting-sticker-eval-v014)
+  - [Enhanced Reporting](#enhanced-reporting)
   - [Stickler Evaluation Engine](#stickler-evaluation-engine)
     - [Architecture](#architecture)
   - [How It Works](#how-it-works)
@@ -128,7 +130,7 @@ The evaluation framework is powered by [Stickler](https://github.com/awslabs/sti
 - **Extensible Comparators**: Support for exact, fuzzy, numeric, semantic, and LLM-based comparison
 - **Native JSON Schema Support**: Direct use of JSON Schema with custom extensions
 
-The IDP solution uses a feature branch of Stickler (commit: de7d0fda) that adds JSON Schema construction support. This will migrate to the main branch once [PR #20](https://github.com/awslabs/stickler/pull/20) merges.
+The IDP solution installs Stickler from PyPI (`stickler-eval==0.5.0`, verified at import via `idp_common.evaluation.stickler_version`).
 
 ### Architecture
 
@@ -145,7 +147,7 @@ flowchart TD
 
 The `SticklerConfigMapper` translates IDP's evaluation extensions (`x-aws-idp-evaluation-*`) to Stickler's format (`x-aws-stickler-*`), maintaining independence from any specific evaluation backend.
 
-### Confidence Score Storage (Stickler v0.4.0+)
+### Confidence Score Storage
 
 The evaluation service stores confidence scores from extraction results alongside comparison data for downstream calibration analysis:
 
@@ -193,7 +195,7 @@ The evaluation service stores confidence scores from extraction results alongsid
 - `_convert_to_rich_values()` method: Converts extraction results to Rich Value format with confidence
 - Field comparisons patching: Ensures `field_path` is populated for Stickler's ConfidenceCalculator
 
-**Purpose**: Enables downstream confidence calibration analysis (AUROC, ECE, Brier score) by providing both confidence values and correctness labels (matched/unmatched) in a format compatible with Stickler v0.4.0's `ConfidenceMetricsCalculator`.
+**Purpose**: Enables downstream confidence calibration analysis (AUROC, ECE, Brier score) by providing both confidence values and correctness labels (matched/unmatched) as inputs to Stickler's `BulkStructuredModelEvaluator` in the aggregation Lambda.
 
 ## How It Works
 
@@ -380,6 +382,7 @@ The evaluation framework provides different comparison methods optimized for var
 | **Fuzzy** | Names, addresses, general text | Yes | 0.7 | Token-based fuzzy matching allowing minor variations and reordering. Threshold controls minimum similarity score |
 | **Levenshtein** | Text with typos, variations | Yes | 0.7 | Edit distance-based string comparison for detecting character-level differences. Threshold controls minimum similarity score |
 | **Semantic** | Descriptions, free text | Yes | 0.7 | Embedding-based similarity using Bedrock Titan embeddings for meaning comparison. Threshold controls minimum similarity score |
+| **Date** | Dates, date ranges | No (binary) | N/A | Format-insensitive date comparison (Stickler v0.5.0+ `DateComparator`). Parses both values into dates first, so `01/05/2024`, `2024-01-05`, and `January 5, 2024` all match. Handles ranges. Optionally tuned via `x-aws-idp-evaluation-method-config` (`dayfirst`, `tolerance`, `range_mode`). Not for time-only values |
 | **LLM** | Complex semantic equivalence | No (binary) | N/A | AI-powered comparison with detailed reasoning. Returns binary match decision (1.0 or 0.0), not similarity score |
 | **Hungarian** | Arrays of structured objects | Yes (match_threshold) | 0.8 | Optimal bipartite matching algorithm for list comparison. Uses document-level match threshold for item pairing |
 | **AggregateObject** | Nested objects | No | N/A | Recursive field-by-field comparison of nested structures. No top-level threshold |
@@ -398,6 +401,7 @@ Evaluation reports display thresholds **only for methods that use similarity-bas
 **Methods WITHOUT Threshold Display:**
 - `Exact` - Binary comparison (no threshold concept)
 - `NumericExact` - Uses tolerance, not threshold
+- `Date` - Binary date-equality decision (uses optional method-config, not a threshold)
 - `LLM` - Returns binary match decision
 - `AggregateObject` - Recursive comparison
 
@@ -422,7 +426,8 @@ classes:
         x-aws-idp-evaluation-weight: 2.0  # Critical field - double weight
       invoice_date:
         type: string
-        x-aws-idp-evaluation-method: FUZZY
+        format: date
+        x-aws-idp-evaluation-method: DATE  # Format-insensitive date match
         x-aws-idp-evaluation-weight: 1.5  # Important field
       vendor_name:
         type: string
@@ -596,6 +601,15 @@ classes:
         type: string
         description: The unique identifier for the invoice
         x-aws-idp-evaluation-method: EXACT  # Use exact string matching
+      invoice_date:
+        type: string
+        format: date
+        description: The date the invoice was issued
+        x-aws-idp-evaluation-method: DATE  # Format-insensitive date match
+        # Optional DateComparator tuning:
+        # x-aws-idp-evaluation-method-config:
+        #   dayfirst: false      # false = US month-first; true = EU day-first
+        #   range_mode: graded   # scoring policy for date ranges
       amount_due:
         type: string
         description: The total amount to be paid
@@ -1343,14 +1357,11 @@ The solution includes a comprehensive Jupyter notebook (`notebooks/evaluation_re
 4. **Comparative Analysis**: Compare performance across different prompt configurations
 5. **Automated Alerts**: Set up CloudWatch alarms based on accuracy metrics stored in the database
 
-## Migration from Legacy Evaluation
+## Evaluation Engine
 
-The feature/stickler branch introduces a new Stickler-based evaluation service while preserving the legacy implementation for backward compatibility:
+Evaluation is powered entirely by the [Stickler](https://github.com/awslabs/stickler) library via `service.py`. (The pre-Stickler custom-comparator engine, formerly `service_legacy.py` / `comparator.py`, has been removed.)
 
-- **New**: `service.py` (Stickler-based) - default for new deployments
-- **Legacy**: `service_legacy.py` - preserved for existing workflows
-
-All existing configurations are compatible with the Stickler service through the `SticklerConfigMapper`, which translates IDP evaluation extensions to Stickler format transparently.
+All existing configurations are compatible through the `SticklerConfigMapper`, which translates IDP evaluation extensions to Stickler format transparently.
 
 ### What Changed
 
@@ -1386,13 +1397,14 @@ All existing configurations are compatible with the Stickler service through the
 
 ### Stickler Version Information
 
-The solution uses Stickler from GitHub:
+The solution installs Stickler from PyPI (`stickler-eval==0.5.0`, pinned in
+`lib/idp_common_pkg/pyproject.toml` and `setup.py`). The resolved version is
+exposed at runtime via
+`idp_common.evaluation.stickler_version.STICKLER_VERSION` — derived from
+`importlib.metadata.version("stickler-eval")` so environment drift and
+pin/constant drift fail loudly instead of silently disagreeing.
 - **Repository**: https://github.com/awslabs/stickler
-- **Branch**: `sr/json_schema_construction` (temporary)
-- **Commit**: `de7d0fda6d551088d9b43bea5adb39e58d04b314`
-- **Migration Path**: Will switch to main branch once [PR #20](https://github.com/awslabs/stickler/pull/20) merges
-
-For version details, see `lib/idp_common_pkg/idp_common/evaluation/stickler_version.py`
+- **PyPI**: https://pypi.org/project/stickler-eval/
 
 ## Excluded Sections in Evaluation
 

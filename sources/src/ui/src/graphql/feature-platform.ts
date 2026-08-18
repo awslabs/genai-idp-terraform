@@ -10,7 +10,7 @@
  * single schema snapshot. Using raw strings lets the UI compile regardless
  * of whether the feature platform is turned on at build time.
  *
- * Use with: `import { generateClient } from 'aws-amplify/api';`
+ * Use with: `import { generateClient } from '../api/client-shim';`
  *           `client.graphql({ query: LIST_INSTALLED_FEATURES });`
  */
 
@@ -23,6 +23,7 @@ export const LIST_CATALOG_FEATURES = /* GraphQL */ `
       iconUrl
       description
       docsUrl
+      showInNav
       source
       productCode
       marketplaceListingUrl

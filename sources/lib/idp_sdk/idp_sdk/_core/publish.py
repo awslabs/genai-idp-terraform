@@ -36,8 +36,18 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from .s3_security import apply_enforce_ssl_only
+
 LIB_DEPENDENCY = "./lib/idp_common_pkg/idp_common"
 LIB_PKG_PATH = "./lib/idp_common_pkg"
+
+# Files the multi-doc discovery CodeBuild project needs from the source zip in
+# order to build its container image. Kept as a constant so the packaging step
+# and its test assert on the same list.
+MULTI_DOC_DISCOVERY_BUILD_INPUTS = (
+    "nested/multi-doc-discovery/Dockerfile",
+    "nested/multi-doc-discovery/requirements.txt",
+)
 
 
 class IDPPublisher:
@@ -65,6 +75,7 @@ class IDPPublisher:
         self.skip_validation = False
         self.lint_enabled = True
         self.headless = False  # Set by operations layer when --headless is requested
+        self.govcloud = False  # Set by operations layer when --govcloud is requested
         self.account_id = None
         self._layer_arns = {}  # Store built layer ARNs for template injection
 
@@ -570,6 +581,20 @@ STDERR:
         try:
             self.s3_client.head_bucket(Bucket=self.bucket)
             self.console.print(f"[green]Using existing bucket: {self.bucket}[/green]")
+            # Additive hardening on a bucket we didn't create: ensure non-TLS
+            # requests are denied. Never fatal — the operator may own the
+            # bucket policy and not have granted us s3:PutBucketPolicy.
+            if apply_enforce_ssl_only(
+                self.s3_client, self.bucket, self.region, raise_on_error=False
+            ):
+                self.console.print(
+                    "[green]EnforceSSLOnly bucket policy in place[/green]"
+                )
+            else:
+                self.console.print(
+                    "[yellow]Could not verify/apply the EnforceSSLOnly bucket policy "
+                    "on the existing bucket — add it manually.[/yellow]"
+                )
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             if error_code == "404":
@@ -592,7 +617,15 @@ STDERR:
                         Bucket=self.bucket,
                         VersioningConfiguration={"Status": "Enabled"},
                     )
-                except ClientError as create_error:
+
+                    # Deny any non-TLS request (same EnforceSSLOnly statement
+                    # the CloudFormation-managed buckets carry). Fatal here —
+                    # we just created the bucket, so we own its policy.
+                    apply_enforce_ssl_only(self.s3_client, self.bucket, self.region)
+                    self.console.print(
+                        "[green]Applied EnforceSSLOnly bucket policy[/green]"
+                    )
+                except (ClientError, RuntimeError) as create_error:
                     self.console.print(
                         f"[red]Failed to create bucket: {create_error}[/red]"
                     )
@@ -1332,6 +1365,21 @@ STDERR:
                     arcname = os.path.relpath(file_path, ".")
                     zipf.write(file_path, arcname)
 
+            # Add the build inputs themselves. The CodeBuild buildspec builds
+            # `-f nested/multi-doc-discovery/Dockerfile`, which in turn COPYs
+            # nested/multi-doc-discovery/requirements.txt, so BOTH must be in
+            # the zip. They used to be heredoc'd inline in the buildspec, which
+            # let the real files (and Dependabot's security bumps to them) drift
+            # out of the image entirely.
+            for build_input in MULTI_DOC_DISCOVERY_BUILD_INPUTS:
+                if not os.path.isfile(build_input):
+                    self.console.print(
+                        f"[red]❌ Missing multi-doc discovery build input: "
+                        f"{build_input}[/red]"
+                    )
+                    sys.exit(1)
+                zipf.write(build_input, build_input)
+
         self.console.print(
             f"[green]✅ Created multi-doc discovery source zip ({os.path.getsize(zipfile_path) / 1024 / 1024:.2f} MB)[/green]"
         )
@@ -1518,8 +1566,8 @@ STDERR:
         Launch Stack URL from those. The feature's ui-deployer then copies the
         UI bundle into the host's WebUIBucket at install/update time.
 
-        Returns ``(hash, file_list)`` — empty when no bundled feature
-        directories are present (e.g. a trimmed checkout).
+        Returns ``(hash, file_list, oss_catalog_entries)`` — empty when no
+        bundled feature directories are present (e.g. a trimmed checkout).
         """
         feature_dirs = [
             Path(d) for d in self._bundled_feature_dirs() if Path(d).is_dir()
@@ -1529,7 +1577,7 @@ STDERR:
                 "No bundled feature directories found — skipping sample-feature "
                 "publish (feature bucket will start empty)."
             )
-            return "", []
+            return "", [], []
 
         self.log_phase("Building Sample Features", "🧩")
 
@@ -1584,6 +1632,269 @@ STDERR:
     # no ListObjectsV2, no post-deploy artifacts-bucket dependency).
     _CATALOG_OUTPUT_FILE = "config_library/catalog.json"
 
+    # Self-updating sample-document manifest. Generated at publish time by
+    # scanning samples/, written into config_library/ so the existing
+    # ConfigurationCopyFunction copies it into the stack's ConfigurationBucket;
+    # the Quick Start agent's list_sample_documents tool reads it from there
+    # (GetObject, no bucket listing). Mirrors the catalog.json mechanism.
+    _SAMPLES_MANIFEST_FILE = "config_library/samples-manifest.json"
+    _SAMPLES_DIR = "samples"
+    # Document extensions that make sense as Discovery input.
+    _SAMPLE_DOC_EXTS = (".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".webp")
+    # Subdirectories of samples/ that hold batches of documents (indexed as a
+    # single "batch" entry). Other subdirs (code samples, hooks) are skipped.
+    _SAMPLE_DOC_SUBDIRS = ("w2", "rule-validation")
+    # Directory holding the unified-pattern config-library presets. Used to
+    # resolve a sample's associated config by folder-name convention when no
+    # explicit configId override is provided.
+    _UNIFIED_CONFIG_DIR = "config_library/unified"
+
+    # Curated names/descriptions/config-associations for well-known samples;
+    # anything not listed falls back to a filename-derived name + generic
+    # description (and a folder-name-convention config lookup), so newly added
+    # samples are still indexed automatically. Each value is
+    # (name, description, configId) where configId is the config_library/unified
+    # preset folder the sample is designed for, or None if unassociated.
+    _SAMPLE_OVERRIDES = {
+        "lending_package.pdf": (
+            "Lending Package",
+            "Multi-page mortgage loan packet (application, pay stubs, W-2, bank "
+            "statements) — a multi-class packet for testing classification + extraction.",
+            "lending-package-sample",
+        ),
+        "lending_package-long.pdf": (
+            "Lending Package (long)",
+            "Longer multi-page mortgage loan packet variant.",
+            "lending-package-sample",
+        ),
+        "insurance_package.pdf": (
+            "Insurance Package",
+            "Multi-section insurance claim packet for multi-class processing.",
+            None,
+        ),
+        "insurance_package_single.pdf": (
+            "Insurance Package (single)",
+            "Single-section insurance document sample.",
+            None,
+        ),
+        "bank-statement-multipage.pdf": (
+            "Bank Statement (multi-page)",
+            "Multi-page bank statement with transaction tables — good for agentic "
+            "table extraction.",
+            "bank-statement-sample",
+        ),
+        "healthcare-multisection-package.pdf": (
+            "Healthcare Package",
+            "Multi-section healthcare document packet.",
+            "healthcare-multisection-package",
+        ),
+        "rvl_cdip_package.pdf": (
+            "RVL-CDIP Package",
+            "Mixed-document packet from the RVL-CDIP set for classification testing.",
+            "rvl-cdip-package-sample",
+        ),
+        "DS11-USPassportApplication.pdf": (
+            "US Passport Application (DS-11)",
+            "US passport application form.",
+            "ds11-passport-application",
+        ),
+        "old_cal_license.png": (
+            "California Driver License",
+            "Driver license image sample.",
+            None,
+        ),
+        "w2": (
+            "W-2 Forms",
+            "Batch of W-2 tax form documents.",
+            "fake-w2",
+        ),
+        "rule-validation": (
+            "Rule Validation Samples",
+            "Documents for the rule-validation pipeline.",
+            "rule-validation",
+        ),
+    }
+
+    def _sample_config_id(self, override_config_id, sample_id):
+        """Resolve the config_library preset associated with a sample.
+
+        Prefers the explicit override; otherwise falls back to a folder-name
+        convention (config_library/unified/<sample_id> exists). Returns None
+        when no association can be established.
+        """
+        if override_config_id:
+            return override_config_id
+        candidate = Path(self._UNIFIED_CONFIG_DIR) / sample_id
+        if candidate.is_dir():
+            return sample_id
+        return None
+
+    def _sample_label(self, key):
+        """(name, description, configId) for a sample key.
+
+        Uses the curated overrides table when present; otherwise derives a
+        name from the filename and attempts a folder-name-convention config
+        lookup. ``configId`` is the associated config_library/unified preset,
+        or None.
+        """
+        sample_id = os.path.splitext(os.path.basename(key))[0]
+        override = self._SAMPLE_OVERRIDES.get(key)
+        if override:
+            name, desc, override_config_id = override
+            return name, desc, self._sample_config_id(override_config_id, sample_id)
+        name = sample_id.replace("_", " ").replace("-", " ").strip().title()
+        return (
+            name,
+            f"Sample document: {name}.",
+            self._sample_config_id(None, sample_id),
+        )
+
+    def generate_samples_manifest(self):
+        """Scan samples/ and write config_library/samples-manifest.json.
+
+        Self-updating: indexes top-level sample documents plus the known
+        document subdirectories (as single "batch" entries). Other subdirs
+        (code samples, lambda hooks) are skipped. Called alongside
+        write_catalog_file so it rides the same config_library sync to the
+        ConfigurationBucket. Each entry's ``s3Key`` matches where
+        upload_samples() / CopySampleFiles land the binary in the stack's
+        ConfigurationBucket (``samples/<file>``), and ``configId`` records the
+        associated config_library/unified preset (or None), so the UI can offer
+        to import + use the matching config when the sample is launched.
+        """
+        samples_dir = Path(self._SAMPLES_DIR)
+        if not samples_dir.is_dir():
+            self.log_verbose(
+                f"{self._SAMPLES_DIR}/ not found — skipping samples manifest"
+            )
+            return None
+
+        samples = []
+        for entry in sorted(os.listdir(samples_dir)):
+            path = samples_dir / entry
+            if path.is_file() and entry.lower().endswith(self._SAMPLE_DOC_EXTS):
+                name, desc, config_id = self._sample_label(entry)
+                samples.append(
+                    {
+                        "id": os.path.splitext(entry)[0],
+                        "name": name,
+                        "description": desc,
+                        "s3Key": f"samples/{entry}",
+                        "kind": "document",
+                        "fileCount": 1,
+                        "configId": config_id,
+                    }
+                )
+            elif path.is_dir() and entry in self._SAMPLE_DOC_SUBDIRS:
+                docs = [
+                    f
+                    for f in sorted(os.listdir(path))
+                    if f.lower().endswith(self._SAMPLE_DOC_EXTS)
+                ]
+                if not docs:
+                    continue
+                name, desc, config_id = self._sample_label(entry)
+                samples.append(
+                    {
+                        "id": entry,
+                        "name": name,
+                        "description": desc,
+                        "s3Key": f"samples/{entry}/",
+                        # s3Key of each file in the batch (the folder prefix is
+                        # not openable; individual files are). Lets the agent
+                        # cite one representative document as a viewable example.
+                        "files": [f"samples/{entry}/{f}" for f in docs],
+                        "kind": "batch",
+                        "fileCount": len(docs),
+                        "configId": config_id,
+                    }
+                )
+
+        manifest = {"schemaVersion": "1.0", "samples": samples}
+        out_path = Path(self._SAMPLES_MANIFEST_FILE)
+        out_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        self.log_success(f"Wrote {out_path} ({len(samples)} sample documents)")
+        return manifest
+
+    def _upload_samples_manifest_to_artifacts(self):
+        """Upload config_library/samples-manifest.json to the artifacts bucket.
+
+        Mirrors _upload_catalog_to_artifacts: upload_config_library already
+        bulk-synced config_library/ before this freshly-written file existed, so
+        upload it on its own under the same prefix; the deploy-time copy FileList
+        (generate_config_file_list walks the local config_library/ dir) then
+        includes it and ConfigurationCopyFunction copies it into the stack's
+        ConfigurationBucket.
+        """
+        out_path = Path(self._SAMPLES_MANIFEST_FILE)
+        if not out_path.is_file():
+            return
+        s3_key = f"{self.prefix_and_version}/config_library/samples-manifest.json"
+        self.s3_client.upload_file(
+            str(out_path),
+            self.bucket,
+            s3_key,
+            ExtraArgs={"ContentType": "application/json"},
+        )
+        self.log_verbose(
+            f"Uploaded samples-manifest.json to s3://{self.bucket}/{s3_key}"
+        )
+
+    def iter_sample_files(self):
+        """Yield sample document files as paths relative to samples/.
+
+        Applies the SAME selection rules as generate_samples_manifest: top-level
+        files with a document extension, plus the document extensions inside the
+        known batch subdirectories. Code/hook subdirs and non-document files
+        (.xlsx, .docx, ...) are skipped, so we never ship
+        lambda-hook-inference/, external-mcp-client/, etc.
+        """
+        samples_dir = Path(self._SAMPLES_DIR)
+        if not samples_dir.is_dir():
+            return
+        for entry in sorted(os.listdir(samples_dir)):
+            path = samples_dir / entry
+            if path.is_file() and entry.lower().endswith(self._SAMPLE_DOC_EXTS):
+                yield entry
+            elif path.is_dir() and entry in self._SAMPLE_DOC_SUBDIRS:
+                for f in sorted(os.listdir(path)):
+                    if f.lower().endswith(self._SAMPLE_DOC_EXTS):
+                        yield f"{entry}/{f}"
+
+    def generate_sample_file_list(self):
+        """List of sample document files (relative to samples/) for copying.
+
+        Consumed by the deploy-time CopySampleFiles custom resource
+        (<SAMPLE_FILES_LIST_TOKEN>) so ConfigurationCopyFunction copies each
+        binary from the artifacts bucket into the stack's ConfigurationBucket
+        under samples/.
+        """
+        return sorted(self.iter_sample_files())
+
+    def upload_samples(self):
+        """Upload curated sample document binaries to the artifacts bucket.
+
+        Mirrors upload_config_library, but uploads only the curated document
+        files (see iter_sample_files) to
+        s3://{bucket}/{prefix_and_version}/samples/. The deploy-time
+        CopySampleFiles custom resource then copies them into the stack's
+        ConfigurationBucket under samples/, where the samples-manifest s3Key
+        values point and the upload_resolver reads them.
+        """
+        self.log_phase("Uploading Sample Documents", "📄")
+        files = self.generate_sample_file_list()
+        if not files:
+            self.log_verbose(f"No sample documents found under {self._SAMPLES_DIR}/")
+            return
+        self.log_task(f"Uploading {len(files)} sample documents to S3...")
+        for rel_path in files:
+            local_path = os.path.join(self._SAMPLES_DIR, rel_path)
+            s3_key = f"{self.prefix_and_version}/samples/{rel_path}"
+            self.s3_client.upload_file(local_path, self.bucket, s3_key)
+        self.log_success(f"Uploaded {len(files)} sample documents")
+
     def _load_marketplace_features(self):
         """Load + normalize the curated marketplace extension list.
 
@@ -1620,6 +1931,10 @@ STDERR:
                     # Optional absolute docs URL; if omitted the UI falls back to
                     # marketplaceListingUrl for the "Learn more" link.
                     "docsUrl": item.get("docsUrl") or "",
+                    # Not-yet-installed nav visibility (default True). Set
+                    # false for entries that should only be discoverable via
+                    # the UI's Browse catalog page.
+                    "showInNav": bool(item.get("showInNav", True)),
                     "source": "marketplace",
                     "latestVersion": item.get("latestVersion") or "",
                     "productCode": item.get("productCode") or "",
@@ -1736,16 +2051,30 @@ STDERR:
 
         if cached:
             manifest = load_manifest(feature_dir)
-            if _bundle_has_version(manifest.version):
+            # A cache hit skips publisher.build(), so any artifact the upload
+            # step needs must already be on disk. Besides the versioned UI
+            # bundle, a feature with an agentSource must still have its packaged
+            # zip (package_agent_source.sh output) — it is git-ignored and gets
+            # cleaned between runs, so treat a missing zip as a cache MISS.
+            agent_source = getattr(manifest, "agentSource", None)
+            agent_zip_missing = bool(
+                agent_source
+                and getattr(agent_source, "artifactPath", None)
+                and not (feature_dir / agent_source.artifactPath).is_file()
+            )
+            if _bundle_has_version(manifest.version) and not agent_zip_missing:
                 self.log_cached(
                     f"Feature {feature_dir.name} source unchanged — "
                     f"using cached UI bundle"
                 )
             else:
+                reason = (
+                    "agent-source.zip missing"
+                    if agent_zip_missing
+                    else f"cached bundle does not carry version '{manifest.version}'"
+                )
                 self.log_warning(
-                    f"Feature {feature_dir.name}: cached bundle does not carry "
-                    f"version '{manifest.version}' — forcing a rebuild "
-                    f"(stale dist/ or checksum collision)."
+                    f"Feature {feature_dir.name}: {reason} — forcing a rebuild."
                 )
                 cached = False
 
@@ -1804,6 +2133,10 @@ STDERR:
             "description": manifest.description or "",
             "iconUrl": manifest.iconUrl or "",
             "docsUrl": manifest.docsUrl or "",
+            # From feature.yaml showInNav (default True): whether the feature
+            # gets its own nav entry before it's installed. The bundled
+            # samples set false so they're only in the Browse catalog page.
+            "showInNav": manifest.showInNav,
             "source": "oss",
             "latestVersion": manifest.version,
             # OSS extension artifacts live in the (same) artifacts bucket the
@@ -1919,6 +2252,30 @@ STDERR:
                 self.log_error(
                     f"Feature {feature_id} declares configPreset.path "
                     f"'{config_preset.path}' but no file exists at {preset_local}"
+                )
+                sys.exit(1)
+
+        # Agent source zip — if the manifest declares an agentSource. The
+        # feature stack's CodeBuild project reads it from
+        # `<FEATURE_ARTIFACT_PREFIX>/<version>/<artifactPath>` (Source.Location)
+        # to build the AgentCore Runtime image at install, so it MUST be uploaded
+        # at that same relative path under the version subfolder. The publisher
+        # (publisher.build) already produced the zip at feature_dir/<artifactPath>.
+        agent_source = getattr(manifest, "agentSource", None)
+        if agent_source and getattr(agent_source, "artifactPath", None):
+            agent_zip_local = feature_dir / agent_source.artifactPath
+            if agent_zip_local.is_file():
+                _upload(
+                    agent_zip_local,
+                    f"{version_root}/{agent_source.artifactPath}",
+                    "application/zip",
+                )
+            else:
+                self.log_error(
+                    f"Feature {feature_id} declares agentSource.artifactPath "
+                    f"'{agent_source.artifactPath}' but no file exists at "
+                    f"{agent_zip_local} — the package step must produce it before "
+                    f"upload. Check agentSource.package / packageCommand."
                 )
                 sys.exit(1)
 
@@ -2049,6 +2406,20 @@ STDERR:
                 config_files_list = self.generate_config_file_list()
                 config_files_json = json.dumps(config_files_list)
 
+                # Sample document file list + content hash for the deploy-time
+                # CopySampleFiles custom resource. Hash over the curated files'
+                # contents so a changed sample (even without a rename)
+                # re-triggers the copy into the ConfigurationBucket.
+                sample_files_list = self.generate_sample_file_list()
+                sample_files_json = json.dumps(sample_files_list)
+                sample_hash_material = "".join(
+                    rel + self.get_file_checksum(os.path.join(self._SAMPLES_DIR, rel))
+                    for rel in sample_files_list
+                )
+                samples_hash = hashlib.sha256(
+                    sample_hash_material.encode()
+                ).hexdigest()[:16]
+
                 # Extract content-based hash from unified source zipfile name for ImageVersion
                 # Format: unified-source-{hash}.zip -> extract {hash}
                 unified_image_version = unified_source_zipfile.replace(
@@ -2138,6 +2509,10 @@ STDERR:
                         ).encode()
                     ).hexdigest()[:16],
                     "<CONFIG_FILES_LIST_TOKEN>": config_files_json,
+                    # Sample document binaries copied into the ConfigurationBucket
+                    # under samples/ at deploy time (CopySampleFiles).
+                    "<SAMPLES_HASH_TOKEN>": samples_hash,
+                    "<SAMPLE_FILES_LIST_TOKEN>": sample_files_json,
                     "<WORKFORCE_URL_HASH_TOKEN>": workforce_url_hash,
                     "<A2I_RESOURCES_HASH_TOKEN>": a2i_resources_hash,
                     "<COGNITO_CLIENT_HASH_TOKEN>": cognito_client_hash,
@@ -2153,15 +2528,29 @@ STDERR:
                     "<w2_dataset_deployer_HASH_TOKEN>": self.get_directory_checksum(
                         "src/lambda/w2_dataset_deployer"
                     )[:16],
-                    "<MULTI_DOC_DISCOVERY_BUILD_HASH_TOKEN>": self.get_directory_checksum(
-                        "src/lambda/multi_doc_discovery"
-                    )[:16],
-                    # Feature Platform: the bundled extension(s) uploaded to the
-                    # artifact bucket under <prefix>/extensions/<id>/. These
-                    # tokens carry the build hash + uploaded file list for
-                    # change detection; OSS extensions install directly from the
-                    # artifacts bucket (no host-side copy resource). Empty when
-                    # no bundled features were built.
+                    # BuildHash is the ONLY meaningful property of the
+                    # DockerBuildRun custom resource, so it is the sole thing
+                    # that re-triggers the container build on a stack update: if
+                    # it doesn't change, CloudFormation sees no delta, never
+                    # re-invokes the resource, and the ECR :latest image keeps
+                    # whatever it had. It must therefore cover EVERY input to the
+                    # image — the handler code AND the Dockerfile/requirements.txt
+                    # the build installs from. Hashing only the handler directory
+                    # meant a Dependabot bump to requirements.txt left BuildHash
+                    # byte-identical and the vulnerable dependency stayed
+                    # deployed (a fresh create always builds, so this is only
+                    # observable on an in-place update).
+                    "<MULTI_DOC_DISCOVERY_BUILD_HASH_TOKEN>": hashlib.sha256(
+                        (
+                            self.get_directory_checksum(
+                                "src/lambda/multi_doc_discovery"
+                            )
+                            + "".join(
+                                self.get_file_checksum(build_input)
+                                for build_input in MULTI_DOC_DISCOVERY_BUILD_INPUTS
+                            )
+                        ).encode()
+                    ).hexdigest()[:16],
                     "<SAMPLE_FEATURES_HASH_TOKEN>": sample_features_hash,
                     "<SAMPLE_FEATURES_LIST_TOKEN>": json.dumps(
                         sample_features_list or []
@@ -2467,22 +2856,24 @@ STDERR:
             # Main template components
             "main": main_deps,
             # Nested components (includes all nested stacks - core and optional)
-            "nested/appsync": [
+            "nested/api-resolvers": [
                 LIB_DEPENDENCY,
-                "nested/appsync/src",
-                "nested/appsync/template.yaml",
+                "nested/api-resolvers/src",
+                "nested/api-resolvers/template.yaml",
             ],
             "nested/bedrockkb": [
                 "nested/bedrockkb/src",
                 "nested/bedrockkb/template.yaml",
             ],
-            "nested/alb-hosting": [
-                "nested/alb-hosting/template.yaml",
-            ],
             "nested/multi-doc-discovery": [
                 LIB_DEPENDENCY,
                 "nested/multi-doc-discovery/docker_build_lambda",
                 "nested/multi-doc-discovery/template.yaml",
+                # The container image's build inputs. Without these two, a
+                # Dependabot bump to requirements.txt (or a Dockerfile change)
+                # would not invalidate the checksum, so the smart-rebuild logic
+                # would skip the component and keep shipping the old image.
+                *MULTI_DOC_DISCOVERY_BUILD_INPUTS,
                 "src/lambda/multi_doc_discovery",
             ],
             # Unified pattern (combines BDA + Pipeline)
@@ -2700,12 +3091,13 @@ STDERR:
         # List of templates to lint (packaged templates after token replacement)
         templates_to_lint = []
 
-        # In headless mode (GovCloud), the main template still contains UI/AppSync
-        # /CloudFront/Cognito resources that will be stripped by the headless transformer
-        # later in the publish flow. Linting them here always fails for GovCloud regions
-        # because those resource types don't exist. Skip the main template and any nested
-        # templates that contain headless-stripped resources — the outer publish flow
-        # lints the generated idp-headless.yaml separately.
+        # In headless or govcloud mode, the main template still contains UI/AppSync/
+        # CloudFront/Cognito resources that will be stripped by the headless/govcloud
+        # transformer later in the publish flow. Linting them here always fails for
+        # GovCloud regions because those resource types don't exist. Skip the main
+        # template and any nested templates that contain headless-stripped resources —
+        # the outer publish flow lints the generated idp-headless.yaml / idp-govcloud.yaml
+        # separately, with region-aware checks.
         main_packaged = ".aws-sam/idp-main.yaml"
         if self.headless:
             headless_packaged = ".aws-sam/idp-headless.yaml"
@@ -2715,12 +3107,16 @@ STDERR:
                 self.console.print(
                     "[dim]Skipping main template lint — headless transformation runs later.[/dim]"
                 )
+        elif self.govcloud:
+            self.console.print(
+                "[dim]Skipping main template lint — GovCloud transformation runs later.[/dim]"
+            )
         elif os.path.exists(main_packaged):
             templates_to_lint.append(("Main template", main_packaged))
 
         # Nested templates (packaged versions)
         # In headless mode, skip nested templates that contain resources stripped by the
-        # headless transformer (currently: nested/appsync, which contains AWS::AppSync::*).
+        # headless transformer (currently: nested/api-resolvers, which contains AWS::AppSync::*).
         headless_skip_nested = {"appsync"} if self.headless else set()
         nested_dir = "nested"
         if os.path.exists(nested_dir):
@@ -3693,6 +4089,25 @@ STDERR:
             self.write_catalog_file(oss_catalog_entries)
             self._upload_catalog_to_artifacts()
             timing_breakdown["Write & upload catalog.json"] = time.time() - step_start
+
+            # Self-updating sample-document manifest (config_library/samples-manifest.json),
+            # generated by scanning samples/. Rides the same config_library copy
+            # into the ConfigurationBucket; the Quick Start agent's
+            # list_sample_documents tool reads it at runtime.
+            step_start = time.time()
+            self.generate_samples_manifest()
+            self._upload_samples_manifest_to_artifacts()
+            timing_breakdown["Write & upload samples-manifest.json"] = (
+                time.time() - step_start
+            )
+
+            # Upload the curated sample-document binaries to the artifacts
+            # bucket. The deploy-time CopySampleFiles custom resource copies
+            # them into the stack's ConfigurationBucket under samples/, matching
+            # the samples-manifest s3Key values so the UI can launch them.
+            step_start = time.time()
+            self.upload_samples()
+            timing_breakdown["Upload sample documents"] = time.time() - step_start
 
             # Build main template
             step_start = time.time()

@@ -13,12 +13,21 @@ description: |
 # OSS docs-site slug — the UI "Learn more" link resolves this against the
 # published docs site. Source: docs/extensions/sample-document-status.md.
 docsUrl: extensions/sample-document-status
+# Reference sample: no Extensions nav entry until installed — discoverable
+# via the UI's Browse catalog page instead.
+showInNav: false
 template:
   path: template.yaml
   requiresMainStackName: true
 ui:
   bundlePath: feature-ui/dist/ui-bundle.js
-  buildCommand: "cd feature-ui && npm ci && npm run build"
+  # Structured build steps: each argv runs without a shell; cwd replaces
+  # the `cd X && ...` idiom of the legacy buildCommand string.
+  build:
+    - cwd: feature-ui
+      argv: ["npm", "ci"]
+    - cwd: feature-ui
+      argv: ["npm", "run", "build"]
 defaultParameters:
   LogLevel: INFO
 capabilities:

@@ -5,10 +5,12 @@
 Tests for configuration Pydantic models.
 """
 
+import logging
+
 import pytest
+
 from idp_common.config.models import (
     AgenticConfig,
-    AssessmentConfig,
     ChatConfig,
     ExtractionConfig,
     IDPConfig,
@@ -37,6 +39,28 @@ class TestConfigModels:
         assert config.enabled is False
         assert config.review_agent is True
 
+    def test_extraction_mode_derives_agentic_enabled(self):
+        """extraction.mode is authoritative and derives agentic.enabled."""
+        from idp_common.config.models import ExtractionConfig
+
+        # mode=advanced -> agentic on
+        c = ExtractionConfig(mode="advanced")
+        assert c.agentic.enabled is True
+        # mode=simple -> agentic off (mode wins even over an explicit agentic.enabled)
+        c = ExtractionConfig(mode="simple", agentic={"enabled": True})
+        assert c.agentic.enabled is False
+        # legacy config with no mode -> inferred from agentic.enabled
+        c = ExtractionConfig(agentic={"enabled": True})
+        assert c.mode == "advanced"
+        c = ExtractionConfig(agentic={"enabled": False})
+        assert c.mode == "simple"
+
+    def test_extraction_mode_rejects_unknown(self):
+        from idp_common.config.models import ExtractionConfig
+
+        with pytest.raises(Exception):
+            ExtractionConfig(mode="turbo")
+
     def test_extraction_config_with_string_numbers(self):
         """Test ExtractionConfig with string numeric values"""
         config_dict = {
@@ -44,6 +68,8 @@ class TestConfigModels:
             "temperature": "0.5",
             "top_p": "0.1",
             "top_k": "5",
+            # max_tokens is no longer an ExtractionConfig field (extra="ignore"):
+            # output is always requested at the model maximum.
             "max_tokens": "10000",
             "agentic": {"enabled": False, "review_agent": False},
         }
@@ -53,13 +79,12 @@ class TestConfigModels:
         assert config.temperature == 0.5
         assert config.top_p == 0.1
         assert config.top_k == 5.0
-        assert config.max_tokens == 10000
+        assert not hasattr(config, "max_tokens")
 
         # Types should be correct
         assert isinstance(config.temperature, float)
         assert isinstance(config.top_p, float)
         assert isinstance(config.top_k, float)
-        assert isinstance(config.max_tokens, int)
 
     def test_extraction_config_with_native_numbers(self):
         """Test ExtractionConfig with native numeric values"""
@@ -68,7 +93,6 @@ class TestConfigModels:
             "temperature": 0.5,
             "top_p": 0.1,
             "top_k": 5.0,
-            "max_tokens": 10000,
             "agentic": {"enabled": False, "review_agent": False},
         }
         config = ExtractionConfig.model_validate(config_dict)
@@ -76,7 +100,7 @@ class TestConfigModels:
         assert config.temperature == 0.5
         assert config.top_p == 0.1
         assert config.top_k == 5.0
-        assert config.max_tokens == 10000
+        assert not hasattr(config, "max_tokens")
 
     def test_full_config_with_mixed_types(self):
         """Test full IDPConfig with mixed type representations"""
@@ -97,14 +121,12 @@ class TestConfigModels:
                 "temperature": 0.0,
                 "top_p": 0.1,
                 "top_k": 5,
-                "max_tokens": 10000,
                 "agentic": {"enabled": False, "review_agent": True},
             },
             "assessment": {
                 "model": "us.amazon.nova-lite-v1:0",
                 "enabled": True,
                 "temperature": "0.0",
-                "granular": {"enabled": False, "list_batch_size": "1"},
             },
             "classes": [],
         }
@@ -114,7 +136,8 @@ class TestConfigModels:
         # Booleans
         assert config.extraction.agentic.enabled is False
         assert config.extraction.agentic.review_agent is True
-        assert config.assessment.enabled is True
+        # v0.6: assessment.enabled migrated to extraction.confidence.enabled
+        assert config.extraction.confidence.enabled is True
 
         # Numbers from strings
         assert config.classification.temperature == 0.0
@@ -122,7 +145,7 @@ class TestConfigModels:
 
         # Numbers from natives
         assert config.extraction.top_p == 0.1
-        assert config.extraction.max_tokens == 10000
+        assert not hasattr(config.extraction, "max_tokens")
 
     def test_classification_valid_class_enforcement_defaults(self):
         """New class-enforcement fields default to enabled with sane values."""
@@ -168,23 +191,59 @@ class TestConfigModels:
         result = process_config(config)
         assert result is True
 
-    def test_assessment_granular_config(self):
-        """Test granular assessment configuration"""
+    def test_confidence_list_batch_size_config(self):
+        """Confidence list batching config (v0.6: extraction.confidence). Any
+        leftover retired ``granular.*`` keys are ignored, not errors."""
+        from idp_common.config import ConfidenceConfig
+
         config_dict = {
             "model": "us.amazon.nova-lite-v1:0",
-            "granular": {
-                "enabled": True,
-                "list_batch_size": "5",
-                "simple_batch_size": "10",
-                "max_workers": "20",
-            },
+            "list_batch_size": "5",
+            # Retired granular sub-config: tolerated (ignored) for back-compat.
+            "granular": {"enabled": True, "max_workers": "20"},
         }
-        config = AssessmentConfig.model_validate(config_dict)
+        config = ConfidenceConfig.model_validate(config_dict)
 
-        assert config.granular.enabled is True
-        assert config.granular.list_batch_size == 5
-        assert config.granular.simple_batch_size == 10
-        assert config.granular.max_workers == 20
+        assert config.list_batch_size == 5
+        assert not hasattr(config, "granular")
+
+    def test_required_int_none_falls_back_to_default(self):
+        """A stored config may carry an explicit ``null`` / empty string for a
+        required int field (e.g. ``list_batch_size``, ``max_empty_line_gap``).
+        These must fall back to the field default rather than crash with
+        ``int(None)`` when the config is re-validated (e.g. on upgrade)."""
+        from idp_common.config import ConfidenceConfig
+        from idp_common.config.models import TableParsingConfig
+
+        # Explicit None -> default (25)
+        assert (
+            ConfidenceConfig.model_validate({"list_batch_size": None}).list_batch_size
+            == 25
+        )
+        # Empty string -> default
+        assert (
+            ConfidenceConfig.model_validate({"list_batch_size": ""}).list_batch_size
+            == 25
+        )
+        # Valid values still coerce
+        assert (
+            ConfidenceConfig.model_validate({"list_batch_size": "8"}).list_batch_size
+            == 8
+        )
+
+        # Same guard on a different non-optional int field (default 3)
+        assert (
+            TableParsingConfig.model_validate(
+                {"max_empty_line_gap": None}
+            ).max_empty_line_gap
+            == 3
+        )
+        assert (
+            TableParsingConfig.model_validate(
+                {"max_empty_line_gap": 5}
+            ).max_empty_line_gap
+            == 5
+        )
 
     def test_config_validation_range_checks(self):
         """Test that validation enforces ranges"""
@@ -209,7 +268,7 @@ class TestConfigModels:
         assert config.agentic.enabled is False
         assert config.agentic.review_agent is False
         assert config.temperature == 0.0
-        assert config.max_tokens == 10000
+        assert not hasattr(config, "max_tokens")
 
 
 class TestChatConfig:
@@ -223,7 +282,10 @@ class TestChatConfig:
         # Default should be a large-context Opus model (see decision in CHANGELOG).
         assert cfg.model == "us.anthropic.claude-opus-4-8:1m"
         assert cfg.temperature == 0.0
-        assert cfg.max_tokens == 4096
+        # max_tokens defaults to None (unset) => Bedrock client resolves the
+        # model's maximum output limit. An empty string also maps to None.
+        assert cfg.max_tokens is None
+        assert ChatConfig.model_validate({"max_tokens": ""}).max_tokens is None
         assert cfg.system_prompt  # non-empty
 
     def test_chat_config_string_numeric_parsing(self):
@@ -282,11 +344,12 @@ class TestPipelineHookPreservation:
         "onError": "continue",
         "enabled": True,
     }
+    # v0.6: the standalone `assessment` step config was retired (confidence folded
+    # into extraction), so it no longer carries a postHook list.
     _STEPS = [
         "ocr",
         "classification",
         "extraction",
-        "assessment",
         "rule_validation",
         "summarization",
     ]
@@ -308,6 +371,89 @@ class TestPipelineHookPreservation:
         assert cfg.rule_validation.postHook == []
         assert cfg.classification.postHook == []
 
+    def test_preprocessing_flat_hook_survives_round_trip(self):
+        """The flat `preprocessing` section (arn/args/onError + generic args)
+        must survive the IDPConfig round-trip — otherwise the PII Anonymization
+        wizard/preset would lose the hook + args on Save-as-Version /
+        applyFeatureConfigPreset, and the dispatcher would find no hook."""
+        cfg_dict = {
+            "preprocessing": {
+                "enabled": True,
+                "featureId": "pii-anonymizer",
+                "arn": "arn:aws:lambda:us-west-2:111122223333:function:PiiHook",
+                "onError": "fail",
+                "args": [
+                    {"key": "mode", "value": "redactcopy_and_stop"},
+                    {"key": "model_id", "value": "us.amazon.nova-lite-v1:0"},
+                ],
+            }
+        }
+        dumped = IDPConfig.model_validate(cfg_dict).model_dump(mode="python")
+        pp = dumped["preprocessing"]
+        assert pp["enabled"] is True
+        assert pp["arn"].endswith(":PiiHook")
+        assert pp["onError"] == "fail"
+        # generic args (feature config) preserved
+        assert {"key": "mode", "value": "redactcopy_and_stop"} in pp["args"]
+        assert {"key": "model_id", "value": "us.amazon.nova-lite-v1:0"} in pp["args"]
+
+    def test_preprocessing_defaults(self):
+        cfg = IDPConfig.model_validate({})
+        assert cfg.preprocessing.enabled is False
+        assert cfg.preprocessing.arn is None
+        assert cfg.preprocessing.args == []
+
+    def test_postprocessing_flat_hook_survives_round_trip(self):
+        """The flat `postprocessing` section is the mirror of `preprocessing` and
+        needs the same protection: dropped on a round-trip, the final delivery
+        hook would silently stop running after any Save-as-Version /
+        applyFeatureConfigPreset."""
+        cfg_dict = {
+            "postprocessing": {
+                "enabled": True,
+                "featureId": "delivery",
+                "arn": "arn:aws:lambda:us-west-2:111122223333:function:DeliverHook",
+                "onError": "continue",
+                "args": [{"key": "endpoint", "value": "https://sap.example/ingest"}],
+            }
+        }
+        dumped = IDPConfig.model_validate(cfg_dict).model_dump(mode="python")
+        pp = dumped["postprocessing"]
+        assert pp["enabled"] is True
+        assert pp["arn"].endswith(":DeliverHook")
+        assert pp["onError"] == "continue"
+        assert pp["featureId"] == "delivery"
+        assert {
+            "key": "endpoint",
+            "value": "https://sap.example/ingest",
+        } in pp["args"]
+
+    def test_postprocessing_defaults(self):
+        """Inert by default: no ARN, disabled, empty args — the dispatcher finds
+        no hook and the workflow tail is unchanged."""
+        cfg = IDPConfig.model_validate({})
+        assert cfg.postprocessing.enabled is False
+        assert cfg.postprocessing.arn is None
+        assert cfg.postprocessing.args == []
+        assert cfg.postprocessing.allowDocumentUpdate is True
+
+    def test_both_flat_hook_sections_coexist(self):
+        """A config may carry both flat hooks; neither round-trip clobbers the
+        other (they are separate top-level sections)."""
+        cfg = IDPConfig.model_validate(
+            {
+                "preprocessing": {"enabled": True, "arn": "arn:pre", "onError": "fail"},
+                "postprocessing": {"enabled": True, "arn": "arn:post"},
+            }
+        )
+        dumped = cfg.model_dump(mode="python")
+        assert dumped["preprocessing"]["arn"] == "arn:pre"
+        assert dumped["preprocessing"]["onError"] == "fail"
+        assert dumped["postprocessing"]["arn"] == "arn:post"
+        # Default onError differs by intent: preprocessing gates, postprocessing
+        # must not fail an already-processed document by accident.
+        assert dumped["postprocessing"]["onError"] == "continue"
+
     def test_sparse_rule_validation_overlay_keeps_hook_and_merges_defaults(self):
         """The real failure mode: a sparse preset overlay carrying only
         rule_validation.postHook must keep the hook AND inherit classification
@@ -318,3 +464,40 @@ class TestPipelineHookPreservation:
         assert len(cfg.rule_validation.postHook) == 1
         # classification still has its default model (not wiped out).
         assert cfg.classification.model
+
+
+@pytest.mark.unit
+class TestRuleClassesMigrationIsLoud:
+    """Discarding user-supplied rule_classes must be logged (#600).
+
+    `rule_classes` was renamed to `policy_classes` in v0.5.9. When BOTH keys are
+    present the deprecated one is dropped — and because `rule_classes` is a
+    known-deprecated key it does not trip the unknown-field warning either. A
+    notebook user following the old guidance therefore lost their rules with no
+    message anywhere.
+    """
+
+    def test_rename_when_only_legacy_key_present(self):
+        cfg = IDPConfig(
+            **{"rule_classes": [{"x-aws-idp-policy-type": "a", "rule_properties": {}}]}
+        )
+        assert len(cfg.policy_classes) == 1
+        assert cfg.policy_classes[0]["x-aws-idp-policy-type"] == "a"
+
+    def test_discarding_legacy_key_warns(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            cfg = IDPConfig(
+                **{
+                    "policy_classes": [
+                        {"x-aws-idp-policy-type": "kept", "rule_properties": {}}
+                    ],
+                    "rule_classes": [
+                        {"x-aws-idp-policy-type": "dropped", "rule_properties": {}}
+                    ],
+                }
+            )
+
+        # policy_classes still wins — behavior is unchanged, only the silence is.
+        assert [pc["x-aws-idp-policy-type"] for pc in cfg.policy_classes] == ["kept"]
+        assert "DISCARDING 'rule_classes'" in caplog.text
+        assert "policy_classes" in caplog.text
