@@ -240,7 +240,7 @@ resource "random_id" "upload_resolver_build_id" {
 # Source code archive for upload resolver
 data "archive_file" "discovery_upload_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/discovery_upload_resolver"
+  source_dir  = "${path.module}/../../../sources/nested/api-resolvers/src/lambda/discovery_upload_resolver"
   output_path = "${local.module_build_dir}/discovery-upload-resolver.zip_${random_id.upload_resolver_build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]

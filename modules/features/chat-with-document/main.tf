@@ -11,7 +11,7 @@
  *
  * Upstream replaced the legacy synchronous `chatWithDocument` Query with an
  * async model (verified against the v0.5.12 snapshot,
- * `sources/nested/appsync/src/api/schema.graphql` + `nested/appsync/template.yaml`):
+ * `sources/nested/api-resolvers/src/api/schema.graphql` + `nested/api-resolvers/template.yaml`):
  *
  *   * `sendChatDocumentMessage` (Mutation) — a lightweight resolver Lambda that
  *     records session ownership, async-invokes the processor on the first user
@@ -47,7 +47,7 @@ locals {
   # template's src/lambda; the lightweight resolver lives under the nested
   # appsync template. Both are zipped read-only from sources/ (no edits).
   processor_src_dir = "${path.module}/../../../sources/src/lambda/chat_with_document_processor"
-  resolver_src_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/send_chat_document_message_resolver"
+  resolver_src_dir  = "${path.module}/../../../sources/nested/api-resolvers/src/lambda/send_chat_document_message_resolver"
 
   output_bucket_name = element(split(":", var.output_bucket_arn), 5)
 

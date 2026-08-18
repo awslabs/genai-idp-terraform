@@ -17,7 +17,7 @@
 # so reaching the vendored snapshot is five levels up:
 #   schema_fixture -> tests -> rbac -> features -> modules -> <repo root>
 locals {
-  schema_path = "${path.module}/../../../../../sources/nested/appsync/src/api/schema.graphql"
+  schema_path = "${path.module}/../../../../../sources/nested/api-resolvers/src/api/schema.graphql"
 }
 
 output "schema" {

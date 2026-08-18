@@ -307,7 +307,7 @@ resource "aws_appsync_graphql_api" "api" {
     }
   }
 
-  schema = file("${path.module}/../../sources/nested/appsync/src/api/schema.graphql")
+  schema = file("${path.module}/../../sources/nested/api-resolvers/src/api/schema.graphql")
 
   tags = var.tags
 }

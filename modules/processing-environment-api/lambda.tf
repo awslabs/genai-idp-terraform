@@ -41,7 +41,7 @@ resource "random_id" "build_id" {
 # Upload Document Resolver Lambda
 data "archive_file" "upload_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/upload_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/upload_resolver"
   output_path = "${local.module_build_dir}/upload-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -90,7 +90,7 @@ resource "aws_lambda_function" "upload_resolver" {
 # Delete Document Resolver Lambda
 data "archive_file" "delete_document_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/delete_document_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/delete_document_resolver"
   output_path = "${local.module_build_dir}/delete-document-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -139,7 +139,7 @@ resource "aws_lambda_function" "delete_document_resolver" {
 # Reprocess Document Resolver Lambda
 data "archive_file" "reprocess_document_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/reprocess_document_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/reprocess_document_resolver"
   output_path = "${local.module_build_dir}/reprocess-document-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -197,7 +197,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
 # Get File Contents Resolver Lambda
 data "archive_file" "get_file_contents_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_file_contents_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/get_file_contents_resolver"
   output_path = "${local.module_build_dir}/get-file-contents-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -248,7 +248,7 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 # pricing, and config library operations via fieldName dispatch.
 data "archive_file" "configuration_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/configuration_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/configuration_resolver"
   output_path = "${local.module_build_dir}/configuration_resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -304,7 +304,7 @@ resource "aws_lambda_function" "configuration_resolver" {
 # Get Step Function Execution Resolver Lambda
 data "archive_file" "get_stepfunction_execution_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_stepfunction_execution_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/get_stepfunction_execution_resolver"
   output_path = "${local.module_build_dir}/get-stepfunction-execution-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -361,7 +361,7 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
 # Query Knowledge Base Resolver Lambda
 data "archive_file" "query_knowledge_base_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/query_knowledgebase_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/query_knowledgebase_resolver"
   output_path = "${local.module_build_dir}/query-knowledge-base-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -418,7 +418,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
 # Copy to Baseline Resolver Lambda
 data "archive_file" "copy_to_baseline_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/copy_to_baseline_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/copy_to_baseline_resolver"
   output_path = "${local.module_build_dir}/copy-to-baseline-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]

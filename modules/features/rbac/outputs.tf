@@ -76,7 +76,7 @@ output "reviewer_filtering_environment" {
     Environment-map fragment for the core/configuration AppSync resolver Lambdas
     so they resolve the `Users` table at runtime. Carries `USERS_TABLE_NAME` —
     the exact env key the shipped document-list and configuration resolvers read
-    (`sources/nested/appsync/src/lambda/{list_documents_gsi_resolver,
+    (`sources/nested/api-resolvers/src/lambda/{list_documents_gsi_resolver,
     list_documents_range_resolver,configuration_resolver}/index.py`) to apply
     Reviewer document filtering and `allowedConfigVersions` scoping server-side.
     Merged into the feature-plugin contract's `environment`.
@@ -127,7 +127,7 @@ output "reviewer_filtering_iam_statements" {
 #
 # `schema_additions = null`: the `@aws_auth(cognito_groups: [...])` directives
 # and the `User`/`UserList` types already ship in the read-only v0.5.12 schema
-# (`sources/nested/appsync/src/api/schema.graphql`), so no SDL injection is
+# (`sources/nested/api-resolvers/src/api/schema.graphql`), so no SDL injection is
 # needed.
 locals {
   # Deterministic AppSync data source name (alphanumeric + underscore only) the

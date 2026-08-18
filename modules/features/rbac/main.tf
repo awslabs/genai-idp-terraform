@@ -19,7 +19,7 @@
  * `allowedConfigVersions` scoping wiring, and the feature-plugin contract output.
  *
  * The `@aws_auth` directives already ship in the read-only v0.5.12 snapshot
- * (`sources/nested/appsync/src/api/schema.graphql`), so RBAC's job is to make
+ * (`sources/nested/api-resolvers/src/api/schema.graphql`), so RBAC's job is to make
  * them enforceable by guaranteeing the four groups exist — not to inject SDL.
  */
 
@@ -69,7 +69,7 @@ resource "aws_cognito_user_group" "rbac" {
 #   * PK / SK string keys (USER#{userId} for both on user records).
 #   * `EmailIndex` GSI on `email` (projection ALL) for email-based lookups —
 #     required by the v0.5.12 resolvers that enforce `allowedConfigVersions`
-#     scoping (`sources/nested/appsync/src/lambda/{configuration_resolver,
+#     scoping (`sources/nested/api-resolvers/src/lambda/{configuration_resolver,
 #     list_documents_*_resolver}/index.py` all query `IndexName="EmailIndex"`)
 #     and by the user-management Lambda (`sources/src/lambda/user_management/`).
 #
@@ -330,7 +330,7 @@ resource "aws_lambda_function" "user_management" {
 # The filtering/scoping LOGIC ships in the read-only v0.5.12 snapshot — the
 # document-list resolvers and the configuration resolver all consult the Users
 # table server-side (verified against
-# `sources/nested/appsync/src/lambda/{list_documents_gsi_resolver,
+# `sources/nested/api-resolvers/src/lambda/{list_documents_gsi_resolver,
 # list_documents_range_resolver,configuration_resolver}/index.py`):
 #
 #   * each reads `USERS_TABLE_NAME` from its environment
@@ -343,7 +343,7 @@ resource "aws_lambda_function" "user_management" {
 # The profile query already exposes `allowedConfigVersions` via the shipped
 # schema: `getMyProfile: User` returns the `User` type, which declares
 # `allowedConfigVersions: [String]`
-# (`sources/nested/appsync/src/api/schema.graphql`). No SDL injection needed.
+# (`sources/nested/api-resolvers/src/api/schema.graphql`). No SDL injection needed.
 #
 # RBAC's Terraform job (this submodule) is therefore the WIRING: give those
 # AppSync resolver Lambdas the env var and the least-privilege read path to the
