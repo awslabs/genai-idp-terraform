@@ -92,16 +92,8 @@ resource "aws_iam_role_policy" "process_changes_resolver_policy" {
           "${var.working_bucket_arn}/*"
         ]
       },
-      # AppSync permissions for GraphQL API
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = [
-          "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/*/types/Mutation/*"
-        ]
-      },
+      # appsync:GraphQL permission removed in the v0.6.4 REST migration — the
+      # resolver writes the TrackingTable directly (no AppSync mutation publish).
       # KMS permissions for encryption
       {
         Effect = "Allow"

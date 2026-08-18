@@ -343,7 +343,10 @@ resource "aws_lambda_function" "discovery_processor" {
       LOG_LEVEL                = var.log_level
       BEDROCK_LOG_LEVEL        = var.log_level
       DISCOVERY_TRACKING_TABLE = aws_dynamodb_table.discovery_tracking.name
-      APPSYNC_API_URL          = var.appsync_api_url
+      # APPSYNC_API_URL intentionally empty post-v0.6.4: the processor writes
+      # the DiscoveryTable directly; the UI polls it via the dispatcher's
+      # ddb_direct instead of AppSync subscriptions.
+      APPSYNC_API_URL = var.appsync_api_url != null ? var.appsync_api_url : ""
     }
   }
 
@@ -385,150 +388,11 @@ resource "aws_lambda_event_source_mapping" "discovery_processor_sqs" {
 }
 
 # =============================================================================
-# GraphQL Data Sources and Resolvers
+# NOTE (v0.6.4 REST migration): The AppSync data sources (discovery_lambda,
+# discovery_table) and VTL resolvers (listDiscoveryJobs, updateDiscoveryJobStatus)
+# were removed. listDiscoveryJobs/updateDiscoveryJobStatus/deleteDiscoveryJob are
+# now served in-process by the dispatcher's ddb_direct.py against this module's
+# DiscoveryTable; autoDetectSections (and its upload aliases) route to
+# discovery_upload_resolver via the parent's field-function map. The Lambda
+# functions, table, queues, and IAM roles above are unchanged.
 # =============================================================================
-
-# Discovery Lambda Data Source
-resource "aws_appsync_datasource" "discovery_lambda" {
-  api_id           = var.appsync_api_id
-  name             = "DiscoveryLambda"
-  description      = "Lambda function to handle discovery document uploads"
-  type             = "AWS_LAMBDA"
-  service_role_arn = var.appsync_lambda_role_arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.discovery_upload_resolver.arn
-  }
-}
-
-# Discovery Table DynamoDB Data Source
-resource "aws_appsync_datasource" "discovery_table" {
-  api_id           = var.appsync_api_id
-  name             = "DiscoveryTable"
-  description      = "DynamoDB table for discovery job tracking"
-  type             = "AMAZON_DYNAMODB"
-  service_role_arn = var.appsync_dynamodb_role_arn
-
-  dynamodb_config {
-    table_name = aws_dynamodb_table.discovery_tracking.name
-  }
-}
-
-# List Discovery Jobs Resolver (Query) - matches existing schema
-resource "aws_appsync_resolver" "list_discovery_jobs" {
-  api_id      = var.appsync_api_id
-  type        = "Query"
-  field       = "listDiscoveryJobs"
-  data_source = aws_appsync_datasource.discovery_table.name
-
-  request_template = <<EOF
-#set($userId = $context.identity.username)
-#if(!$userId)
-  #set($userId = $context.identity.sub)
-#end
-#if(!$userId)
-  #set($userId = "anonymous")
-#end
-{
-  "version": "2018-05-29",
-  "operation": "Query",
-  "query": {
-    "expression": "PK = :pk",
-    "expressionValues": {
-      ":pk": $util.dynamodb.toDynamoDBJson("discovery#$userId")
-    }
-  },
-  "limit": 20,
-  "scanIndexForward": false
-}
-EOF
-
-  response_template = <<EOF
-{
-  "DiscoveryJobs": [
-    #foreach($item in $ctx.result.items)
-      {
-        "jobId": $util.toJson($item.SK),
-        "documentKey": $util.toJson($item.s3Key),
-        "groundTruthKey": $util.toJson($item.groundTruthKey),
-        "status": $util.toJson($item.status),
-        "createdAt": $util.toJson($item.createdAt),
-        "updatedAt": $util.toJson($item.completedAt),
-        "errorMessage": $util.toJson($item.error)
-      }#if($foreach.hasNext),#end
-    #end
-  ],
-  "nextToken": $util.toJson($ctx.result.nextToken)
-}
-EOF
-}
-
-# Update Discovery Job Status Resolver (Mutation) - matches existing schema
-resource "aws_appsync_resolver" "update_discovery_job_status" {
-  api_id      = var.appsync_api_id
-  type        = "Mutation"
-  field       = "updateDiscoveryJobStatus"
-  data_source = aws_appsync_datasource.discovery_table.name
-
-  request_template = <<EOF
-#set($userId = $context.identity.username)
-#if(!$userId)
-  #set($userId = $context.identity.sub)
-#end
-#if(!$userId)
-  #set($userId = "anonymous")
-#end
-#set($expNames = {})
-#set($expValues = {})
-
-## Set status (required)
-$util.qr($expNames.put("#status", "status"))
-$util.qr($expValues.put(":status", $util.dynamodb.toDynamoDB($ctx.args.status)))
-#set($updateExpression = "SET #status = :status")
-
-## Set errorMessage (optional)
-#if($ctx.args.errorMessage)
-  $util.qr($expNames.put("#errorMessage", "error"))
-  $util.qr($expValues.put(":errorMessage", $util.dynamodb.toDynamoDB($ctx.args.errorMessage)))
-  #set($updateExpression = "$updateExpression, #errorMessage = :errorMessage")
-#end
-
-## Set completedAt to current timestamp when status is COMPLETED or FAILED
-#if($ctx.args.status == "COMPLETED" || $ctx.args.status == "FAILED")
-  $util.qr($expNames.put("#completedAt", "completedAt"))
-  $util.qr($expValues.put(":completedAt", $util.dynamodb.toDynamoDB($util.time.nowISO8601())))
-  #set($updateExpression = "$updateExpression, #completedAt = :completedAt")
-#end
-
-{
-  "version": "2018-05-29",
-  "operation": "UpdateItem",
-  "key": {
-    "PK": $util.dynamodb.toDynamoDBJson("discovery#$userId"),
-    "SK": $util.dynamodb.toDynamoDBJson($ctx.args.jobId)
-  },
-  "update": {
-    "expression": "$updateExpression",
-    "expressionNames": $utils.toJson($expNames),
-    "expressionValues": $utils.toJson($expValues)
-  }
-}
-EOF
-
-  response_template = <<EOF
-#if($ctx.error)
-  $util.error($ctx.error.message, $ctx.error.type)
-#end
-
-## Return the updated job
-#if(!$ctx.result)
-  null
-#else
-  {
-    "jobId": $util.toJson($ctx.result.SK),
-    "status": $util.toJson($ctx.result.status),
-    "errorMessage": $util.toJson($ctx.result.error)
-  }
-#end
-EOF
-}

@@ -148,69 +148,8 @@ resource "aws_lambda_function" "complete_section_review" {
   tags       = var.tags
 }
 
-# =============================================================================
-# AppSync data source + resolvers for HITL operations
-# =============================================================================
-
-resource "aws_appsync_datasource" "complete_section_review" {
-  count            = var.enable_hitl ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "CompleteSectionReviewDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.complete_section_review[0].arn }
-}
-
-resource "aws_appsync_resolver" "claim_review" {
-  count       = var.enable_hitl ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "claimReview"
-  data_source = aws_appsync_datasource.complete_section_review[0].name
-}
-
-resource "aws_appsync_resolver" "release_review" {
-  count       = var.enable_hitl ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "releaseReview"
-  data_source = aws_appsync_datasource.complete_section_review[0].name
-}
-
-resource "aws_appsync_resolver" "skip_all_sections_review" {
-  count       = var.enable_hitl ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "skipAllSectionsReview"
-  data_source = aws_appsync_datasource.complete_section_review[0].name
-}
-
-resource "aws_appsync_resolver" "complete_section_review" {
-  count       = var.enable_hitl ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "completeSectionReview"
-  data_source = aws_appsync_datasource.complete_section_review[0].name
-}
-
-# Allow AppSync to invoke the complete_section_review Lambda
-resource "aws_iam_policy" "appsync_invoke_hitl_policy" {
-  count       = var.enable_hitl ? 1 : 0
-  name        = "${local.api_name}-appsync-invoke-hitl"
-  description = "Allow AppSync to invoke complete_section_review Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.complete_section_review[0].arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "appsync_invoke_hitl" {
-  count      = var.enable_hitl ? 1 : 0
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_hitl_policy[0].arn
-}
+# AppSync data source/resolvers (claimReview, releaseReview, skipAllSectionsReview,
+# completeSectionReview) + invoke policy removed in the v0.6.4 REST migration.
+# The dispatcher routes claimReview to this Lambda and aliases the other three
+# HITL fields onto it (see dispatcher.tf field_function_map + index.py
+# FIELD_ALIASES); the dispatcher role grants the invoke.

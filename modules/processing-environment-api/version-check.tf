@@ -134,49 +134,7 @@ resource "aws_lambda_function" "version_check_resolver" {
   tags       = var.tags
 }
 
-# =============================================================================
-# AppSync: data source + Query.getLatestPublishedVersion resolver
-# =============================================================================
-
-resource "aws_appsync_datasource" "version_check" {
-  count            = local.version_check_enabled ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "VersionCheckDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.version_check_resolver[0].arn }
-}
-
-resource "aws_appsync_resolver" "get_latest_published_version" {
-  count       = local.version_check_enabled ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getLatestPublishedVersion"
-  data_source = aws_appsync_datasource.version_check[0].name
-}
-
-# =============================================================================
-# IAM: allow AppSync to invoke exactly the version-check Lambda
-# (mirrors the Test Studio invoke-policy pattern)
-# =============================================================================
-
-resource "aws_iam_policy" "appsync_invoke_version_check_policy" {
-  count       = local.version_check_enabled ? 1 : 0
-  name        = "AppSyncInvokeVersionCheckPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to invoke the version-check resolver Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = [aws_lambda_function.version_check_resolver[0].arn]
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "appsync_invoke_version_check_attachment" {
-  count      = local.version_check_enabled ? 1 : 0
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_version_check_policy[0].arn
-}
+# AppSync data source/resolver (Query.getLatestPublishedVersion) + invoke policy
+# removed in the v0.6.4 REST migration. getLatestPublishedVersion is now routed
+# to version_check_resolver by the dispatcher (see dispatcher.tf); the
+# dispatcher role grants the invoke.

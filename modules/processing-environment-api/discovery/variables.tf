@@ -34,21 +34,6 @@ variable "appsync_api_url" {
   default     = null
 }
 
-variable "appsync_api_id" {
-  description = "ID of the AppSync GraphQL API"
-  type        = string
-}
-
-variable "appsync_lambda_role_arn" {
-  description = "ARN of the AppSync Lambda service role"
-  type        = string
-}
-
-variable "appsync_dynamodb_role_arn" {
-  description = "ARN of the AppSync DynamoDB service role"
-  type        = string
-}
-
 variable "idp_common_layer_arn" {
   description = "ARN of the IDP common Lambda layer"
   type        = string

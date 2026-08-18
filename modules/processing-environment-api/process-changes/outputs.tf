@@ -34,16 +34,5 @@ output "process_changes_resolver_role_name" {
   value       = aws_iam_role.process_changes_resolver_role.name
 }
 
-# =============================================================================
-# AppSync Resolver Outputs
-# =============================================================================
-
-output "process_changes_resolver_name" {
-  description = "Name of the AppSync resolver for process changes"
-  value       = "${aws_appsync_resolver.process_changes.type}.${aws_appsync_resolver.process_changes.field}"
-}
-
-output "process_changes_data_source_name" {
-  description = "Name of the AppSync data source for process changes"
-  value       = aws_appsync_datasource.process_changes_lambda.name
-}
+# AppSync resolver/data-source outputs removed in the v0.6.4 REST migration.
+# processChanges is dispatched via the parent's field-function map.

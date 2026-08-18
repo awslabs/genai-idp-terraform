@@ -234,11 +234,9 @@ resource "aws_iam_role_policy" "agent_chat_processor" {
         ]
         Resource = "*"
       },
-      {
-        Effect   = "Allow"
-        Action   = ["appsync:GraphQL"]
-        Resource = "${aws_appsync_graphql_api.api.arn}/*"
-      },
+      # appsync:GraphQL statement removed in the v0.6.4 REST migration — the
+      # chat processor no longer publishes mutations to AppSync (the UI reads
+      # the response stream / polls DynamoDB directly).
       {
         Effect = "Allow"
         Action = ["s3:GetObject"]
@@ -428,7 +426,10 @@ resource "aws_lambda_function" "agent_chat_processor" {
       LOOKUP_FUNCTION_NAME        = var.lookup_function_name != null ? var.lookup_function_name : ""
       INPUT_BUCKET                = local.input_bucket_name
       OUTPUT_BUCKET               = local.output_bucket_name
-      APPSYNC_API_URL             = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+      # APPSYNC_API_URL intentionally empty post-v0.6.4: the processor writes
+      # DynamoDB directly and streams to the browser instead of publishing to
+      # AppSync (see docs/migration-appsync-to-rest.md §2/§3).
+      APPSYNC_API_URL             = ""
       MAX_CONVERSATION_TURNS      = "20"
       MAX_MESSAGE_SIZE_KB         = "8.5"
       DATA_RETENTION_DAYS         = tostring(var.data_retention_in_days)
@@ -829,113 +830,10 @@ resource "aws_lambda_function" "delete_agent_chat_session_resolver" {
 }
 
 # =============================================================================
-# AppSync Lambda data sources and resolvers for Agent Companion Chat
+# NOTE: The AppSync data sources/resolvers for Agent Companion Chat
+# (sendAgentChatMessage, listChatSessions, getChatMessages / getAgentChatMessages,
+# deleteChatSession, updateChatSessionTitle) were removed in the v0.6.4 REST
+# migration. These fields are now routed to the same resolver Lambdas by the
+# dispatcher (see dispatcher.tf field_function_map); the dispatcher role grants
+# the invokes. The Lambda functions/tables/roles above are unchanged.
 # =============================================================================
-
-resource "aws_appsync_datasource" "agent_chat_resolver" {
-  count            = var.enable_agent_companion_chat ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "AgentChatResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.agent_chat_resolver[0].arn
-  }
-}
-
-resource "aws_appsync_datasource" "create_chat_session_resolver" {
-  count            = var.enable_agent_companion_chat ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "CreateChatSessionResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.create_chat_session_resolver[0].arn
-  }
-}
-
-resource "aws_appsync_datasource" "list_agent_chat_sessions_resolver" {
-  count            = var.enable_agent_companion_chat ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "ListAgentChatSessionsResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.list_agent_chat_sessions_resolver[0].arn
-  }
-}
-
-resource "aws_appsync_datasource" "get_agent_chat_messages_resolver" {
-  count            = var.enable_agent_companion_chat ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "GetAgentChatMessagesResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.get_agent_chat_messages_resolver[0].arn
-  }
-}
-
-resource "aws_appsync_datasource" "delete_agent_chat_session_resolver" {
-  count            = var.enable_agent_companion_chat ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "DeleteAgentChatSessionResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.delete_agent_chat_session_resolver[0].arn
-  }
-}
-
-resource "aws_appsync_resolver" "send_agent_chat_message" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "sendAgentChatMessage"
-  data_source = aws_appsync_datasource.agent_chat_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "list_agent_chat_sessions" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "listChatSessions"
-  data_source = aws_appsync_datasource.list_agent_chat_sessions_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "get_agent_chat_messages" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getAgentChatMessages"
-  data_source = aws_appsync_datasource.get_agent_chat_messages_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "get_chat_messages" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getChatMessages"
-  data_source = aws_appsync_datasource.get_agent_chat_messages_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "delete_agent_chat_session" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "deleteChatSession"
-  data_source = aws_appsync_datasource.delete_agent_chat_session_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "update_chat_session_title" {
-  count       = var.enable_agent_companion_chat ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "updateChatSessionTitle"
-  data_source = aws_appsync_datasource.create_chat_session_resolver[0].name
-}

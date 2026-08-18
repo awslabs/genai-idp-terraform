@@ -85,7 +85,9 @@ resource "aws_lambda_function" "process_changes_resolver" {
       WORKING_BUCKET         = local.working_bucket_name
       INPUT_BUCKET           = local.input_bucket_name
       OUTPUT_BUCKET          = local.output_bucket_name
-      APPSYNC_API_URL        = var.appsync_graphql_url
+      # APPSYNC_API_URL intentionally empty post-v0.6.4: the resolver writes the
+      # TrackingTable directly; the UI polls it via the dispatcher's ddb_direct.
+      APPSYNC_API_URL = ""
     }
   }
 
@@ -114,29 +116,8 @@ resource "aws_cloudwatch_log_group" "process_changes_resolver_logs" {
 }
 
 # =============================================================================
-# GraphQL Data Source and Resolver
+# NOTE (v0.6.4 REST migration): The AppSync data source + processChanges
+# resolver were removed. processChanges is now routed to this Lambda by the
+# parent's field-function map (see dispatcher.tf); the dispatcher role grants
+# the invoke. The Lambda function and IAM role above are unchanged.
 # =============================================================================
-
-# Process Changes Lambda Data Source
-resource "aws_appsync_datasource" "process_changes_lambda" {
-  api_id           = var.appsync_api_id
-  name             = "ProcessChangesDataSource"
-  description      = "Lambda function for processing section changes"
-  type             = "AWS_LAMBDA"
-  service_role_arn = var.appsync_lambda_role_arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.process_changes_resolver.arn
-  }
-}
-
-# Process Changes Resolver (Mutation) - matches existing schema
-resource "aws_appsync_resolver" "process_changes" {
-  api_id      = var.appsync_api_id
-  type        = "Mutation"
-  field       = "processChanges"
-  data_source = aws_appsync_datasource.process_changes_lambda.name
-
-  # Direct Lambda invocation - no request/response templates needed
-  # The Lambda function handles the GraphQL arguments directly
-}

@@ -318,11 +318,13 @@ resource "aws_lambda_function" "agent_processor" {
 
   environment {
     variables = {
-      LOG_LEVEL                        = var.log_level
-      CONFIGURATION_TABLE_NAME         = var.configuration_table_name
-      STRANDS_LOG_LEVEL                = var.log_level
-      AGENT_TABLE                      = aws_dynamodb_table.agent_jobs.name
-      APPSYNC_API_URL                  = var.appsync_api_url
+      LOG_LEVEL                = var.log_level
+      CONFIGURATION_TABLE_NAME = var.configuration_table_name
+      STRANDS_LOG_LEVEL        = var.log_level
+      AGENT_TABLE              = aws_dynamodb_table.agent_jobs.name
+      # APPSYNC_API_URL intentionally empty post-v0.6.4: agent jobs are written
+      # to the AgentTable directly and read by the dispatcher's ddb_direct.
+      APPSYNC_API_URL                  = ""
       ATHENA_DATABASE                  = var.reporting_database_name
       ATHENA_OUTPUT_LOCATION           = "s3://${local.reporting_bucket_name}/athena-results/"
       DOCUMENT_ANALYSIS_AGENT_MODEL_ID = var.bedrock_model_id
@@ -431,26 +433,11 @@ resource "aws_cloudwatch_log_group" "list_available_agents_logs" {
 
 
 # =============================================================================
-# AppSync Lambda Permissions
+# NOTE (v0.6.4 REST migration): The AppSync lambda:InvokeFunction permissions
+# for the agent request handler / list-available-agents Lambdas were removed.
+# submitAgentQuery / listAvailableAgents are now invoked by the HTTP API
+# dispatcher (parent field-function map); the dispatcher role grants the invoke.
 # =============================================================================
-
-# Permission for AppSync to invoke Agent Request Handler
-resource "aws_lambda_permission" "appsync_agent_request_handler" {
-  statement_id  = "AllowAppSyncInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.agent_request_handler.function_name
-  principal     = "appsync.amazonaws.com"
-  source_arn    = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
-}
-
-# Permission for AppSync to invoke List Available Agents
-resource "aws_lambda_permission" "appsync_list_available_agents" {
-  statement_id  = "AllowAppSyncInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.list_available_agents.function_name
-  principal     = "appsync.amazonaws.com"
-  source_arn    = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
-}
 
 # =============================================================================
 # Bedrock Agent Configuration

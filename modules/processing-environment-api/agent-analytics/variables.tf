@@ -23,16 +23,6 @@ variable "reporting_bucket_arn" {
   type        = string
 }
 
-variable "appsync_api_url" {
-  description = "URL of the AppSync GraphQL API for status updates"
-  type        = string
-}
-
-variable "appsync_api_id" {
-  description = "ID of the AppSync GraphQL API"
-  type        = string
-}
-
 variable "idp_common_layer_arn" {
   description = "ARN of the IDP common Lambda layer"
   type        = string

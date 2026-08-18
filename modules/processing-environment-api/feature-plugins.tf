@@ -34,66 +34,12 @@ locals {
   ]...)
 }
 
-resource "aws_appsync_datasource" "feature" {
-  for_each = local.feature_data_sources
-
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = each.key
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = each.value }
-}
-
-resource "aws_iam_role_policy" "feature_datasource_invoke" {
-  count = var.has_feature_iam ? 1 : 0
-  name  = "FeatureDataSourceInvoke-${random_string.suffix.result}"
-  role  = aws_iam_role.appsync_lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = values(local.feature_data_sources)
-    }]
-  })
-}
-
 # =============================================================================
-# Composed feature resolvers
+# NOTE (v0.6.4 REST migration): The AppSync feature data sources, resolvers, and
+# the AppSync-Lambda-role policies (feature_datasource_invoke, feature_contracts)
+# were removed. Feature-contract composition into the REST dispatcher transport
+# (routing feature fields through the field-function map and granting the
+# dispatcher role the invoke + IAM statements) is handled in a later sub-step of
+# the migration. `local.feature_env` is still merged into the configuration
+# resolver Lambda (see lambda.tf), so feature environment wiring is preserved.
 # =============================================================================
-# Each entry in `local.feature_resolvers` is keyed by GraphQL field name and
-# carries the data source plus request/response mapping templates, mirroring the
-# resolver style in resolvers.tf. `type` defaults to "Query" and `field`
-# defaults to the map key, so a feature contract only has to specify them when
-# they differ. Lambda-backed templates fall back to the module's standard
-# Invoke/passthrough VTL when a contract omits them.
-resource "aws_appsync_resolver" "feature" {
-  for_each   = local.feature_resolvers
-  depends_on = [aws_appsync_datasource.feature]
-
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = try(each.value.type, "Query")
-  field       = try(each.value.field, each.key)
-  data_source = each.value.data_source
-
-  request_template  = try(each.value.request_template, "{\"version\": \"2018-05-29\", \"operation\": \"Invoke\", \"payload\": $util.toJson($context)}")
-  response_template = try(each.value.response_template, "$util.toJson($context.result)")
-}
-
-# =============================================================================
-# Composed feature IAM statements
-# =============================================================================
-# Feature contracts contribute policy-statement objects that are merged onto the
-# AppSync Lambda role (the role AppSync assumes to invoke resolver Lambdas).
-# Guarded by count so nothing is created when no feature contributes statements.
-resource "aws_iam_role_policy" "feature_contracts" {
-  count = var.has_feature_iam ? 1 : 0
-  name  = "FeatureContractsPolicy-${random_string.suffix.result}"
-  role  = aws_iam_role.appsync_lambda_role.id
-
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.feature_iam
-  })
-}

@@ -23,6 +23,22 @@ variable "visibility" {
   }
 }
 
+# =============================================================================
+# REST API TRANSPORT (API Gateway) — replaces AppSync (v0.6.4)
+# =============================================================================
+
+variable "api_gateway_vpc_endpoint_id" {
+  description = "VPC interface endpoint id for execute-api. Required when visibility=PRIVATE — the REST API becomes a PRIVATE endpoint reachable only through this VPC endpoint, with a matching resource policy restricting aws:SourceVpce. Empty (default) for a REGIONAL (public, Cognito-authorized) endpoint."
+  type        = string
+  default     = ""
+}
+
+variable "waf_allowed_ipv4_ranges" {
+  description = "IPv4 CIDRs allowed to call the REST API. The allow-all default ([\"0.0.0.0/0\"]) disables WAF; any other value attaches a REGIONAL WAFv2 WebACL (DefaultAction Block + IP allow-list) to the API stage that blocks non-listed source IPs."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "resolver_count_limit" {
   description = "A number indicating the maximum number of resolvers that should be accepted when handling queries"
   type        = number

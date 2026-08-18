@@ -2,43 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 output "api_id" {
-  description = "The ID of the AppSync GraphQL API"
-  value       = aws_appsync_graphql_api.api.id
+  description = "The ID of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.http_api.id
 }
 
 output "api_name" {
-  description = "The name of the AppSync GraphQL API"
-  value       = aws_appsync_graphql_api.api.name
+  description = "The name of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.http_api.name
 }
 
 output "api_arn" {
-  description = "The ARN of the AppSync GraphQL API"
-  value       = aws_appsync_graphql_api.api.arn
+  description = "The execution ARN of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.http_api.execution_arn
 }
 
-output "graphql_url" {
-  description = "The URL endpoint for the GraphQL API"
-  value       = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+# Base URL of the REST transport (stage 'api'). Mirrors the upstream
+# HttpApiEndpoint output. The web UI points VITE_API_BASE_URL here and POSTs to
+# ${api_base_url}/op/<field>.
+output "api_base_url" {
+  description = "Base URL of the REST API transport (stage 'api')."
+  value       = "https://${aws_api_gateway_rest_api.http_api.id}.execute-api.${data.aws_region.current.id}.${data.aws_partition.current.dns_suffix}/api"
 }
 
-# Fully-qualified AppSync GraphQL hostname (host portion of the GraphQL URL),
-# for Route 53 Private Hosted Zone setup in private-network (cross-VPC / hybrid)
-# topologies. Mirrors upstream v0.5.15 AppSyncEndpointForDNS. See
-# docs/deployment-private-network.md.
-output "appsync_endpoint_for_dns" {
-  description = "Fully-qualified AppSync GraphQL hostname for Route 53 Private Hosted Zone setup in private-network topologies."
-  value       = split("/", aws_appsync_graphql_api.api.uris["GRAPHQL"])[2]
-}
-
-output "realtime_url" {
-  description = "The URL endpoint for the Realtime API"
-  value       = aws_appsync_graphql_api.api.uris["REALTIME"]
-}
-
-output "api_key" {
-  description = "The API key for the GraphQL API (if API key authentication is enabled)"
-  value       = length(aws_appsync_api_key.api_key) > 0 ? aws_appsync_api_key.api_key[0].key : null
-  sensitive   = true
+output "http_api_dispatcher_function_arn" {
+  description = "ARN of the HTTP API dispatcher Lambda function."
+  value       = aws_lambda_function.http_api_dispatcher.arn
 }
 
 output "lambda_functions" {
