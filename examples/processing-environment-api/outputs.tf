@@ -6,15 +6,9 @@ output "api_id" {
   value       = module.processing_environment_api.api_id
 }
 
-output "graphql_url" {
-  description = "The URL endpoint for the GraphQL API"
-  value       = module.processing_environment_api.graphql_url
-}
-
-output "api_key" {
-  description = "The API key for the GraphQL API (if API key authentication is enabled)"
-  value       = module.processing_environment_api.api_key
-  sensitive   = true
+output "api_base_url" {
+  description = "The REST transport base URL for the API"
+  value       = module.processing_environment_api.api_base_url
 }
 
 output "tracking_table_name" {

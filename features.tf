@@ -72,7 +72,7 @@ module "chat_with_document" {
 
   appsync_api_id          = module.processing_environment_api[0].api_id
   appsync_graphql_api_arn = module.processing_environment_api[0].api_arn
-  appsync_graphql_url     = module.processing_environment_api[0].graphql_url
+  appsync_graphql_url     = ""
 
   output_bucket_arn        = var.output_bucket_arn
   configuration_table_arn  = module.processing_environment.configuration_table_arn

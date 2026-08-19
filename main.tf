@@ -303,9 +303,7 @@ module "processing_environment" {
     api_id           = module.processing_environment_api[0].api_id
     api_name         = module.processing_environment_api[0].api_name
     api_arn          = module.processing_environment_api[0].api_arn
-    graphql_url      = module.processing_environment_api[0].graphql_url
-    realtime_url     = module.processing_environment_api[0].realtime_url
-    api_key          = module.processing_environment_api[0].api_key
+    graphql_url      = ""
     lambda_functions = module.processing_environment_api[0].lambda_functions
   } : null
 
@@ -488,7 +486,7 @@ module "bda_processor" {
   enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # S3 bucket ARNs
   input_bucket_arn        = var.input_bucket_arn
@@ -549,7 +547,7 @@ module "bedrock_llm_processor" {
   enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # S3 bucket ARNs
   input_bucket_arn        = var.input_bucket_arn
@@ -623,7 +621,7 @@ module "sagemaker_udop_processor" {
   enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # S3 bucket ARNs
   input_bucket_arn        = var.input_bucket_arn
@@ -714,7 +712,7 @@ module "web_ui" {
   }
 
   # API configuration (if enabled)
-  api_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_url = local.api_enabled ? module.processing_environment_api[0].api_base_url : null
 
   # S3 bucket ARNs
   input_bucket_arn  = var.input_bucket_arn
@@ -950,7 +948,7 @@ module "processor_attachment" {
   # Optional: API configuration
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
