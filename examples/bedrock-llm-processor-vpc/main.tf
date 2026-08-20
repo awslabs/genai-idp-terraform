@@ -173,7 +173,8 @@ resource "aws_security_group" "vpc_endpoints" {
 # VPC endpoints for AWS services, via the reusable partition-aware
 # `modules/vpc-endpoints/` building block. Instantiated only when this example
 # creates its own VPC (existing-VPC consumers bring their own endpoints). The
-# `appsync-api` endpoint is required when `api.visibility = "PRIVATE"`.
+# `execute-api` endpoint is required when `api.api_gateway_visibility = "PRIVATE"`
+# (v0.6.4: was `appsync-api` before upstream replaced AppSync with API Gateway).
 module "vpc_endpoints" {
   source = "../../modules/vpc-endpoints"
 
@@ -200,7 +201,7 @@ module "vpc_endpoints" {
     sqs                   = true
     states                = true
     textract              = true
-    appsync-api           = true
+    execute-api           = true
   }
 
   # Gateway endpoints (S3 + DynamoDB) routed through the isolated route tables.
@@ -358,8 +359,12 @@ locals {
     enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
     enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
 
-    # AppSync API visibility (GLOBAL or PRIVATE)
-    visibility = var.api.visibility
+    # REST API visibility (GLOBAL or PRIVATE). When PRIVATE, the API is only
+    # reachable through the execute-api interface VPC endpoint provisioned
+    # above, whose id is threaded here so the endpoint configuration and the
+    # aws:SourceVpce resource policy can be built.
+    api_gateway_visibility      = var.api.api_gateway_visibility
+    api_gateway_vpc_endpoint_id = try(module.vpc_endpoints[0].execute_api_endpoint_id, "")
     } : {
     enabled            = false
     agent_analytics    = { enabled = false }
@@ -381,8 +386,10 @@ locals {
     enable_omni_ai_dataset          = false
     enable_docplit_poly_seq_dataset = false
 
-    # AppSync API visibility (GLOBAL or PRIVATE)
-    visibility = "GLOBAL"
+    # REST API visibility (GLOBAL or PRIVATE). Must mirror the true branch's
+    # attribute set — a conditional's branches need identical object types.
+    api_gateway_visibility      = "GLOBAL"
+    api_gateway_vpc_endpoint_id = ""
   }
 }
 

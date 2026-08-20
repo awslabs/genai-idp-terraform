@@ -175,9 +175,10 @@ variable "api" {
     enable_omni_ai_dataset          = optional(bool, false)
     enable_docplit_poly_seq_dataset = optional(bool, false)
 
-    # AppSync API visibility. Set to "PRIVATE" to require all callers
-    # to reach the API via the `appsync-api` interface VPC endpoint.
-    visibility = optional(string, "GLOBAL")
+    # REST API visibility (v0.6.4). Set to "PRIVATE" to require all callers to
+    # reach the API Gateway REST endpoint via the `execute-api` interface VPC
+    # endpoint this example provisions.
+    api_gateway_visibility = optional(string, "GLOBAL")
   })
   default = { enabled = false }
 }

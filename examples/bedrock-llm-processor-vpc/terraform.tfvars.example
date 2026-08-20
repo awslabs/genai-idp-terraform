@@ -21,12 +21,12 @@ vpc_cidr = "10.0.0.0/16"
 # tags = { Environment = "dev" }
 
 # ── API visibility + Knowledge Base ─────────────────────────────────────────
-# Keep the GraphQL API private inside the VPC, and/or enable the KB backend.
+# Keep the REST API private inside the VPC, and/or enable the KB backend.
 # The KB generation model MUST be a cross-region inference-profile id
 # (us./eu./apac. prefix); the embedding model is a plain foundation-model id.
 # chat-with-document is on by default.
 # api = {
-#   visibility = "PRIVATE"
+#   api_gateway_visibility = "PRIVATE"
 #   knowledge_base = {
 #     enabled            = true
 #     model_id           = "us.amazon.nova-pro-v1:0"      # generation (inference profile)

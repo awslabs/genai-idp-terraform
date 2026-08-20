@@ -38,6 +38,19 @@ check "agent_analytics_requires_reporting" {
   }
 }
 
+# Deprecation notice: `api.visibility` was renamed to
+# `api.api_gateway_visibility` in v0.6.4, when upstream replaced AppSync with
+# the API Gateway REST transport (AppSyncVisibility -> ApiGatewayVisibility).
+# The old spelling still works and takes precedence, so this is a non-blocking
+# check (it warns on plan/apply without failing).
+#tfsec:ignore:*
+check "api_visibility_deprecated" {
+  assert {
+    condition     = var.api.visibility == null
+    error_message = "DEPRECATED: api.visibility is renamed to api.api_gateway_visibility (upstream v0.6.4 renamed AppSyncVisibility to ApiGatewayVisibility when AppSync was replaced by the API Gateway REST transport). Your value is still being honored. Migrate by moving it to api.api_gateway_visibility; see docs/migration-v0.5.16-to-v0.6.4.md."
+  }
+}
+
 # Validation: exactly one processor façade must be configured.
 #tfsec:ignore:*
 check "exactly_one_processor" {
@@ -441,9 +454,14 @@ module "processing_environment_api" {
   enable_docplit_poly_seq_dataset = try(var.api.enable_docplit_poly_seq_dataset, false)
   bda_project_arn                 = length(module.bda_processor) > 0 ? module.bda_processor[0].data_automation_project_arn : ""
 
-  # AppSync API visibility. "PRIVATE" makes the endpoint reachable only through
-  # the appsync-api interface VPC endpoint (for fully isolated VPC deployments).
-  visibility = try(var.api.visibility, "GLOBAL")
+  # REST API visibility (v0.6.4). "PRIVATE" makes the API Gateway REST endpoint
+  # reachable only through the execute-api interface VPC endpoint (fully
+  # isolated VPC deployments); "GLOBAL" is a public REGIONAL endpoint still
+  # gated by the Cognito authorizer. Resolved from
+  # api.api_gateway_visibility (or the deprecated api.visibility) in locals.tf.
+  visibility                  = local.api_gateway_visibility
+  api_gateway_vpc_endpoint_id = try(var.api.api_gateway_vpc_endpoint_id, "")
+  waf_allowed_ipv4_ranges     = try(var.api.waf_allowed_ipv4_ranges, ["0.0.0.0/0"])
 
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name

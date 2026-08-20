@@ -14,8 +14,10 @@ locals {
   # subnet are supplied.
   private_network_enabled = var.private_network != null && length(var.vpc_subnet_ids) > 0
 
-  # PRIVATE AppSync needs the appsync-api interface endpoint.
-  appsync_visibility_private = try(var.api.visibility, "GLOBAL") == "PRIVATE"
+  # A PRIVATE REST API needs the execute-api interface endpoint (v0.6.4: was
+  # appsync-api before upstream replaced AppSync with API Gateway). Resolved in
+  # locals.tf from api.api_gateway_visibility / the deprecated api.visibility.
+  api_visibility_private = local.api_use_private
 
   # Interface endpoints required by the enabled processors/features. The map key
   # is the PrivateLink service suffix (com.amazonaws.<region>.<key>).
@@ -23,7 +25,7 @@ locals {
   #   - bedrock: any processor can call Bedrock.
   #   - textract: only the OCR processors (bedrock-llm, sagemaker-udop).
   #   - bedrock-agent-runtime: Knowledge Base / agent-analytics / chat retrieval.
-  #   - appsync-api: only when the API is PRIVATE.
+  #   - execute-api: only when the REST API is PRIVATE.
   _vpc_endpoint_base = {
     ssm         = true
     ssmmessages = true
@@ -54,14 +56,14 @@ locals {
     try(local.chat_with_document_config.enabled, false)
   ) ? { bedrock-agent-runtime = true } : {}
 
-  _vpc_endpoint_appsync = local.appsync_visibility_private ? { appsync-api = true } : {}
+  _vpc_endpoint_execute_api = local.api_visibility_private ? { execute-api = true } : {}
 
   required_interface_endpoints = merge(
     local._vpc_endpoint_base,
     local._vpc_endpoint_bedrock,
     local._vpc_endpoint_textract,
     local._vpc_endpoint_agent_runtime,
-    local._vpc_endpoint_appsync,
+    local._vpc_endpoint_execute_api,
   )
 }
 
@@ -97,16 +99,16 @@ module "vpc_endpoints" {
 # count-gated module is instantiated.
 # ---------------------------------------------------------------------------
 
-# PRIVATE AppSync requires the appsync-api interface endpoint. Passes on the
+# A PRIVATE REST API requires the execute-api interface endpoint. Passes on the
 # default path (GLOBAL or unset).
 #tfsec:ignore:*
-check "private_appsync_endpoint_present" {
+check "private_api_endpoint_present" {
   assert {
-    condition = try(var.api.visibility, "GLOBAL") != "PRIVATE" || contains(
+    condition = !local.api_visibility_private || contains(
       keys(try(module.vpc_endpoints[0].interface_endpoint_ids, {})),
-      "appsync-api"
+      "execute-api"
     )
-    error_message = "AppSyncVisibility = PRIVATE requires the appsync-api interface VPC endpoint so VPC clients can resolve and reach the GraphQL API. Provision it by enabling a private-network deployment (set var.private_network and var.vpc_subnet_ids) so module.vpc_endpoints includes the \"appsync-api\" endpoint."
+    error_message = "api.api_gateway_visibility = PRIVATE requires the execute-api interface VPC endpoint so VPC clients can resolve and reach the REST API. Provision it by enabling a private-network deployment (set var.private_network and var.vpc_subnet_ids) so module.vpc_endpoints includes the \"execute-api\" endpoint."
   }
 }
 

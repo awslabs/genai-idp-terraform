@@ -474,12 +474,37 @@ variable "api" {
     enable_omni_ai_dataset          = optional(bool, false)
     enable_docplit_poly_seq_dataset = optional(bool, false)
 
-    # AppSync API visibility. Use "PRIVATE" for fully isolated VPC
-    # deployments — only clients with a route to the
-    # `appsync-api` interface VPC endpoint can reach the API. The
-    # default "GLOBAL" exposes the API on the public internet (still
-    # protected by the configured authorization).
-    visibility = optional(string, "GLOBAL")
+    # ---------------------------------------------------------------------
+    # REST API transport visibility (v0.6.4). Upstream replaced AppSync with
+    # an API Gateway REST API and renamed AppSyncVisibility/UsePrivateAppSync
+    # to ApiGatewayVisibility/UsePrivateApi.
+    # ---------------------------------------------------------------------
+    # "PRIVATE" makes the REST API a PRIVATE endpoint reachable only through
+    # the `execute-api` interface VPC endpoint (supply
+    # api_gateway_vpc_endpoint_id), with a resource policy restricting
+    # aws:SourceVpce. The default "GLOBAL" exposes a REGIONAL endpoint on the
+    # public internet (still gated by the Cognito authorizer).
+    api_gateway_visibility = optional(string, "GLOBAL")
+
+    # Derived from api_gateway_visibility when null (PRIVATE => true). Set
+    # explicitly only to override. Mirrors upstream UsePrivateApi.
+    use_private_api = optional(bool, null)
+
+    # VPC interface endpoint id for execute-api. Required when
+    # api_gateway_visibility = "PRIVATE".
+    api_gateway_vpc_endpoint_id = optional(string, "")
+
+    # IPv4 CIDRs allowed to call the REST API. The allow-all default disables
+    # WAF; any other value attaches a REGIONAL WAFv2 WebACL to the API stage.
+    # Mirrors upstream WAFAllowedIPv4Ranges.
+    waf_allowed_ipv4_ranges = optional(list(string), ["0.0.0.0/0"])
+
+    # DEPRECATED (v0.6.4): renamed to `api_gateway_visibility` when the
+    # transport moved from AppSync to API Gateway. Still honored — when set it
+    # takes precedence and a `check` block surfaces a deprecation notice. Will
+    # be removed in a future release; see
+    # docs/migration-v0.5.16-to-v0.6.4.md.
+    visibility = optional(string, null)
   })
 
   default = {
@@ -494,6 +519,28 @@ variable "api" {
   validation {
     condition     = !var.api.agent_analytics.enabled || var.api.agent_analytics.model_id != null
     error_message = "When api.agent_analytics.enabled is true, model_id must be provided."
+  }
+
+  validation {
+    condition     = contains(["GLOBAL", "PRIVATE"], var.api.api_gateway_visibility)
+    error_message = "api.api_gateway_visibility must be \"GLOBAL\" or \"PRIVATE\"."
+  }
+
+  validation {
+    condition     = var.api.visibility == null || contains(["GLOBAL", "PRIVATE"], var.api.visibility)
+    error_message = "api.visibility (deprecated — use api.api_gateway_visibility) must be \"GLOBAL\" or \"PRIVATE\" when set."
+  }
+
+  # A PRIVATE REST API is only reachable through an execute-api interface VPC
+  # endpoint, and the endpoint id is required to build both the endpoint
+  # configuration and the aws:SourceVpce resource policy. Fail fast at plan
+  # time rather than producing an unreachable API.
+  validation {
+    condition = (
+      coalesce(var.api.visibility, var.api.api_gateway_visibility) != "PRIVATE" ||
+      trimspace(var.api.api_gateway_vpc_endpoint_id) != ""
+    )
+    error_message = "When the REST API is PRIVATE you must also set api.api_gateway_vpc_endpoint_id to the execute-api interface VPC endpoint id."
   }
 }
 

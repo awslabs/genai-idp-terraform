@@ -33,6 +33,20 @@ locals {
   # Knowledge Base configuration
   # Deprecated var.knowledge_base takes precedence if explicitly set (non-null), otherwise use api.knowledge_base
   knowledge_base_config = var.knowledge_base != null ? var.knowledge_base : var.api.knowledge_base
+
+  # ---------------------------------------------------------------------------
+  # REST API visibility (v0.6.4 rename)
+  # ---------------------------------------------------------------------------
+  # Upstream renamed AppSyncVisibility -> ApiGatewayVisibility when the
+  # transport moved to API Gateway. `api.visibility` is the deprecated spelling;
+  # it still takes precedence when explicitly set (matching the established
+  # deprecated-wins convention above), so existing configurations keep working.
+  # check "api_visibility_deprecated" surfaces the rename.
+  api_gateway_visibility = coalesce(var.api.visibility, var.api.api_gateway_visibility)
+
+  # PRIVATE => the REST API is VPC-only. Derived unless explicitly overridden,
+  # mirroring upstream UsePrivateApi.
+  api_use_private = coalesce(var.api.use_private_api, local.api_gateway_visibility == "PRIVATE")
 }
 
 #
