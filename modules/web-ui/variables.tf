@@ -77,15 +77,17 @@ variable "web_app_bucket_name" {
 variable "hosting" {
   description = <<-EOT
     Web UI hosting mode. "CloudFront" (default) creates a CloudFront
-    distribution in front of the web app bucket. "ALB" skips CloudFront and
-    expects an Application Load Balancer (see modules/web-ui-alb) to serve the
-    bucket via an S3 interface VPC endpoint. Mirrors upstream WebUIHosting.
+    distribution in front of the web app bucket. "APIGateway" skips CloudFront
+    and expects the REST API to serve the bucket (VPC-capable private posture);
+    the bucket is still created, but no fronting layer is created here — the
+    API Gateway wiring lands in a follow-up commit. Mirrors upstream
+    WebUIHosting. "ALB" was removed in v0.6.4 (upstream deleted ALB hosting).
   EOT
   type        = string
   default     = "CloudFront"
   validation {
-    condition     = contains(["CloudFront", "ALB"], var.hosting)
-    error_message = "hosting must be CloudFront or ALB."
+    condition     = contains(["CloudFront", "APIGateway"], var.hosting)
+    error_message = "hosting must be CloudFront or APIGateway. \"ALB\" was removed in v0.6.4; see docs/migration-v0.5.16-to-v0.6.4.md."
   }
 }
 
@@ -93,9 +95,10 @@ variable "web_ui_url" {
   description = <<-EOT
     Public URL the browser uses to reach the Web UI. Used for input/output
     bucket CORS allowed-origins and the UI build environment. In CloudFront
-    mode this is derived from the distribution; in ALB mode supply the custom
-    domain URL fronting the ALB (mirrors upstream CustomDomainUrl). When null
-    in ALB mode, CORS falls back to "*".
+    mode this is derived from the distribution; for non-CloudFront hosting
+    supply the custom domain URL fronting the UI (mirrors upstream
+    CustomDomainUrl). When null and CloudFront is not created, CORS falls back
+    to "*".
   EOT
   type        = string
   default     = null

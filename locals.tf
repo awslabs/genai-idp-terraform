@@ -155,9 +155,10 @@ locals {
   # Presigned-URL-via-VPCE (v0.5.16). When opted in AND a VPC-endpoint DNS name
   # is supplied, presigner Lambdas point at the S3 interface endpoint using the
   # "https://bucket.<dns>" form (boto3 virtual-host addressing). Supplied as a
-  # user input (S3VpcEndpointDnsNameOverride equivalent) because deriving it
-  # from the web-ui-alb module would create an api -> web_ui -> web_ui_alb -> api
-  # dependency cycle. Null (default) => presigned URLs use the global S3 endpoint.
+  # user input (S3VpcEndpointDnsNameOverride equivalent) because the endpoint is
+  # owned by the caller's VPC wiring; deriving it from a web-UI-side resource
+  # would create an api -> web_ui -> api dependency cycle. Null (default) =>
+  # presigned URLs use the global S3 endpoint.
   web_ui_s3_endpoint_url = (
     var.web_ui.s3_presigned_url_via_vpc_endpoint && var.web_ui.s3_vpc_endpoint_dns_name_override != null
     ? "https://bucket.${var.web_ui.s3_vpc_endpoint_dns_name_override}"

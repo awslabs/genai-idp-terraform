@@ -83,28 +83,15 @@ check "web_ui_logging_bucket" {
   }
 }
 
-# Validation: ALB hosting mode requires VPC, subnets, and an ACM certificate.
-#tfsec:ignore:*
-check "web_ui_alb_inputs" {
-  assert {
-    condition = !(var.web_ui.enabled && var.web_ui.hosting == "ALB") || (
-      var.web_ui.alb.vpc_id != null &&
-      length(var.web_ui.alb.subnet_ids) >= 2 &&
-      var.web_ui.alb.certificate_arn != null
-    )
-    error_message = "When web_ui.hosting is \"ALB\", web_ui.alb.vpc_id, at least two web_ui.alb.subnet_ids, and web_ui.alb.certificate_arn are required."
-  }
-}
-
 # Validation: presigned-URL-via-VPCE requires a supplied endpoint DNS name.
-# The ALB-created VPCE DNS cannot be auto-wired here without a dependency cycle,
-# so the DNS name (web-ui-alb output s3_vpc_endpoint_dns_name) must be supplied
-# via web_ui.s3_vpc_endpoint_dns_name_override. Mirrors upstream override rule.
+# The S3 interface endpoint is owned outside this module (the deployment's own
+# VPC wiring), so its DNS name must be supplied via
+# web_ui.s3_vpc_endpoint_dns_name_override. Mirrors upstream override rule.
 #tfsec:ignore:*
 check "web_ui_presign_vpce_dns" {
   assert {
     condition     = !var.web_ui.s3_presigned_url_via_vpc_endpoint || var.web_ui.s3_vpc_endpoint_dns_name_override != null
-    error_message = "web_ui.s3_vpc_endpoint_dns_name_override is required when web_ui.s3_presigned_url_via_vpc_endpoint is true (set it to the web_ui_alb output s3_vpc_endpoint_dns_name)."
+    error_message = "web_ui.s3_vpc_endpoint_dns_name_override is required when web_ui.s3_presigned_url_via_vpc_endpoint is true (set it to the DNS name of the S3 interface VPC endpoint serving the deployment)."
   }
 }
 
@@ -268,7 +255,7 @@ module "user_identity" {
   allowed_signup_email_domain = var.web_ui.enable_signup
   deletion_protection         = var.deletion_protection
 
-  # Register the Web UI custom domain / ALB URL as an OAuth callback+logout URL
+  # Register the Web UI custom domain URL as an OAuth callback+logout URL
   # so hosted-UI redirects succeed. CloudFront domains are not known until the
   # distribution exists, so only the explicit custom_domain_url is wired here.
   additional_callback_urls = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
@@ -350,8 +337,9 @@ module "processing_environment_api" {
   name = "${local.name_prefix}-api"
 
   # Presigned-URL-via-VPCE (v0.5.16). When enabled with a supplied endpoint DNS
-  # name, presigner Lambdas target the S3 interface VPC endpoint. Supplied as an
-  # input (not derived from the web-ui-alb module) to keep the graph acyclic.
+  # name, presigner Lambdas target the S3 interface VPC endpoint. Supplied as a
+  # user input rather than derived from an in-module endpoint, which keeps the
+  # graph acyclic.
   s3_endpoint_url = local.web_ui_s3_endpoint_url
 
   # User identity - Dynamic authorization based on user_identity availability
@@ -783,9 +771,9 @@ module "web_ui" {
   cloudfront_distribution_id        = var.web_ui.cloudfront_distribution_id
   should_allow_sign_up_email_domain = var.web_ui.enable_signup != ""
 
-  # Hosting mode (CloudFront vs. ALB) + public URL for CORS / UI build env.
-  # In ALB mode the CloudFront distribution is not created; the web-ui-alb
-  # module (below) serves the bucket via an internal ALB + S3 VPC endpoint.
+  # Hosting mode + public URL for CORS / UI build env. "CloudFront" creates the
+  # distribution; any other mode creates the bucket only and expects an external
+  # fronting layer (APIGateway hosting lands in a follow-up commit).
   hosting    = var.web_ui.hosting
   web_ui_url = var.web_ui.custom_domain_url
 
@@ -799,76 +787,6 @@ module "web_ui" {
   lambda_tracing_mode = var.lambda_tracing_mode
 
   tags = var.tags
-}
-
-#
-# Web UI ALB hosting (Optional — when web_ui.hosting = "ALB")
-#
-# Serves the web app bucket through an internal Application Load Balancer and an
-# S3 interface VPC endpoint instead of CloudFront (private-network / GovCloud).
-# Depends on module.web_ui for the bucket name; the bucket *policy* granting
-# VPCE access is created below at the root (referencing this module's endpoint
-# id) to keep the dependency acyclic.
-#
-module "web_ui_alb" {
-  count  = var.web_ui.enabled && var.web_ui.hosting == "ALB" ? 1 : 0
-  source = "./modules/web-ui-alb"
-
-  name_prefix              = local.name_prefix
-  vpc_id                   = var.web_ui.alb.vpc_id
-  subnet_ids               = var.web_ui.alb.subnet_ids
-  certificate_arn          = var.web_ui.alb.certificate_arn
-  alb_scheme               = var.web_ui.alb.scheme
-  alb_allowed_cidrs        = var.web_ui.alb.allowed_cidrs
-  web_ui_bucket_name       = module.web_ui[0].bucket.bucket_name
-  logging_bucket_name      = var.web_ui.logging_enabled ? local.logging_bucket_name : null
-  lambda_security_group_id = var.web_ui.alb.lambda_security_group_id
-  manage_lambda_sg_rules   = var.web_ui.alb.manage_lambda_sg_rules
-
-  tags = var.tags
-}
-
-# Web UI bucket policy for ALB hosting: allow anonymous GetObject only through
-# the S3 interface VPC endpoint, and deny insecure transport. Mirrors upstream
-# WebUIBucketPolicy (UseALBHosting branch). Created at the root so it can
-# reference both module.web_ui (bucket) and module.web_ui_alb (endpoint id)
-# without a module cycle.
-resource "aws_s3_bucket_policy" "web_ui_alb" {
-  count  = var.web_ui.enabled && var.web_ui.hosting == "ALB" && var.web_ui.create_infrastructure ? 1 : 0
-  bucket = module.web_ui[0].bucket.bucket_name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "AllowALBViaVpcEndpoint"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "s3:GetObject"
-        Resource  = "${module.web_ui[0].bucket.bucket_arn}/*"
-        Condition = {
-          StringEquals = {
-            "aws:sourceVpce" = module.web_ui_alb[0].s3_vpc_endpoint_id
-          }
-        }
-      },
-      {
-        Sid       = "DenyInsecureConnections"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          module.web_ui[0].bucket.bucket_arn,
-          "${module.web_ui[0].bucket.bucket_arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      }
-    ]
-  })
 }
 
 #

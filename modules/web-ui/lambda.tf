@@ -55,8 +55,8 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
   role  = aws_iam_role.ui_codebuild_trigger_lambda_role[0].id
 
   # The CloudFront invalidation statement is appended via concat() only when a
-  # distribution exists (CloudFront hosting). In ALB mode there is no
-  # distribution, so the statement is omitted entirely rather than emitted with
+  # distribution exists (CloudFront hosting). For non-CloudFront hosting there
+  # is no distribution, so the statement is omitted entirely rather than emitted with
   # an empty Resource list (IAM rejects statements without resources).
   policy = jsonencode({
     Version = "2012-10-17"

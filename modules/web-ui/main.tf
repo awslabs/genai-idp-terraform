@@ -53,8 +53,9 @@ locals {
   }
 
   # Hosting mode gates. CloudFront resources exist only when we create
-  # infrastructure AND hosting is CloudFront; in ALB mode the bucket is still
-  # created but served by the ALB (see modules/web-ui-alb) via an S3 VPCE.
+  # infrastructure AND hosting is CloudFront; for any other hosting mode the
+  # bucket is still created but fronted elsewhere (API Gateway hosting is wired
+  # in a follow-up commit).
   is_cloudfront     = var.hosting == "CloudFront"
   create_cloudfront = var.create_infrastructure && local.is_cloudfront
 
@@ -62,13 +63,13 @@ locals {
   cloudfront_distribution_id = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].id : var.cloudfront_distribution_id
   cloudfront_domain_name     = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].domain_name : null
 
-  # Public app URL: CloudFront domain in CloudFront mode; the supplied custom
-  # domain URL (fronting the ALB) in ALB mode. Drives CORS + UI build env.
+  # Public app URL: CloudFront domain in CloudFront mode; otherwise the supplied
+  # custom domain URL fronting the UI. Drives CORS + UI build env.
   app_url = local.create_cloudfront ? "https://${aws_cloudfront_distribution.web_distribution[0].domain_name}" : var.web_ui_url
 
   # CORS allowed origins for the browser-accessed input/output buckets. Falls
-  # back to "*" when no concrete URL is known (BYO infra or ALB without a
-  # custom domain).
+  # back to "*" when no concrete URL is known (BYO infra, or non-CloudFront
+  # hosting without a custom domain).
   cors_allowed_origins = local.app_url != null ? [local.app_url] : ["*"]
 }
 
@@ -209,8 +210,8 @@ resource "aws_cloudfront_origin_access_control" "oac" {
 }
 
 # Grant CloudFront OAC read access to the web app bucket (CloudFront mode only).
-# In ALB mode the bucket policy is created at the root (it must reference the S3
-# VPC endpoint id from the web-ui-alb module, which would otherwise cycle).
+# Non-CloudFront hosting modes bring their own bucket-access mechanism, so no
+# policy is created here.
 resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
   count  = local.create_cloudfront ? 1 : 0
   bucket = aws_s3_bucket.web_app_bucket[0].id

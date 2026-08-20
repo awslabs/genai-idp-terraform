@@ -195,8 +195,8 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
     "profile"
   ]
 
-  # Localhost is retained for local UI development; the Web UI custom domain /
-  # ALB URL (when set) is appended so hosted-UI OAuth redirects are accepted.
+  # Localhost is retained for local UI development; the Web UI custom domain URL
+  # (when set) is appended so hosted-UI OAuth redirects are accepted.
   callback_urls = distinct(concat(["https://localhost:3000"], var.additional_callback_urls))
   logout_urls   = distinct(concat(["https://localhost:3000"], var.additional_logout_urls))
 }

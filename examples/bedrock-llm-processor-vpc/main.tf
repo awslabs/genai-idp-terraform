@@ -455,24 +455,13 @@ module "genai_idp_accelerator" {
 
   # Web UI configuration.
   #
-  # ALB hosting (WebUIHosting=ALB): when web_ui_alb_certificate_arn is set, the
-  # Web UI is served by an internal Application Load Balancer + S3 interface VPC
-  # endpoint instead of CloudFront (fits this fully-isolated VPC). Otherwise the
-  # Web UI is disabled.
+  # ALB hosting was removed in v0.6.4 (upstream deleted it in v0.6.0), so this
+  # example uses the default CloudFront hosting and leaves the Web UI opt-in via
+  # enable_web_ui. A VPC-capable private hosting mode ("APIGateway") is wired in
+  # a follow-up commit; see docs/migration-v0.5.16-to-v0.6.4.md.
   web_ui = {
-    enabled = var.web_ui_alb_certificate_arn != null
-    hosting = "ALB"
-    alb = {
-      vpc_id                   = local.vpc_id
-      subnet_ids               = local.vpc_subnet_ids
-      certificate_arn          = var.web_ui_alb_certificate_arn
-      scheme                   = "internal"
-      allowed_cidrs            = [var.vpc_cidr]
-      lambda_security_group_id = local.vpc_security_group_ids[0]
-      # This example creates the Lambda SG in the same apply, so opt in
-      # explicitly (the count can't be derived from the computed SG id).
-      manage_lambda_sg_rules = true
-    }
+    enabled = var.enable_web_ui
+    hosting = "CloudFront"
   }
 
   # General configuration

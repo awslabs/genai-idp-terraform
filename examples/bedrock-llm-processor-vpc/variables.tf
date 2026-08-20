@@ -233,8 +233,8 @@ variable "build" {
   }
 }
 
-variable "web_ui_alb_certificate_arn" {
-  description = "ACM certificate ARN for the internal ALB HTTPS listener. When set, the Web UI is served via ALB hosting (WebUIHosting=ALB) in this isolated VPC; when null, the Web UI is disabled."
-  type        = string
-  default     = null
+variable "enable_web_ui" {
+  description = "Whether to deploy the Web UI. Defaults to false because this example provisions a fully-isolated VPC and the default CloudFront hosting is public-internet facing. ALB hosting was removed in v0.6.4; a VPC-capable private hosting mode arrives with APIGateway hosting."
+  type        = bool
+  default     = false
 }

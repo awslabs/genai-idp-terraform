@@ -35,13 +35,13 @@ variable "allowed_signup_email_domain" {
 }
 
 variable "additional_callback_urls" {
-  description = "Extra OAuth callback URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain / ALB URL. Mirrors upstream CustomDomainUrl callback wiring."
+  description = "Extra OAuth callback URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain URL. Mirrors upstream CustomDomainUrl callback wiring."
   type        = list(string)
   default     = []
 }
 
 variable "additional_logout_urls" {
-  description = "Extra OAuth logout URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain / ALB URL."
+  description = "Extra OAuth logout URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain URL."
   type        = list(string)
   default     = []
 }

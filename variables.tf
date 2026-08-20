@@ -366,37 +366,31 @@ variable "web_ui" {
     console_title              = optional(string, "IDP Accelerator Console")
 
     # Hosting mode. "CloudFront" (default) fronts the web app bucket with a
-    # CloudFront distribution. "ALB" skips CloudFront and serves the bucket via
-    # an internal Application Load Balancer + S3 interface VPC endpoint (for
-    # private-network / GovCloud deployments). Mirrors upstream WebUIHosting.
+    # CloudFront distribution. "APIGateway" skips CloudFront and serves the
+    # bucket through the REST API (VPC-capable / private posture), mirroring
+    # upstream WebUIHosting.
+    #
+    # NOTE: "APIGateway" is accepted by this variable's validation as of
+    # v0.6.4, but the API Gateway hosting resources are wired in the FOLLOWING
+    # commit. Until then, selecting "APIGateway" creates the web app bucket
+    # without any fronting layer.
+    #
+    # "ALB" was REMOVED in v0.6.4 (upstream deleted ALB hosting in v0.6.0).
+    # See docs/migration-v0.5.16-to-v0.6.4.md.
     hosting = optional(string, "CloudFront")
 
-    # Public URL fronting the ALB (custom domain). Drives input/output bucket
+    # Public URL fronting the Web UI (custom domain). Drives input/output bucket
     # CORS and Cognito callback/logout URLs. Mirrors upstream CustomDomainUrl.
-    # Only used when hosting = "ALB"; when null, CORS falls back to "*".
+    # Only used for non-CloudFront hosting; when null, CORS falls back to "*".
     custom_domain_url = optional(string, null)
-
-    # ALB hosting settings (required when hosting = "ALB").
-    alb = optional(object({
-      vpc_id                   = optional(string, null)
-      subnet_ids               = optional(list(string), [])
-      certificate_arn          = optional(string, null)
-      scheme                   = optional(string, "internal")
-      allowed_cidrs            = optional(list(string), [])
-      lambda_security_group_id = optional(string, null)
-      # Explicit opt-in for the Lambda <-> S3 VPCE 443 rules. Set true (with
-      # lambda_security_group_id) to create them; kept separate from the id so
-      # `count` in the module stays plan-known even for a same-apply Lambda SG.
-      manage_lambda_sg_rules = optional(bool, false)
-    }), {})
 
     # Presigned-URL-via-VPCE settings (mirrors upstream
     # S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride). When
     # enabled, presigner Lambdas generate S3 URLs targeting the VPC interface
     # endpoint. Non-breaking default: off (presigned URLs use global S3).
-    # Because the ALB-created VPCE cannot feed back into the API module without
-    # a dependency cycle, supply the DNS name/id here (or from the web-ui-alb
-    # module outputs at the example level).
+    # The S3 interface endpoint is owned by the caller's VPC wiring, so supply
+    # its DNS name/id here (e.g. from the vpc-endpoints module outputs at the
+    # example level) rather than having this module derive it.
     s3_presigned_url_via_vpc_endpoint = optional(bool, false)
     s3_vpc_endpoint_dns_name_override = optional(string, null)
     s3_vpc_endpoint_id_override       = optional(string, null)
@@ -410,6 +404,13 @@ variable "web_ui" {
     logging_bucket_arn         = null
     enable_signup              = ""
     display_name               = null
+  }
+
+  # Reject the removed "ALB" hosting mode with an actionable message instead of
+  # letting it silently fall through to a bucket with no fronting layer.
+  validation {
+    condition     = contains(["CloudFront", "APIGateway"], var.web_ui.hosting)
+    error_message = "web_ui.hosting = \"ALB\" was removed in v0.6.4 (upstream deleted ALB hosting). Use \"APIGateway\" for a VPC-capable private posture, or \"CloudFront\". See docs/migration-v0.5.16-to-v0.6.4.md."
   }
 }
 

@@ -21,7 +21,7 @@ output "distribution" {
 
 # Additional outputs for integration and debugging
 output "application_url" {
-  description = "URL of the web application (CloudFront domain in CloudFront mode; the supplied web_ui_url in ALB mode)"
+  description = "URL of the web application (CloudFront domain in CloudFront mode; the supplied web_ui_url otherwise)"
   value       = local.app_url
 }
 
