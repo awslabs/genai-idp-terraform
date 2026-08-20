@@ -362,6 +362,30 @@ variable "base_layer_arn" {
   default     = null
 }
 
+variable "agents_layer_arn" {
+  description = "ARN of the IDP agents (strands) Lambda layer. Required by the chat token-streaming Function URL processor, which imports both processor modules (base + agents). Wired from module.idp_agents_layer.layer_arn at the root."
+  type        = string
+  default     = null
+}
+
+variable "lambda_web_adapter_layer_arn" {
+  description = "ARN of the AWS Lambda Web Adapter (LWA) layer attached to the chat token-streaming processor. When empty (default), the module constructs the upstream default (arn:<partition>:lambda:<region>:753240598075:layer:LambdaAdapterLayerX86:25)."
+  type        = string
+  default     = ""
+}
+
+variable "users_table_name" {
+  description = "Name of the RBAC Users DynamoDB table (USERS_TABLE_NAME for the chat token-streaming processor). Threaded from module.rbac[0].users_table_name at the root when RBAC is enabled, else empty."
+  type        = string
+  default     = ""
+}
+
+variable "settings_parameter_name" {
+  description = "Deterministic SSM parameter name of the web-ui settings document (SETTINGS_PARAMETER_NAME for the chat token-streaming processor). Passed as a plain string from the root (never a module reference) to avoid a dependency cycle with the web-ui module. Empty when the web UI is disabled."
+  type        = string
+  default     = ""
+}
+
 variable "enable_encryption" {
   description = "Enable encryption for resources"
   type        = bool

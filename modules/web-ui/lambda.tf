@@ -178,7 +178,8 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       user_pool_id               = var.user_identity.user_pool.user_pool_id
       user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
       identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
-      appsync_url                = var.api_url
+      api_base_url               = var.api_url
+      stream_url                 = var.stream_url != null ? var.stream_url : ""
       cloudfront_domain          = local.cloudfront_domain_name
       knowledge_base_enabled     = var.knowledge_base_enabled
       discovery_bucket_name      = var.discovery_bucket_name
@@ -196,7 +197,8 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       user_pool_id               = var.user_identity.user_pool.user_pool_id
       user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
       identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
-      appsync_url                = var.api_url
+      api_base_url               = var.api_url
+      stream_url                 = var.stream_url != null ? var.stream_url : ""
       cloudfront_domain          = local.cloudfront_domain_name
       knowledge_base_enabled     = var.knowledge_base_enabled
       discovery_bucket_name      = var.discovery_bucket_name

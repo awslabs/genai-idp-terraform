@@ -634,8 +634,13 @@ resource "aws_codebuild_project" "ui_build" {
     }
 
     environment_variable {
-      name  = "VITE_APPSYNC_GRAPHQL_URL"
+      name  = "VITE_API_BASE_URL"
       value = var.api_url
+    }
+
+    environment_variable {
+      name  = "VITE_STREAM_URL"
+      value = var.stream_url != null ? var.stream_url : ""
     }
 
     environment_variable {

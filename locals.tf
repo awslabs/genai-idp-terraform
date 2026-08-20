@@ -62,6 +62,15 @@ locals {
 
   # Only enable authenticated user permissions when user identity exists and API/UI is enabled
   enable_authenticated_user_permissions = (local.api_enabled || var.web_ui.enabled) && (var.user_identity != null || length(module.user_identity) > 0)
+
+  # Chat token-streaming endpoint (v0.6.4) enablement, derived from STATIC config
+  # (never from the module's computed arn) so it is safe as a for_each gate.
+  # Mirrors the API module's local.chat_stream_enabled gate.
+  chat_stream_enabled = try(var.api.enable_agent_companion_chat, false) || try(var.api.chat_with_document.enabled, false)
+
+  # Grant the authenticated Cognito role invoke on the stream Function URL only
+  # when the API is enabled, the role exists, and chat streaming is on.
+  enable_chat_stream_invoke_grant = local.api_enabled && local.chat_stream_enabled && local.authenticated_role_arn != null
 }
 
 #

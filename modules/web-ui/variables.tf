@@ -130,8 +130,14 @@ variable "encryption_key_arn" {
 # API Integration
 #
 variable "api_url" {
-  description = "The GraphQL API URL for the processing environment"
+  description = "Base URL of the REST API transport for the processing environment (VITE_API_BASE_URL). The SPA POSTs to <api_url>/op/<field>. Formerly the AppSync GraphQL endpoint (VITE_APPSYNC_GRAPHQL_URL) before the v0.6.4 REST migration; the input name is retained."
   type        = string
+}
+
+variable "stream_url" {
+  description = "Function URL of the chat token-streaming endpoint (VITE_STREAM_URL). Null (default) when chat streaming is disabled; rendered as an empty string in the UI config."
+  type        = string
+  default     = null
 }
 
 #

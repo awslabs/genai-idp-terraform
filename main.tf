@@ -451,7 +451,23 @@ module "processing_environment_api" {
   # Lambda layers
   base_layer_arn           = module.processing_environment.base_layer_arn
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
+  agents_layer_arn         = module.idp_agents_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+
+  # Chat token-streaming endpoint (v0.6.4): AWS Lambda Web Adapter layer for the
+  # streaming Function URL. Empty => API module constructs the upstream default.
+  lambda_web_adapter_layer_arn = var.lambda_web_adapter_layer_arn
+
+  # RBAC Users table for the streaming processor's scope enforcement (empty when
+  # RBAC is off).
+  users_table_name = local.feature_enable.rbac ? module.rbac[0].users_table_name : ""
+
+  # Deterministic web-ui settings SSM parameter name for the streaming
+  # processor. Passed as a plain string (NOT module.web_ui) to avoid a
+  # dependency cycle: the web-ui module names the parameter
+  # "/${name_prefix}/web-ui-settings" where its name_prefix is
+  # "${local.name_prefix}-web-ui". Empty when the web UI is disabled.
+  settings_parameter_name = var.web_ui.enabled ? "/${local.name_prefix}-web-ui/web-ui-settings" : ""
 
   # Build strategy (see var.build in variables.tf)
   lambda_local        = var.build.lambda_local
@@ -714,6 +730,10 @@ module "web_ui" {
   # API configuration (if enabled)
   api_url = local.api_enabled ? module.processing_environment_api[0].api_base_url : null
 
+  # Chat token-streaming Function URL (VITE_STREAM_URL). Null when the API (or
+  # chat streaming) is disabled.
+  stream_url = local.api_enabled ? module.processing_environment_api[0].chat_stream_function_url : null
+
   # S3 bucket ARNs
   input_bucket_arn  = var.input_bucket_arn
   output_bucket_arn = var.output_bucket_arn
@@ -855,6 +875,34 @@ resource "aws_iam_role_policy" "authenticated_user_permissions" {
       local.human_review_a2i_statement,
       local.processing_environment_api_statements
     )
+  })
+}
+
+#
+# Chat token-streaming Function URL invoke grant (v0.6.4)
+# Mirrors upstream CognitoAuthorizedRole ChatStreamInvoke: grants the
+# authenticated Cognito Identity Pool role lambda:InvokeFunction +
+# lambda:InvokeFunctionUrl on the stream function ARN. Attached as a separate
+# inline policy on the same authenticated role (kept out of the big concat above
+# because the stream function ARN is only known when chat streaming is enabled).
+#
+resource "aws_iam_role_policy" "chat_stream_invoke" {
+  for_each = local.enable_chat_stream_invoke_grant ? toset(["enabled"]) : toset([])
+  name     = "${local.name_prefix}-chat-stream-invoke"
+  role     = basename(local.authenticated_role_arn)
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction",
+          "lambda:InvokeFunctionUrl"
+        ]
+        Resource = module.processing_environment_api[0].chat_stream_function_arn
+      }
+    ]
   })
 }
 

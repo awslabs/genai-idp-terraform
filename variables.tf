@@ -58,6 +58,12 @@ variable "force_rebuild_layers" {
   default     = false
 }
 
+variable "lambda_web_adapter_layer_arn" {
+  description = "ARN of the AWS Lambda Web Adapter (LWA) layer attached to the chat token-streaming processor Function URL. When empty (default), the API module constructs the upstream default (arn:<partition>:lambda:<region>:753240598075:layer:LambdaAdapterLayerX86:25). Override to pin a specific LWA layer version/region/architecture."
+  type        = string
+  default     = ""
+}
+
 #
 # Required Resource ARNs
 #

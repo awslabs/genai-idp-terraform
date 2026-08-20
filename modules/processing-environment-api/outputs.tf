@@ -72,6 +72,19 @@ output "edit_sections_enabled" {
   value       = local.edit_sections_enabled
 }
 
+# Chat token-streaming endpoint (v0.6.4). Null when neither chat sub-feature is
+# enabled. The Function URL is threaded to the web UI as VITE_STREAM_URL; the
+# ARN is consumed at the root to grant the authenticated Cognito role invoke.
+output "chat_stream_function_url" {
+  description = "Function URL of the chat token-streaming processor (RESPONSE_STREAM). Null when chat streaming is disabled."
+  value       = local.chat_stream_enabled ? aws_lambda_function_url.chat_stream[0].function_url : null
+}
+
+output "chat_stream_function_arn" {
+  description = "ARN of the chat token-streaming processor Lambda. Null when chat streaming is disabled."
+  value       = local.chat_stream_enabled ? aws_lambda_function.chat_stream_processor[0].arn : null
+}
+
 output "discovery_bucket_name" {
   description = "Name of the discovery S3 bucket (if discovery is enabled)"
   value       = var.discovery.enabled ? module.discovery[0].discovery_bucket_name : null

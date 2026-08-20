@@ -18,7 +18,8 @@ resource "null_resource" "local_ui_build" {
       user_pool_id               = var.user_identity.user_pool.user_pool_id
       user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
       identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
-      appsync_url                = var.api_url
+      api_base_url               = var.api_url
+      stream_url                 = var.stream_url != null ? var.stream_url : ""
       cloudfront_domain          = local.app_url
       knowledge_base_enabled     = var.knowledge_base_enabled
       discovery_bucket_name      = var.discovery_bucket_name
@@ -40,7 +41,8 @@ resource "null_resource" "local_ui_build" {
       VITE_USER_POOL_ID          = var.user_identity.user_pool.user_pool_id
       VITE_USER_POOL_CLIENT_ID   = var.user_identity.user_pool_client.user_pool_client_id
       VITE_IDENTITY_POOL_ID      = var.user_identity.identity_pool.identity_pool_id
-      VITE_APPSYNC_GRAPHQL_URL   = var.api_url
+      VITE_API_BASE_URL          = var.api_url
+      VITE_STREAM_URL            = var.stream_url != null ? var.stream_url : ""
       VITE_AWS_REGION            = data.aws_region.current.id
       VITE_SHOULD_HIDE_SIGN_UP   = var.should_allow_sign_up_email_domain ? "false" : "true"
       VITE_CLOUDFRONT_DOMAIN     = local.app_url != null ? "${local.app_url}/" : ""
