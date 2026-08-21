@@ -27,7 +27,8 @@ terraform version   # must report >= 1.7.0
 | ALB Web UI hosting removed (`web_ui.hosting = "ALB"`) | documented below |
 | API Gateway Web UI hosting (`web_ui.hosting = "APIGateway"`) | documented below |
 | AppSync GraphQL transport replaced by API Gateway REST | TODO |
-| `api.visibility` renamed to `api.api_gateway_visibility` | TODO |
+| `api.visibility` renamed to `api.api_gateway_visibility` | documented below |
+| `EnableHeadless` renamed to `EnableJobsApi` upstream | no action — see below |
 | Configuration / feature-parity changes | TODO |
 
 The TODO rows are filled in by the remaining sub-steps of this migration; they
@@ -306,3 +307,46 @@ terraform show tfplan-apigw-hosting | grep -E 'aws_s3_bucket\.'
 Deployments that stay on CloudFront are unaffected: with no
 `bucket_name_override` the module keeps its original internal suffix, so there is
 no bucket churn.
+
+---
+
+## `EnableHeadless` renamed to `EnableJobsApi` — no action required
+
+Upstream renamed the `EnableHeadless` stack parameter to `EnableJobsApi` in IDP
+v0.6.2, because the old name implied it *removed* the Web UI when in fact it
+**adds** a Jobs REST API alongside it (a Private API Gateway with `/jobs`
+endpoints, a machine-to-machine OAuth client, and supporting Lambdas).
+
+**This rename does not affect the Terraform wrapper**, because the wrapper has
+never implemented that Jobs API. It provisions none of the upstream Jobs-API
+resources:
+
+- the `api_handler`, `job_tracker`, and `batch_pre_processor` Lambdas
+- the Private API Gateway `/jobs` routes
+- the Cognito resource server / `client_credentials` OAuth client for
+  machine-to-machine access
+- the optional SSM-reachable bastion host
+
+There is therefore no `EnableHeadless` or `EnableJobsApi` variable to migrate.
+
+### Do not confuse this with the wrapper's "headless" posture
+
+The wrapper has a *different* concept that happens to share the word. Setting:
+
+```hcl
+enable_api    = false
+web_ui.enabled = false
+```
+
+runs the processors with DynamoDB-only tracking and no UI and no API at all (see
+`examples/unified-headless-demo`). That is the opposite of upstream's
+`EnableJobsApi`, which is additive and coexists with the UI. Nothing about that
+posture changes in this release.
+
+### If you need the Jobs API
+
+It is not available in the wrapper today. Submitting documents programmatically
+is still supported by uploading directly to the input bucket, which is how the
+wrapper's headless example operates. If a first-class Jobs API matters for your
+integration, raise it as a feature request — it is a new subsystem rather than a
+migration step, and is deliberately out of scope for this upgrade.

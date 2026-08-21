@@ -47,6 +47,15 @@ the migration steps behind every breaking change below.
 - Private networking requires the `execute-api` interface VPC endpoint instead of
   `appsync-api`; `modules/vpc-endpoints` renames its `appsync_api_endpoint_id`
   output to `execute_api_endpoint_id`.
+
+### Not applicable
+
+- Upstream's `EnableHeadless` → `EnableJobsApi` rename (v0.6.2) needs no wrapper
+  change: the wrapper does not implement the upstream Jobs API (no `/jobs`
+  Private API Gateway, `api_handler`/`job_tracker`/`batch_pre_processor`
+  Lambdas, machine-to-machine OAuth client, or bastion). The wrapper's
+  `enable_api = false` "headless" posture is an unrelated concept and is
+  unchanged. See the migration guide.
 - Backend workers write status to DynamoDB directly (`APPSYNC_API_URL=""`),
   matching upstream, and the UI polls for updates.
 

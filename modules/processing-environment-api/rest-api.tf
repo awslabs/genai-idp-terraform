@@ -118,6 +118,13 @@ resource "aws_api_gateway_integration" "op_post" {
 
 # Unauthenticated CORS preflight. MOCK integration answering 200 with CORS +
 # security headers. CONVERT_TO_TEXT is required because BinaryMediaTypes is */*.
+# A CORS preflight MUST be unauthenticated: browsers send OPTIONS without the
+# Authorization header before each cross-origin POST, so requiring auth here
+# would break every request. The MOCK integration returns only static
+# CORS/security headers and reaches no backend or data; the POST method on the
+# same resource is Cognito-authorized. Mirrors upstream HttpApiOptionsMethod
+# (AuthorizationType: NONE).
+#tfsec:ignore:aws-api-gateway-no-public-access
 resource "aws_api_gateway_method" "op_options" {
   rest_api_id   = aws_api_gateway_rest_api.http_api.id
   resource_id   = aws_api_gateway_resource.op_field.id
@@ -270,6 +277,66 @@ resource "aws_api_gateway_deployment" "http_api" {
   ]
 }
 
+# =============================================================================
+# Stage access / execution logging (mirrors upstream EnableApiAccessLogs)
+# =============================================================================
+# Upstream enables these only at LogLevel INFO/DEBUG, because execution logging
+# at INFO echoes full request/response payloads (customer document data) into
+# CloudWatch. We follow that exactly:
+#   * ACCESS logs: request METADATA only, never bodies. These capture the
+#     failures that never reach the dispatcher — authorizer 401/403s, WAF
+#     blocks, CORS/gateway responses.
+#   * EXECUTION logs: pinned to ERROR with data tracing OFF for the same
+#     no-payloads reason (deliberately not INFO).
+# At WARN/ERROR (the recommended production setting) no logging is configured,
+# matching prior behaviour.
+locals {
+  api_access_logs_enabled = contains(["INFO", "DEBUG"], upper(var.log_level))
+}
+
+resource "aws_cloudwatch_log_group" "api_access_logs" {
+  count             = local.api_access_logs_enabled ? 1 : 0
+  name              = "/aws/apigateway/${local.api_name}-access"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = var.tags
+}
+
+# A REST API stage REJECTS access logging unless the ACCOUNT-level API Gateway
+# CloudWatch role is set ("CloudWatch Logs role ARN must be set in account
+# settings to enable logging"). This is a per-account, per-region SINGLETON:
+# multiple stacks that declare it overwrite each other (last writer wins), which
+# is harmless because they all grant the same managed push policy. Mirrors
+# upstream's AWS::ApiGateway::Account with the same caveat.
+resource "aws_iam_role" "api_gateway_cloudwatch" {
+  count = local.api_access_logs_enabled ? 1 : 0
+  name  = "${local.api_name}-apigw-cloudwatch"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "apigateway.${data.aws_partition.current.dns_suffix}" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "api_gateway_cloudwatch" {
+  count      = local.api_access_logs_enabled ? 1 : 0
+  role       = aws_iam_role.api_gateway_cloudwatch[0].name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+}
+
+resource "aws_api_gateway_account" "this" {
+  count               = local.api_access_logs_enabled ? 1 : 0
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch[0].arn
+
+  depends_on = [aws_iam_role_policy_attachment.api_gateway_cloudwatch]
+}
+
 resource "aws_api_gateway_stage" "api" {
   rest_api_id           = aws_api_gateway_rest_api.http_api.id
   deployment_id         = aws_api_gateway_deployment.http_api.id
@@ -277,7 +344,51 @@ resource "aws_api_gateway_stage" "api" {
   xray_tracing_enabled  = var.xray_enabled
   cache_cluster_enabled = false
 
+  # Request metadata only — never bodies. The error/authorizer fields are what
+  # diagnose requests that never reach the dispatcher Lambda.
+  dynamic "access_log_settings" {
+    for_each = local.api_access_logs_enabled ? [1] : []
+    content {
+      destination_arn = aws_cloudwatch_log_group.api_access_logs[0].arn
+      format = jsonencode({
+        requestId         = "$context.requestId"
+        ip                = "$context.identity.sourceIp"
+        requestTime       = "$context.requestTime"
+        httpMethod        = "$context.httpMethod"
+        resourcePath      = "$context.resourcePath"
+        status            = "$context.status"
+        responseLatency   = "$context.responseLatency"
+        integrationStatus = "$context.integrationStatus"
+        integrationError  = "$context.integration.error"
+        errorMessage      = "$context.error.message"
+        errorResponseType = "$context.error.responseType"
+        authorizerError   = "$context.authorizer.error"
+        principalId       = "$context.authorizer.principalId"
+        wafStatus         = "$context.wafResponseCode"
+        userAgent         = "$context.identity.userAgent"
+      })
+    }
+  }
+
   tags = var.tags
+
+  depends_on = [aws_api_gateway_account.this]
+}
+
+# Execution logging at ERROR only, data tracing off (no payloads). Captures the
+# gateway-side failures access logs cannot diagnose (integration mapping errors,
+# MOCK/CORS template failures).
+resource "aws_api_gateway_method_settings" "api" {
+  count       = local.api_access_logs_enabled ? 1 : 0
+  rest_api_id = aws_api_gateway_rest_api.http_api.id
+  stage_name  = aws_api_gateway_stage.api.stage_name
+  method_path = "*/*"
+
+  settings {
+    logging_level      = "ERROR"
+    data_trace_enabled = false
+    metrics_enabled    = true
+  }
 }
 
 # API Gateway invokes the dispatcher on POST /op/*.
