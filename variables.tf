@@ -365,15 +365,28 @@ variable "web_ui" {
     display_name               = optional(string, null)
     console_title              = optional(string, "IDP Accelerator Console")
 
-    # Hosting mode. "CloudFront" (default) fronts the web app bucket with a
-    # CloudFront distribution. "APIGateway" skips CloudFront and serves the
-    # bucket through the REST API (VPC-capable / private posture), mirroring
-    # upstream WebUIHosting.
+    # Hosting mode, mirroring upstream WebUIHosting.
     #
-    # NOTE: "APIGateway" is accepted by this variable's validation as of
-    # v0.6.4, but the API Gateway hosting resources are wired in the FOLLOWING
-    # commit. Until then, selecting "APIGateway" creates the web app bucket
-    # without any fronting layer.
+    # "CloudFront" (default) fronts the web app bucket with a CloudFront
+    # distribution.
+    #
+    # "APIGateway" skips CloudFront entirely and serves the SPA as an S3 proxy on
+    # the SAME API Gateway REST API that carries the /op transport: GET / returns
+    # index.html and GET /{proxy+} returns the hashed assets. Consequences:
+    #   * The Web UI inherits the API's posture — api.api_gateway_visibility
+    #     (PRIVATE => VPC-only via the execute-api interface endpoint) and
+    #     api.waf_allowed_ipv4_ranges (WAFv2 on the stage) apply to the SPA too.
+    #   * No CloudFront distribution and no ACM certificate are needed, so this
+    #     is the mode for fully isolated VPC / GovCloud deployments.
+    #   * The app is served under the stage prefix, i.e. at the API base URL
+    #     (".../api"), and the UI is built with Vite base = "/api/" so asset URLs
+    #     resolve through the {proxy+} route.
+    #   * Requires api.enabled = true (the REST API is what serves the SPA); see
+    #     check "web_ui_apigateway_hosting_requires_api".
+    #   * Switching an existing CloudFront deployment to this mode REPLACES the
+    #     web app bucket (its name becomes root-derived). Only built static
+    #     assets live there and the next build repopulates them — see
+    #     docs/migration-v0.5.16-to-v0.6.4.md.
     #
     # "ALB" was REMOVED in v0.6.4 (upstream deleted ALB hosting in v0.6.0).
     # See docs/migration-v0.5.16-to-v0.6.4.md.
@@ -381,7 +394,8 @@ variable "web_ui" {
 
     # Public URL fronting the Web UI (custom domain). Drives input/output bucket
     # CORS and Cognito callback/logout URLs. Mirrors upstream CustomDomainUrl.
-    # Only used for non-CloudFront hosting; when null, CORS falls back to "*".
+    # Only used for non-CloudFront hosting; ignored in APIGateway mode, where the
+    # app URL is the REST API base URL. When null, CORS falls back to "*".
     custom_domain_url = optional(string, null)
 
     # Presigned-URL-via-VPCE settings (mirrors upstream

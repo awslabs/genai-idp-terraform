@@ -232,6 +232,26 @@ resource "aws_api_gateway_deployment" "http_api" {
       aws_api_gateway_gateway_response.default_4xx.id,
       aws_api_gateway_gateway_response.default_5xx.id,
       join(",", [for c in aws_api_gateway_authorizer.cognito : c.id]),
+
+      # Web UI S3-proxy routes (web-ui-hosting.tf, serve_web_ui = true). These
+      # MUST be part of the trigger: a deployment is an immutable snapshot of the
+      # API, so adding/changing methods without re-cutting it leaves the stage
+      # serving the previous snapshot and the SPA routes never appear (this is
+      # the Terraform equivalent of upstream bumping the
+      # AWS::ApiGateway::Deployment logical id — see the NB in
+      # sources/nested/api-resolvers/template.yaml). Count-safe splats keep the
+      # expression valid when the routes are disabled.
+      join(",", [for r in aws_api_gateway_resource.web_ui_proxy : r.id]),
+      join(",", [for m in aws_api_gateway_method.web_ui_root : m.id]),
+      join(",", [for i in aws_api_gateway_integration.web_ui_root : i.id]),
+      join(",", [for r in aws_api_gateway_integration_response.web_ui_root_200 : r.id]),
+      join(",", [for r in aws_api_gateway_integration_response.web_ui_root_404 : r.id]),
+      join(",", [for r in aws_api_gateway_integration_response.web_ui_root_500 : r.id]),
+      join(",", [for m in aws_api_gateway_method.web_ui_proxy : m.id]),
+      join(",", [for i in aws_api_gateway_integration.web_ui_proxy : i.id]),
+      join(",", [for r in aws_api_gateway_integration_response.web_ui_proxy_200 : r.id]),
+      join(",", [for r in aws_api_gateway_integration_response.web_ui_proxy_404 : r.id]),
+      join(",", [for r in aws_api_gateway_integration_response.web_ui_proxy_500 : r.id]),
     ]))
   }
 
@@ -243,6 +263,10 @@ resource "aws_api_gateway_deployment" "http_api" {
     aws_api_gateway_integration.op_post,
     aws_api_gateway_integration.op_options,
     aws_api_gateway_integration_response.op_options,
+    aws_api_gateway_integration.web_ui_root,
+    aws_api_gateway_integration_response.web_ui_root_200,
+    aws_api_gateway_integration.web_ui_proxy,
+    aws_api_gateway_integration_response.web_ui_proxy_200,
   ]
 }
 

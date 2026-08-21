@@ -164,6 +164,20 @@ locals {
     ? "https://bucket.${var.web_ui.s3_vpc_endpoint_dns_name_override}"
     : null
   )
+
+  # Web-app bucket name for APIGateway hosting, derived at the ROOT from a
+  # root-owned random suffix (random_string.web_ui_bucket_suffix in main.tf).
+  #
+  # The S3-proxy integration in the API module needs the bucket NAME, but the
+  # web-ui module already consumes the API module's outputs (api_url,
+  # stream_url). Reading the name off module.web_ui would close the loop into a
+  # module-to-module cycle. Deriving it here makes the graph
+  # root -> random_string -> {web_ui, api} with no edge between the two modules.
+  #
+  # Only used in APIGateway mode. In CloudFront mode the override passed to the
+  # web-ui module is null and the module keeps naming the bucket from its OWN
+  # internal random_string.suffix, so existing deployments see no replacement.
+  web_ui_apigw_bucket_name = "${var.prefix}-webapp-${random_string.web_ui_bucket_suffix.result}"
 }
 
 #

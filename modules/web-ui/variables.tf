@@ -74,13 +74,37 @@ variable "web_app_bucket_name" {
   default     = null
 }
 
+variable "bucket_name_override" {
+  description = <<-EOT
+    Explicit name for the web app bucket, overriding the module-internal
+    "<prefix>-webapp-<random suffix>" naming. Used by APIGateway
+    hosting, where the API Gateway S3-proxy integration must know the bucket
+    name without depending on this module (which would create a module cycle),
+    so the caller derives the name and passes it here. Null (default) keeps the
+    historical internal naming — CloudFront deployments must leave this null so
+    the existing bucket is not replaced.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "apigw_proxy_role_arn" {
+  description = <<-EOT
+    ARN of the IAM role API Gateway assumes to read the web app bucket when the
+    REST API serves the SPA (hosting = "APIGateway"). Granted s3:GetObject on the
+    bucket objects via a bucket policy. Null (default) creates no policy.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "hosting" {
   description = <<-EOT
     Web UI hosting mode. "CloudFront" (default) creates a CloudFront
     distribution in front of the web app bucket. "APIGateway" skips CloudFront
-    and expects the REST API to serve the bucket (VPC-capable private posture);
-    the bucket is still created, but no fronting layer is created here — the
-    API Gateway wiring lands in a follow-up commit. Mirrors upstream
+    and serves the bucket through the REST API as an S3 proxy (VPC-capable
+    private posture): the SPA is built with Vite base "/api/" and the bucket is
+    read by the API Gateway proxy role (apigw_proxy_role_arn). Mirrors upstream
     WebUIHosting. "ALB" was removed in v0.6.4 (upstream deleted ALB hosting).
   EOT
   type        = string

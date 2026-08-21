@@ -25,7 +25,7 @@ terraform version   # must report >= 1.7.0
 | Change | Status |
 | --- | --- |
 | ALB Web UI hosting removed (`web_ui.hosting = "ALB"`) | documented below |
-| API Gateway Web UI hosting (`web_ui.hosting = "APIGateway"`) | TODO |
+| API Gateway Web UI hosting (`web_ui.hosting = "APIGateway"`) | documented below |
 | AppSync GraphQL transport replaced by API Gateway REST | TODO |
 | `api.visibility` renamed to `api.api_gateway_visibility` | TODO |
 | Configuration / feature-parity changes | TODO |
@@ -215,3 +215,94 @@ reverting state. To revert:
 3. `state-backup-pre-v0.6.4.json` is a reference for the previous resource ids;
    do not push it back with `terraform state push` unless the real resources
    still exist with those exact ids.
+
+---
+
+## API Gateway Web UI hosting
+
+### What it is
+
+`web_ui.hosting = "APIGateway"` is the replacement for the removed ALB mode. The
+React SPA is served as an **S3 proxy on the same API Gateway REST API** that
+carries the `/op/{field}` data transport:
+
+```
+GET /            -> s3://<web-app-bucket>/index.html   (SPA shell)
+GET /{proxy+}     -> s3://<web-app-bucket>/{proxy}      (assets)
+POST /op/{field}  -> dispatcher Lambda                  (data transport)
+```
+
+Because the UI and the API share one REST API and one stage, the UI
+**inherits the API's network posture for free**:
+
+- `api.api_gateway_visibility = "PRIVATE"` makes the UI reachable only through
+  the `execute-api` interface VPC endpoint — a VPC-only Web UI with no
+  CloudFront, no ALB, no ACM certificate, and no S3 VPC endpoint.
+- `api.waf_allowed_ipv4_ranges` attaches the same WAFv2 WebACL to the stage that
+  protects the API, so the IP allow-list covers the UI too.
+
+The SPA is reached at the REST API base URL (the `api_base_url` output, which
+ends in `/api`). CloudFront hosting remains the default and is unchanged.
+
+### Switching to it
+
+```hcl
+web_ui = {
+  enabled = true
+  hosting = "APIGateway"   # was "CloudFront" or the removed "ALB"
+}
+
+api = {
+  enabled = true           # REQUIRED — the SPA is served BY the REST API
+
+  # Optional: VPC-only UI + API.
+  # api_gateway_visibility      = "PRIVATE"
+  # api_gateway_vpc_endpoint_id = "vpce-0123456789abcdef0"
+}
+```
+
+`web_ui.hosting = "APIGateway"` with `api.enabled = false` is rejected by the
+`web_ui_apigateway_hosting_requires_api` check — there would be no REST API to
+serve the SPA from.
+
+### The UI is built with a different base path
+
+API Gateway serves the SPA under the stage prefix `/api`, so the UI is built with
+Vite `base = /api/` in this mode (`VITE_UI_BASE_PATH`, mirroring upstream). Asset
+URLs are emitted as `/api/assets/...` and resolve through the `{proxy+}` route.
+Flipping `web_ui.hosting` changes that value, which changes the build hash and
+triggers a UI rebuild automatically — no manual step.
+
+Deep links work without a rewrite-to-`index.html` fallback because the SPA uses
+`HashRouter`: client-side routes live in the URL fragment (`/api/#/...`), so they
+never reach the server as distinct paths. A genuinely missing asset key correctly
+returns 404.
+
+### ⚠️ Switching from CloudFront replaces the web-app bucket
+
+In APIGateway mode the web-app bucket name is derived at the **root** module
+(`<prefix>-webapp-<root-generated-suffix>`) instead of from a suffix generated
+inside the `web-ui` module. The API module needs the bucket name up front to build
+the S3-proxy integration URIs, and taking it from the `web-ui` module output would
+create a dependency cycle (`web-ui` already depends on the API module for its
+endpoint URLs).
+
+Consequence: **moving an existing CloudFront deployment to APIGateway hosting
+plans a replacement of the web-app S3 bucket.**
+
+This is safe. The bucket holds only the compiled static UI assets, which the
+build step republishes on the same apply. Nothing user-authored lives there —
+documents, configuration, evaluation baselines, and reporting data are all in
+other buckets and are untouched.
+
+Review the plan before applying and confirm the only bucket being replaced is the
+web-app bucket:
+
+```bash
+terraform plan -out=tfplan-apigw-hosting
+terraform show tfplan-apigw-hosting | grep -E 'aws_s3_bucket\.' 
+```
+
+Deployments that stay on CloudFront are unaffected: with no
+`bucket_name_override` the module keeps its original internal suffix, so there is
+no bucket churn.

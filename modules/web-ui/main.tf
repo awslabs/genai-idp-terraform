@@ -53,11 +53,20 @@ locals {
   }
 
   # Hosting mode gates. CloudFront resources exist only when we create
-  # infrastructure AND hosting is CloudFront; for any other hosting mode the
-  # bucket is still created but fronted elsewhere (API Gateway hosting is wired
-  # in a follow-up commit).
+  # infrastructure AND hosting is CloudFront; in APIGateway mode the bucket is
+  # created but fronted by the REST API's S3-proxy routes instead.
   is_cloudfront     = var.hosting == "CloudFront"
   create_cloudfront = var.create_infrastructure && local.is_cloudfront
+
+  # Bucket policy for the API Gateway S3 proxy. Mutually exclusive with the
+  # CloudFront OAC policy by hosting mode (a bucket has exactly one policy).
+  create_apigw_bucket_policy = var.create_infrastructure && var.hosting == "APIGateway" && var.apigw_proxy_role_arn != null
+
+  # Vite base path (VITE_UI_BASE_PATH). CloudFront serves the SPA from the
+  # distribution root, so assets emit at /assets/...; API Gateway serves it under
+  # the stage prefix, so the build must emit /api/assets/... for those URLs to
+  # resolve through the {proxy+} route. Mirrors upstream VITE_UI_BASE_PATH.
+  ui_base_path = local.is_cloudfront ? "/" : "/api/"
 
   # Determine CloudFront distribution ID based on mode
   cloudfront_distribution_id = local.create_cloudfront ? aws_cloudfront_distribution.web_distribution[0].id : var.cloudfront_distribution_id
@@ -137,8 +146,12 @@ resource "aws_iam_role_policy" "settings_parameter_access" {
 # Web App S3 Bucket (created only if create_infrastructure is true)
 #checkov:skip=CKV_AWS_145:S3 bucket encryption is configured via separate aws_s3_bucket_server_side_encryption_configuration resource
 resource "aws_s3_bucket" "web_app_bucket" {
-  count         = var.create_infrastructure ? 1 : 0
-  bucket        = "${var.prefix}-webapp-${random_string.suffix.result}"
+  count = var.create_infrastructure ? 1 : 0
+  # bucket_name_override is only set for APIGateway hosting, where the API module
+  # needs the name up front (see var.bucket_name_override). When null — every
+  # CloudFront deployment — the name falls back to the module-internal suffix
+  # exactly as before, so no existing bucket is replaced.
+  bucket        = var.bucket_name_override != null ? var.bucket_name_override : "${var.prefix}-webapp-${random_string.suffix.result}"
   force_destroy = true
 
   tags = local.common_tags
@@ -253,6 +266,51 @@ resource "aws_s3_bucket_policy" "web_app_bucket_cloudfront" {
   depends_on = [
     aws_s3_bucket.web_app_bucket,
     aws_cloudfront_distribution.web_distribution
+  ]
+}
+
+# Grant the API Gateway S3-proxy role read access to the web app bucket
+# (APIGateway hosting mode only). The proxy role is created by the API module and
+# used as the integration credentials for GET / and GET /{proxy+}.
+#
+# This policy and the CloudFront OAC policy above are mutually exclusive: a
+# bucket has exactly one policy, and the two hosting modes never coexist.
+resource "aws_s3_bucket_policy" "web_app_bucket_apigateway" {
+  count  = local.create_apigw_bucket_policy ? 1 : 0
+  bucket = aws_s3_bucket.web_app_bucket[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowApiGatewayProxyRead"
+        Effect = "Allow"
+        Principal = {
+          AWS = var.apigw_proxy_role_arn
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.web_app_bucket[0].arn}/*"
+      },
+      {
+        Sid       = "DenyInsecureConnections"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.web_app_bucket[0].arn,
+          "${aws_s3_bucket.web_app_bucket[0].arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [
+    aws_s3_bucket.web_app_bucket
   ]
 }
 
@@ -657,6 +715,13 @@ resource "aws_codebuild_project" "ui_build" {
     environment_variable {
       name  = "VITE_CLOUDFRONT_DOMAIN"
       value = local.app_url != null ? "${local.app_url}/" : ""
+    }
+
+    # Vite base path: "/" under CloudFront, "/api/" when the REST API serves the
+    # SPA under its stage prefix. Mirrors upstream VITE_UI_BASE_PATH.
+    environment_variable {
+      name  = "VITE_UI_BASE_PATH"
+      value = local.ui_base_path
     }
   }
 

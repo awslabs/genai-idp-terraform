@@ -6,6 +6,52 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [Unreleased] — 0.6.4-tf.0 (in progress)
+
+Upgrade to upstream IDP v0.6.4. See
+[docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md) for
+the migration steps behind every breaking change below.
+
+### Breaking Changes
+
+- **AWS AppSync removed; the UI/API transport is now an API Gateway REST API.**
+  Upstream deleted AppSync in v0.6.0. Queries/mutations go through a single
+  dispatcher Lambda at `POST /op/{field}`, status updates are polled, and chat
+  tokens stream from a Lambda Function URL. The API module's `graphql_url`,
+  `realtime_url`, `api_key`, and `appsync_endpoint_for_dns` outputs are replaced
+  by `api_base_url`.
+- **ALB Web UI hosting removed** (`web_ui.hosting = "ALB"`), following upstream's
+  deletion of the `nested/alb-hosting/` stack. `modules/web-ui-alb`, the
+  `web_ui.alb` input, and the `web_ui_alb` output are gone. `removed-v0-6-4.tf`
+  ships `removed` blocks so a direct upgrade can still decommission the ALB.
+- **Root `required_version` raised to `>= 1.7.0`**, required by those `removed`
+  blocks. The effective floor was already 1.5 (existing `check` blocks).
+- **`api.visibility` renamed to `api.api_gateway_visibility`.** The old name
+  still works and takes precedence, with a deprecation `check`; it will be
+  removed in a future release.
+
+### Added
+
+- **`web_ui.hosting = "APIGateway"`** — serves the SPA as an S3 proxy on the same
+  REST API and stage as the data transport, so the UI inherits the API's PRIVATE
+  endpoint and WAF posture. Replaces ALB hosting for VPC-only deployments; needs
+  no CloudFront, ALB, ACM certificate, or S3 VPC endpoint.
+- **Chat token streaming** via a Lambda Web Adapter function behind a
+  `RESPONSE_STREAM` Function URL, replacing the AppSync
+  mutation-to-subscription fan-out. Surfaced to the UI as `VITE_STREAM_URL`.
+- `api.use_private_api`, `api.api_gateway_vpc_endpoint_id`, and
+  `api.waf_allowed_ipv4_ranges`, mirroring the upstream parameters.
+
+### Changed
+
+- Private networking requires the `execute-api` interface VPC endpoint instead of
+  `appsync-api`; `modules/vpc-endpoints` renames its `appsync_api_endpoint_id`
+  output to `execute_api_endpoint_id`.
+- Backend workers write status to DynamoDB directly (`APPSYNC_API_URL=""`),
+  matching upstream, and the UI polls for updates.
+
+---
+
 ## [0.5.16-tf.0]
 
 > This release bundles two tracks: the **local-build** work (`var.build`,

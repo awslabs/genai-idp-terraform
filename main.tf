@@ -27,6 +27,17 @@ check "web_ui_requires_api" {
   }
 }
 
+# Validation: APIGateway Web UI hosting requires the API. In this mode the SPA is
+# served BY the REST API (S3-proxy GET routes on the same stage as /op), so
+# without the API there is nothing to serve the bucket from.
+#tfsec:ignore:*
+check "web_ui_apigateway_hosting_requires_api" {
+  assert {
+    condition     = !(var.web_ui.enabled && var.web_ui.hosting == "APIGateway") || local.api_enabled
+    error_message = "web_ui.hosting = \"APIGateway\" requires api.enabled = true: the SPA is served as an S3 proxy on the REST API stage, so the API must exist. Use \"CloudFront\" hosting or enable the API."
+  }
+}
+
 # Validation: Agent Analytics requires Reporting (it needs reporting.bucket_arn
 # and reporting.database_name; otherwise the API config is silently downgraded).
 # See https://github.com/awslabs/genai-idp-terraform/issues/84
@@ -109,6 +120,20 @@ data "aws_partition" "current" {}
 
 # Random suffix for unique resource names.
 resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# Random suffix for the web-app bucket name in APIGateway hosting mode.
+#
+# Owned by the root (not the web-ui module) so the API module can be told the
+# bucket name for its S3-proxy integration without depending on module.web_ui —
+# see local.web_ui_apigw_bucket_name in locals.tf for the cycle rationale. This
+# resource exists in every configuration but only feeds the bucket name when
+# web_ui.hosting = "APIGateway"; CloudFront deployments keep the web-ui module's
+# internal suffix and are unaffected.
+resource "random_string" "web_ui_bucket_suffix" {
   length  = 8
   special = false
   upper   = false
@@ -451,6 +476,14 @@ module "processing_environment_api" {
   api_gateway_vpc_endpoint_id = try(var.api.api_gateway_vpc_endpoint_id, "")
   waf_allowed_ipv4_ranges     = try(var.api.waf_allowed_ipv4_ranges, ["0.0.0.0/0"])
 
+  # Web UI hosting on the REST API (v0.6.4, web_ui.hosting = "APIGateway").
+  # Adds GET / and GET /{proxy+} S3-proxy routes on the same stage as the /op
+  # transport, so the SPA inherits the PRIVATE-endpoint + WAF posture above.
+  # The bucket name comes from a ROOT-derived local, never from module.web_ui —
+  # see local.web_ui_apigw_bucket_name for why.
+  serve_web_ui       = var.web_ui.enabled && var.web_ui.hosting == "APIGateway"
+  web_ui_bucket_name = var.web_ui.hosting == "APIGateway" ? local.web_ui_apigw_bucket_name : ""
+
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
 
@@ -772,10 +805,25 @@ module "web_ui" {
   should_allow_sign_up_email_domain = var.web_ui.enable_signup != ""
 
   # Hosting mode + public URL for CORS / UI build env. "CloudFront" creates the
-  # distribution; any other mode creates the bucket only and expects an external
-  # fronting layer (APIGateway hosting lands in a follow-up commit).
-  hosting    = var.web_ui.hosting
-  web_ui_url = var.web_ui.custom_domain_url
+  # distribution; "APIGateway" serves the bucket through the REST API stage, so
+  # the app URL is the REST base (".../api") rather than a custom domain.
+  hosting = var.web_ui.hosting
+  web_ui_url = (
+    var.web_ui.hosting == "APIGateway"
+    ? (local.api_enabled ? module.processing_environment_api[0].api_base_url : null)
+    : var.web_ui.custom_domain_url
+  )
+
+  # APIGateway hosting: the bucket name must be known to the API module for its
+  # S3-proxy integration, so it is derived at the root instead of from the
+  # module's own random suffix. Null in CloudFront mode, which keeps the module's
+  # historical naming (and therefore the existing bucket) untouched.
+  bucket_name_override = var.web_ui.hosting == "APIGateway" ? local.web_ui_apigw_bucket_name : null
+
+  # Bucket policy principal for the API Gateway S3 proxy. The web-ui module
+  # already depends on the API module (api_url / stream_url), so this adds no new
+  # module edge.
+  apigw_proxy_role_arn = local.api_enabled ? module.processing_environment_api[0].web_ui_proxy_role_arn : null
 
   # Encryption key
   encryption_key_arn = var.encryption_key_arn

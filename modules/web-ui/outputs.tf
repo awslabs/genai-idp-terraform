@@ -65,6 +65,7 @@ REACT_APP_USER_POOL_CLIENT_ID=${var.user_identity.user_pool_client.user_pool_cli
 REACT_APP_IDENTITY_POOL_ID=${var.user_identity.identity_pool.identity_pool_id}
 VITE_API_BASE_URL=${var.api_url}
 VITE_STREAM_URL=${var.stream_url != null ? var.stream_url : ""}
+VITE_UI_BASE_PATH=${local.ui_base_path}
 REACT_APP_AWS_REGION=${data.aws_region.current.id}
 REACT_APP_SETTINGS_PARAMETER=${aws_ssm_parameter.web_ui_settings.name}
 REACT_APP_SHOULD_HIDE_SIGN_UP=${var.should_allow_sign_up_email_domain ? "false" : "true"}

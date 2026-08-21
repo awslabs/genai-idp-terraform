@@ -39,6 +39,18 @@ variable "waf_allowed_ipv4_ranges" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "serve_web_ui" {
+  description = "When true, serve the React SPA from web_ui_bucket_name as an S3 proxy on this REST API (GET / -> index.html, GET /{proxy+} -> assets). Mirrors upstream ServeWebUI / WebUIHosting=APIGateway. The SPA then inherits the API's endpoint type (visibility) and stage WAF. Requires web_ui_bucket_name."
+  type        = bool
+  default     = false
+}
+
+variable "web_ui_bucket_name" {
+  description = "Name of the web-app S3 bucket holding the built SPA, proxied by the GET routes when serve_web_ui = true. Must be supplied as a plain name derived by the caller (not read from the web-ui module) to keep the module graph acyclic. Empty (default) disables the S3-proxy routes."
+  type        = string
+  default     = ""
+}
+
 variable "resolver_count_limit" {
   description = "A number indicating the maximum number of resolvers that should be accepted when handling queries"
   type        = number

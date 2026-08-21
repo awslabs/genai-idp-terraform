@@ -24,6 +24,14 @@ output "api_base_url" {
   value       = "https://${aws_api_gateway_rest_api.http_api.id}.execute-api.${data.aws_region.current.id}.${data.aws_partition.current.dns_suffix}/api"
 }
 
+# IAM role API Gateway assumes to read the web-app bucket when serving the SPA
+# (serve_web_ui = true). The caller grants this principal s3:GetObject in the
+# bucket policy. Null when Web UI hosting on this API is disabled.
+output "web_ui_proxy_role_arn" {
+  description = "ARN of the IAM role API Gateway uses to read the web-app bucket for the Web UI S3 proxy (null unless serve_web_ui is enabled)."
+  value       = local.serve_web_ui ? aws_iam_role.web_ui_proxy[0].arn : null
+}
+
 output "http_api_dispatcher_function_arn" {
   description = "ARN of the HTTP API dispatcher Lambda function."
   value       = aws_lambda_function.http_api_dispatcher.arn

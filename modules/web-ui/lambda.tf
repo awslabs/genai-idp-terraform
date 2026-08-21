@@ -186,6 +186,9 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       reporting_bucket_name      = var.reporting_bucket_name
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
       idp_pattern                = var.idp_pattern
+      # Hosting flip changes the Vite base path, which rewrites every asset URL
+      # in the emitted bundle — must retrigger the build.
+      ui_base_path = local.ui_base_path
     }))
     buildspec_hash   = md5(aws_codebuild_project.ui_build[0].source[0].buildspec)
     source_code_hash = data.archive_file.ui_source.output_base64sha256
