@@ -83,75 +83,22 @@ resource "terraform_data" "copy_idp_common_source" {
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/setup.py") : "",
     local.idp_common_files_hash,
     filemd5("${path.module}/main.tf"),
+    # The staging logic lives in the script below, so its content must be part
+    # of the trigger set -- fingerprinting main.tf alone would let edits to the
+    # rsync mirror go unnoticed and leave a stale staged tree.
+    filemd5("${path.module}/scripts/stage-idp-common.sh"),
   ]
 
   provisioner "local-exec" {
-    command = <<-EOT
-      set -e
+    # The source and destination paths are supplied through `environment` and
+    # expanded double-quoted inside the script, so the shell never parses their
+    # contents. This also makes paths containing a space work correctly.
+    command = "${path.module}/scripts/stage-idp-common.sh"
 
-      DEST="${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
-
-      mkdir -p "$DEST"
-
-      if [ ! -d "${var.idp_common_source_path}" ]; then
-        echo "ERROR: idp_common_source_path not found: ${var.idp_common_source_path}" >&2
-        exit 1
-      fi
-
-      rsync -a --delete \
-        --exclude='__pycache__/' \
-        --exclude='*.py[cod]' \
-        --exclude='*$py.class' \
-        --exclude='*.so' \
-        --exclude='.pytest_cache/' \
-        --exclude='.mypy_cache/' \
-        --exclude='.ruff_cache/' \
-        --exclude='.tox/' \
-        --exclude='.venv/' \
-        --exclude='venv/' \
-        --exclude='env/' \
-        --exclude='ENV/' \
-        --exclude='build/' \
-        --exclude='dist/' \
-        --exclude='develop-eggs/' \
-        --exclude='downloads/' \
-        --exclude='eggs/' \
-        --exclude='.eggs/' \
-        --exclude='sdist/' \
-        --exclude='wheels/' \
-        --exclude='var/' \
-        --exclude='parts/' \
-        --exclude='*.egg-info/' \
-        --exclude='*.egg' \
-        --exclude='.installed.cfg' \
-        --exclude='tests/' \
-        --exclude='.coverage' \
-        --exclude='coverage.xml' \
-        --exclude='coverage/' \
-        --exclude='coverage_html/' \
-        --exclude='htmlcov/' \
-        --exclude='nosetests.xml' \
-        --exclude='test-results.xml' \
-        --exclude='test-reports/' \
-        --exclude='uv.lock' \
-        --exclude='poetry.lock' \
-        --exclude='.git/' \
-        --exclude='.gitignore' \
-        --exclude='.gitattributes' \
-        --exclude='.idea/' \
-        --exclude='.vscode/' \
-        --exclude='*.swp' \
-        --exclude='*.swo' \
-        --exclude='.DS_Store' \
-        --exclude='Thumbs.db' \
-        --exclude='node_modules/' \
-        --exclude='clean_build.sh' \
-        --exclude='verify_stickler.py' \
-        "${var.idp_common_source_path}/" "$DEST/"
-
-      echo "Staged idp_common source at $DEST:"
-      du -sh "$DEST" || true
-    EOT
+    environment = {
+      IDP_COMMON_SOURCE_PATH = var.idp_common_source_path
+      STAGING_DEST           = "${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
+    }
   }
 }
 
@@ -270,11 +217,19 @@ resource "null_resource" "test_iam_permissions" {
   depends_on = [time_sleep.wait_for_iam_propagation]
 
   provisioner "local-exec" {
+    # The role name embeds var.layer_prefix, so the ARN is an input-derived
+    # value. It is supplied through `environment` and expanded double-quoted for
+    # the same reason as the paths elsewhere in this module: nothing derived from
+    # an input is parsed by the shell.
     command = <<-EOT
       echo "Testing IAM role propagation for IDP CodeBuild..."
       sleep 10
-      echo "IAM role should be ready: ${aws_iam_role.codebuild_role[0].arn}"
+      echo "IAM role should be ready: $ROLE_ARN"
     EOT
+
+    environment = {
+      ROLE_ARN = aws_iam_role.codebuild_role[0].arn
+    }
   }
 
   triggers = {
@@ -457,11 +412,18 @@ resource "null_resource" "cleanup_after_build" {
   }
 
   provisioner "local-exec" {
+    # The path is supplied through `environment` and expanded double-quoted, so
+    # the shell never parses its contents and this deletion cannot be redirected
+    # to another target.
     command = <<EOF
       echo "Cleaning up temporary files after build..."
-      rm -f "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip" 2>/dev/null || true
+      rm -f "$ZIP_PATH" 2>/dev/null || true
       echo "Cleanup completed"
     EOF
+
+    environment = {
+      ZIP_PATH = "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip"
+    }
   }
 }
 
@@ -544,11 +506,18 @@ resource "null_resource" "cleanup_build_artifacts" {
   depends_on = [random_id.build_id]
 
   provisioner "local-exec" {
+    # The path is supplied through `environment` and expanded double-quoted, so
+    # the shell never parses its contents and this deletion cannot be redirected
+    # to another target.
     command = <<EOT
       echo "Cleaning up old build artifacts..."
-      find "${local.module_build_dir}" -name "*.zip" -mtime +1 -delete 2>/dev/null || true
+      find "$BUILD_DIR" -name "*.zip" -mtime +1 -delete 2>/dev/null || true
       echo "Build artifact cleanup completed"
     EOT
+
+    environment = {
+      BUILD_DIR = local.module_build_dir
+    }
   }
 
   triggers = {
@@ -560,6 +529,11 @@ resource "null_resource" "cleanup_on_destroy" {
   depends_on = [aws_lambda_layer_version.layers]
 
   provisioner "local-exec" {
+    # Interpolates only `path.root`, which is not an input, and keeps the base
+    # directory spelled out rather than reusing local.module_build_dir on
+    # purpose: a destroy-time provisioner may reference only `self` and `path.*`,
+    # so a `local.*` or `var.*` reference here fails with "Invalid reference from
+    # destroy provisioner". Leave the literal in place.
     when    = destroy
     command = <<EOT
       echo "Cleaning up all temporary files..."

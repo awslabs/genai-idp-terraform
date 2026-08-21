@@ -9,7 +9,14 @@ resource "null_resource" "create_lambda_build_dir" {
   count = local.use_local_build ? 0 : 1
 
   provisioner "local-exec" {
-    command = "mkdir -p ${local.module_build_dir}"
+    # The path is supplied through `environment` and expanded double-quoted, so
+    # the shell never parses its contents. This also makes build directories
+    # whose path contains a space work correctly.
+    command = "mkdir -p \"$BUILD_DIR\""
+
+    environment = {
+      BUILD_DIR = local.module_build_dir
+    }
   }
 
   triggers = {
