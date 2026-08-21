@@ -135,11 +135,25 @@ def _merge_with_system_defaults(user_config: Dict[str, Any]) -> Dict[str, Any]:
 
 def _detect_pattern(config: Dict[str, Any]) -> str:
     """
-    Auto-detect the IDP pattern from a user config.
+    Auto-detect the IDP pattern for system-default merging.
 
-    Mirrors upstream ``update_configuration.detect_pattern_from_config``:
-    BDA → pattern-1, UDOP → pattern-3, otherwise pattern-2 (Bedrock LLM,
-    the most common case).
+    Only ``pattern-1`` (BDA) and ``pattern-2`` (Bedrock LLM pipeline) exist:
+    upstream removed Pattern 3 in IDP v0.5.0, and
+    ``idp_common.config.merge_utils`` enforces that with
+    ``VALID_PATTERNS = ["pattern-1", "pattern-2"]`` — asking it for
+    ``pattern-3`` raises ``ValueError``.
+
+    UDOP therefore maps to ``pattern-2``, not ``pattern-3``. In this wrapper
+    SageMaker-UDOP is a façade over the unified (pattern-2 shaped) pipeline
+    that swaps only the classification step for a UDOP endpoint bridge, so the
+    pattern-2 defaults are the correct base for it: it needs the same OCR,
+    extraction, assessment, summarization and evaluation defaults, and only its
+    classification section differs.
+
+    Previously UDOP returned ``pattern-3``, which made the merge raise; the
+    caller's broad ``except`` then swallowed it and seeded the RAW user config
+    with no system defaults merged in — silently omitting every default prompt
+    and model setting.
     """
     if not isinstance(config, dict):
         return "pattern-2"
@@ -150,8 +164,6 @@ def _detect_pattern(config: Dict[str, Any]) -> str:
     )
     if method == "bda":
         return "pattern-1"
-    if method == "udop":
-        return "pattern-3"
     return "pattern-2"
 
 
