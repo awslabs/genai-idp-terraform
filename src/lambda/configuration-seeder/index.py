@@ -107,12 +107,25 @@ def _merge_with_system_defaults(user_config: Dict[str, Any]) -> Dict[str, Any]:
         # enforcement of those flags lives upstream in idp_common.
         merged = merge_config_with_defaults(user_config, pattern=pattern, validate=False)
     except FileNotFoundError as exc:
+        # Upstream IDP v0.6.4 ships a broken pattern-1.yaml (see
+        # _merge_with_defaults_tolerant): its _inherits list names
+        # base-assessment.yaml, which was deleted when assessment was folded
+        # into extraction. Retry with a tolerant defaults loader rather than
+        # degrading to an unmerged config.
         logger.warning(
-            "System defaults YAMLs missing from the Lambda layer (%s); "
-            "saving user config unchanged.",
+            "System defaults inheritance failed (%s); retrying with a "
+            "tolerant defaults loader.",
             exc,
         )
-        return user_config
+        try:
+            merged = _merge_with_defaults_tolerant(user_config, pattern)
+        except Exception as retry_exc:
+            logger.warning(
+                "Tolerant system-defaults merge also failed; saving user "
+                "config unchanged. Error: %s",
+                retry_exc,
+            )
+            return user_config
     except Exception as exc:  # pragma: no cover - belt-and-braces
         logger.warning(
             "Error merging with system defaults; saving user config "
@@ -131,6 +144,113 @@ def _merge_with_system_defaults(user_config: Dict[str, Any]) -> Dict[str, Any]:
         sorted(merged_keys),
     )
     return merged
+
+
+def _resolve_inherits_tolerant(
+    config: Dict[str, Any],
+    defaults_dir,
+    load_yaml_file,
+    deep_update,
+    seen: Optional[set] = None,
+) -> Dict[str, Any]:
+    """
+    Resolve an ``_inherits`` chain, skipping entries whose file is absent.
+
+    Byte-for-byte equivalent to ``merge_utils._resolve_inheritance`` except that
+    a missing inherited file is logged and skipped instead of raising
+    ``FileNotFoundError``. Ordering, cycle detection, and the
+    "current config wins over everything it inherits" precedence are preserved.
+    """
+    seen = set() if seen is None else seen
+    config = dict(config)
+    inherits = config.pop("_inherits", None)
+    if inherits is None:
+        return config
+
+    inherits_list = [inherits] if isinstance(inherits, str) else list(inherits)
+
+    result: Dict[str, Any] = {}
+    for inherit_file in inherits_list:
+        if inherit_file in seen:
+            logger.warning("Circular inheritance detected: %s", inherit_file)
+            continue
+        seen.add(inherit_file)
+
+        inherit_path = defaults_dir / inherit_file
+        if not inherit_path.exists():
+            # The upstream v0.6.4 defect. Skipping is semantically correct:
+            # the only missing file is base-assessment.yaml, and assessment
+            # was retired as a standalone section in the v0.6 config model.
+            logger.warning(
+                "System defaults file %s is referenced by _inherits but does "
+                "not exist; skipping it.",
+                inherit_file,
+            )
+            continue
+
+        inherited = _resolve_inherits_tolerant(
+            load_yaml_file(inherit_path),
+            defaults_dir,
+            load_yaml_file,
+            deep_update,
+            seen.copy(),
+        )
+        deep_update(result, inherited)
+
+    deep_update(result, config)
+    return result
+
+
+def _merge_with_defaults_tolerant(
+    user_config: Dict[str, Any], pattern: str
+) -> Dict[str, Any]:
+    """
+    Reproduce ``merge_config_with_defaults`` with a fault-tolerant defaults load.
+
+    Why this exists: upstream IDP v0.6.4's
+    ``system_defaults/pattern-1.yaml`` inherits ``base-assessment.yaml``, a file
+    that no longer ships in v0.6.4 (assessment was folded into ``extraction``).
+    ``merge_utils._resolve_inheritance`` raises ``FileNotFoundError`` on a
+    missing inherited file, so **every BDA (pattern-1) deployment** would
+    otherwise fall back to seeding the raw, unmerged user config — no default
+    prompts, models, or classes.
+
+    Fixing this in ``sources/`` is forbidden (`.kiro/steering/sources-readonly.md`),
+    and the ``IDP_SYSTEM_DEFAULTS_DIR`` env-var override cannot help either:
+    ``merge_utils.get_system_defaults_dir`` resolves the packaged resource
+    directory at priority 1 and only consults the env var if that lookup fails,
+    which it never does in a Lambda where ``idp_common`` is installed. So the
+    repair lives here, in the wrapper's own Lambda.
+
+    This is a fallback, not a replacement: ``_merge_with_system_defaults`` still
+    calls upstream first and only lands here on ``FileNotFoundError``. When
+    upstream repairs ``pattern-1.yaml`` (or drops the stale ``_inherits`` entry),
+    the pristine path resumes automatically and this code stops executing.
+
+    The migrate-then-merge ordering is preserved from upstream, and matters: see
+    the "IMPORTANT -- migrate BEFORE merge" note in
+    ``merge_utils.merge_config_with_defaults``.
+    """
+    from copy import deepcopy
+
+    from idp_common.config.merge_utils import (
+        deep_update,
+        get_system_defaults_dir,
+        load_yaml_file,
+    )
+    from idp_common.config.migrations.v05_to_v06 import migrate_v05_to_v06
+
+    migrated = migrate_v05_to_v06(deepcopy(user_config))
+
+    defaults_dir = get_system_defaults_dir()
+    pattern_config = load_yaml_file(defaults_dir / f"{pattern}.yaml")
+    defaults = _resolve_inherits_tolerant(
+        pattern_config, defaults_dir, load_yaml_file, deep_update
+    )
+
+    result = deepcopy(defaults)
+    deep_update(result, migrated)
+    return result
 
 
 def _detect_pattern(config: Dict[str, Any]) -> str:
