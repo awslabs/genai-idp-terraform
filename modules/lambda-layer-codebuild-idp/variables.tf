@@ -5,9 +5,15 @@
 variable "layer_prefix" {
   description = "Prefix for layer names"
   type        = string
+
+  # Restricted to the character set AWS accepts for the IAM role, CodeBuild
+  # project, log group, S3 key and layer names this value composes. It is also
+  # embedded in build paths, so it is kept free of characters that carry meaning
+  # to a shell. Must begin with a letter or digit so it is never parsed as a
+  # command-line flag.
   validation {
-    condition     = length(var.layer_prefix) > 0 && length(var.layer_prefix) <= 50
-    error_message = "Variable layer_prefix must be between 1 and 50 characters."
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_-]*$", var.layer_prefix)) && length(var.layer_prefix) <= 50
+    error_message = "Variable layer_prefix must be 1-50 characters of letters, digits, hyphens, or underscores, and must begin with a letter or digit."
   }
 }
 
@@ -36,6 +42,15 @@ variable "idp_common_source_path" {
   description = "Path to the idp_common source code directory"
   type        = string
   default     = ""
+
+  # Path characters only. Relative segments such as ".." are permitted -- callers
+  # legitimately pass paths like "${path.module}/../../sources/lib/idp_common_pkg".
+  # "~" is excluded because the value is always expanded inside quotes, where a
+  # tilde would be taken literally rather than as a home directory.
+  validation {
+    condition     = var.idp_common_source_path == "" || can(regex("^[A-Za-z0-9 _.:/\\\\-]+$", var.idp_common_source_path))
+    error_message = "Variable idp_common_source_path may contain only letters, digits, spaces, and the characters _ . : / \\ and -."
+  }
 }
 
 variable "idp_common_extras" {

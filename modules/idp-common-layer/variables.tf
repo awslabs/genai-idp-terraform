@@ -11,6 +11,13 @@ variable "layer_prefix" {
   description = "Prefix for the lambda layers (should be unique per deployment)"
   type        = string
   default     = "idp-common"
+
+  # Mirrors the validation on the same input in ../lambda-layer-codebuild-idp,
+  # so an invalid value is reported against the variable the caller actually set.
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_-]*$", var.layer_prefix)) && length(var.layer_prefix) <= 50
+    error_message = "Variable layer_prefix must be 1-50 characters of letters, digits, hyphens, or underscores, and must begin with a letter or digit."
+  }
 }
 
 variable "idp_common_extras" {
