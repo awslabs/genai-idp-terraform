@@ -350,3 +350,45 @@ is still supported by uploading directly to the input bucket, which is how the
 wrapper's headless example operates. If a first-class Jobs API matters for your
 integration, raise it as a feature request — it is a new subsystem rather than a
 migration step, and is deliberately out of scope for this upgrade.
+
+## IAM permissions boundaries are not supported — no action required unless your account requires one
+
+Upstream's CloudFormation templates take an optional `PermissionsBoundaryArn`
+parameter and attach it to every IAM role they create, for accounts whose Service
+Control Policy requires a boundary on every role. IDP v0.6.1 fixed a bug in that
+mechanism (the Feature Platform nested stack neither declared the parameter nor
+attached the boundary, so `iam:CreateRole` was denied and the nested stack rolled
+back in SCP-enforced accounts).
+
+**That fix does not apply to this wrapper, and the underlying capability is not
+implemented here.** Two separate facts:
+
+- The nested-stack forwarding bug has no analogue in Terraform — there are no
+  nested stacks. Nothing to forward.
+- The wrapper has never supported permissions boundaries at all. Upstream added
+  `PermissionsBoundaryArn` to its templates in v0.3.9, so this is a long-standing
+  gap rather than something this release introduced or regressed.
+
+### What this means for you
+
+If your account does **not** enforce a boundary-requiring SCP — the common case —
+there is nothing to do. This release changes nothing about role creation.
+
+If your account **does** enforce one, this wrapper cannot deploy into it, on this
+release or any earlier one. `terraform apply` will fail with `AccessDenied` on
+`iam:CreateRole`. Please raise it as a feature request rather than working around
+it locally.
+
+### Why it is deferred rather than fixed here
+
+Closing the gap means attaching `permissions_boundary` to all 72 `aws_iam_role`
+resources across 12 modules — Terraform has no provider-level default boundary,
+so it is per-role — plus a coverage test to keep new roles from silently missing
+it (upstream maintains exactly such a test).
+
+It is deferred because it is **purely additive and non-breaking**: an optional
+`permissions_boundary_arn` variable defaulting to `null` produces no diff for
+anyone who does not set it, so adding it in a later release costs nothing that
+adding it now would save. Bundling 72 role modifications into this release, by
+contrast, would bury the AppSync and ALB changes that the upgrade plan needs to
+make reviewable.

@@ -41,12 +41,58 @@ the migration steps behind every breaking change below.
   mutation-to-subscription fan-out. Surfaced to the UI as `VITE_STREAM_URL`.
 - `api.use_private_api`, `api.api_gateway_vpc_endpoint_id`, and
   `api.waf_allowed_ipv4_ranges`, mirroring the upstream parameters.
+- **`preprocessing` and `postprocessing` pipeline hook points.** Two generic
+  extension points added in IDP v0.6, alongside the six existing per-step
+  `<step>.postHook` lists. `preprocessing` runs before the BDA/pipeline routing
+  decision (so it fires in both processing modes, and can halt an execution as
+  `REDACTED_SUPERSEDED` when it spawns a redacted copy); `postprocessing` runs
+  last, after evaluation, on the shared tail. Inert until a config version
+  populates the section.
+- **`ocr.backend: bda`** — runs a Bedrock Data Automation standard-output SYNC
+  project as a pure OCR engine in place of Textract. Enable with the new
+  `enable_bda_ocr_backend` flag on any processor. The deployment-scoped project is
+  created and deleted with the deployment.
 
 ### Changed
 
 - Private networking requires the `execute-api` interface VPC endpoint instead of
   `appsync-api`; `modules/vpc-endpoints` renames its `appsync_api_endpoint_id`
   output to `execute_api_endpoint_id`.
+- The pipeline-hooks dispatcher timeout is raised from 60s to 900s. It fronts
+  hooks synchronously, and upstream budgets up to ~890s for the PII-redaction
+  preprocessing hook, so 60s would sever the invoke.
+- `idp_common` layer extras are reconciled with v0.6.4's `pyproject.toml`:
+  `criteria_validation` → `rule_validation`, and `multi_document_discovery` /
+  `synthesis` / `code_intel` are now accepted. `analytics` was never a real extra
+  and is rejected. This matters because pip does not fail on an unknown extra — it
+  installs nothing for it — so a stale name produced a layer silently missing
+  dependencies at runtime.
+
+### Fixed
+
+- **BDA (pattern-1) deployments no longer seed an unmerged configuration.**
+  Upstream v0.6.4's `system_defaults/pattern-1.yaml` inherits
+  `base-assessment.yaml`, a file that release deleted, and the merge raises
+  `FileNotFoundError` on a missing inherited file. Every BDA deployment therefore
+  fell back to storing the raw user config with no default prompts, models, or
+  classes. The seeder now retries with a loader that skips absent inherits, which
+  is semantically correct since assessment is retired in the v0.6 config model.
+- **Cross-region inference profiles with a `global.`, `ca.` or `sa.` prefix now
+  receive their IAM grant.** v0.6 defaults ship
+  `global.anthropic.claude-sonnet-4-6`, but all three copies of the model-ID IAM
+  derivation matched only `us|eu|apac`, so such models got the foundation-model
+  grant without the inference-profile grant — an `AccessDenied` at invoke time.
+  The `agent-analytics` copy additionally stripped the prefix with
+  `substr(id, 3, -1)`, which mangled `apac.` IDs; it now uses the same regex as
+  the others.
+- Evaluation without summarization passed the whole Step Functions state envelope
+  to the evaluation Lambda as its `document`, instead of the document.
+- With neither summarization nor evaluation enabled, the workflow's final output
+  was the raw envelope, so the workflow tracker matched `output_data["document"]`
+  and persisted the original pre-OCR document rather than the processed one.
+- The workflow tracker can now delete an original superseded by a redacted copy:
+  it gains `INPUT_BUCKET` plus the S3 rights to purge the input object and all
+  versions under the output prefix.
 
 ### Not applicable
 
@@ -58,6 +104,16 @@ the migration steps behind every breaking change below.
   unchanged. See the migration guide.
 - Backend workers write status to DynamoDB directly (`APPSYNC_API_URL=""`),
   matching upstream, and the UI polls for updates.
+- Upstream's `PermissionsBoundaryArn` fix for the Feature Platform nested stack
+  (v0.6.1) needs no wrapper change, because there are no nested stacks to forward
+  it to. Note separately that the wrapper does not implement permissions
+  boundaries at all — upstream added them in v0.3.9, so this is a pre-existing gap
+  rather than a regression in this release, and it is tracked as follow-up work.
+  Accounts whose SCP requires a boundary on every IAM role cannot deploy this
+  wrapper. See the migration guide.
+- Feature-Platform registration of the new `preprocessing` / `postprocessing` hook
+  points needs no wrapper change: the vendored `register_feature_hooks` Lambda
+  already accepts both flat points.
 
 ---
 
