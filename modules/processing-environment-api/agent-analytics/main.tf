@@ -33,13 +33,21 @@ locals {
   # Module build directory for Lambda archives
   module_build_dir = "${path.module}/.terraform-build"
 
-  # Helper function to generate model permissions for bedrock_model_id
-  # This follows the same pattern as processing-environment-api
+  # Helper to generate model permissions for bedrock_model_id.
+  # Same shape as processing-environment-api/locals.tf and
+  # processors/unified-processor/locals.tf.
+  #
+  # The prefix is matched by regex rather than `startswith` + `substr(id, 3, -1)`:
+  # that hardcoded 3 assumes a two-letter geo, so it silently mangled
+  # `apac.anthropic...` into `c.anthropic...` (a 5-char prefix) and would do worse
+  # to IDP v0.6's `global.` profiles (7 chars), producing a foundation-model ARN
+  # that matches nothing and an AccessDenied at invoke time.
+  model_prefix_re = "^(us|eu|apac|ca|sa|global)\\."
+
   bedrock_model_permissions = {
-    # Parse model information
     is_arn               = startswith(var.bedrock_model_id, "arn:")
-    is_inference_profile = !startswith(var.bedrock_model_id, "arn:") && (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac."))
-    base_model_id        = (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac.")) ? substr(var.bedrock_model_id, 3, -1) : var.bedrock_model_id
+    is_inference_profile = !startswith(var.bedrock_model_id, "arn:") && can(regex(local.model_prefix_re, var.bedrock_model_id))
+    base_model_id        = can(regex(local.model_prefix_re, var.bedrock_model_id)) ? replace(var.bedrock_model_id, "/${local.model_prefix_re}/", "") : var.bedrock_model_id
 
     # Foundation model statement (always needed)
     # For inference profiles, we need permissions for the underlying foundation model (without prefix)
@@ -56,12 +64,12 @@ locals {
         # For regular model IDs, create foundation model ARN as-is
         startswith(var.bedrock_model_id, "arn:") && !contains(split(":", var.bedrock_model_id), "inference-profile") ?
         var.bedrock_model_id :
-        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${(startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac.")) ? substr(var.bedrock_model_id, 3, -1) : var.bedrock_model_id}"
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex(local.model_prefix_re, var.bedrock_model_id)) ? replace(var.bedrock_model_id, "/${local.model_prefix_re}/", "") : var.bedrock_model_id}"
       ]
     }
 
     # Inference profile statement (only for inference profiles)
-    inference_profile_statement = (!startswith(var.bedrock_model_id, "arn:") && (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac."))) ? {
+    inference_profile_statement = (!startswith(var.bedrock_model_id, "arn:") && can(regex(local.model_prefix_re, var.bedrock_model_id))) ? {
       effect = "Allow"
       actions = [
         "bedrock:GetInferenceProfile",

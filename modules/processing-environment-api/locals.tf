@@ -12,10 +12,12 @@ locals {
   # Helper function to generate model permissions for knowledge base model_id
   # This follows the same pattern as bedrock-llm-processor
   knowledge_base_model_permissions = var.knowledge_base.enabled && var.knowledge_base.model_id != null ? {
-    # Parse model information
+    # Parse model information. The prefix set includes `global` for IDP v0.6
+    # (`global.anthropic.claude-sonnet-4-6`) plus `ca`/`sa`; see the matching note
+    # in modules/processors/unified-processor/locals.tf.
     is_arn          = startswith(var.knowledge_base.model_id, "arn:")
-    is_cross_region = !startswith(var.knowledge_base.model_id, "arn:") && can(regex("^(us|eu|apac)\\.", var.knowledge_base.model_id))
-    base_model_id   = can(regex("^(us|eu|apac)\\.", var.knowledge_base.model_id)) ? replace(var.knowledge_base.model_id, "/^(us|eu|apac)\\./", "") : var.knowledge_base.model_id
+    is_cross_region = !startswith(var.knowledge_base.model_id, "arn:") && can(regex("^(us|eu|apac|ca|sa|global)\\.", var.knowledge_base.model_id))
+    base_model_id   = can(regex("^(us|eu|apac|ca|sa|global)\\.", var.knowledge_base.model_id)) ? replace(var.knowledge_base.model_id, "/^(us|eu|apac|ca|sa|global)\\./", "") : var.knowledge_base.model_id
 
     # Foundation model statement (always needed)
     # For inference profiles, we need permissions for both the underlying model and the profile itself
@@ -29,16 +31,16 @@ locals {
         # Always include the underlying foundation model
         startswith(var.knowledge_base.model_id, "arn:") && !contains(split(":", var.knowledge_base.model_id), "inference-profile") ?
         var.knowledge_base.model_id :
-        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex("^(us|eu|apac)\\.", var.knowledge_base.model_id)) ? replace(var.knowledge_base.model_id, "/^(us|eu|apac)\\./", "") : var.knowledge_base.model_id}",
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex("^(us|eu|apac|ca|sa|global)\\.", var.knowledge_base.model_id)) ? replace(var.knowledge_base.model_id, "/^(us|eu|apac|ca|sa|global)\\./", "") : var.knowledge_base.model_id}",
         # For cross-region inference profiles, also include the profile as a foundation model ARN
         # (some Bedrock operations may reference it this way)
-        (!startswith(var.knowledge_base.model_id, "arn:") && can(regex("^(us|eu|apac)\\.", var.knowledge_base.model_id))) ?
+        (!startswith(var.knowledge_base.model_id, "arn:") && can(regex("^(us|eu|apac|ca|sa|global)\\.", var.knowledge_base.model_id))) ?
         "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${var.knowledge_base.model_id}" : null
       ])
     }
 
     # Inference profile statement (only for cross-region inference profiles)
-    inference_profile_statement = (!startswith(var.knowledge_base.model_id, "arn:") && can(regex("^(us|eu|apac)\\.", var.knowledge_base.model_id))) || (startswith(var.knowledge_base.model_id, "arn:") && contains(split(":", var.knowledge_base.model_id), "inference-profile")) ? {
+    inference_profile_statement = (!startswith(var.knowledge_base.model_id, "arn:") && can(regex("^(us|eu|apac|ca|sa|global)\\.", var.knowledge_base.model_id))) || (startswith(var.knowledge_base.model_id, "arn:") && contains(split(":", var.knowledge_base.model_id), "inference-profile")) ? {
       effect = "Allow"
       actions = [
         "bedrock:GetInferenceProfile",

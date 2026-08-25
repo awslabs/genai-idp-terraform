@@ -28,9 +28,15 @@ locals {
       assessment     = var.assessment_model_id != null ? var.assessment_model_id : (can(local.config_with_overrides.assessment.model) ? local.config_with_overrides.assessment.model : var.model_id)
       } : name => id != null ? {
 
+      # Cross-region inference-profile prefixes. `global` was added for IDP v0.6:
+      # its system defaults ship `global.anthropic.claude-sonnet-4-6`, and without
+      # `global` here that model would get the foundation-model grant but NOT the
+      # inference-profile grant, failing at invoke time with AccessDenied. `ca` and
+      # `sa` complete the set that idp_common.bda.bda_ocr._PROFILE_GEO_PREFIXES
+      # recognises.
       is_arn          = startswith(id, "arn:")
-      is_cross_region = !startswith(id, "arn:") && can(regex("^(us|eu|apac)\\.", id))
-      base_model_id   = can(regex("^(us|eu|apac)\\.", id)) ? replace(id, "/^(us|eu|apac)\\./", "") : id
+      is_cross_region = !startswith(id, "arn:") && can(regex("^(us|eu|apac|ca|sa|global)\\.", id))
+      base_model_id   = can(regex("^(us|eu|apac|ca|sa|global)\\.", id)) ? replace(id, "/^(us|eu|apac|ca|sa|global)\\./", "") : id
 
       # Foundation model statement (always needed)
       foundation_statement = {
@@ -42,12 +48,12 @@ locals {
         resources = [
           startswith(id, "arn:") && !contains(split(":", id), "inference-profile") ?
           id :
-          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex("^(us|eu|apac)\\.", id)) ? replace(id, "/^(us|eu|apac)\\./", "") : id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex("^(us|eu|apac|ca|sa|global)\\.", id)) ? replace(id, "/^(us|eu|apac|ca|sa|global)\\./", "") : id}"
         ]
       }
 
       # Inference profile statement (only for cross-region inference profiles)
-      inference_profile_statement = (!startswith(id, "arn:") && can(regex("^(us|eu|apac)\\.", id))) || (startswith(id, "arn:") && contains(split(":", id), "inference-profile")) ? {
+      inference_profile_statement = (!startswith(id, "arn:") && can(regex("^(us|eu|apac|ca|sa|global)\\.", id))) || (startswith(id, "arn:") && contains(split(":", id), "inference-profile")) ? {
         effect = "Allow"
         actions = [
           "bedrock:GetInferenceProfile",
