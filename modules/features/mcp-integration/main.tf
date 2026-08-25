@@ -361,6 +361,20 @@ data "archive_file" "agentcore_gateway_manager" {
 locals {
   agentcore_gateway_manager_src       = "${path.module}/../../../sources/src/lambda/agentcore_gateway_manager"
   agentcore_gateway_manager_build_dir = "${path.module}/../../../.terraform/tmp/agentcore_gateway_manager_build"
+
+  # pip platform tag for the TARGET Lambda architecture, not the build host.
+  #
+  # This must track `var.lambda_architecture` (which is what
+  # aws_lambda_function.agentcore_gateway_manager sets on the function). It used
+  # to be hardcoded to manylinux2014_x86_64 with a comment saying to switch it
+  # manually for arm64 — and since `lambda_architecture` DEFAULTS to arm64, the
+  # default configuration shipped x86_64 wheels to an arm64 function. The native
+  # Rust extension in `pydantic_core` (pulled in transitively by
+  # bedrock_agentcore_starter_toolkit -> pydantic) then failed to load with
+  # `No module named 'pydantic_core._pydantic_core'`, the handler never imported,
+  # and the CloudFormation custom resource hung until its timeout because
+  # cfnresponse was never reached.
+  agentcore_pip_platform = var.lambda_architecture == "arm64" ? "manylinux2014_aarch64" : "manylinux2014_x86_64"
 }
 
 resource "null_resource" "build_agentcore_gateway_manager" {
@@ -373,8 +387,10 @@ resource "null_resource" "build_agentcore_gateway_manager" {
     ]))
     # Bump this string when the build pipeline below changes (e.g. adding /
     # removing pip flags). `null_resource.triggers` are the only signal
-    # terraform has for "re-run the build".
-    build_pipeline_version = "manylinux2014_x86_64"
+    # terraform has for "re-run the build". It carries the platform tag so that
+    # flipping var.lambda_architecture forces a rebuild against the right wheels
+    # instead of silently reusing the previous architecture's build dir.
+    build_pipeline_version = local.agentcore_pip_platform
   }
 
   provisioner "local-exec" {
@@ -389,19 +405,19 @@ resource "null_resource" "build_agentcore_gateway_manager" {
       # Copy source files
       cp -r "$SRC_DIR"/. "$BUILD_DIR/"
 
-      # Install deps for the Lambda runtime (Linux x86_64), not the build host.
-      # `bedrock_agentcore_starter_toolkit` pulls in `pydantic`, whose
-      # transitive `pydantic_core` package ships native (Rust-compiled)
-      # binaries. The `--platform` / `--only-binary` / `--implementation` flags
-      # force pip to fetch the manylinux x86_64 wheel that Lambda can load at
-      # runtime. Switch `manylinux2014_x86_64` to `manylinux2014_aarch64` if the
-      # function is rebuilt for arm64.
+      # Install deps for the Lambda runtime (Linux), not the build host.
+      # `bedrock_agentcore_starter_toolkit` pulls in `pydantic`, whose transitive
+      # `pydantic_core` package ships native (Rust-compiled) binaries. The
+      # `--platform` / `--only-binary` / `--implementation` flags force pip to
+      # fetch the manylinux wheel Lambda can load at runtime. The platform tag is
+      # derived from var.lambda_architecture (see local.agentcore_pip_platform) so
+      # it can never drift from the function's own `architectures`.
       pip3 install \
         --target "$BUILD_DIR" \
         --upgrade \
         --no-cache-dir \
         --quiet \
-        --platform manylinux2014_x86_64 \
+        --platform ${local.agentcore_pip_platform} \
         --python-version 3.12 \
         --implementation cp \
         --only-binary=:all: \
