@@ -45,6 +45,26 @@ variable "user_pool_id" {
   default     = null
 }
 
+variable "user_pool_available" {
+  description = <<-EOT
+    Whether a Cognito User Pool will exist for this deployment.
+
+    Must be derived from CONFIGURATION by the caller (a supplied user-identity
+    object, or the count of the user-identity module), never from the pool ID
+    itself. On a fresh deploy `user_pool_id` is a computed attribute of a module
+    created in the same apply, so it is unknown at plan time and
+    `user_pool_id != null` is unknown too — which fails the plan with "Invalid
+    count argument ... cannot be determined until apply" on the resource server
+    and connector client below.
+
+    Defaults to null, which falls back to the `user_pool_id != null` test so
+    existing callers keep working; that fallback is only safe when the pool ID is
+    already known (an externally supplied pool).
+  EOT
+  type        = bool
+  default     = null
+}
+
 variable "mcp_callback_urls" {
   description = <<-EOT
     Optional OAuth 2.0 callback URLs for the MCP external app client. Required by

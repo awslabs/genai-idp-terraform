@@ -38,6 +38,8 @@ module "mcp_integration" {
   name_prefix = "${local.name_prefix}-api"
 
   user_pool_id = local.user_pool_id
+  # Config-derived; the pool ID itself is unknown at plan on a fresh deploy.
+  user_pool_available = local.user_identity_available
 
   output_bucket_arn = var.output_bucket_arn
 

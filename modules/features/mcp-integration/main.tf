@@ -33,6 +33,14 @@ locals {
   # GovCloud guard: AgentCore not available in us-gov-* regions.
   enable_mcp_effective = var.enabled && !startswith(data.aws_region.current.id, "us-gov-")
 
+  # Plan-time-known "a user pool will exist" test. Prefer the caller's
+  # config-derived flag; fall back to inspecting the ID for callers that have not
+  # been updated. See var.user_pool_available for why the ID itself is unusable as
+  # a count gate on a fresh deploy.
+  user_pool_present = var.user_pool_available != null ? var.user_pool_available : var.user_pool_id != null
+
+  enable_mcp_cognito = local.enable_mcp_effective && local.user_pool_present
+
   api_name           = var.name_prefix
   output_bucket_arn  = var.output_bucket_arn
   output_bucket_name = element(split(":", var.output_bucket_arn), 5)
@@ -551,7 +559,7 @@ resource "aws_cognito_user_pool_client" "mcp_client" {
 # AgentCore Gateway validates.
 
 resource "aws_cognito_resource_server" "mcp" {
-  count        = local.enable_mcp_effective && var.user_pool_id != null ? 1 : 0
+  count        = local.enable_mcp_cognito ? 1 : 0
   user_pool_id = var.user_pool_id
   identifier   = "idp-mcp-connector"
   name         = "idp-mcp-connector"
@@ -563,7 +571,7 @@ resource "aws_cognito_resource_server" "mcp" {
 }
 
 resource "aws_cognito_user_pool_client" "mcp_connector" {
-  count        = local.enable_mcp_effective && var.user_pool_id != null ? 1 : 0
+  count        = local.enable_mcp_cognito ? 1 : 0
   name         = "mcp-connector-client"
   user_pool_id = var.user_pool_id
 

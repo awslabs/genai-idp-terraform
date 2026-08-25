@@ -74,8 +74,18 @@ locals {
     length(module.user_identity) > 0 ? module.user_identity[0].identity_pool.authenticated_role_arn : null
   )
 
+  # Whether an authenticated Cognito Identity Pool role exists at all.
+  #
+  # Derived from CONFIGURATION ONLY — a supplied `var.user_identity`, or the
+  # count of the module we create — never from `local.authenticated_role_arn`.
+  # That ARN is a computed module attribute, so on a fresh deploy it is unknown
+  # at plan time and `authenticated_role_arn != null` is unknown too. Using it to
+  # gate `count`/`for_each` fails the plan outright with "Invalid for_each
+  # argument ... known only after apply". This boolean is safe as a gate.
+  user_identity_available = var.user_identity != null || length(module.user_identity) > 0
+
   # Only enable authenticated user permissions when user identity exists and API/UI is enabled
-  enable_authenticated_user_permissions = (local.api_enabled || var.web_ui.enabled) && (var.user_identity != null || length(module.user_identity) > 0)
+  enable_authenticated_user_permissions = (local.api_enabled || var.web_ui.enabled) && local.user_identity_available
 
   # Chat token-streaming endpoint (v0.6.4) enablement, derived from STATIC config
   # (never from the module's computed arn) so it is safe as a for_each gate.
@@ -84,7 +94,7 @@ locals {
 
   # Grant the authenticated Cognito role invoke on the stream Function URL only
   # when the API is enabled, the role exists, and chat streaming is on.
-  enable_chat_stream_invoke_grant = local.api_enabled && local.chat_stream_enabled && local.authenticated_role_arn != null
+  enable_chat_stream_invoke_grant = local.api_enabled && local.chat_stream_enabled && local.user_identity_available
 }
 
 #

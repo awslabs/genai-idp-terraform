@@ -51,21 +51,21 @@ output "mcp_gateway_id" {
 
 output "mcp_oauth_client_id" {
   description = "Cognito app client ID for MCP OAuth 2.0 authentication."
-  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_client[0].id, null) : null
+  value       = local.enable_mcp_cognito ? try(aws_cognito_user_pool_client.mcp_client[0].id, null) : null
 }
 
 output "mcp_oauth_client_secret" {
   description = "Cognito app client secret for MCP OAuth 2.0 authentication."
-  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_client[0].client_secret, null) : null
+  value       = local.enable_mcp_cognito ? try(aws_cognito_user_pool_client.mcp_client[0].client_secret, null) : null
   sensitive   = true
 }
 
 output "mcp_connector_client_id" {
   description = "Cognito connector client ID (client_credentials flow) for the OAuth resource server."
-  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_user_pool_client.mcp_connector[0].id, null) : null
+  value       = local.enable_mcp_cognito ? try(aws_cognito_user_pool_client.mcp_connector[0].id, null) : null
 }
 
 output "mcp_resource_server_identifier" {
   description = "Identifier of the Cognito OAuth resource server (idp-mcp-connector)."
-  value       = local.enable_mcp_effective && var.user_pool_id != null ? try(aws_cognito_resource_server.mcp[0].identifier, null) : null
+  value       = local.enable_mcp_cognito ? try(aws_cognito_resource_server.mcp[0].identifier, null) : null
 }
