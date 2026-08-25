@@ -14,13 +14,18 @@ output "state_machine_name" {
 # Routing topology exposed so terraform test can assert routing at plan time (the
 # full definition string is unknown at plan because it interpolates computed ARNs).
 output "state_machine_start_at" {
-  description = "The StartAt state of the document-processing state machine. Always 'RouteByProcessingMode'; documents route at runtime by their config version's use_bda flag."
-  value       = "RouteByProcessingMode"
+  description = "The StartAt state of the document-processing state machine. Always 'PreprocessingHook' (IDP v0.6): the preprocessing extension point runs before the BDA/pipeline routing decision, so it fires in both modes. Documents then route at runtime by their config version's use_bda flag."
+  value       = "PreprocessingHook"
 }
 
 output "state_machine_state_names" {
   description = "The set of state names in the document-processing state machine definition (both BDA-branch and pipeline-branch states)."
   value       = keys(local.sfn_states)
+}
+
+output "state_machine_transition_targets" {
+  description = "Every state name referenced as a transition target by a top-level state (Next / Choices[*].Next / Catch[*].Next / Default). Exposed for graph-closure assertions in terraform test."
+  value       = local.sfn_transition_targets
 }
 
 output "max_processing_concurrency" {
@@ -44,13 +49,18 @@ output "extraction_model" {
 }
 
 output "summarization_model" {
-  description = "The summarization model being used (from variable override or config.yaml)"
-  value       = var.is_summarization_enabled ? local.config_with_overrides.summarization.model : null
+  description = "The summarization model being used (from variable override or config.yaml), or null when summarization is off."
+  value       = var.is_summarization_enabled ? try(local.config_with_overrides.summarization.model, null) : null
 }
 
 output "evaluation_model" {
-  description = "The evaluation model being used (from variable override or config.yaml)"
-  value       = var.evaluation_enabled ? local.config_with_overrides.evaluation.llm_method.model : null
+  description = "The evaluation model being used (from variable override or config.yaml), or null when evaluation is off or the config carries no evaluation section."
+  # try() rather than a bare lookup: `evaluation` is only merged into
+  # config_with_overrides when var.evaluation_model_id is set OR the supplied
+  # config already carries an evaluation section. A sparse config with
+  # evaluation_enabled = true would otherwise fail the plan on this output
+  # instead of on anything that matters.
+  value = var.evaluation_enabled ? try(local.config_with_overrides.evaluation.llm_method.model, null) : null
 }
 
 output "schema_definition" {

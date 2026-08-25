@@ -120,8 +120,9 @@ resource "aws_lambda_function" "queue_sender" {
       CONFIG_TABLE           = local.configuration_table.table_name
       DATA_RETENTION_IN_DAYS = var.data_tracking_retention_days
       OUTPUT_BUCKET          = local.output_bucket_name
-      DOCUMENT_TRACKING_MODE = var.api != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL        = var.api != null ? var.api.graphql_url : ""
+      # See the workflow_tracker note below: v0.6 always tracks via DynamoDB.
+      DOCUMENT_TRACKING_MODE = "dynamodb"
+      APPSYNC_API_URL        = ""
     }
   }
 
@@ -193,13 +194,21 @@ resource "aws_lambda_function" "workflow_tracker" {
 
   environment {
     variables = {
-      CONCURRENCY_TABLE            = local.concurrency_table.table_name
-      METRIC_NAMESPACE             = var.metric_namespace
-      TRACKING_TABLE               = local.tracking_table.table_name
-      OUTPUT_BUCKET                = local.output_bucket_name
-      WORKING_BUCKET               = local.working_bucket_name
-      DOCUMENT_TRACKING_MODE       = var.api != null ? "appsync" : "dynamodb"
-      APPSYNC_API_URL              = var.api != null ? var.api.graphql_url : ""
+      CONCURRENCY_TABLE = local.concurrency_table.table_name
+      METRIC_NAMESPACE  = var.metric_namespace
+      TRACKING_TABLE    = local.tracking_table.table_name
+      OUTPUT_BUCKET     = local.output_bucket_name
+      WORKING_BUCKET    = local.working_bucket_name
+      # Needed to fully delete an original that a preprocessing hook superseded
+      # with a redacted copy (REDACTED_SUPERSEDED terminal status). The tracker is
+      # the last writer for the execution, so it owns that delete.
+      INPUT_BUCKET = local.input_bucket_name
+      # IDP v0.6 removed AppSync: idp_common.docs_service.get_document_tracking_mode()
+      # now always returns "dynamodb" and ignores this variable. Both are kept at
+      # upstream's literal values so the env matches the vendored template rather
+      # than implying an AppSync path that no longer exists.
+      DOCUMENT_TRACKING_MODE       = "dynamodb"
+      APPSYNC_API_URL              = ""
       LOG_LEVEL                    = var.log_level
       REPORTING_BUCKET             = var.enable_reporting ? local.reporting_bucket_name : ""
       SAVE_REPORTING_FUNCTION_NAME = var.enable_reporting ? aws_lambda_function.save_reporting_data[0].function_name : ""

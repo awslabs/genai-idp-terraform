@@ -1,22 +1,27 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the shared unified-processor engine: `use_bda`
-# routing.
+# Native `terraform test` for the shared unified-processor engine: BDA vs
+# step-by-step pipeline routing.
 #
-# The engine receives a non-null boolean `use_bda` set by the instantiating
-# façade; the BDA branch resources (invoke/process-results/completion Lambdas +
-# DLQ + EventBridge wiring) are created ONLY on the `use_bda = true` path, and
-# the state machine routes through `RouteByProcessingMode`. On the
-# `use_bda = false` path the pipeline branch (OCR → classification → extraction)
-# is the entry point and the BDA-branch resources are absent (count 0).
+# The engine deploys BOTH branches unconditionally and routes per document at
+# RUNTIME, on the `use_bda` flag of the config version the document is pinned to
+# (see `RouteByProcessingMode`, and the `count = 1` note at the top of
+# lambda_bda.tf). There is deliberately no `use_bda` input variable: a single
+# deployment must be able to serve a BDA config version and a Bedrock-LLM config
+# version at the same time, so the branch cannot be selected at plan time.
+#
+# This file previously asserted the opposite — that `use_bda = false` omitted the
+# BDA Lambdas and started the machine at OCRStep. That predates the
+# always-both-branches refactor, and the assertions had gone permanently red.
+# They are rewritten here to pin the behaviour the engine actually has.
 #
 # Offline by design: the AWS provider is mocked so the suite runs with no AWS
 # credentials and no network. `command = plan` is used throughout — assertions
-# target input-derived resource counts and the rendered state-machine
-# definition / IAM, which the mock provider makes known at plan time. The real
-# `archive`/`time`/`null` providers stay live so the `archive_file` data sources
-# also verify that every `sources/patterns/unified/...` path resolves.
+# target input-derived resource counts and the routing-topology outputs, which
+# the mock provider makes known at plan time. The real `archive`/`time`/`null`
+# providers stay live so the `archive_file` data sources also verify that every
+# `sources/patterns/unified/...` path resolves.
 
 # The mocked AWS provider must return a valid partition/region/account for the
 # many `arn:${data.aws_partition.current.partition}:...` interpolations, or the
@@ -41,7 +46,6 @@ mock_provider "aws" {
 }
 
 # Shared, realistic dummy inputs for the engine ↔ façade delegation contract.
-# Per-run `variables` blocks below only flip `use_bda` (+ `bda_project_arn`).
 variables {
   name = "unified-test"
 
@@ -65,42 +69,30 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# use_bda = true  →  BDA branch present, state machine routes via the router.
+# Both branches are provisioned, and the state machine can route to either.
 # ---------------------------------------------------------------------------
-run "use_bda_true_creates_bda_branch" {
+run "both_branches_are_always_provisioned" {
   command = plan
 
-  variables {
-    use_bda         = true
-    bda_project_arn = "arn:aws:bedrock:us-east-1:123456789012:data-automation-project/abc123"
-  }
-
-  # BDA invoke Lambda is present on the BDA path.
+  # BDA branch: invoke, process-results, async completion, and the completion DLQ.
   assert {
     condition     = length(aws_lambda_function.bda_invoke) == 1
-    error_message = "BDA invoke Lambda must be created when use_bda = true."
+    error_message = "BDA invoke Lambda must always be created; routing is a runtime decision."
   }
-
-  # BDA process-results Lambda is present on the BDA path.
   assert {
     condition     = length(aws_lambda_function.bda_process_results) == 1
-    error_message = "BDA process-results Lambda must be created when use_bda = true."
+    error_message = "BDA process-results Lambda must always be created; routing is a runtime decision."
   }
-
-  # BDA async completion Lambda is present on the BDA path.
   assert {
     condition     = length(aws_lambda_function.bda_completion) == 1
-    error_message = "BDA completion Lambda must be created when use_bda = true."
+    error_message = "BDA completion Lambda must always be created; routing is a runtime decision."
   }
-
-  # The BDA completion DLQ is present on the BDA path.
   assert {
     condition     = length(aws_sqs_queue.bda_completion_dlq) == 1
-    error_message = "BDA completion DLQ must be created when use_bda = true."
+    error_message = "BDA completion DLQ must always be created; routing is a runtime decision."
   }
 
-  # The pipeline branch is ALWAYS present (it is the non-BDA path), so OCR /
-  # classification / extraction exist on the BDA path too.
+  # Pipeline branch: OCR → classification → extraction.
   assert {
     condition     = aws_lambda_function.ocr.function_name == "unified-test-ocr"
     error_message = "Pipeline OCR Lambda must always be present."
@@ -113,82 +105,37 @@ run "use_bda_true_creates_bda_branch" {
     condition     = aws_lambda_function.extraction.function_name == "unified-test-extraction"
     error_message = "Pipeline extraction Lambda must always be present."
   }
-
-  # The state machine enters at the runtime router and routes the BDA branch.
-  # (The full rendered `definition` interpolates computed Lambda ARNs and is
-  # unknown at plan, so we assert on the engine's routing-topology outputs,
-  # which derive purely from `var.use_bda`.)
-  assert {
-    condition     = output.state_machine_start_at == "RouteByProcessingMode"
-    error_message = "State machine must start at RouteByProcessingMode when use_bda = true."
-  }
-  assert {
-    condition     = contains(output.state_machine_state_names, "BDA_InvokeDataAutomation")
-    error_message = "State machine must include the BDA invoke branch when use_bda = true."
-  }
-  assert {
-    condition     = contains(output.state_machine_state_names, "RouteByProcessingMode")
-    error_message = "State machine must include the BDA router state when use_bda = true."
-  }
 }
 
 # ---------------------------------------------------------------------------
-# use_bda = false  →  BDA branch absent, state machine starts at the pipeline.
+# Routing topology: the machine enters at the v0.6 preprocessing hook, then
+# reaches the runtime router, which can send a document down either branch.
 # ---------------------------------------------------------------------------
-run "use_bda_false_omits_bda_branch" {
+run "state_machine_routes_both_branches_at_runtime" {
   command = plan
 
-  variables {
-    use_bda = false
+  # StartAt is the flat preprocessing hook, which runs BEFORE the routing
+  # decision so it fires in both processing modes (and even when OCR is off).
+  assert {
+    condition     = output.state_machine_start_at == "PreprocessingHook"
+    error_message = "State machine must start at PreprocessingHook so the v0.6 preprocessing hook precedes BDA/pipeline routing."
   }
 
-  # No BDA-branch resources on the pipeline path (count 0).
+  # The runtime router and both branch entry points are all present.
   assert {
-    condition     = length(aws_lambda_function.bda_invoke) == 0
-    error_message = "BDA invoke Lambda must NOT be created when use_bda = false."
-  }
-  assert {
-    condition     = length(aws_lambda_function.bda_process_results) == 0
-    error_message = "BDA process-results Lambda must NOT be created when use_bda = false."
-  }
-  assert {
-    condition     = length(aws_lambda_function.bda_completion) == 0
-    error_message = "BDA completion Lambda must NOT be created when use_bda = false."
-  }
-  assert {
-    condition     = length(aws_sqs_queue.bda_completion_dlq) == 0
-    error_message = "BDA completion DLQ must NOT be created when use_bda = false."
+    condition = alltrue([for s in [
+      "RouteByProcessingMode",
+      "BDA_CheckExistingData",
+      "BDA_InvokeDataAutomation",
+      "OCRStep",
+    ] : contains(output.state_machine_state_names, s)])
+    error_message = "The runtime router and both branch entry points must all be rendered."
   }
 
-  # The pipeline branch is exercised: OCR / classification / extraction present.
+  # The router is reachable from the preprocessing halt check, so a document with
+  # no preprocessing hook configured still routes normally.
   assert {
-    condition     = aws_lambda_function.ocr.function_name == "unified-test-ocr"
-    error_message = "Pipeline OCR Lambda must be present when use_bda = false."
-  }
-  assert {
-    condition     = aws_lambda_function.classification.function_name == "unified-test-classification"
-    error_message = "Pipeline classification Lambda must be present when use_bda = false."
-  }
-  assert {
-    condition     = aws_lambda_function.extraction.function_name == "unified-test-extraction"
-    error_message = "Pipeline extraction Lambda must be present when use_bda = false."
-  }
-
-  # State machine starts directly at the pipeline (no BDA router state).
-  assert {
-    condition     = output.state_machine_start_at == "OCRStep"
-    error_message = "State machine must start at the pipeline OCRStep when use_bda = false."
-  }
-  assert {
-    condition     = contains(output.state_machine_state_names, "OCRStep")
-    error_message = "State machine must include the pipeline OCRStep when use_bda = false."
-  }
-  assert {
-    condition     = !contains(output.state_machine_state_names, "RouteByProcessingMode")
-    error_message = "State machine must NOT include the BDA router when use_bda = false."
-  }
-  assert {
-    condition     = !contains(output.state_machine_state_names, "BDA_InvokeDataAutomation")
-    error_message = "State machine must NOT include the BDA invoke branch when use_bda = false."
+    condition     = contains(output.state_machine_transition_targets, "RouteByProcessingMode")
+    error_message = "RouteByProcessingMode must be a transition target; otherwise routing is unreachable behind the preprocessing hook."
   }
 }
