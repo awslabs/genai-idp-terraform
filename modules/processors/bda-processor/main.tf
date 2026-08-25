@@ -82,6 +82,9 @@ module "engine" {
   # Lambda architecture (must match the idp_common layer build architecture).
   lambda_architecture = var.lambda_architecture
 
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = var.enable_bda_ocr_backend
+
   # API wiring
   enable_api      = var.enable_api
   api_id          = var.api_id

@@ -367,6 +367,26 @@ variable "enable_hitl" {
   default     = false
 }
 
+variable "enable_bda_ocr_backend" {
+  description = <<-EOT
+    Provision the deployment-scoped Bedrock Data Automation OCR project required
+    by the IDP v0.6 `ocr.backend: bda` configuration setting, which runs a BDA
+    standard-output SYNC project as a pure OCR engine in place of Textract.
+
+    Set this to true only if a config version selects `ocr.backend: bda`, and only
+    in a region where Bedrock Data Automation is available. Upstream provisions
+    the project unconditionally; it is gated here because an unconditional
+    control-plane create fails `apply` in regions without BDA. Left false, the OCR
+    function receives an empty BDA_OCR_PROJECT_ARN and the `bda` backend errors
+    clearly — the same behaviour upstream documents for unsupported regions.
+
+    Independent of the BDA *processing* branch (`use_bda` on a config version),
+    which uses async invocation against a customer-supplied BDA project.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "assessment_model_id" {
   description = "The Bedrock model ID to use for assessment (when assessment is enabled)"
   type        = string

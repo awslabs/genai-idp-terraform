@@ -532,6 +532,9 @@ module "bda_processor" {
 
   lambda_architecture = var.build.lambda_architecture
 
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = try(var.bda_processor.enable_bda_ocr_backend, false)
+
   name = "${local.name_prefix}-processor"
 
   # Shared assets bucket for Lambda layers
@@ -595,6 +598,9 @@ module "bedrock_llm_processor" {
   count  = var.bedrock_llm_processor != null ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = try(var.bedrock_llm_processor.enable_bda_ocr_backend, false)
 
   name = "${local.name_prefix}-processor"
 
@@ -669,6 +675,9 @@ module "sagemaker_udop_processor" {
   count  = var.sagemaker_udop_processor != null ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = try(var.sagemaker_udop_processor.enable_bda_ocr_backend, false)
 
   name = "${local.name_prefix}-processor"
 

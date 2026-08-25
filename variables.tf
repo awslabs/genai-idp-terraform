@@ -225,6 +225,10 @@ variable "bedrock_llm_processor" {
     # Optional fallback BDA project for use_bda:true additional versions;
     # does not relink the default configuration.
     bda_project_arn = optional(string, null)
+    # Provision the deployment-scoped BDA OCR project needed by IDP v0.6's
+    # `ocr.backend: bda` setting (BDA standard-output SYNC as a Textract
+    # replacement). Off by default: BDA is not available in every region.
+    enable_bda_ocr_backend = optional(bool, false)
   })
   default = null
 
@@ -249,6 +253,9 @@ variable "bda_processor" {
     # Extra non-active, editable config versions seeded alongside the default
     # (version_name => config object). Shown in the UI version dropdown.
     additional_configurations = optional(any, {})
+    # See bedrock_llm_processor.enable_bda_ocr_backend. Relevant here only for
+    # additional config versions that run the pipeline branch (use_bda: false).
+    enable_bda_ocr_backend = optional(bool, false)
   })
   default = null
 }
@@ -271,6 +278,8 @@ variable "sagemaker_udop_processor" {
     # Optional fallback BDA project for use_bda:true additional versions;
     # does not relink the default configuration.
     bda_project_arn = optional(string, null)
+    # See bedrock_llm_processor.enable_bda_ocr_backend.
+    enable_bda_ocr_backend = optional(bool, false)
   })
   default = null
 }

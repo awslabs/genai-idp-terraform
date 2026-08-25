@@ -385,3 +385,9 @@ variable "lambda_architecture" {
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
 }
+
+variable "enable_bda_ocr_backend" {
+  description = "Provision the deployment-scoped Bedrock Data Automation OCR project required by the IDP v0.6 `ocr.backend: bda` configuration setting. Off by default: BDA is not available in every region, and an unconditional control-plane create would fail apply there. Forwarded to the unified-processor engine."
+  type        = bool
+  default     = false
+}
