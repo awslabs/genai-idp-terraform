@@ -361,61 +361,21 @@ resource "aws_lambda_function" "chat_resolver" {
 }
 
 # =============================================================================
-# AppSync data sources (self-contained)
+# Transport (IDP v0.6.4): REST dispatcher, not AppSync
 # =============================================================================
-# This submodule owns its AppSync data sources so it stays fully self-contained.
-# The contract references them by name; the API module's
-# feature-plugin composition (`aws_appsync_resolver.feature`) attaches the
-# `sendChatDocumentMessage` mutation to the Lambda data source and the
-# `onChatDocumentMessageUpdate` subscription to the NONE data source.
-
-# Dedicated AppSync service role that lets AppSync invoke the resolver Lambda.
-resource "aws_iam_role" "appsync_service_role" {
-  name = "${var.name_prefix}-cwd-appsync-${local.suffix}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "appsync.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy" "appsync_service_role" {
-  name = "invoke-chat-resolver"
-  role = aws_iam_role.appsync_service_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.chat_resolver.arn
-    }]
-  })
-}
-
-# Lambda data source fronting the lightweight sendChatDocumentMessage resolver.
-resource "aws_appsync_datasource" "send_chat_document_message" {
-  api_id           = var.appsync_api_id
-  name             = var.data_source_name
-  description      = "Lambda data source for the Chat-with-Document async mutation"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_service_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.chat_resolver.arn
-  }
-}
-
-# NONE (local) data source used by the subscription fan-out resolver. Named
-# per-submodule to avoid collision with other API-wide NONE data sources.
-resource "aws_appsync_datasource" "chat_document_none" {
-  api_id = var.appsync_api_id
-  name   = var.none_data_source_name
-  type   = "NONE"
-}
+# This submodule used to own an AppSync service role plus two data sources: an
+# AWS_LAMBDA source fronting the lightweight `sendChatDocumentMessage` resolver,
+# and a NONE source backing the `onChatDocumentMessageUpdate` subscription
+# fan-out. Upstream deleted AppSync in v0.6.0, so all three are gone.
+#
+# `sendChatDocumentMessage` now routes through the REST dispatcher: the contract
+# publishes it in `field_functions` (see outputs.tf) and the API module merges
+# that into the dispatcher's field-function map. The dispatcher invokes the same
+# resolver Lambda with an AppSync-shaped event, so the Lambda is unchanged and
+# needs no service role — the dispatcher's own role carries the invoke grant.
+#
+# `onChatDocumentMessageUpdate` has NO REST equivalent and is dropped outright.
+# GraphQL subscriptions do not exist on API Gateway REST, and upstream replaced
+# the mutation-to-subscription fan-out with the streaming Lambda Function URL
+# (chat-stream.tf) that the browser SigV4-signs directly, plus polling. Nothing
+# in this module needs to publish subscription events any more.

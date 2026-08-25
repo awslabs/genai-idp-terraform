@@ -518,6 +518,11 @@ module "processing_environment_api" {
   enabled_feature_contracts = local.enabled_feature_contracts
   has_feature_iam           = local.feature_enable.rbac
 
+  # Feature Platform API fields -> Lambda ARNs for the REST dispatcher. Passed
+  # separately because the Feature Platform is wired outside the contract map.
+  # Safe (no cycle): the module no longer takes any input from the API module.
+  feature_platform_field_functions = length(module.feature_platform) > 0 ? module.feature_platform[0].field_functions : {}
+
   tags = var.tags
 }
 

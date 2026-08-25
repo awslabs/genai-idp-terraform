@@ -16,10 +16,11 @@ variable "main_stack_name" {
   type        = string
 }
 
-variable "graphql_api_id" {
-  description = "AppSync GraphQL API ID to attach feature-platform data sources and resolvers to."
-  type        = string
-}
+# NOTE (IDP v0.6.4): `graphql_api_id` was removed along with AppSync. This
+# module publishes a field -> Lambda ARN map (`field_functions`) that the API
+# module merges into the REST dispatcher instead of attaching per-field AppSync
+# resolvers itself. Dropping the input is also what keeps the API module free to
+# consume that map without a dependency cycle.
 
 variable "configuration_table_name" {
   description = "ConfigurationTable name (for hook registration and config presets)."

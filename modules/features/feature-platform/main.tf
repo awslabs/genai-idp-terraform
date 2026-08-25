@@ -81,7 +81,9 @@ locals {
     }
   }
 
-  # AppSync field -> backing function (some functions serve two fields).
+  # API field -> backing function (some functions serve two fields). `type` is
+  # retained for documentation only: the REST dispatcher routes purely on field
+  # name, so Query vs Mutation no longer changes the wiring.
   resolvers = {
     listInstalledFeatures     = { type = "Query", fn = "list_installed_features" }
     listCatalogFeatures       = { type = "Query", fn = "list_catalog_features" }
@@ -250,58 +252,20 @@ resource "aws_cloudwatch_log_group" "feature" {
 }
 
 ###########################################################################
-# AppSync: service role, one Lambda data source per function, resolvers
+# Transport (IDP v0.6.4): REST dispatcher, not AppSync
+#
+# This module used to provision an AppSync service role, one Lambda data source
+# per function, and one resolver per field, all against `var.graphql_api_id`.
+# Upstream deleted AppSync in v0.6.0, so all of that is gone: the module now
+# only publishes a field -> Lambda ARN map (see the `field_functions` output),
+# which `processing-environment-api` merges into the REST dispatcher's
+# field-function map. The dispatcher invokes these Lambdas directly with an
+# AppSync-shaped event, so no service role and no per-field resource is needed.
+#
+# Removing `graphql_api_id` also removes this module's only dependency on the
+# API module, which is what lets the API module consume `field_functions`
+# without creating a dependency cycle.
 ###########################################################################
-resource "aws_iam_role" "appsync" {
-  name = "${var.name_prefix}-feature-platform-appsync-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "appsync.${data.aws_partition.current.dns_suffix}" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy" "appsync" {
-  name = "${var.name_prefix}-feature-platform-appsync-policy"
-  role = aws_iam_role.appsync.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["lambda:InvokeFunction"]
-      Resource = [for f in aws_lambda_function.feature : f.arn]
-    }]
-  })
-}
-
-resource "aws_appsync_datasource" "feature" {
-  for_each = local.functions
-
-  api_id           = var.graphql_api_id
-  name             = "FeaturePlatform_${each.key}"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.feature[each.key].arn
-  }
-}
-
-resource "aws_appsync_resolver" "feature" {
-  for_each = local.resolvers
-
-  api_id      = var.graphql_api_id
-  type        = each.value.type
-  field       = each.key
-  data_source = aws_appsync_datasource.feature[each.value.fn].name
-}
 
 ###########################################################################
 # WebUI bucket policy statement fragment (consumed by the main web-ui policy)

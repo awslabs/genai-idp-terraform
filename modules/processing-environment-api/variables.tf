@@ -596,3 +596,20 @@ variable "s3_endpoint_url" {
   type        = string
   default     = null
 }
+
+variable "feature_platform_field_functions" {
+  description = <<-EOT
+    Feature Platform API field -> Lambda ARN map, merged into the REST
+    dispatcher's field-function map (IDP v0.6.4).
+
+    Supplied as its own input rather than through `enabled_feature_contracts`
+    because the Feature Platform module is wired at the root outside the
+    feature-contract map. Wire it from `module.feature_platform[0].field_functions`.
+
+    Replaces the AppSync data sources and per-field resolvers the Feature Platform
+    module used to create against the GraphQL API. Empty by default, so the
+    dispatcher is unchanged when the Feature Platform is disabled.
+  EOT
+  type        = map(string)
+  default     = {}
+}

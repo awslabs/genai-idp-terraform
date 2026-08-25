@@ -78,6 +78,11 @@ locals {
     var.enable_edit_sections ? {
       processChanges = module.process_changes[0].process_changes_resolver_function_arn
     } : {},
+    # Feature-plugin contributions (Chat-with-Document, Feature Platform, …).
+    # Composed in feature-plugins.tf from each enabled contract's
+    # `field_functions`. Empty by default. Merged last so a feature can override a
+    # core field if it deliberately takes it over.
+    local.feature_field_functions,
     var.enable_agent_companion_chat ? {
       sendAgentChatMessage   = aws_lambda_function.agent_chat_resolver[0].arn
       listChatSessions       = aws_lambda_function.list_agent_chat_sessions_resolver[0].arn

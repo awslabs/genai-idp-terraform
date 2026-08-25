@@ -61,9 +61,13 @@ module "mcp_integration" {
   tags = var.tags
 }
 
-# Chat-with-Document: async streaming chat submodule. Consumes the AppSync
-# ids/url from the API module and emits its two resolvers as a contract; the API
-# module attaches them after both sides exist (not a cycle).
+# Chat-with-Document: async streaming chat submodule. Emits its
+# `sendChatDocumentMessage` field in the contract's `field_functions`; the API
+# module folds that into the REST dispatcher's field-function map.
+#
+# It intentionally takes NO id/arn from the API module (IDP v0.6.4). It creates no
+# AppSync resource any more, and staying free of that dependency is what lets the
+# API module consume the contract's field_functions without a cycle.
 module "chat_with_document" {
   source = "./modules/features/chat-with-document"
   count  = local.feature_enable.chat_with_document ? 1 : 0
@@ -72,9 +76,9 @@ module "chat_with_document" {
 
   name_prefix = "${local.name_prefix}-api"
 
-  appsync_api_id          = module.processing_environment_api[0].api_id
-  appsync_graphql_api_arn = module.processing_environment_api[0].api_arn
-  appsync_graphql_url     = ""
+  # Empty string selects the DynamoDB-direct write path in the vendored
+  # processor code; there is no AppSync endpoint to publish to.
+  appsync_graphql_url = ""
 
   output_bucket_arn        = var.output_bucket_arn
   configuration_table_arn  = module.processing_environment.configuration_table_arn
@@ -248,7 +252,10 @@ module "feature_platform" {
   name_prefix     = "${local.name_prefix}-api"
   main_stack_name = local.name_prefix
 
-  graphql_api_id           = module.processing_environment_api[0].api_id
+  # No graphql_api_id (IDP v0.6.4): this module creates no AppSync resource and
+  # publishes `field_functions` for the REST dispatcher instead. Keeping it free of
+  # any API-module input is what avoids a cycle, since the API module now consumes
+  # its output.
   configuration_table_name = module.processing_environment.configuration_table_name
   configuration_table_arn  = module.processing_environment.configuration_table_arn
 
