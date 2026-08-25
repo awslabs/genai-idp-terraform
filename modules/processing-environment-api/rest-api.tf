@@ -24,7 +24,22 @@ locals {
   is_private_api = var.visibility == "PRIVATE"
 
   # WAF is enabled unless the IP allow-list is the allow-all default.
-  api_waf_enabled = var.waf_allowed_ipv4_ranges != ["0.0.0.0/0"]
+  # Attach the WAF only when an explicit, non-allow-all IPv4 allow-list is given.
+  #
+  # Do NOT write this as `var.waf_allowed_ipv4_ranges != ["0.0.0.0/0"]`. Terraform
+  # does not type-convert when comparing a `list(string)` against a tuple
+  # literal, so that expression is ALWAYS true (verified: `var.v == ["0.0.0.0/0"]`
+  # evaluates false for a `list(string)` var holding exactly that value, while
+  # `var.v != tolist(["0.0.0.0/0"])` correctly evaluates false). The result was a
+  # WAF built on every deployment with `0.0.0.0/0` in its IPSet — which WAFv2
+  # rejects outright (`WAFInvalidParameterException ... field: IP_ADDRESS,
+  # parameter: 0.0.0.0/0`), so the API WAF path could never apply successfully.
+  #
+  # The semantic test below avoids the comparison entirely: an empty list means
+  # "no allow-list" (and would also produce an invalid empty IPSet), and an
+  # allow-list containing 0.0.0.0/0 means "allow all", which is expressed by not
+  # attaching a WAF rather than by an IPSet WAFv2 will not accept.
+  api_waf_enabled = length(var.waf_allowed_ipv4_ranges) > 0 && !contains(var.waf_allowed_ipv4_ranges, "0.0.0.0/0")
 
   # CORS + security headers reused by the OPTIONS preflight and gateway
   # responses (mirrors the upstream static values).
