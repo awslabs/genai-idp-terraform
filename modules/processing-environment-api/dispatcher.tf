@@ -25,12 +25,20 @@ locals {
   # field. Keying by anything other than the canonical name would break the
   # alias lookup (`FIELD_FUNCTION_MAP.get(FIELD_ALIASES.get(field, field))`).
   #
-  # VTL/DynamoDB-direct fields are intentionally ABSENT — the dispatcher serves
-  # them in-process via ddb_direct.py given TRACKING/DISCOVERY/AGENT table names:
-  #   createDocument, updateDocument, getDocument, listDocuments,
-  #   listDocumentsDateHour, listDocumentsDateShard (TrackingTable VTL);
+  # Fields the dispatcher serves in-process via ddb_direct.py are intentionally
+  # ABSENT here. That set is EXACTLY `ddb_direct._HANDLED` — do not widen it from
+  # memory:
+  #   getDocument, listDocumentsDateHour, listDocumentsDateShard (TrackingTable);
   #   listDiscoveryJobs, updateDiscoveryJobStatus, deleteDiscoveryJob;
-  #   getAgentJobStatus, listAgentJobs, updateAgentJobStatus, deleteAgentJob.
+  #   getAgentJobStatus, listAgentJobs, updateAgentJobStatus, deleteAgentJob;
+  #   getCircuitBreakerStatus (only as the feature-disabled fallback).
+  #
+  # `listDocuments` is NOT in that set, despite the family resemblance to the
+  # listDocumentsDate* entries. FIELD_ALIASES folds it onto `getDocumentCount`,
+  # which must be mapped to a real Lambda below. An earlier revision of this
+  # comment wrongly listed listDocuments (and createDocument/updateDocument) as
+  # ddb_direct-served, which is why the Document List 404'd with
+  # "unknown operation: listDocuments" on a live deployment.
   field_function_map = merge(
     {
       # Core document + configuration resolvers (always present)
@@ -40,6 +48,16 @@ locals {
       getFileContents          = aws_lambda_function.get_file_contents_resolver.arn
       deleteConfigVersion      = aws_lambda_function.configuration_resolver.arn
       getStepFunctionExecution = aws_lambda_function.get_stepfunction_execution_resolver.arn
+
+      # Document listing / versions / samples (see document-resolvers.tf).
+      # `getDocumentCount` is the CANONICAL key the dispatcher's FIELD_ALIASES
+      # folds `listDocuments` onto, so this entry is what makes the Web UI's
+      # Document List work. `compareDocumentVersions` likewise absorbs
+      # getDocumentVersion / listDocumentVersions / deleteDocumentVersion.
+      getDocumentCount         = aws_lambda_function.document_resolver["list_documents_gsi_resolver"].arn
+      listDocumentsByDateRange = aws_lambda_function.document_resolver["list_documents_range_resolver"].arn
+      compareDocumentVersions  = aws_lambda_function.document_resolver["document_versions_resolver"].arn
+      getSampleDocumentUrl     = aws_lambda_function.document_resolver["get_sample_document_resolver"].arn
       abortWorkflow            = aws_lambda_function.abort_workflow.arn
       syncBdaIdp               = aws_lambda_function.sync_bda_idp.arn
     },
