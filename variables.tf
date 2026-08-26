@@ -212,6 +212,7 @@ variable "bedrock_llm_processor" {
   type = object({
     classification_model_id      = optional(string, null)
     extraction_model_id          = optional(string, null)
+    assessment_model_id          = optional(string, null)
     max_pages_for_classification = optional(string, "ALL")
     summarization = optional(object({
       enabled  = optional(bool, true)
