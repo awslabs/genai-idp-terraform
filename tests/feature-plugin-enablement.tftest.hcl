@@ -145,7 +145,9 @@ run "all_features_off_by_default" {
   command = plan
 
   variables {
-    api = { enabled = false }
+    # chat_with_document defaults ON in v0.6.4, so disable it explicitly to
+    # exercise the truly-empty feature-contract path.
+    api = { enabled = false, chat_with_document = { enabled = false } }
   }
 
   assert {
@@ -173,6 +175,8 @@ run "mcp_enabled_via_forwarded_flag" {
     api = {
       enabled    = false
       enable_mcp = true
+      # chat_with_document defaults ON in v0.6.4; keep it off so only MCP is enabled.
+      chat_with_document = { enabled = false }
     }
   }
 
