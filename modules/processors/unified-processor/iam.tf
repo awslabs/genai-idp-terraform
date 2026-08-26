@@ -583,7 +583,12 @@ resource "aws_iam_role_policy" "process_results_lambda" {
           }
         }
       }
-      ], var.enable_api ? [] : [{
+      ],
+      # v0.6.4: workers write document status to DynamoDB directly (AppSync
+      # removed; UI polls), so tracking-table access is unconditional — not gated
+      # on enable_api. Gating it left process-results unable to read/update the
+      # tracking table with the web UI on, failing the pipeline post-OCR.
+      [{
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
@@ -848,8 +853,10 @@ resource "aws_iam_role_policy" "assessment_lambda" {
           ]
         }
       ],
-      # Conditional DynamoDB tracking table permissions (only when API is disabled)
-      var.enable_api ? [] : [{
+      # v0.6.4: workers write document status to DynamoDB directly (AppSync
+      # removed; UI polls), so tracking-table access is unconditional — not gated
+      # on enable_api.
+      [{
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
