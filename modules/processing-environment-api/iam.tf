@@ -814,10 +814,13 @@ resource "aws_iam_policy" "get_stepfunction_execution_resolver_logs_policy" {
   })
 }
 resource "aws_iam_policy" "get_stepfunction_execution_resolver_stepfunctions_policy" {
-  #checkov:skip=CKV_AWS_355:Step Functions execution ARNs are dynamic and cannot be pre-scoped
   name        = "GetStepFunctionExecutionResolverStepFunctionsPolicy-${random_string.suffix.result}"
   description = "Policy for Get Step Function Execution Resolver Lambda to access Step Functions"
 
+  # Scoped to this deployment's own document-processing executions (see
+  # local.stepfunction_execution_resource) rather than "*", matching the
+  # upstream SAM policy's execution-ARN scoping and closing the account-wide
+  # read behind the reported getStepFunctionExecution IDOR.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -827,7 +830,7 @@ resource "aws_iam_policy" "get_stepfunction_execution_resolver_stepfunctions_pol
           "states:GetExecutionHistory"
         ]
         Effect   = "Allow"
-        Resource = "*"
+        Resource = local.stepfunction_execution_resource
       }
     ]
   })

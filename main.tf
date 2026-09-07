@@ -452,6 +452,11 @@ module "processing_environment_api" {
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
 
+  # Step Functions state machine ARN. Used to scope the getStepFunctionExecution
+  # resolver's states:DescribeExecution / states:GetExecutionHistory grant to
+  # this deployment's own executions (least privilege) instead of "*".
+  state_machine_arn = try(local.processor_config.state_machine_arn, null)
+
   # Lambda layers
   base_layer_arn           = module.processing_environment.base_layer_arn
   idp_common_layer_arn     = module.idp_common_layer.layer_arn

@@ -9,6 +9,21 @@ locals {
   # no-op merge, so public deployments keep the global regional S3 endpoint.
   s3_endpoint_url_env = var.s3_endpoint_url != null ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {}
 
+  # Least-privilege resource scope for the getStepFunctionExecution resolver's
+  # states:DescribeExecution / states:GetExecutionHistory grant.
+  #
+  # Upstream (SAM) scopes this to `execution:${StackName}-*:*`. The Terraform
+  # port previously granted `Resource = "*"`, which let the resolver describe
+  # ANY Step Functions execution in the account — the account-wide reach behind
+  # the reported IDOR. We restore least privilege by scoping to this
+  # deployment's own document-processing executions.
+  #
+  # A state machine ARN (…:stateMachine:<name>) becomes an execution ARN scope
+  # (…:execution:<name>:*). When the processor (and thus the ARN) is not wired
+  # in, fall back to an account/region-scoped prefix wildcard rather than "*",
+  # so the grant is never account-wide.
+  stepfunction_execution_resource = var.state_machine_arn != null ? "${replace(var.state_machine_arn, ":stateMachine:", ":execution:")}:*" : "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:execution:${var.name}-*:*"
+
   # Helper function to generate model permissions for knowledge base model_id
   # This follows the same pattern as bedrock-llm-processor
   knowledge_base_model_permissions = var.knowledge_base.enabled && var.knowledge_base.model_id != null ? {
