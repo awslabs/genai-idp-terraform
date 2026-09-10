@@ -61,14 +61,14 @@ summarization_model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 enable_evaluation   = false
 evaluation_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 
-# Assessment Feature
-enable_assessment = false
-
 # Reporting Feature
 enable_reporting = false
 
-# API Configuration
-enable_api = true
+# Rule Validation Feature (compliance checking). To enable, set the flag AND
+# point config_file_path at a config that has rule_validation enabled, e.g.
+# config_file_path = "../../sources/config_library/unified/rule-validation/config.yaml"
+enable_rule_validation = false
+config_file_path       = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
 # Web UI Configuration
 web_ui = {
