@@ -14,6 +14,8 @@ create_bda_project = true # let this example create + link one
 # chat_with_document_enabled = true         # on by default; does NOT require a KB
 # classification_model_id    = "us.amazon.nova-2-lite-v1:0"
 # extraction_model_id        = "us.amazon.nova-2-lite-v1:0"
+# enable_rule_validation     = true
+# config_file_path           = "../../sources/config_library/unified/rule-validation/config.yaml"
 # web_ui = { enabled = true }              # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }

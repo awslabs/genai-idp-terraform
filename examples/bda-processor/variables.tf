@@ -148,6 +148,12 @@ variable "summarization_enabled" {
   default     = true
 }
 
+variable "enable_rule_validation" {
+  description = "Wire the rule-validation stage into the workflow. Requires a config whose active version sets rule_validation.enabled=true with non-empty policy_classes for the stage to run at runtime."
+  type        = bool
+  default     = false
+}
+
 variable "summarization_model_id" {
   description = "Model ID for document summarization (BDA processor). If null, uses the default from YAML configuration."
   type        = string

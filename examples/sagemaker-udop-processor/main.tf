@@ -433,6 +433,7 @@ module "genai_idp_accelerator" {
     type                        = "sagemaker-udop"
     classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
     extraction_model_id         = var.extraction_model_id
+    enable_rule_validation      = var.enable_rule_validation
     summarization = {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id
@@ -483,6 +484,22 @@ module "genai_idp_accelerator" {
       model_id           = var.knowledge_base_model_id
       embedding_model_id = var.knowledge_base_embedding_model_id
     }
+
+    # Feature flags forwarded from var.api (previously accepted but dropped).
+    agent_analytics             = var.api.agent_analytics
+    discovery                   = var.api.discovery
+    chat_with_document          = var.api.chat_with_document
+    process_changes             = var.api.process_changes
+    enable_agent_companion_chat = var.api.enable_agent_companion_chat
+    enable_test_studio          = var.api.enable_test_studio
+    enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_error_analyzer       = var.api.enable_error_analyzer
+    enable_mcp                  = var.api.enable_mcp
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
   }
 
   # Feature flags (DEPRECATED - use api variable instead)

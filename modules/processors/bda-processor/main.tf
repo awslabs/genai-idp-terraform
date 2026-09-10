@@ -117,6 +117,9 @@ module "engine" {
   vpc_subnet_ids         = var.vpc_subnet_ids
   vpc_security_group_ids = var.vpc_security_group_ids
 
+  # Rule validation
+  enable_rule_validation = var.enable_rule_validation
+
   # Summarization
   is_summarization_enabled = local.is_summarization_enabled
   summarization_model_id   = var.summarization_model_id

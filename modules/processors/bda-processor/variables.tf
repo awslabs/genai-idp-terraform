@@ -160,6 +160,12 @@ variable "evaluation_baseline_bucket_name" {
 }
 
 # Summarization configuration
+variable "enable_rule_validation" {
+  description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
+  type        = bool
+  default     = false
+}
+
 variable "summarization_model_id" {
   description = "Optional model used for document summarization. If not provided, the model from config.yaml will be used."
   type        = string

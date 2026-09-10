@@ -104,6 +104,12 @@ variable "summarization_enabled" {
   default     = true
 }
 
+variable "enable_rule_validation" {
+  description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
+  type        = bool
+  default     = false
+}
+
 variable "summarization_model_id" {
   description = "Model ID for document summarization"
   type        = string

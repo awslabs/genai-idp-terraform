@@ -233,8 +233,13 @@ locals {
   # The state after summarization depends on whether evaluation is enabled
   post_summ_next = local.eval_enabled ? "EvaluationStep" : "TailWrapSummarizedDocument"
 
-  # CheckHITLRequired default (HITL not triggered), same as post_hitl_next
-  check_hitl_default = local.post_hitl_next
+  # Rule validation is wired into the workflow only when enabled; see rv_states.
+  rv_enabled = var.enable_rule_validation
+
+  # Where the HITL join goes: the RV entry Choice when enabled, else the
+  # pre-existing summarization/eval/tail target (so the disabled path is unchanged).
+  rv_entry           = local.rv_enabled ? "CheckRuleValidationEnabled" : local.post_hitl_next
+  check_hitl_default = local.rv_entry
 
   # HITL is async (v0.4.16): process_results marks the doc HITL_IN_PROGRESS and
   # the workflow continues without waiting; reviewers complete via AppSync.
@@ -242,7 +247,7 @@ locals {
     MarkHITLPending = {
       Type    = "Pass"
       Comment = "Document marked for async HITL review, workflow continues without waiting"
-      Next    = local.post_hitl_next
+      Next    = local.rv_entry
     }
   } : {}
 
@@ -307,6 +312,159 @@ locals {
       Next       = "PostprocessingHook"
     }
   } : {}
+
+  # Rule-validation sub-flow, ported from the upstream unified ASL so the
+  # Lambdas in lambda_rule_validation.tf actually run. Gated on
+  # var.enable_rule_validation (empty map when off => zero-diff plan). Per-doc
+  # gate is $.Result.rule_validation_enabled, already set by process_results.
+  #
+  # Divergence from upstream: upstream feeds SummarizationStep from
+  # $.RuleValidationOrchestrationResult.document; this port's tail reads
+  # $.Result.document. So internal result paths match upstream, but the final
+  # Pass copies the document back to $.Result.document -> local.post_hitl_next.
+  # Only that copy-back touches $.Result, so $.Result.hitl_triggered is safe.
+  # merge([for ...]...) rather than a ternary: the states are heterogeneously
+  # shaped, so a ternary against an empty object fails type unification (same
+  # pattern as summ_states / bda_states).
+  rv_states = merge([for _ in(local.rv_enabled ? [1] : []) : {
+    # Run RV only when the resolved config asked for it.
+    CheckRuleValidationEnabled = {
+      Type = "Choice"
+      Choices = [
+        {
+          Variable      = "$.Result.rule_validation_enabled"
+          BooleanEquals = true
+          Next          = "PolicyClassificationStep"
+        }
+      ]
+      Default = "SetEmptyRuleValidationResult"
+    }
+
+    # Which policy classes apply. Whole-state input (Lambda reads $.Result.document).
+    PolicyClassificationStep = {
+      Type       = "Task"
+      Resource   = aws_lambda_function.rule_validation_policy_classification_function[0].arn
+      ResultPath = "$.PolicyClassificationResult"
+      Retry      = local.standard_retry
+      Next       = "CheckPolicyMatch"
+    }
+
+    # No applicable policy => skip the Map + orchestration.
+    CheckPolicyMatch = {
+      Type = "Choice"
+      Choices = [
+        {
+          Variable      = "$.PolicyClassificationResult.skip_rule_validation"
+          BooleanEquals = true
+          Next          = "SetSkippedRuleValidationResult"
+        }
+      ]
+      Default = "ProcessRuleValidationSections"
+    }
+
+    # Skipped: carry the classified document forward.
+    SetSkippedRuleValidationResult = {
+      Type = "Pass"
+      Parameters = {
+        "document.$" = "$.PolicyClassificationResult.document"
+      }
+      ResultPath = "$.RuleValidationOrchestrationResult"
+      Next       = "PostRuleValidationHook"
+    }
+
+    # Disabled for this doc: carry the process-results document forward.
+    SetEmptyRuleValidationResult = {
+      Type = "Pass"
+      Parameters = {
+        "document.$" = "$.Result.document"
+      }
+      ResultPath = "$.RuleValidationOrchestrationResult"
+      Next       = "PostRuleValidationHook"
+    }
+
+    # Validate each section in parallel (worker reads document + section_id).
+    ProcessRuleValidationSections = {
+      Type      = "Map"
+      ItemsPath = "$.PolicyClassificationResult.document.sections"
+      ItemSelector = {
+        "execution_arn.$" = "$$.Execution.Id"
+        "document.$"      = "$.PolicyClassificationResult.document"
+        "section_id.$"    = "$$.Map.Item.Value"
+      }
+      MaxConcurrency = 10
+      Iterator = {
+        StartAt = "RuleValidationStep"
+        States = {
+          RuleValidationStep = {
+            Type     = "Task"
+            Resource = aws_lambda_function.rule_validation_function[0].arn
+            Retry    = local.standard_retry
+            Next     = "RuleValidationSectionComplete"
+          }
+          RuleValidationSectionComplete = {
+            Type = "Pass"
+            End  = true
+          }
+        }
+      }
+      ResultPath = "$.RuleValidationResults"
+      Next       = "RuleValidationOrchestration"
+    }
+
+    # Consolidate per-section results into one verdict set on the document.
+    RuleValidationOrchestration = {
+      Type       = "Task"
+      Resource   = aws_lambda_function.rule_validation_orchestration_function[0].arn
+      ResultPath = "$.RuleValidationOrchestrationResult"
+      Retry      = local.standard_retry
+      Next       = "PostRuleValidationHook"
+    }
+
+    # Sixth hook point. Fail-open like the other five (Catch continues flow).
+    PostRuleValidationHook = {
+      Type     = "Task"
+      Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+      Parameters = {
+        FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+        Payload = {
+          "hookPoint"      = "postRuleValidation"
+          "executionArn.$" = "$$.Execution.Id"
+          "document.$"     = "$.RuleValidationOrchestrationResult.document"
+        }
+      }
+      ResultPath = "$.HookResults.postRuleValidation"
+      Retry = [{
+        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+        IntervalSeconds = 2
+        MaxAttempts     = 3
+        BackoffRate     = 2
+      }]
+      # On failure there's no Payload; use the error-path Apply instead.
+      Catch = [{
+        ErrorEquals = ["States.ALL"]
+        ResultPath  = "$.HookResults.postRuleValidation.error"
+        Next        = "ApplyPostRuleValidationHookDocumentOnError"
+      }]
+      Next = "ApplyPostRuleValidationHookDocument"
+    }
+
+    # Hook ran: copy the (possibly modified) document from its Payload back to
+    # $.Result.document, where the summarization/eval/tail states read it.
+    ApplyPostRuleValidationHookDocument = {
+      Type       = "Pass"
+      InputPath  = "$.HookResults.postRuleValidation.Payload.document"
+      ResultPath = "$.Result.document"
+      Next       = local.post_hitl_next
+    }
+
+    # Hook failed: fall back to the orchestrated (un-hooked) document.
+    ApplyPostRuleValidationHookDocumentOnError = {
+      Type       = "Pass"
+      InputPath  = "$.RuleValidationOrchestrationResult.document"
+      ResultPath = "$.Result.document"
+      Next       = local.post_hitl_next
+    }
+  }]...)
 
   # ---------------------------------------------------------------------------
   # IDP v0.6 flat hook points: `preprocessing` and `postprocessing`.
@@ -843,6 +1001,7 @@ locals {
     local.hitl_states,
     local.summ_states,
     local.eval_states,
+    local.rv_states,
     local.bda_states,
     local.preprocessing_states,
     local.postprocessing_states
