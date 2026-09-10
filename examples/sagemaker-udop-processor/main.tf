@@ -433,6 +433,7 @@ module "genai_idp_accelerator" {
     type                        = "sagemaker-udop"
     classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
     extraction_model_id         = var.extraction_model_id
+    enable_rule_validation      = var.enable_rule_validation
     summarization = {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id

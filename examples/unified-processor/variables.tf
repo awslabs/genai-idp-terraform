@@ -91,6 +91,12 @@ variable "config_file_path" {
   default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 }
 
+variable "enable_rule_validation" {
+  description = "Wire the rule-validation (compliance QA) stage into the workflow. Requires a config whose active version sets rule_validation.enabled=true with non-empty policy_classes for the stage to run at runtime."
+  type        = bool
+  default     = false
+}
+
 variable "additional_config_files" {
   description = "Optional extra config versions to seed alongside the default and the BDA version, as version_name => path to a YAML file (relative to this example dir or absolute). Each shows in the UI version dropdown as an editable, non-active version. A top-level bda_project_arn key inside a file links that version to a BDA project."
   type        = map(string)

@@ -65,6 +65,19 @@ the migration steps behind every breaking change below.
 
 ### Added
 
+- **Rule validation wired into the workflow.** The rule-validation stage now
+  runs as real Step Functions states in the unified-processor engine, mirroring
+  the upstream ASL: `CheckRuleValidationEnabled`, policy classification,
+  per-section `Map`, orchestration, then the `postRuleValidation` hook.
+  Previously the rule-validation Lambdas were packaged but never invoked. The
+  third Lambda (`rule-validation-policy-classification`) is now packaged too, and
+  the sixth pipeline hook point `postRuleValidation` is reachable. Available on
+  all three processor types (bedrock-llm, bda, sagemaker-udop): the states live
+  in the shared engine and every branch reaches the post-extraction join where
+  the stage attaches. Gated on `processor.enable_rule_validation` (default
+  `false`); when off, the rendered state machine and resources are unchanged
+  (zero-diff plan). At runtime the stage runs only for documents whose active
+  config sets `rule_validation.enabled = true` with non-empty `policy_classes`.
 - **`web_ui.hosting = "APIGateway"`** — serves the SPA as an S3 proxy on the same
   REST API and stage as the data transport, so the UI inherits the API's PRIVATE
   endpoint and WAF posture. Replaces ALB hosting for VPC-only deployments; needs

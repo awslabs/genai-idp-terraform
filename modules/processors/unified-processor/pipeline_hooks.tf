@@ -18,14 +18,15 @@
 # configured the dispatcher returns after a single config read and the pipeline
 # is unchanged. Mirrors upstream IDP v0.6.4 (patterns/unified).
 #
-# NOTE: this workflow's state machine (main.tf) wires only FIVE of the six
+# NOTE: this workflow's state machine (main.tf) wires all SIX per-step hook
 # points — postOcr, postClassification, postExtraction, postAssessment,
-# postSummarization. `postRuleValidation` is intentionally NOT wired because
-# the Terraform-authored unified workflow has no rule-validation state to hang
-# it on (upstream's ASL has RuleValidation -> RuleValidationOrchestration ->
-# PostRuleValidationHook; those states are not ported here). If the
-# rule-validation step is added to main.tf, wire its postRuleValidation hook
-# the same way as the other five.
+# postRuleValidation, postSummarization. `postRuleValidation` fires from the
+# PostRuleValidationHook state inside the rule-validation sub-flow
+# (`local.rv_states`), which is rendered only when var.enable_rule_validation is
+# set; when rule validation is disabled the point is simply never reached (the
+# dispatcher stays inert either way). The rule-validation states mirror
+# upstream's ASL (RuleValidation -> RuleValidationOrchestration ->
+# PostRuleValidationHook), adapted to this port's `$.Result.document` envelope.
 
 data "archive_file" "pipeline_hooks_dispatcher" {
   type        = "zip"

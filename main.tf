@@ -564,6 +564,9 @@ module "bda_processor" {
   # Optional: Summarization configuration (BDA only)
   summarization_model_id = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
 
+  # Rule validation
+  enable_rule_validation = var.processor.enable_rule_validation
+
   # Optional: Document processing configuration
   config = var.processor.config
 
@@ -646,6 +649,7 @@ module "bedrock_llm_processor" {
   # Feature flags
   is_summarization_enabled = var.processor.summarization.enabled
   enable_hitl              = var.processor.enable_hitl
+  enable_rule_validation   = var.processor.enable_rule_validation
 
   # Optional: Summarization model configuration
   summarization_model_id = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
@@ -708,6 +712,9 @@ module "sagemaker_udop_processor" {
   summarization_model_id          = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
+
+  # Rule validation
+  enable_rule_validation = var.processor.enable_rule_validation
 
   # Optional: Document processing configuration
   config = var.processor.config
