@@ -257,3 +257,9 @@ variable "enable_mcp" {
   type        = bool
   default     = false
 }
+
+variable "enable_test_studio" {
+  description = "Enable the Test Studio feature (Web UI Test Sets / Test Execution tabs): test-runner, test-set, and test-results resolvers plus their dispatcher fields."
+  type        = bool
+  default     = false
+}

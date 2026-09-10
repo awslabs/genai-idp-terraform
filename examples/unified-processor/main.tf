@@ -563,6 +563,9 @@ module "genai_idp_accelerator" {
     enable_agent_companion_chat = var.enable_agent_companion_chat
     agent_analytics             = { enabled = var.enable_agent_analytics }
     enable_mcp                  = var.enable_mcp
+
+    # Test Studio (Web UI "Test Sets" / "Test Execution" tabs).
+    enable_test_studio = var.enable_test_studio
   }
 
   # Reporting is required by agent_analytics (analytics agent queries via Athena).
