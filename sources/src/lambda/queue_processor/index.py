@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 
 import boto3
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -135,6 +136,20 @@ def extend_visibility_for_outage(receipt_handle: str) -> None:
         logger.warning(f"Failed to extend visibility for OPEN-state message: {e}")
 
 
+def _deterministic_execution_name(input_key: str) -> str:
+    """
+    Build a deterministic Step Functions execution name from a document's S3 key.
+
+    Execution names must be unique per state machine for 90 days, are limited to 80
+    characters, and only allow a restricted character set (no "/"), so the raw S3 key
+    can't be used directly. Hashing it gives a name that's stable across retries/
+    redeliveries for the *same* document, so a duplicate start_execution call for the
+    same document raises ExecutionAlreadyExists instead of racing a fresh execution.
+    """
+    digest = hashlib.sha256(input_key.encode("utf-8")).hexdigest()
+    return f"doc-{digest}"
+
+
 def start_workflow(document: Document) -> Dict[str, Any]:
     """
     Start Step Functions workflow
@@ -204,19 +219,37 @@ def start_workflow(document: Document) -> Dict[str, Any]:
     }
 
     logger.info(f"Starting workflow for document (size: {len(json.dumps(event, default=str))} chars)")
-    
+
+    execution_name = _deterministic_execution_name(document.input_key)
+
     try:
         execution = sfn.start_execution(
             stateMachineArn=state_machine_arn,
+            name=execution_name,
             input=json.dumps(event)
         )
-        
+
         # Set workflow execution ARN and start_time in the document
         document.workflow_execution_arn = execution.get('executionArn', '')
         document.start_time = datetime.now(timezone.utc).isoformat()
-        
+
         logger.info(f"Workflow started: {execution.get('executionArn', '')}")
         return execution
+    except sfn.exceptions.ExecutionAlreadyExists:
+        # A duplicate trigger (e.g. an at-least-once SQS/S3-event redelivery) for the
+        # same document. Execution names are unique per state machine for 90 days
+        # regardless of the prior execution's terminal state, so this means a workflow
+        # for this exact document already started -- either it's still running, or it
+        # already finished (successfully or not). Either way, starting a second,
+        # independent execution here would race the first and could overwrite its
+        # tracking status. Treat this as already-handled rather than raising.
+        logger.warning(
+            f"Execution {execution_name} already exists for this document -- "
+            f"a workflow for this document was already started (duplicate trigger). "
+            f"Skipping duplicate start_execution call."
+        )
+        document.workflow_execution_arn = document.workflow_execution_arn or ''
+        return {"executionArn": document.workflow_execution_arn, "alreadyStarted": True}
     except Exception as e:
         logger.error(f"Error starting workflow: {str(e)}")
         # Ensure we have a default workflow_execution_arn to avoid None errors
