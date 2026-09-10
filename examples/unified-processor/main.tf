@@ -507,6 +507,7 @@ module "genai_idp_accelerator" {
   bedrock_llm_processor = {
     classification_model_id = var.classification_model_id
     extraction_model_id     = var.extraction_model_id
+    assessment_model_id     = var.assessment_model_id
     summarization = {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id

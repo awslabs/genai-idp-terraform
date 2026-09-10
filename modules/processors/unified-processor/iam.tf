@@ -228,7 +228,7 @@ resource "aws_iam_role_policy" "ocr_lambda" {
         Resource = [
           local.configuration_table_arn,
           # v0.6 backend workers write document status to the tracking table
-          # directly (no AppSync), so this grant is unconditional — the stale
+          # directly (no AppSync), so this grant is unconditional. The stale
           # var.enable_api gate left OCR unable to UpdateItem when the API is on.
           local.tracking_table_arn,
         ]
