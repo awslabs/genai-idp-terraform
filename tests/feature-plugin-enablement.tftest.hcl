@@ -122,9 +122,10 @@ variables {
     authenticated_role_arn = "arn:aws:iam::123456789012:role/test-authenticated-role"
   }
 
-  # Exactly one processor (validation gate). Config carries a `chat:` block so
-  # the chat submodule's effective-config resolution succeeds when enabled.
-  bedrock_llm_processor = {
+  # Config carries a `chat:` block so the chat submodule's effective-config
+  # resolution succeeds when enabled.
+  processor = {
+    type = "bedrock-llm"
     config = {
       classification = { model = "us.amazon.nova-lite-v1:0" }
       extraction     = { model = "us.amazon.nova-lite-v1:0" }

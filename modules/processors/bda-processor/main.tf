@@ -16,7 +16,7 @@
  * Pattern-specific (BDA-only) concern handled here:
  *   * The Bedrock Data Automation Project ARN that the BDA branch invokes. In
  *     this Terraform wrapper the project is **consumer-supplied** through the
- *     required `var.data_automation_project_arn` (root: `var.bda_processor.project_arn`)
+ *     required `var.data_automation_project_arn` (root: `var.processor.project_arn`)
  *     rather than synthesized from config classes. This is a deliberate
  *     divergence from the CDK `BdaProcessor`, which builds Blueprints + a
  *     `DataAutomationProject` at synth time (CDK uses a CFN custom resource that
