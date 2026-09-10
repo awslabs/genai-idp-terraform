@@ -212,10 +212,16 @@ resource "aws_iam_role_policy" "ocr_lambda" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = concat(
-          [local.configuration_table_arn],
-          var.enable_api ? [] : [local.tracking_table_arn]
-        )
+        # v0.6.4: backend workers write document status to the tracking table
+        # DIRECTLY (AppSync was removed; the UI polls DynamoDB), so the OCR role
+        # needs tracking-table write regardless of enable_api. The old
+        # `enable_api ? [] : [...]` gate assumed the API path wrote status via
+        # AppSync, which no longer exists — it left OCR unable to UpdateItem and
+        # failed every execution at the first step.
+        Resource = [
+          local.configuration_table_arn,
+          local.tracking_table_arn,
+        ]
       },
       {
         Effect = "Allow"
@@ -577,7 +583,12 @@ resource "aws_iam_role_policy" "process_results_lambda" {
           }
         }
       }
-      ], var.enable_api ? [] : [{
+      ],
+      # v0.6.4: workers write document status to DynamoDB directly (AppSync
+      # removed; UI polls), so tracking-table access is unconditional — not gated
+      # on enable_api. Gating it left process-results unable to read/update the
+      # tracking table with the web UI on, failing the pipeline post-OCR.
+      [{
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
@@ -842,8 +853,10 @@ resource "aws_iam_role_policy" "assessment_lambda" {
           ]
         }
       ],
-      # Conditional DynamoDB tracking table permissions (only when API is disabled)
-      var.enable_api ? [] : [{
+      # v0.6.4: workers write document status to DynamoDB directly (AppSync
+      # removed; UI polls), so tracking-table access is unconditional — not gated
+      # on enable_api.
+      [{
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",

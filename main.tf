@@ -642,6 +642,7 @@ module "bedrock_llm_processor" {
   # The processor will use config.yaml by default and override with these if provided
   classification_model_id      = var.bedrock_llm_processor.classification_model_id
   extraction_model_id          = var.bedrock_llm_processor.extraction_model_id
+  assessment_model_id          = var.bedrock_llm_processor.assessment_model_id
   evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
   max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
 

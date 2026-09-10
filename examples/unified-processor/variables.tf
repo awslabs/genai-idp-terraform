@@ -110,6 +110,12 @@ variable "extraction_model_id" {
   default     = "us.amazon.nova-2-lite-v1:0"
 }
 
+variable "assessment_model_id" {
+  description = "Model ID for extraction-confidence assessment (Bedrock-LLM branch). Set so the seeded config's assessment.model and the assessment role's Bedrock grant agree; without it the assessment Lambda falls back to a hardcoded default the IAM allowlist does not cover."
+  type        = string
+  default     = "us.amazon.nova-2-lite-v1:0"
+}
+
 variable "summarization_enabled" {
   description = "Enable document summarization for the Bedrock-LLM branch"
   type        = bool

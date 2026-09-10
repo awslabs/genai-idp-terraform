@@ -212,6 +212,7 @@ variable "bedrock_llm_processor" {
   type = object({
     classification_model_id      = optional(string, null)
     extraction_model_id          = optional(string, null)
+    assessment_model_id          = optional(string, null)
     max_pages_for_classification = optional(string, "ALL")
     summarization = optional(object({
       enabled  = optional(bool, true)
@@ -551,7 +552,11 @@ variable "api" {
   }
 
   validation {
-    condition     = var.api.visibility == null || contains(["GLOBAL", "PRIVATE"], var.api.visibility)
+    # Ternary, not `x == null || contains(...)`: Terraform does not short-circuit
+    # `||` when the right operand errors, and contains() rejects a null value — so
+    # the `||` form fails validation on the null default (the normal case now that
+    # api_gateway_visibility is the supported input).
+    condition     = var.api.visibility == null ? true : contains(["GLOBAL", "PRIVATE"], var.api.visibility)
     error_message = "api.visibility (deprecated — use api.api_gateway_visibility) must be \"GLOBAL\" or \"PRIVATE\" when set."
   }
 
