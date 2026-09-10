@@ -408,6 +408,28 @@ resource "aws_wafv2_web_acl" "cognito" {
     }
   }
 
+  # AWS Managed Rule - Known Bad Inputs (Wiz: AWSManagedRulesKnownBadInputsRuleSet).
+  # Blocks request patterns known to be invalid and associated with the
+  # exploitation or discovery of vulnerabilities.
+  rule {
+    name     = "AWSManagedRulesKnownBadInputsRuleSet"
+    priority = 2
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${var.name_prefix}-cognito-known-bad-inputs"
+      sampled_requests_enabled   = true
+    }
+  }
+
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = "${var.name_prefix}-cognito-waf"
