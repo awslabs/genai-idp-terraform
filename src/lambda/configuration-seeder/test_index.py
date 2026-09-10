@@ -40,17 +40,59 @@ _spec.loader.exec_module(seeder)
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
+from botocore.exceptions import ClientError
+
+
+def ConditionalCheckFailed():
+    """Real botocore ClientError with the ConditionalCheckFailed code (the
+    seeder inspects response['Error']['Code'], so a look-alike won't do)."""
+    return ClientError(
+        {"Error": {"Code": "ConditionalCheckFailedException", "Message": "conditional failed"}},
+        "PutItem",
+    )
+
+
 class FakeTable:
-    """Captures the item handed to `put_item` without touching AWS."""
+    """In-memory DynamoDB stand-in: a keyed store (so read-modify-write and
+    marker reads work offline) that also records the raw put sequence and
+    honours the ConditionExpression shapes the seeder uses."""
 
     def __init__(self):
         self.put_items = []
+        self.store = {}
 
-    def put_item(self, Item):  # noqa: N803 - boto3 kwarg name
+    def put_item(self, Item, ConditionExpression=None, ExpressionAttributeValues=None):  # noqa: N803
+        key = Item["Configuration"]
+        if ConditionExpression == "attribute_not_exists(Configuration)":
+            if key in self.store:
+                raise ConditionalCheckFailed()
+        elif ConditionExpression == "attribute_exists(Configuration)":
+            if key not in self.store:
+                raise ConditionalCheckFailed()
+        elif ConditionExpression == "UpdatedAt = :prev":
+            prev = (ExpressionAttributeValues or {}).get(":prev")
+            current = self.store.get(key, {})
+            if current.get("UpdatedAt") != prev:
+                raise ConditionalCheckFailed()
         # Deep-copy so later mutation of the source dict can't retroactively
-        # change what we assert on.
+        # change what we assert on / what the store holds.
+        stored = copy.deepcopy(Item)
         self.put_items.append(copy.deepcopy(Item))
+        self.store[key] = stored
         return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
+    def get_item(self, Key, **kwargs):  # noqa: N803 - boto3 kwarg name
+        item = self.store.get(Key["Configuration"])
+        return {"Item": copy.deepcopy(item)} if item is not None else {}
+
+    def delete_item(self, Key, **kwargs):  # noqa: N803 - boto3 kwarg name
+        self.store.pop(Key["Configuration"], None)
+        return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
+    # --- test conveniences ---------------------------------------------------
+    def config_puts(self, version="default"):
+        """Raw puts targeting the Config#<version> row, in order."""
+        return [p for p in self.put_items if p["Configuration"] == f"Config#{version}"]
 
 
 @pytest.fixture(autouse=True)
@@ -353,3 +395,225 @@ def test_bda_link_put_item_not_called_against_aws():
     table = FakeTable()
     _seed_default_with_arn(table, _config_without_flags(), _BDA_PROJECT_ARN)
     assert table.put_items, "put_item should have been invoked on the fake table"
+
+
+# ---------------------------------------------------------------------------
+# Edit preservation + provenance (config-ownership-and-seeding): the
+# read-modify-write path for the active `default` version (preserve_edits=True).
+
+
+def _seed_preserving(table, value, *, description="Default IDP configuration"):
+    """Drive the seeder's active-default (preserving) path for one config."""
+    merged = seeder._merge_with_system_defaults(value)
+    return seeder._put_config_default(
+        table,
+        version="default",
+        merged_config=merged,
+        description=description,
+        is_active=True,
+        preserve_edits=True,
+    )
+
+
+def _config_v1():
+    return {"extraction": {"model": "us.amazon.nova-lite-v1:0"}, "classes": []}
+
+
+def _config_v2():
+    return {"extraction": {"model": "us.anthropic.claude-3-5-sonnet"}, "classes": []}
+
+
+def _marker_row(table):
+    return table.store.get("TerraformSeed#default")
+
+
+def test_create_writes_config_and_stamps_marker():
+    """First seed of an absent row creates the Config row and a provenance row."""
+    table = FakeTable()
+    _seed_preserving(table, _config_v1())
+
+    # Config row present, IsActive, and the provenance sibling stamped.
+    config = table.store["Config#default"]
+    assert config["IsActive"] is True
+    marker = _marker_row(table)
+    assert marker is not None
+    assert marker["Configuration"] == "TerraformSeed#default"
+    assert marker["SeedHash"] == seeder._seed_hash(
+        seeder._merge_with_system_defaults(_config_v1())
+    )
+    # The marker is a SEPARATE item — never a top-level attr on the config row.
+    assert "SeedHash" not in config
+
+
+def test_update_of_unmodified_row_rewrites_and_preserves_created_at():
+    """An untouched row is updated to new desired config; CreatedAt survives."""
+    table = FakeTable()
+    _seed_preserving(table, _config_v1())
+    original_created = table.store["Config#default"]["CreatedAt"]
+
+    # Advance the clock so a create would stamp a different CreatedAt.
+    seeder._isoformat_now = lambda: "2027-01-01T00:00:00Z"  # type: ignore[assignment]
+    try:
+        _seed_preserving(table, _config_v2())
+    finally:
+        seeder._isoformat_now = lambda: "2026-06-01T00:00:00Z"  # type: ignore[assignment]
+
+    updated = table.store["Config#default"]
+    assert updated["extraction"]["model"] == "us.anthropic.claude-3-5-sonnet"
+    assert updated["CreatedAt"] == original_created  # preserved
+    assert updated["UpdatedAt"] == "2027-01-01T00:00:00Z"  # advanced
+    # Marker re-stamped to the new content.
+    assert _marker_row(table)["SeedHash"] == seeder._seed_hash(
+        seeder._merge_with_system_defaults(_config_v2())
+    )
+
+
+def test_operator_edited_row_is_preserved():
+    """A row diverged from the stamped provenance is left intact and skipped."""
+    table = FakeTable()
+    _seed_preserving(table, _config_v1())
+
+    # Simulate an operator UI edit: mutate the stored config, marker unchanged.
+    table.store["Config#default"]["extraction"]["model"] = "operator.custom.model"
+    table.store["Config#default"]["UpdatedAt"] = "2026-07-01T00:00:00Z"
+
+    result = _seed_preserving(table, _config_v2())
+
+    assert result == {
+        "seeded": False,
+        "reason": "operator-owned-row-preserved",
+        "version": "default",
+    }
+    # Untouched: still the operator's value, not the desired v2 value.
+    assert table.store["Config#default"]["extraction"]["model"] == "operator.custom.model"
+
+
+def test_deleting_marker_readopts_and_overwrites_diverged_row():
+    """Documented force procedure: deleting the marker makes the seeder adopt
+    (overwrite once) a diverged row on the next invocation."""
+    table = FakeTable()
+    _seed_preserving(table, _config_v1())
+
+    # Operator edits the row; with the marker present this would be preserved.
+    table.store["Config#default"]["extraction"]["model"] = "operator.custom.model"
+    table.store["Config#default"]["UpdatedAt"] = "2026-07-01T00:00:00Z"
+    assert _seed_preserving(table, _config_v2())["reason"] == "operator-owned-row-preserved"
+
+    # Delete the provenance marker (the documented break-glass step), then
+    # re-invoke: the row now looks unstamped -> adopt -> overwrite once.
+    del table.store["TerraformSeed#default"]
+    _seed_preserving(table, _config_v2())
+
+    assert table.store["Config#default"]["extraction"]["model"] == (
+        "us.anthropic.claude-3-5-sonnet"
+    )
+    # Provenance re-stamped to the reasserted content.
+    assert _marker_row(table)["SeedHash"] == seeder._seed_hash(
+        seeder._merge_with_system_defaults(_config_v2())
+    )
+
+
+def test_missing_marker_is_adopted_on_first_upgrade():
+    """A pre-existing row with no marker is adopted (written once + stamped)."""
+    table = FakeTable()
+    # A pre-existing row with NO TerraformSeed# marker (legacy deployment).
+    table.store["Config#default"] = {
+        "Configuration": "Config#default",
+        "IsActive": True,
+        "Description": "Default IDP configuration",
+        "CreatedAt": "2025-01-01T00:00:00Z",
+        "UpdatedAt": "2025-01-01T00:00:00Z",
+        "extraction": {"model": "legacy.model"},
+        "classes": [],
+    }
+
+    _seed_preserving(table, _config_v2())
+
+    updated = table.store["Config#default"]
+    assert updated["extraction"]["model"] == "us.anthropic.claude-3-5-sonnet"
+    # CreatedAt from the legacy row is preserved even on adopt.
+    assert updated["CreatedAt"] == "2025-01-01T00:00:00Z"
+    assert _marker_row(table) is not None
+
+
+def test_marker_is_stable_for_identical_input():
+    """Re-seeding identical config updates in place and keeps the same hash."""
+    table = FakeTable()
+    _seed_preserving(table, _config_v1())
+    first_hash = _marker_row(table)["SeedHash"]
+
+    # Re-seed the SAME desired config: decision is "update" (matches marker),
+    # and the recomputed hash is identical.
+    _seed_preserving(table, _config_v1())
+    assert _marker_row(table)["SeedHash"] == first_hash
+    # Two config puts total (create + idempotent update), never a skip.
+    assert len(table.config_puts()) == 2
+
+
+def test_read_failure_raises_rather_than_overwriting():
+    """A read error must fail the invocation, never default to overwrite."""
+
+    class ExplodingTable(FakeTable):
+        def get_item(self, Key, **kwargs):  # noqa: N803
+            raise RuntimeError("dynamodb unavailable")
+
+    table = ExplodingTable()
+    merged = seeder._merge_with_system_defaults(_config_v1())
+    with pytest.raises(RuntimeError, match="dynamodb unavailable"):
+        seeder._put_config_default(
+            table,
+            version="default",
+            merged_config=merged,
+            description="Default IDP configuration",
+            is_active=True,
+            preserve_edits=True,
+        )
+    # Nothing was written.
+    assert table.put_items == []
+
+
+def test_concurrent_modification_between_read_and_write_is_not_clobbered():
+    """A conditional-check failure on write is treated as skip, not clobber."""
+
+    class RaceTable(FakeTable):
+        def put_item(self, Item, ConditionExpression=None, ExpressionAttributeValues=None):  # noqa: N803
+            # Only the Config row write is guarded; simulate a concurrent edit
+            # by failing the conditional exactly once for it.
+            if (
+                Item["Configuration"] == "Config#default"
+                and ConditionExpression == "UpdatedAt = :prev"
+            ):
+                raise ConditionalCheckFailed()
+            return super().put_item(Item, ConditionExpression, ExpressionAttributeValues)
+
+    table = RaceTable()
+    # Seed once (create path) so an update path is exercised next.
+    _seed_preserving(table, _config_v1())
+    result = _seed_preserving(table, _config_v2())
+    assert result == {
+        "seeded": False,
+        "reason": "concurrent-modification",
+        "version": "default",
+    }
+
+
+def test_non_default_versions_keep_unconditional_write():
+    """
+    Managed / additional (non-active) versions do NOT read-modify-write: they
+    keep the historical unconditional put and never stamp a provenance row.
+    """
+    table = FakeTable()
+    merged = seeder._merge_with_system_defaults(_config_v1())
+    seeder._put_config_default(
+        table,
+        version="lending",
+        merged_config=merged,
+        description="Managed configuration: lending",
+        is_active=False,
+        managed=True,
+        preserve_edits=False,
+    )
+    assert table.store["Config#lending"]["Managed"] is True
+    assert table.store["Config#lending"]["IsActive"] is False
+    # No provenance sibling for non-preserved rows.
+    assert "TerraformSeed#lending" not in table.store

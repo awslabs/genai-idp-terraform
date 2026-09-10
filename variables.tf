@@ -551,7 +551,7 @@ variable "api" {
   }
 
   validation {
-    condition     = var.api.visibility == null || contains(["GLOBAL", "PRIVATE"], var.api.visibility)
+    condition     = var.api.visibility == null ? true : contains(["GLOBAL", "PRIVATE"], var.api.visibility)
     error_message = "api.visibility (deprecated — use api.api_gateway_visibility) must be \"GLOBAL\" or \"PRIVATE\" when set."
   }
 
