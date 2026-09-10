@@ -39,11 +39,11 @@ graph TB
 
 ### Processing Environment API
 
-**Purpose**: GraphQL API for document management and monitoring
+**Purpose**: REST API for document management and monitoring
 
 **Key Features**:
 
-- AppSync GraphQL API
+- API Gateway REST API
 - Lambda resolvers for data operations
 - Document status tracking
 - Configuration management
@@ -135,6 +135,38 @@ graph TB
 - **BDA Processor**: Amazon Bedrock Data Automation
 - **Bedrock LLM Processor**: Custom Bedrock LLM processing
 - **SageMaker UDOP Processor**: SageMaker UDOP model
+
+**Selecting a processor**: the root module takes a single `processor` object. Its
+`type` field chooses the processor and decides which other fields are required:
+
+```hcl
+# Bedrock LLM (no extra required fields)
+processor = {
+  type   = "bedrock-llm"
+  config = yamldecode(file("config.yaml"))
+}
+
+# BDA (requires project_arn)
+processor = {
+  type        = "bda"
+  project_arn = "arn:aws:bedrock:us-east-1:<account-id>:data-automation-project/<id>"
+  config      = yamldecode(file("config.yaml"))
+}
+
+# SageMaker UDOP (requires classification_endpoint_arn)
+processor = {
+  type                        = "sagemaker-udop"
+  classification_endpoint_arn = "arn:aws:sagemaker:us-east-1:<account-id>:endpoint/<name>"
+  config                      = yamldecode(file("config.yaml"))
+}
+```
+
+`type` must be one of `bedrock-llm`, `bda`, or `sagemaker-udop`. Fields that do
+not apply to the chosen type are ignored. Common optional fields include
+`summarization`, `enable_hitl`, `enable_rule_validation` (compliance checking,
+also needs a `rule_validation` block with `policy_classes` in `config`),
+`additional_configurations`, and the per-step model overrides
+(`classification_model_id`, `extraction_model_id`, `assessment_model_id`).
 
 ### Processor Attachment
 
@@ -280,14 +312,17 @@ Most modules share common configuration patterns:
 - `tags`: Resource tags
 - `log_level`: Logging level
 
-### Environment-Specific Variables
+### Frequently Used Variables
 
-- `admin_email`: Administrator email address
-- `enable_monitoring`: Enable CloudWatch monitoring
-- `enable_web_ui`: Deploy web interface
-- `custom_domain`: Custom domain configuration
+- `processor`: The document processor object (see [Processors](#processors))
+- `web_ui`: Web UI hosting configuration (object)
+- `api`: API and API-related feature configuration (object)
+- `evaluation`: Baseline-comparison evaluation configuration (object)
+- `reporting`: Reporting and analytics configuration (object)
+- `vpc_subnet_ids` / `vpc_security_group_ids`: optional VPC placement
 
-For detailed variable documentation, see individual module pages in the repository.
+For the complete, authoritative list, see the root module's `variables.tf` and
+the Inputs table in the repository README.
 
 ## Getting Started
 

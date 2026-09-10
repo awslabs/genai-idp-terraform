@@ -2,44 +2,44 @@
 
 This guide covers recommended practices for deploying and operating the GenAI IDP Accelerator with Terraform.
 
+The accelerator's root module consumes infrastructure you provide (S3 buckets, a
+KMS key, and optionally VPC subnets and security groups) and configures the
+processing stack through a set of typed variable objects (`processor`, `api`,
+`web_ui`, `evaluation`, `reporting`, and others). It does not create the input,
+output, and working buckets or the VPC for you. The examples under `examples/`
+show a complete surrounding setup you can copy.
+
 ## Deployment Best Practices
 
 ### Environment Management
 
-**Use Separate Environments**:
+Keep separate Terraform workspaces or state keys per environment, and use a
+distinct `prefix` per deployment so resource names do not collide:
 
 ```hcl
-# terraform/environments/dev/terraform.tfvars
-environment = "dev"
+prefix = "genai-idp-dev"
 region = "us-east-1"
 
-# Reduced resources for development
-lambda_memory_size = 512
-lambda_timeout = 60
-enable_detailed_monitoring = false
-```
-
-**Consistent Tagging**:
-
-```hcl
-locals {
-  common_tags = {
-    Environment = var.environment
-    Project     = "genai-idp-accelerator"
-    Owner       = var.owner
-    Terraform   = "true"
-  }
+log_level          = "INFO"
+log_retention_days = 7
+tags = {
+  Environment = "dev"
+  Project     = "genai-idp-accelerator"
 }
 ```
 
+For lower-cost non-production deployments, disable the optional subsystems you do
+not need (they default off unless noted): keep `evaluation`, `reporting`, and the
+optional `api` features off, and only enable `web_ui` when you need the console.
+
 ### State Management
 
-**Remote State Backend**:
+Use a remote state backend with locking:
 
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "terraform-state-${var.environment}"
+    bucket         = "terraform-state-<your-suffix>"
     key            = "idp-accelerator/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
@@ -48,325 +48,111 @@ terraform {
 }
 ```
 
-**State Locking**:
-
-```hcl
-resource "aws_dynamodb_table" "terraform_locks" {
-  name           = "terraform-locks"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-}
-```
-
 ## Security Best Practices
 
-### IAM Permissions
+### Encryption
 
-**Least Privilege Principle**:
+Provide a KMS key and set `enable_encryption` so the module encrypts the
+resources it manages:
 
 ```hcl
-resource "aws_iam_policy" "lambda_policy" {
-  name = "${var.environment}-idp-lambda-policy"
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "textract:DetectDocumentText",
-          "textract:AnalyzeDocument"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.documents.arn}/*"
-      }
-    ]
-  })
-}
+encryption_key_arn = aws_kms_key.idp.arn
+enable_encryption  = true
 ```
+
+`enable_encryption` is a separate boolean (rather than deriving from
+`encryption_key_arn != null`) so the value is known at plan time and does not
+cause count/for_each unknown-value errors.
 
 ### Data Protection
 
-**Encryption at Rest**:
+- Enable versioning and server-side encryption on the S3 buckets you pass in as
+  `input_bucket_arn`, `output_bucket_arn`, and `working_bucket_arn`.
+- Set `data_tracking_retention_days` to control how long tracking data is kept.
+- Use `deletion_protection = true` (the default) to protect Cognito resources.
+
+### Private Networking
+
+The module does not create a VPC. To run the Lambdas inside your own VPC, pass
+existing subnets and security groups, and use `private_network` for a
+VPC-isolated API and Web UI posture:
 
 ```hcl
-resource "aws_s3_bucket_server_side_encryption_configuration" "documents" {
-  bucket = aws_s3_bucket.documents.id
-  
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
+vpc_subnet_ids         = ["subnet-...", "subnet-..."]
+vpc_security_group_ids = ["sg-..."]
 ```
 
-**Encryption in Transit**:
-
-- Use HTTPS for all API endpoints
-- Enable SSL/TLS for data transfer
-- Use VPC endpoints where possible
+See the `bedrock-llm-processor-vpc` example for a complete VPC-isolated
+deployment (private API Gateway, S3 VPC endpoint, ALB or API Gateway Web UI
+hosting).
 
 ## Performance Best Practices
 
-### Lambda Optimization
-
-**Memory and Timeout Settings**:
-
-```hcl
-resource "aws_lambda_function" "document_processor" {
-  memory_size = 1024  # Adjust based on workload
-  timeout     = 300   # 5 minutes for document processing
-  
-  environment {
-    variables = {
-      POWERTOOLS_LOG_LEVEL = "INFO"
-    }
-  }
-}
-```
-
-**Connection Reuse**:
-
-```python
-import boto3
-
-# Initialize clients outside handler for reuse
-s3_client = boto3.client('s3')
-textract_client = boto3.client('textract')
-
-def lambda_handler(event, context):
-    # Use pre-initialized clients
-    response = textract_client.detect_document_text(...)
-```
-
-### Storage Optimization
-
-**S3 Lifecycle Policies**:
-
-```hcl
-resource "aws_s3_bucket_lifecycle_configuration" "documents_lifecycle" {
-  bucket = aws_s3_bucket.documents.id
-  
-  rule {
-    id     = "transition_to_ia"
-    status = "Enabled"
-    
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"
-    }
-    
-    transition {
-      days          = 90
-      storage_class = "GLACIER"
-    }
-  }
-}
-```
+- Tune per-step model choices with the `processor` model overrides
+  (`classification_model_id`, `extraction_model_id`, `assessment_model_id`) to
+  balance latency, cost, and accuracy.
+- Adjust worker concurrency where the processor exposes it (for example the
+  SageMaker UDOP processor's `ocr_max_workers` / `classification_max_workers`).
+- Set `lambda_tracing_mode` to `Active` to trace with X-Ray while tuning, and
+  back to `PassThrough` for steady state if you prefer.
+- Prefer AWS CodeBuild for layer builds (the default). For faster local
+  iteration, the `build` object supports building layers and the Web UI locally
+  (see the local-build deployment guides).
 
 ## Monitoring Best Practices
 
-### CloudWatch Configuration
-
-**Log Groups**:
-
-```hcl
-resource "aws_cloudwatch_log_group" "lambda_logs" {
-  name              = "/aws/lambda/${var.environment}-idp-processor"
-  retention_in_days = var.log_retention_days
-}
-```
-
-**Alarms**:
-
-```hcl
-resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
-  alarm_name          = "${var.environment}-lambda-errors"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "5"
-  
-  alarm_actions = [aws_sns_topic.alerts.arn]
-}
-```
+- Use `log_level` and `log_retention_days` to control Lambda log verbosity and
+  retention.
+- The monitoring module provisions CloudWatch dashboards and alarms for the
+  processing stack. Review its alarms after each release and wire alarm actions
+  to your own SNS topic.
 
 ## Operational Best Practices
 
 ### Deployment Process
 
-**Validation Steps**:
+1. Run `terraform plan` and review the changes.
+2. Test in a non-production account first.
+3. Monitor the Step Functions executions and CloudWatch metrics after apply.
 
-1. Run `terraform plan` and review changes
-2. Test in development environment first
-3. Use gradual rollout for staging
-4. Monitor deployment metrics
+### Configuration Management
 
-**Rollback Strategy**:
-
-```bash
-# Keep previous state file versions
-terraform state pull > terraform.tfstate.backup
-
-# Quick rollback if needed
-terraform apply -target=aws_lambda_function.processor \
-  -var="lambda_version=previous"
-```
-
-### Documentation
-
-**Infrastructure Documentation**:
-
-- Document all custom configurations
-- Maintain architecture diagrams
-- Keep runbooks updated
-- Record operational procedures
-
-### Backup and Recovery
-
-**State File Backup**:
-
-```hcl
-resource "aws_s3_bucket_versioning" "state_bucket_versioning" {
-  bucket = aws_s3_bucket.terraform_state.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-```
-
-**Data Backup**:
-
-```hcl
-resource "aws_dynamodb_table" "documents" {
-  point_in_time_recovery {
-    enabled = true
-  }
-}
-```
+Processing behaviour (document classes, prompts, models, rule validation) is
+driven by the config passed on `processor.config` and seeded into the
+configuration table. The seeder preserves operator edits made in the Web UI: it
+stamps a provenance marker per seeded version and only re-seeds a row that still
+matches what Terraform last wrote. To reassert Terraform's config over an
+operator-edited row, delete that version's `TerraformSeed#<version>` marker item
+and re-apply.
 
 ## Testing Best Practices
 
-### Infrastructure Testing
-
-**Validation**:
-
 ```bash
-# Validate Terraform configuration
+# Validate and format
 terraform validate
-
-# Check formatting
 terraform fmt -check
 
 # Security scanning
 tfsec .
 ```
 
-**Integration Testing**:
-
-```bash
-# Test deployment in staging
-terraform plan -var-file="staging.tfvars"
-terraform apply -var-file="staging.tfvars"
-
-# Run smoke tests
-./scripts/smoke-tests.sh staging
-```
+The repository's `Makefile` wraps these with the project's exclusions
+(`make validate`, `make lint`, `make security`).
 
 ## Troubleshooting
 
-### Common Issues
+- **Permission errors**: check the IAM roles the module creates and the
+  policies on the buckets and KMS key you passed in.
+- **Service quotas**: check Bedrock model access and Lambda concurrency limits;
+  request increases where needed.
+- **State issues**: use `terraform plan` to detect drift; handle state lock
+  conflicts before retrying.
 
-**Permission Errors**:
-
-- Check IAM policies and roles
-- Verify service-linked roles exist
-- Review resource policies
-
-**Resource Limits**:
-
-- Check AWS service quotas
-- Monitor resource utilization
-- Request quota increases if needed
-
-**State Issues**:
-
-- Use `terraform refresh` to sync state
-- Import existing resources if needed
-- Handle state lock conflicts
-
-### Debugging Tools
-
-**Terraform Debugging**:
+### Debugging
 
 ```bash
 export TF_LOG=DEBUG
 terraform apply
-```
-
-**AWS CLI Debugging**:
-
-```bash
-aws logs describe-log-groups --debug
-aws lambda get-function --function-name processor --debug
-```
-
-## Maintenance
-
-### Regular Tasks
-
-**Weekly**:
-
-- Review CloudWatch alarms and metrics
-- Update documentation as needed
-
-**Monthly**:
-
-- Review and update IAM permissions
-- Analyze performance metrics
-- Plan capacity adjustments
-
-**Quarterly**:
-
-- Security review and updates
-- Disaster recovery testing
-- Architecture review
-
-### Updates and Patches
-
-**Terraform Updates**:
-
-```bash
-# Update Terraform version
-terraform version
-terraform init -upgrade
-
-# Update provider versions
-terraform init -upgrade
-```
-
-**Lambda Runtime Updates**:
-
-```hcl
-resource "aws_lambda_function" "processor" {
-  runtime = "python3.11"  # Keep updated
-}
 ```
 
 ---

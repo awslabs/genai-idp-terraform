@@ -68,14 +68,14 @@ summarization_model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 enable_evaluation   = false
 evaluation_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 
-# Assessment Feature
-enable_assessment = false
-
 # Reporting Feature
 enable_reporting = false
 
-# API Configuration
-enable_api = true
+# Rule Validation Feature (compliance checking). To enable, set the flag AND
+# point config_file_path at a config that has rule_validation enabled, e.g.
+# config_file_path = "../../sources/config_library/unified/rule-validation/config.yaml"
+enable_rule_validation = false
+config_file_path       = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
 # Web UI Configuration
 web_ui = {
@@ -121,11 +121,11 @@ Configure custom document processing by specifying your own configuration file:
 config_file_path = "path/to/your/custom/config.yaml"
 ```
 
-The configuration file defines document classes, extraction prompts, and processing parameters. Examples are available in the `sources/config_library/` directory:
+The configuration file defines document classes, extraction prompts, and processing parameters. Examples are available under the unified config library in `sources/config_library/unified/`:
 
-- **Pattern 1** (BDA): `sources/config_library/pattern-1/lending-package-sample/config.yaml`
-- **Pattern 2** (Bedrock LLM): `sources/config_library/pattern-2/lending-package-sample/config.yaml`  
-- **Pattern 3** (SageMaker UDOP): `sources/config_library/pattern-3/rvl-cdip/config.yaml`
+- Lending package (used by all processor types): `sources/config_library/unified/lending-package-sample/config.yaml`
+- RVL-CDIP (SageMaker UDOP classification): `sources/config_library/unified/rvl-cdip/config.yaml`
+- Rule validation (compliance checking): `sources/config_library/unified/rule-validation/config.yaml`
 
 ### Example Custom Configuration
 
@@ -330,7 +330,7 @@ terraform output
 - `web_ui_url`: CloudFront distribution URL for the web interface
 - `input_bucket_name`: S3 bucket for document uploads
 - `output_bucket_name`: S3 bucket for processed results
-- `api_endpoint`: AppSync GraphQL API endpoint
+- `api`: API Gateway REST API details (object), including `api_base_url` for the REST API base URL
 - `cognito_user_pool_id`: User pool for authentication
 - `glue_database_name`: Analytics database name (if reporting enabled)
 
@@ -352,7 +352,7 @@ terraform destroy
 
 - **Customize Processing**: Modify prompts and document classes for your use case
 - **Scale Performance**: Adjust concurrency settings for your workload
-- **Integrate APIs**: Use the GraphQL API for custom applications
+- **Integrate APIs**: Use the REST API for custom applications
 - **Advanced Analytics**: Build custom dashboards with the reporting data
 - **Deployment**: Review security and compliance requirements
 
@@ -384,11 +384,12 @@ The Bedrock LLM Processor example provides three configuration levels:
 
 - Document processing pipeline
 - Web UI for document management
-- GraphQL API for status tracking
+- REST API for status tracking
 - Multiple Bedrock models support
 - Custom document classes
 - Evaluation framework (optional)
 - Document summarization (optional)
+- Rule validation for compliance checking (optional)
 - Custom prompt engineering
 - Flexible AI model selection
 
