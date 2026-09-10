@@ -194,6 +194,28 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "tracking_table_billing_mode" {
+  description = "Billing mode for the document tracking table, when it is created by this module (ignored if bringing your own table via processing-environment's tracking_table_arn). \"PROVISIONED\" is the default for backward compatibility; \"PAY_PER_REQUEST\" avoids fixed capacity limits under concurrent processing load."
+  type        = string
+  default     = "PROVISIONED"
+  validation {
+    condition     = contains(["PROVISIONED", "PAY_PER_REQUEST"], var.tracking_table_billing_mode)
+    error_message = "Allowed values for tracking_table_billing_mode are \"PROVISIONED\" or \"PAY_PER_REQUEST\"."
+  }
+}
+
+variable "tracking_table_read_capacity" {
+  description = "Read capacity for the document tracking table when tracking_table_billing_mode is PROVISIONED"
+  type        = number
+  default     = 5
+}
+
+variable "tracking_table_write_capacity" {
+  description = "Write capacity for the document tracking table when tracking_table_billing_mode is PROVISIONED"
+  type        = number
+  default     = 5
+}
+
 #
 # Custom Configuration
 #

@@ -314,6 +314,11 @@ module "processing_environment" {
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
 
+  # Tracking table capacity (see modules/tracking-table for details)
+  tracking_table_billing_mode   = var.tracking_table_billing_mode
+  tracking_table_read_capacity  = var.tracking_table_read_capacity
+  tracking_table_write_capacity = var.tracking_table_write_capacity
+
   # VPC configuration
   subnet_ids         = var.vpc_subnet_ids
   security_group_ids = var.vpc_security_group_ids

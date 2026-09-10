@@ -123,6 +123,9 @@ module "tracking_table" {
   table_name                     = "idp-tracking-table-${random_string.suffix.result}"
   kms_key_arn                    = local.key != null ? local.key.key_arn : null
   point_in_time_recovery_enabled = true
+  billing_mode                   = var.tracking_table_billing_mode
+  read_capacity                  = var.tracking_table_read_capacity
+  write_capacity                 = var.tracking_table_write_capacity
 
   tags = var.tags
 

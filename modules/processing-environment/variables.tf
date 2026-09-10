@@ -61,6 +61,28 @@ variable "tracking_table_arn" {
   default     = null
 }
 
+variable "tracking_table_billing_mode" {
+  description = "Billing mode for the document tracking table, when it is created by this module (ignored if tracking_table_arn is set). See modules/tracking-table for allowed values."
+  type        = string
+  default     = "PROVISIONED"
+  validation {
+    condition     = contains(["PROVISIONED", "PAY_PER_REQUEST"], var.tracking_table_billing_mode)
+    error_message = "Allowed values for tracking_table_billing_mode are \"PROVISIONED\" or \"PAY_PER_REQUEST\"."
+  }
+}
+
+variable "tracking_table_read_capacity" {
+  description = "Read capacity for the document tracking table when billing_mode is PROVISIONED, when it is created by this module (ignored if tracking_table_arn is set)"
+  type        = number
+  default     = 5
+}
+
+variable "tracking_table_write_capacity" {
+  description = "Write capacity for the document tracking table when billing_mode is PROVISIONED, when it is created by this module (ignored if tracking_table_arn is set)"
+  type        = number
+  default     = 5
+}
+
 variable "concurrency_table_arn" {
   description = "ARN of the table that manages concurrency limits for document processing"
   type        = string
