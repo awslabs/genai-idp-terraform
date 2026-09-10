@@ -190,15 +190,7 @@ locals {
     Viewer   = try(var.rbac.group_names.viewer, "Viewer")
   }
 
-  # try() (not ? :) is deliberate: the processor config objects are any-typed
-  # with different attribute sets, so a conditional fails with inconsistent
-  # result types. try() returns the first that resolves; {} is the all-null fallback.
-  chat_with_document_processor_config = try(
-    var.bedrock_llm_processor.config,
-    var.bda_processor.config,
-    var.sagemaker_udop_processor.config,
-    {}
-  )
+  chat_with_document_processor_config = try(var.processor.config, {})
 
   # Enabled feature contracts composed by processing-environment-api. All-off resolves to {}.
   #

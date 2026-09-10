@@ -107,13 +107,7 @@ locals {
 # Processor Type and Validation
 #
 locals {
-  # processor_type is determined from the configured processor objects
-  processor_type = (
-    var.bedrock_llm_processor != null ? "bedrock-llm" :
-    var.bda_processor != null ? "bda" :
-    var.sagemaker_udop_processor != null ? "sagemaker-udop" :
-    null
-  )
+  processor_type = var.processor.type
 
   # All processor façades share one unified engine and one idp-common layer, so
   # the layer carries the same extras for every processor type. `ocr` brings

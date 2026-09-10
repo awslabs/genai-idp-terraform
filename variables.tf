@@ -207,82 +207,59 @@ variable "data_tracking_retention_days" {
 # Processor-specific Configuration Objects
 #
 
-variable "bedrock_llm_processor" {
-  description = "Configuration for Bedrock LLM processor"
+variable "processor" {
+  description = <<-EOT
+    The document processor for this deployment. `type` selects the processor
+    (bedrock-llm, bda, or sagemaker-udop); the other fields configure it, and
+    which are required depends on `type`: bda needs `project_arn`,
+    sagemaker-udop needs `classification_endpoint_arn`. Fields that do not apply
+    to the chosen type are ignored.
+  EOT
   type = object({
+    type = string
+
+    # bda
+    project_arn = optional(string, null)
+
+    # sagemaker-udop
+    classification_endpoint_arn = optional(string, null)
+    ocr_max_workers             = optional(number, 20)
+    classification_max_workers  = optional(number, 20)
+
+    # bedrock-llm
     classification_model_id      = optional(string, null)
     extraction_model_id          = optional(string, null)
     assessment_model_id          = optional(string, null)
     max_pages_for_classification = optional(string, "ALL")
+    enable_hitl                  = optional(bool, false)
+
+    # shared
     summarization = optional(object({
       enabled  = optional(bool, true)
       model_id = optional(string, null)
     }), { enabled = true, model_id = null })
-    enable_hitl = optional(bool, false)
-    config      = any
-    # Extra non-active, editable config versions seeded alongside the default
-    # (version_name => config object). Shown in the UI version dropdown.
+    config                    = any
     additional_configurations = optional(any, {})
-    # Optional fallback BDA project for use_bda:true additional versions;
-    # does not relink the default configuration.
-    bda_project_arn = optional(string, null)
-    # Provision the deployment-scoped BDA OCR project needed by IDP v0.6's
-    # `ocr.backend: bda` setting (BDA standard-output SYNC as a Textract
-    # replacement). Off by default: BDA is not available in every region.
-    enable_bda_ocr_backend = optional(bool, false)
+    bda_project_arn           = optional(string, null)
+    enable_bda_ocr_backend    = optional(bool, false)
   })
-  default = null
 
   validation {
-    condition = var.bedrock_llm_processor == null || (
-      try(var.bedrock_llm_processor.max_pages_for_classification, "ALL") == "ALL" ||
-      can(tonumber(try(var.bedrock_llm_processor.max_pages_for_classification, "ALL")))
-    )
-    error_message = "max_pages_for_classification must be 'ALL' or a numeric value."
+    condition     = contains(["bedrock-llm", "bda", "sagemaker-udop"], var.processor.type)
+    error_message = "processor.type must be one of: bedrock-llm, bda, sagemaker-udop."
   }
-}
-
-variable "bda_processor" {
-  description = "Configuration for BDA processor"
-  type = object({
-    project_arn = string
-    summarization = optional(object({
-      enabled  = optional(bool, true)
-      model_id = optional(string, null)
-    }), { enabled = true, model_id = null })
-    config = any
-    # Extra non-active, editable config versions seeded alongside the default
-    # (version_name => config object). Shown in the UI version dropdown.
-    additional_configurations = optional(any, {})
-    # See bedrock_llm_processor.enable_bda_ocr_backend. Relevant here only for
-    # additional config versions that run the pipeline branch (use_bda: false).
-    enable_bda_ocr_backend = optional(bool, false)
-  })
-  default = null
-}
-
-variable "sagemaker_udop_processor" {
-  description = "Configuration for SageMaker UDOP processor"
-  type = object({
-    classification_endpoint_arn = string
-    extraction_model_id         = optional(string, null)
-    summarization = optional(object({
-      enabled  = optional(bool, true)
-      model_id = optional(string, null)
-    }), { enabled = true, model_id = null })
-    ocr_max_workers            = optional(number, 20)
-    classification_max_workers = optional(number, 20)
-    config                     = any
-    # Extra non-active, editable config versions seeded alongside the default
-    # (version_name => config object). Shown in the UI version dropdown.
-    additional_configurations = optional(any, {})
-    # Optional fallback BDA project for use_bda:true additional versions;
-    # does not relink the default configuration.
-    bda_project_arn = optional(string, null)
-    # See bedrock_llm_processor.enable_bda_ocr_backend.
-    enable_bda_ocr_backend = optional(bool, false)
-  })
-  default = null
+  validation {
+    condition     = var.processor.type != "bda" || var.processor.project_arn != null
+    error_message = "processor.project_arn is required when processor.type is \"bda\"."
+  }
+  validation {
+    condition     = var.processor.type != "sagemaker-udop" || var.processor.classification_endpoint_arn != null
+    error_message = "processor.classification_endpoint_arn is required when processor.type is \"sagemaker-udop\"."
+  }
+  validation {
+    condition     = var.processor.max_pages_for_classification == "ALL" || can(tonumber(var.processor.max_pages_for_classification))
+    error_message = "processor.max_pages_for_classification must be \"ALL\" or a numeric value."
+  }
 }
 
 #
