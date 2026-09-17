@@ -27,7 +27,7 @@ genai-idp-terraform/
 │   ├── lambda-layer-codebuild-idp/   # IDP-specific layer builder
 │   ├── monitoring/                   # CloudWatch monitoring
 │   ├── processing-environment/       # Core processing infrastructure
-│   ├── processing-environment-api/   # GraphQL API
+│   ├── processing-environment-api/   # API Gateway REST API
 │   ├── processor-attachment/         # Processor integration
 │   ├── processors/                   # Document processors
 │   │   ├── bda-processor/           # Bedrock Data Automation
