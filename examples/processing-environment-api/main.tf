@@ -87,6 +87,9 @@ module "processing_environment_api" {
   configuration_table_arn        = module.configuration_table.table_arn
   evaluation_baseline_bucket_arn = aws_s3_bucket.evaluation_baseline_bucket.arn
 
+  # Test Studio (Web UI Test Sets / Test Execution tabs): resolvers + dispatcher fields.
+  enable_test_studio = var.enable_test_studio
+
   # Logging
   log_level          = "INFO"
   log_retention_days = 7

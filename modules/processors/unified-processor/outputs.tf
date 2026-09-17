@@ -86,6 +86,20 @@ output "lambda_functions" {
       name = aws_lambda_function.summarization[0].function_name
       arn  = aws_lambda_function.summarization[0].arn
     } : null
+    # Rule-validation functions, deployed and wired into the workflow only when
+    # var.enable_rule_validation is set (null otherwise).
+    rule_validation = var.enable_rule_validation ? {
+      name = aws_lambda_function.rule_validation_function[0].function_name
+      arn  = aws_lambda_function.rule_validation_function[0].arn
+    } : null
+    rule_validation_orchestration = var.enable_rule_validation ? {
+      name = aws_lambda_function.rule_validation_orchestration_function[0].function_name
+      arn  = aws_lambda_function.rule_validation_orchestration_function[0].arn
+    } : null
+    rule_validation_policy_classification = var.enable_rule_validation ? {
+      name = aws_lambda_function.rule_validation_policy_classification_function[0].function_name
+      arn  = aws_lambda_function.rule_validation_policy_classification_function[0].arn
+    } : null
     # BDA branch functions, always deployed (count = 1).
     bda_invoke = {
       name = aws_lambda_function.bda_invoke[0].function_name

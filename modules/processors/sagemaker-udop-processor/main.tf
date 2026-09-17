@@ -95,6 +95,9 @@ module "engine" {
   evaluation_baseline_bucket_arn = local.evaluation_baseline_bucket_arn
   evaluation_model_id            = var.evaluation_model_id
 
+  # Rule validation
+  enable_rule_validation = var.enable_rule_validation
+
   # Summarization
   is_summarization_enabled = var.summarization_model_id != null
   summarization_model_id   = var.summarization_model_id

@@ -59,6 +59,7 @@ resource "aws_iam_role_policy" "state_machine" {
           var.evaluation_enabled && var.evaluation_baseline_bucket_arn != null ? aws_lambda_function.evaluation_function[0].arn : "",
           var.enable_rule_validation ? aws_lambda_function.rule_validation_function[0].arn : "",
           var.enable_rule_validation ? aws_lambda_function.rule_validation_orchestration_function[0].arn : "",
+          var.enable_rule_validation ? aws_lambda_function.rule_validation_policy_classification_function[0].arn : "",
           # BDA branch functions, always deployed (count = 1); the runtime
           # RouteByProcessingMode choice decides whether they execute.
           aws_lambda_function.bda_invoke[0].arn,

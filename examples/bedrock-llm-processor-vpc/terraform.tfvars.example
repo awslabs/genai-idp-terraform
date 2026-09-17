@@ -18,6 +18,8 @@ vpc_cidr = "10.0.0.0/16"
 # classification_model_id = "us.amazon.nova-pro-v1:0"
 # extraction_model_id     = "us.amazon.nova-pro-v1:0"
 # summarization_enabled   = true
+# enable_rule_validation  = true
+# config_file_path        = "../../sources/config_library/unified/rule-validation/config.yaml"
 # tags = { Environment = "dev" }
 
 # ── API visibility + Knowledge Base ─────────────────────────────────────────

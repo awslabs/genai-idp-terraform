@@ -135,6 +135,12 @@ variable "summarization_model_id" {
   default     = null
 }
 
+variable "enable_rule_validation" {
+  description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
+  type        = bool
+  default     = false
+}
+
 variable "evaluation_model_id" {
   description = "Optional model ID for evaluating extraction results. If not provided, the model from config.yaml will be used."
   type        = string

@@ -10,6 +10,8 @@ admin_email = "admin@example.com" # creates the initial Web UI admin user
 # summarization_model_id = "us.amazon.nova-pro-v1:0"
 # enable_evaluation      = false
 # enable_reporting       = false
+# enable_rule_validation = true
+# config_file_path       = "../../sources/config_library/unified/rule-validation/config.yaml"
 # web_ui  = { enabled = true }     # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }

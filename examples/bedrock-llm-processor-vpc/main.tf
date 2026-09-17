@@ -410,6 +410,7 @@ module "genai_idp_accelerator" {
     type                    = "bedrock-llm"
     classification_model_id = var.classification_model_id
     extraction_model_id     = var.extraction_model_id
+    enable_rule_validation  = var.enable_rule_validation
     summarization = {
       enabled  = var.summarization_enabled
       model_id = var.summarization_model_id

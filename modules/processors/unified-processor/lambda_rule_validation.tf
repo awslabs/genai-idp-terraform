@@ -26,6 +26,16 @@ data "archive_file" "rule_validation_orchestration_lambda" {
   depends_on = [null_resource.create_module_build_dir]
 }
 
+data "archive_file" "rule_validation_policy_classification_lambda" {
+  count = var.enable_rule_validation ? 1 : 0
+
+  type        = "zip"
+  source_dir  = "${path.module}/../../../sources/patterns/unified/src/rule-validation-policy-classification-function"
+  output_path = "${path.module}/rule_validation_policy_classification_function.zip"
+
+  depends_on = [null_resource.create_module_build_dir]
+}
+
 # IAM Role and Policy
 
 resource "aws_iam_role" "rule_validation_role" {
@@ -229,6 +239,59 @@ resource "aws_lambda_function" "rule_validation_orchestration_function" {
   tags = local.common_tags
 }
 
+resource "aws_lambda_function" "rule_validation_policy_classification_function" {
+  architectures = [var.lambda_architecture]
+  count         = var.enable_rule_validation ? 1 : 0
+
+  # Suffix kept short: "-rule-validation-policy-classification" pushes the full
+  # function name past Lambda's 64-char limit for typical name_prefixes.
+  function_name    = "${local.name_prefix}-rule-validation-policy-class"
+  role             = aws_iam_role.rule_validation_role[0].arn
+  handler          = "index.handler"
+  runtime          = "python3.12"
+  timeout          = 900
+  memory_size      = 4096
+  filename         = data.archive_file.rule_validation_policy_classification_lambda[0].output_path
+  source_code_hash = data.archive_file.rule_validation_policy_classification_lambda[0].output_base64sha256
+
+  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+
+  kms_key_arn = local.encryption_key_arn
+
+  environment {
+    variables = merge({
+      METRIC_NAMESPACE         = local.metric_namespace
+      CONFIGURATION_TABLE_NAME = local.configuration_table_name
+      LOG_LEVEL                = local.log_level
+      WORKING_BUCKET           = local.working_bucket_name
+      # Policy classification writes the consolidated result and cleans up prior
+      # rule-validation files under the output bucket, so it (unlike the worker
+      # and orchestration functions) needs OUTPUT_BUCKET. REPORTING_BUCKET /
+      # SAVE_REPORTING_FUNCTION_NAME are intentionally unset: the optional
+      # reporting fan-out is guarded by `if reporting_bucket and
+      # save_reporting_function` in the source and is not wired in this port.
+      OUTPUT_BUCKET          = local.output_bucket_name
+      TRACKING_TABLE         = local.tracking_table_name
+      DOCUMENT_TRACKING_MODE = local.api_id != null ? "appsync" : "dynamodb"
+      APPSYNC_API_URL        = local.api_graphql_url != null ? local.api_graphql_url : ""
+    }, local.bedrock_assume_role_env)
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(local.vpc_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = local.vpc_subnet_ids
+      security_group_ids = local.vpc_security_group_ids
+    }
+  }
+
+  tracing_config {
+    mode = var.lambda_tracing_mode
+  }
+
+  tags = local.common_tags
+}
+
 # CloudWatch Log Groups
 
 resource "aws_cloudwatch_log_group" "rule_validation_lambda" {
@@ -245,6 +308,16 @@ resource "aws_cloudwatch_log_group" "rule_validation_orchestration_lambda" {
   count = var.enable_rule_validation ? 1 : 0
 
   name              = "/aws/lambda/${aws_lambda_function.rule_validation_orchestration_function[0].function_name}"
+  retention_in_days = local.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "rule_validation_policy_classification_lambda" {
+  count = var.enable_rule_validation ? 1 : 0
+
+  name              = "/aws/lambda/${aws_lambda_function.rule_validation_policy_classification_function[0].function_name}"
   retention_in_days = local.log_retention_days
   kms_key_id        = local.encryption_key_arn
 

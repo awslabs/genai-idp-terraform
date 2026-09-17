@@ -201,6 +201,10 @@ output "contract" {
         `allowedConfigVersions` scoping server-side.
       * `environment` — `{ USERS_TABLE_NAME }` merged onto the core/config
         resolver Lambdas so they resolve the `Users` table at runtime.
+      * `field_functions` — IDP v0.6.4 REST transport: the field -> Lambda ARN
+        map the dispatcher routes on. Only the canonical `createUser` appears;
+        the dispatcher's FIELD_ALIASES fold updateUser/deleteUser/listUsers/
+        getMyProfile onto it.
       * `schema_additions = null` — the `@aws_auth` directives and `User` types
         already ship in the read-only v0.5.12 schema; no SDL injection needed.
   EOT
@@ -208,6 +212,7 @@ output "contract" {
     enabled          = var.enabled
     resolvers        = local.user_management_resolvers
     data_sources     = { (local.user_management_data_source_name) = aws_lambda_function.user_management.arn }
+    field_functions  = { createUser = aws_lambda_function.user_management.arn }
     iam_statements   = local.reviewer_filtering_iam_statements
     environment      = local.reviewer_filtering_environment
     schema_additions = null

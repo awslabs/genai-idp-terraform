@@ -234,6 +234,9 @@ variable "processor" {
     enable_hitl                  = optional(bool, false)
 
     # shared
+    # Rule validation runs after extraction on any processor type; requires a
+    # `rule_validation` block with policy_classes in `config` to run at runtime.
+    enable_rule_validation = optional(bool, false)
     summarization = optional(object({
       enabled  = optional(bool, true)
       model_id = optional(string, null)
