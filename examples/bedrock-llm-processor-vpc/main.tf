@@ -406,7 +406,8 @@ module "genai_idp_accelerator" {
   build = var.build
 
   # Processor configuration
-  bedrock_llm_processor = {
+  processor = {
+    type                    = "bedrock-llm"
     classification_model_id = var.classification_model_id
     extraction_model_id     = var.extraction_model_id
     summarization = {

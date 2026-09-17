@@ -14,6 +14,16 @@ the migration steps behind every breaking change below.
 
 ### Breaking Changes
 
+- **Processor inputs collapsed into one `processor` variable.** The three
+  mutually exclusive root variables `bedrock_llm_processor`, `bda_processor`, and
+  `sagemaker_udop_processor` are replaced by a single required `processor` object
+  with a `type` discriminator (`bedrock-llm`, `bda`, or `sagemaker-udop`). Move
+  your old block under `processor` and add `type`. The `type` value drives which
+  fields are required: `bda` needs `project_arn`, `sagemaker-udop` needs
+  `classification_endpoint_arn`. This is an input-surface rename only. Internal
+  module block names are unchanged by design, so no `moved {}` blocks and no
+  state migration are required, and a plan shows no resource churn. See
+  [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md).
 - **AWS AppSync removed; the UI/API transport is now an API Gateway REST API.**
   Upstream deleted AppSync in v0.6.0. Queries/mutations go through a single
   dispatcher Lambda at `POST /op/{field}`, status updates are polled, and chat

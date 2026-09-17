@@ -443,7 +443,8 @@ module "genai_idp_accelerator" {
   }
 
   # Processor configuration
-  bda_processor = {
+  processor = {
+    type        = "bda"
     project_arn = awscc_bedrock_data_automation_project.bda_project.project_arn
     summarization = {
       enabled  = var.summarization_enabled

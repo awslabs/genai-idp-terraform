@@ -24,6 +24,7 @@ terraform version   # must report >= 1.7.0
 
 | Change | Status |
 | --- | --- |
+| Processor inputs collapsed into one `processor` variable | documented below |
 | ALB Web UI hosting removed (`web_ui.hosting = "ALB"`) | documented below |
 | API Gateway Web UI hosting (`web_ui.hosting = "APIGateway"`) | documented below |
 | AppSync GraphQL transport replaced by API Gateway REST | TODO |
@@ -35,6 +36,85 @@ terraform version   # must report >= 1.7.0
 
 The TODO rows are filled in by the remaining sub-steps of this migration; they
 are listed here so the shape of the release is visible up front.
+
+---
+
+## Processor inputs collapsed into one `processor` variable
+
+### What changed and why
+
+A deployment always runs exactly one processor, but the old inputs modeled that
+as three separate optional variables (`bedrock_llm_processor`, `bda_processor`,
+`sagemaker_udop_processor`) with a plan-time check that exactly one was set. That
+let you configure zero or two by mistake, and it did not match the single
+`processor` naming used elsewhere. They are now one required `processor` object
+with a `type` field that selects the processor.
+
+### What you need to do
+
+Move your old block under `processor` and add `type`. Nothing else about the
+fields changes; the per-type fields keep the same names.
+
+Bedrock LLM:
+
+```hcl
+# before
+bedrock_llm_processor = {
+  classification_model_id = "us.amazon.nova-lite-v1:0"
+  extraction_model_id     = "us.amazon.nova-lite-v1:0"
+  config                  = local.config
+}
+
+# after
+processor = {
+  type                    = "bedrock-llm"
+  classification_model_id = "us.amazon.nova-lite-v1:0"
+  extraction_model_id     = "us.amazon.nova-lite-v1:0"
+  config                  = local.config
+}
+```
+
+BDA (`project_arn` required):
+
+```hcl
+# before
+bda_processor = {
+  project_arn = awscc_bedrock_data_automation_project.bda_project.project_arn
+  config      = local.config
+}
+
+# after
+processor = {
+  type        = "bda"
+  project_arn = awscc_bedrock_data_automation_project.bda_project.project_arn
+  config      = local.config
+}
+```
+
+SageMaker UDOP (`classification_endpoint_arn` required):
+
+```hcl
+# before
+sagemaker_udop_processor = {
+  classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
+  config                      = local.config
+}
+
+# after
+processor = {
+  type                        = "sagemaker-udop"
+  classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
+  config                      = local.config
+}
+```
+
+### No state migration
+
+This is an input-surface rename only. The internal module block names
+(`module.bedrock_llm_processor`, `module.bda_processor`,
+`module.sagemaker_udop_processor`) are unchanged, so every resource address
+stays the same. You do not need `moved {}` blocks, and `terraform plan` after
+the rename shows no adds, changes, or destroys for the processor resources.
 
 ---
 

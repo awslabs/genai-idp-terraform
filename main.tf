@@ -62,18 +62,8 @@ check "api_visibility_deprecated" {
   }
 }
 
-# Validation: exactly one processor façade must be configured.
-#tfsec:ignore:*
-check "exactly_one_processor" {
-  assert {
-    condition = length(compact([
-      var.bda_processor != null ? "bda" : "",
-      var.bedrock_llm_processor != null ? "bedrock_llm" : "",
-      var.sagemaker_udop_processor != null ? "sagemaker_udop" : "",
-    ])) == 1
-    error_message = "Exactly one of var.bda_processor, var.bedrock_llm_processor, or var.sagemaker_udop_processor must be set. Set one processor façade."
-  }
-}
+# Processor selection and per-type required fields are enforced by validation on
+# var.processor.
 
 # Validation: enable_encryption requires a KMS key (some module IAM policies
 # otherwise fall back to a KMS wildcard), so fail fast when the key is null.
@@ -103,15 +93,6 @@ check "web_ui_presign_vpce_dns" {
   assert {
     condition     = !var.web_ui.s3_presigned_url_via_vpc_endpoint || var.web_ui.s3_vpc_endpoint_dns_name_override != null
     error_message = "web_ui.s3_vpc_endpoint_dns_name_override is required when web_ui.s3_presigned_url_via_vpc_endpoint is true (set it to the DNS name of the S3 interface VPC endpoint serving the deployment)."
-  }
-}
-
-# Validation: SageMaker UDOP processor endpoint ARN requirement
-#tfsec:ignore:*
-check "sagemaker_processor_endpoint_arn" {
-  assert {
-    condition     = var.sagemaker_udop_processor != null ? var.sagemaker_udop_processor.classification_endpoint_arn != null : true
-    error_message = "classification_endpoint_arn is required in sagemaker_udop_processor configuration."
   }
 }
 
@@ -533,12 +514,12 @@ module "processing_environment_api" {
 # BDA Processor
 module "bda_processor" {
   source = "./modules/processors/bda-processor"
-  count  = var.bda_processor != null ? 1 : 0
+  count  = var.processor.type == "bda" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
 
   # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
-  enable_bda_ocr_backend = try(var.bda_processor.enable_bda_ocr_backend, false)
+  enable_bda_ocr_backend = var.processor.enable_bda_ocr_backend
 
   name = "${local.name_prefix}-processor"
 
@@ -574,20 +555,20 @@ module "bda_processor" {
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # BDA-specific configurations
-  data_automation_project_arn = var.bda_processor.project_arn
+  data_automation_project_arn = var.processor.project_arn
 
   # Optional: Evaluation configuration
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
   # Optional: Summarization configuration (BDA only)
-  summarization_model_id = var.bda_processor.summarization.enabled ? var.bda_processor.summarization.model_id : null
+  summarization_model_id = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
 
   # Optional: Document processing configuration
-  config = var.bda_processor.config
+  config = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
-  additional_configurations = var.bda_processor.additional_configurations
+  additional_configurations = var.processor.additional_configurations
   seed_managed_configs      = var.seed_managed_configs
 
   # Lambda tracing configuration
@@ -600,12 +581,12 @@ module "bda_processor" {
 # Bedrock LLM Processor
 module "bedrock_llm_processor" {
   source = "./modules/processors/bedrock-llm-processor"
-  count  = var.bedrock_llm_processor != null ? 1 : 0
+  count  = var.processor.type == "bedrock-llm" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
 
   # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
-  enable_bda_ocr_backend = try(var.bedrock_llm_processor.enable_bda_ocr_backend, false)
+  enable_bda_ocr_backend = var.processor.enable_bda_ocr_backend
 
   name = "${local.name_prefix}-processor"
 
@@ -640,11 +621,11 @@ module "bedrock_llm_processor" {
 
   # Model configurations - pass model IDs directly for optional override
   # The processor will use config.yaml by default and override with these if provided
-  classification_model_id      = var.bedrock_llm_processor.classification_model_id
-  extraction_model_id          = var.bedrock_llm_processor.extraction_model_id
-  assessment_model_id          = var.bedrock_llm_processor.assessment_model_id
+  classification_model_id      = var.processor.classification_model_id
+  extraction_model_id          = var.processor.extraction_model_id
+  assessment_model_id          = var.processor.assessment_model_id
   evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
-  max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
+  max_pages_for_classification = var.processor.max_pages_for_classification
 
   # Evaluation: per-pattern Lambda built from sources/patterns/pattern-2, the
   # only evaluation surface, matching upstream.
@@ -652,22 +633,22 @@ module "bedrock_llm_processor" {
   evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
 
   # Optional: Document processing configuration
-  config = var.bedrock_llm_processor.config
+  config = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
-  additional_configurations = var.bedrock_llm_processor.additional_configurations
+  additional_configurations = var.processor.additional_configurations
   seed_managed_configs      = var.seed_managed_configs
 
   # Optional fallback BDA project for use_bda:true additional versions (does not
   # relink the default)
-  bda_project_arn = var.bedrock_llm_processor.bda_project_arn
+  bda_project_arn = var.processor.bda_project_arn
 
   # Feature flags
-  is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
-  enable_hitl              = var.bedrock_llm_processor.enable_hitl
+  is_summarization_enabled = var.processor.summarization.enabled
+  enable_hitl              = var.processor.enable_hitl
 
   # Optional: Summarization model configuration
-  summarization_model_id = var.bedrock_llm_processor.summarization.enabled ? var.bedrock_llm_processor.summarization.model_id : null
+  summarization_model_id = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -678,12 +659,12 @@ module "bedrock_llm_processor" {
 # SageMaker UDOP Processor
 module "sagemaker_udop_processor" {
   source = "./modules/processors/sagemaker-udop-processor"
-  count  = var.sagemaker_udop_processor != null ? 1 : 0
+  count  = var.processor.type == "sagemaker-udop" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
 
   # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
-  enable_bda_ocr_backend = try(var.sagemaker_udop_processor.enable_bda_ocr_backend, false)
+  enable_bda_ocr_backend = var.processor.enable_bda_ocr_backend
 
   name = "${local.name_prefix}-processor"
 
@@ -716,28 +697,28 @@ module "sagemaker_udop_processor" {
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # SageMaker UDOP processor configuration
-  classification_endpoint_arn = var.sagemaker_udop_processor.classification_endpoint_arn
+  classification_endpoint_arn = var.processor.classification_endpoint_arn
 
   # Optional: Performance configuration
-  ocr_max_workers            = var.sagemaker_udop_processor.ocr_max_workers
-  classification_max_workers = var.sagemaker_udop_processor.classification_max_workers
+  ocr_max_workers            = var.processor.ocr_max_workers
+  classification_max_workers = var.processor.classification_max_workers
 
   # Optional: Model configurations
-  extraction_model_id             = var.sagemaker_udop_processor.extraction_model_id
-  summarization_model_id          = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
+  extraction_model_id             = var.processor.extraction_model_id
+  summarization_model_id          = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
   evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
 
   # Optional: Document processing configuration
-  config = var.sagemaker_udop_processor.config
+  config = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
-  additional_configurations = var.sagemaker_udop_processor.additional_configurations
+  additional_configurations = var.processor.additional_configurations
   seed_managed_configs      = var.seed_managed_configs
 
   # Optional fallback BDA project for use_bda:true additional versions (does not
   # relink the default)
-  bda_project_arn = var.sagemaker_udop_processor.bda_project_arn
+  bda_project_arn = var.processor.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode

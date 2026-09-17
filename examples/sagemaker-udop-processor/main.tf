@@ -429,7 +429,8 @@ module "genai_idp_accelerator" {
   }
 
   # Processor configuration
-  sagemaker_udop_processor = {
+  processor = {
+    type                        = "sagemaker-udop"
     classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
     extraction_model_id         = var.extraction_model_id
     summarization = {
