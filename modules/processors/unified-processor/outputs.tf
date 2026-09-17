@@ -39,28 +39,23 @@ output "configuration" {
 }
 
 output "classification_model" {
-  description = "The classification model being used (from variable override or config.yaml)"
-  value       = local.config_with_overrides.classification.model
+  description = "The classification model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id). This is the model the Bedrock IAM grant is scoped to."
+  value       = local.bedrock_step_model_ids.classification
 }
 
 output "extraction_model" {
-  description = "The extraction model being used (from variable override or config.yaml)"
-  value       = local.config_with_overrides.extraction.model
+  description = "The extraction model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id). This is the model the Bedrock IAM grant is scoped to."
+  value       = local.bedrock_step_model_ids.extraction
 }
 
 output "summarization_model" {
-  description = "The summarization model being used (from variable override or config.yaml), or null when summarization is off."
-  value       = var.is_summarization_enabled ? try(local.config_with_overrides.summarization.model, null) : null
+  description = "The summarization model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id), or null when summarization is off."
+  value       = var.is_summarization_enabled ? local.bedrock_step_model_ids.summarization : null
 }
 
 output "evaluation_model" {
-  description = "The evaluation model being used (from variable override or config.yaml), or null when evaluation is off or the config carries no evaluation section."
-  # try() rather than a bare lookup: `evaluation` is only merged into
-  # config_with_overrides when var.evaluation_model_id is set OR the supplied
-  # config already carries an evaluation section. A sparse config with
-  # evaluation_enabled = true would otherwise fail the plan on this output
-  # instead of on anything that matters.
-  value = var.evaluation_enabled ? try(local.config_with_overrides.evaluation.llm_method.model, null) : null
+  description = "The evaluation model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id), or null when evaluation is off."
+  value       = var.evaluation_enabled ? local.bedrock_step_model_ids.evaluation : null
 }
 
 output "schema_definition" {

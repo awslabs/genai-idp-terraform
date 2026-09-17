@@ -3,6 +3,19 @@
 #
 # IAM Roles and Policies for Bedrock LLM Processor
 
+# Plan-time guard: fail (naming the step + value) if a resolved model ID isn't a
+# valid model-ID/ARN shape before it becomes an IAM ARN. Inert terraform_data.
+resource "terraform_data" "bedrock_model_id_validation" {
+  input = local.bedrock_step_model_ids
+
+  lifecycle {
+    precondition {
+      condition     = length(local.bedrock_invalid_model_ids) == 0
+      error_message = "Invalid Bedrock model ID(s) resolved for one or more steps (step=value): ${join(", ", local.bedrock_invalid_model_ids)}. Each must be a full ARN or a Bedrock model / inference-profile ID (optional geo prefix us|eu|apac|ca|sa|global, then provider.model)."
+    }
+  }
+}
+
 # Step Functions State Machine Role
 resource "aws_iam_role" "state_machine" {
   name = "${local.name_prefix}-state-machine-role"
@@ -212,14 +225,11 @@ resource "aws_iam_role_policy" "ocr_lambda" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        # v0.6.4: backend workers write document status to the tracking table
-        # DIRECTLY (AppSync was removed; the UI polls DynamoDB), so the OCR role
-        # needs tracking-table write regardless of enable_api. The old
-        # `enable_api ? [] : [...]` gate assumed the API path wrote status via
-        # AppSync, which no longer exists — it left OCR unable to UpdateItem and
-        # failed every execution at the first step.
         Resource = [
           local.configuration_table_arn,
+          # v0.6 backend workers write document status to the tracking table
+          # directly (no AppSync), so this grant is unconditional. The stale
+          # var.enable_api gate left OCR unable to UpdateItem when the API is on.
           local.tracking_table_arn,
         ]
       },
@@ -583,12 +593,9 @@ resource "aws_iam_role_policy" "process_results_lambda" {
           }
         }
       }
-      ],
-      # v0.6.4: workers write document status to DynamoDB directly (AppSync
-      # removed; UI polls), so tracking-table access is unconditional — not gated
-      # on enable_api. Gating it left process-results unable to read/update the
-      # tracking table with the web UI on, failing the pipeline post-OCR.
-      [{
+      ], [{
+        # Unconditional: v0.6 workers write document status to the tracking
+        # table directly regardless of the API (stale var.enable_api gate removed).
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
@@ -853,9 +860,8 @@ resource "aws_iam_role_policy" "assessment_lambda" {
           ]
         }
       ],
-      # v0.6.4: workers write document status to DynamoDB directly (AppSync
-      # removed; UI polls), so tracking-table access is unconditional — not gated
-      # on enable_api.
+      # DynamoDB tracking table permissions. Unconditional: v0.6 workers write
+      # document status directly regardless of the API (stale var.enable_api gate removed).
       [{
         Effect = "Allow"
         Action = [
@@ -872,21 +878,30 @@ resource "aws_iam_role_policy" "assessment_lambda" {
       }],
       # OpenAI GPT-5.x (bedrock-mantle) permissions
       [local.bedrock_mantle_statement],
-      # Foundation model permissions
+      # Foundation-model grant from the shared transform. No statement when no
+      # model resolves (replaces a legacy un-stripped var.assessment_model_id ARN).
       local.bedrock_model_permissions.assessment != null ? [{
         Effect   = local.bedrock_model_permissions.assessment.foundation_statement.effect
         Action   = local.bedrock_model_permissions.assessment.foundation_statement.actions
         Resource = local.bedrock_model_permissions.assessment.foundation_statement.resources
-        }] : [{
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel*", "bedrock:GetFoundationModel"]
-        Resource = ["arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${var.assessment_model_id}"]
-      }],
+      }] : [],
       # Inference profile permissions (conditional)
       local.bedrock_model_permissions.assessment != null && local.bedrock_model_permissions.assessment.inference_profile_statement != null ? [{
         Effect   = local.bedrock_model_permissions.assessment.inference_profile_statement.effect
         Action   = local.bedrock_model_permissions.assessment.inference_profile_statement.actions
         Resource = local.bedrock_model_permissions.assessment.inference_profile_statement.resources
+      }] : [],
+      # Escalation model the assessment Lambda invokes on low-confidence sections
+      # (extraction.confidence.escalation_model). Distinct from the primary model.
+      local.bedrock_model_permissions.assessment_escalation != null ? [{
+        Effect   = local.bedrock_model_permissions.assessment_escalation.foundation_statement.effect
+        Action   = local.bedrock_model_permissions.assessment_escalation.foundation_statement.actions
+        Resource = local.bedrock_model_permissions.assessment_escalation.foundation_statement.resources
+      }] : [],
+      local.bedrock_model_permissions.assessment_escalation != null && local.bedrock_model_permissions.assessment_escalation.inference_profile_statement != null ? [{
+        Effect   = local.bedrock_model_permissions.assessment_escalation.inference_profile_statement.effect
+        Action   = local.bedrock_model_permissions.assessment_escalation.inference_profile_statement.actions
+        Resource = local.bedrock_model_permissions.assessment_escalation.inference_profile_statement.resources
       }] : [],
       [
         {

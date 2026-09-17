@@ -29,6 +29,29 @@ the migration steps behind every breaking change below.
 - **`api.visibility` renamed to `api.api_gateway_visibility`.** The old name
   still works and takes precedence, with a deprecation `check`; it will be
   removed in a future release.
+- **Step models are now config/system-default authoritative, not pinned to
+  `var.model_id`.** Previously the engine force-wrote `classification.model`,
+  `extraction.model`, and `summarization.model` from `coalesce(per_step_var,
+  var.model_id)`, so a deployment that set no model variables silently ran
+  `us.amazon.nova-2-lite-v1:0` for every step and ignored the models the config
+  library / upstream system defaults declare. Terraform now writes those keys
+  only when the corresponding per-step variable is explicitly set; otherwise the
+  config YAML (then the upstream system default, then `var.model_id` as a
+  backstop) wins. **Deployments that set no model variables will change which
+  models they invoke** — e.g. extraction moves from `nova-2-lite` to the v0.6
+  default `us.anthropic.claude-sonnet-5` — changing inference results and cost.
+  To keep the prior behaviour, set `classification_model_id`,
+  `extraction_model_id`, and `summarization_model_id` (or the per-processor
+  equivalents) explicitly to `us.amazon.nova-2-lite-v1:0`.
+- **The seeder no longer overwrites operator-edited configuration on every
+  apply.** The active `Config#default` row is now written read-modify-write:
+  once it has diverged from what Terraform last seeded (an edit made in the Web
+  UI), the seeder leaves it intact instead of clobbering it. Operators who
+  relied on `terraform apply` reasserting configuration must use the documented
+  force procedure (delete the `TerraformSeed#default` marker item, then
+  `terraform apply -replace=...seed_default`) to reassert Terraform's config.
+  This is also the supported path for adopting the model-authority defaults above
+  on a deployment whose config row was already edited.
 
 ### Added
 
@@ -52,6 +75,21 @@ the migration steps behind every breaking change below.
   project as a pure OCR engine in place of Textract. Enable with the new
   `enable_bda_ocr_backend` flag on any processor. The deployment-scoped project is
   created and deleted with the deployment.
+- **Configuration seeder edit-preservation provenance.** The seeder records what
+  it wrote as a sibling DynamoDB item, `Configuration = "TerraformSeed#<version>"`,
+  holding a hash of the seeded config. On the next apply it compares the stored
+  row against that hash to tell "Terraform's desired config changed" (update)
+  from "an operator edited the row" (skip). The marker is a separate item, never
+  a top-level attribute on the config row, so the runtime config loader never
+  surfaces it as a configuration section (`list_config_versions` only scans
+  `Config#*`). A row with no marker (a pre-existing deployment) is adopted once
+  on first upgrade. Divergence detection is deliberately coarse: **any** change
+  to the stored row freezes the whole row against future Terraform config
+  updates until the marker is deleted.
+- **Plan-time Bedrock model-ID validation.** Each resolved per-step model ID is
+  checked against a model-ID/ARN shape before it is used to build an IAM ARN, so
+  a typo in a config-YAML model fails `terraform plan` naming the step and value
+  rather than producing a malformed ARN / `AccessDenied` at invoke time.
 
 ### Changed
 
@@ -93,6 +131,42 @@ the migration steps behind every breaking change below.
 - The workflow tracker can now delete an original superseded by a redacted copy:
   it gains `INPUT_BUCKET` plus the S3 rights to purge the input object and all
   versions under the output prefix.
+- **The per-step Bedrock IAM allowlist is derived from the effective
+  configuration, so a grant can no longer disagree with the model the runtime
+  invokes.** Previously `classification`, `extraction`, and `summarization` were
+  pinned to `coalesce(per_step_var, var.model_id)` for both the seeded config and
+  IAM, while `evaluation`/`assessment` already read the config — the two
+  asymmetries cancelled out and hid the bug. All five steps now resolve through
+  one expression (per-step variable → config → upstream system default →
+  `var.model_id`) and share a single model-ID→ARN transform, so the grant always
+  matches the seeded model. The system-default layer is read directly from
+  `sources/.../system_defaults/base-*.yaml`, because those models are merged into
+  the config by the seeder Lambda at apply time and are otherwise invisible to
+  Terraform.
+- **Assessment (confidence) invocations no longer `AccessDenied`.** v0.6 folded
+  assessment under `extraction.confidence`; the assessment Lambda invokes
+  `extraction.confidence.model` (default `us.amazon.nova-lite-v1:0`) and, on
+  low-confidence sections, `extraction.confidence.escalation_model` (default
+  `us.anthropic.claude-sonnet-5:1m`). The assessment role now grants both,
+  resolved from the effective config, instead of a single model derived from the
+  wrong key.
+- **The legacy un-stripped assessment IAM fallback is removed.** When no
+  assessment model resolved, `iam.tf` built
+  `foundation-model/${var.assessment_model_id}` without stripping the geographic
+  prefix, producing a malformed ARN; the grant now comes from the shared,
+  prefix-aware transform.
+- **OCR / process-results / assessment roles can write the tracking table when
+  the API is enabled.** These roles gated the `dynamodb:UpdateItem` grant on the
+  tracking table behind `var.enable_api ? [] : [...]` — stale v0.5 logic assuming
+  the API path wrote status via AppSync. v0.6 removed AppSync and backend workers
+  write status to DynamoDB directly, so with `enable_api = true` (every web-UI
+  example) the pipeline failed at the OCR step with
+  `AccessDeniedException ... dynamodb:UpdateItem`. The grant is now unconditional.
+- **`api.visibility` validation no longer crashes on its null default.** The
+  deprecated-field validation was `var.api.visibility == null ||
+  contains([...], var.api.visibility)`; Terraform does not short-circuit `||`
+  when the right side's `contains(list, null)` throws, so `terraform validate` /
+  `plan` failed for every example. Rewritten as a null-guarding ternary.
 
 ### Not applicable
 

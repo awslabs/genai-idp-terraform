@@ -69,11 +69,19 @@ resource "aws_lambda_invocation" "seed_default" {
     configuration_hash = sha256(jsonencode(var.configuration))
     # Re-seed when the linked project ARN changes (unset -> "none").
     bda_project_arn = coalesce(var.default_bda_project_arn, "none")
-    # Re-invoke when the seeder Lambda source itself changes — this is
-    # how we propagate seeder fixes to existing deployments without
-    # forcing the operator to taint the resource.
+    # Propagate seeder fixes without a manual taint. Safe now that the seeder
+    # preserves operator-edited rows: a source-only change re-invokes but skips
+    # diverged config.
     seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
   }
+
+  # Break-glass to reassert Terraform's config over an operator-edited
+  # Config#default (e.g. to adopt new model defaults on a previously edited
+  # deployment) — a documented one-off, deliberately not a module input:
+  #   1. aws dynamodb delete-item --table-name <configuration-table> \
+  #        --key '{"Configuration": {"S": "TerraformSeed#default"}}'
+  #   2. terraform apply -replace='<module path>.aws_lambda_invocation.seed_default'
+  # With the marker gone the seeder adopts the row once and re-stamps it.
 
   depends_on = [
     aws_lambda_function.configuration_seeder,

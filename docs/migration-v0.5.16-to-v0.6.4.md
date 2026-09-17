@@ -29,6 +29,8 @@ terraform version   # must report >= 1.7.0
 | AppSync GraphQL transport replaced by API Gateway REST | TODO |
 | `api.visibility` renamed to `api.api_gateway_visibility` | documented below |
 | `EnableHeadless` renamed to `EnableJobsApi` upstream | no action — see below |
+| Step models are config/system-default authoritative (not `var.model_id`) | **action may be required — see below** |
+| Seeder preserves operator-edited configuration | documented below |
 | Configuration / feature-parity changes | TODO |
 
 The TODO rows are filled in by the remaining sub-steps of this migration; they
@@ -392,3 +394,109 @@ anyone who does not set it, so adding it in a later release costs nothing that
 adding it now would save. Bundling 72 role modifications into this release, by
 contrast, would bury the AppSync and ALB changes that the upgrade plan needs to
 make reviewable.
+
+---
+
+## Configuration ownership: model authority and operator-edit preservation
+
+Two related behaviour changes ship together. Both are about the Terraform layer
+no longer owning configuration it should not own.
+
+### 1. Step models come from the config, not `var.model_id`
+
+**What changed.** The engine used to force-write `classification.model`,
+`extraction.model`, and `summarization.model` into the seeded configuration from
+`coalesce(per_step_var, var.model_id)`. Because `var.model_id` defaults to
+`us.amazon.nova-2-lite-v1:0`, a deployment that set no model variables ran
+`nova-2-lite` for every step and silently ignored the models the config library
+and the upstream system defaults declare. Terraform now writes those keys only
+when you set the corresponding per-step variable; otherwise resolution is:
+
+```
+per-step variable  →  config YAML model  →  upstream system default  →  var.model_id
+```
+
+The per-step Bedrock IAM grant is derived from the *same* resolution, so it can
+no longer disagree with the model the runtime invokes.
+
+**Who is affected.** Any deployment that did **not** set a per-step model
+variable. With the shipped example configs (which declare no step model), the
+models change to the v0.6 system defaults:
+
+| Step | Before (forced) | After (system default) |
+| --- | --- | --- |
+| classification | `us.amazon.nova-2-lite-v1:0` | `us.amazon.nova-2-lite-v1:0` |
+| extraction | `us.amazon.nova-2-lite-v1:0` | `us.anthropic.claude-sonnet-5` |
+| summarization | `us.amazon.nova-2-lite-v1:0` | `us.anthropic.claude-sonnet-5:1m` |
+| assessment (confidence) | `us.amazon.nova-2-lite-v1:0` | `us.amazon.nova-lite-v1:0` |
+
+**This changes inference results and cost.** `claude-sonnet-5` is materially more
+capable and more expensive than `nova-2-lite`. Review the cost implications
+before upgrading a production deployment.
+
+**To keep the prior behaviour**, pin the models explicitly. On the root
+processor object (e.g. `bedrock_llm_processor`):
+
+```hcl
+bedrock_llm_processor = {
+  classification_model_id = "us.amazon.nova-2-lite-v1:0"
+  extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
+  # summarization only if you enable it
+  # ...
+}
+```
+
+**A YAML typo now fails at plan.** Because a config model ID flows into an IAM
+ARN, `terraform plan` validates each resolved model ID's shape and fails naming
+the step and value, rather than deferring the problem to an `AccessDenied` at
+invoke time.
+
+### 2. The seeder preserves configuration edited in the Web UI
+
+**What changed.** The seeder used to overwrite the active `Config#default` row
+unconditionally on every apply (including whenever the seeder Lambda's own source
+changed). It now does a read-modify-write:
+
+- **No row yet** → create it.
+- **Row unchanged since Terraform seeded it** → update it to the new desired
+  config.
+- **Row edited by an operator** (diverged from what Terraform last seeded) →
+  **left intact**, and the skip is logged in CloudWatch.
+- **Row with no provenance marker** (a deployment predating this change) →
+  adopted once on the first upgrade apply: Terraform writes the desired config
+  and stamps it. **Back up any UI edits before this first upgrade**, because that
+  one apply still overwrites the row.
+
+Provenance is tracked in a sibling DynamoDB item, `TerraformSeed#<version>`,
+which the runtime never reads (it is not a `Config#*` row).
+
+**Consequence.** `terraform apply` no longer reasserts configuration once the row
+has been edited. This is the intended fix, but it is a visible behaviour change
+if you relied on apply-as-reset.
+
+**Divergence is coarse.** *Any* edit to the row freezes the whole row against
+future Terraform configuration updates — Terraform will not push a changed
+`config` into an edited row until you force it. Adopting new upstream config
+defaults on an edited deployment therefore requires the force procedure below.
+
+### Force procedure (reassert Terraform's configuration over an edit)
+
+There is no module input for this — it is a deliberate, one-off manual action so
+it cannot be left on and silently re-clobber edits on every apply. To discard the
+operator edit and reassert Terraform's desired config (also the way to adopt the
+new model-authority defaults on a deployment whose row was already edited):
+
+```bash
+# 1. Delete the provenance marker so the seeder treats the row as a fresh adopt.
+aws dynamodb delete-item \
+  --table-name <your-configuration-table> \
+  --key '{"Configuration": {"S": "TerraformSeed#default"}}'
+
+# 2. Force the seeding invocation to re-run (its input hash is otherwise
+#    unchanged, so a plain apply would be a no-op).
+terraform apply -replace='module.<...>.aws_lambda_invocation.seed_default'
+```
+
+The exact resource address is printed by `terraform plan`; it is the
+`aws_lambda_invocation.seed_default` inside the processor-configuration module of
+whichever processor façade you deploy.

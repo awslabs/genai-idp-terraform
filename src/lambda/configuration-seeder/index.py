@@ -16,10 +16,13 @@
 # `update_configuration` Lambda:
 #   1. Speaks plain Lambda invocation JSON, not CloudFormation Custom
 #      Resource protocol (no cfnresponse).
-#   2. Always treats the call as a Create — the previous version of this
-#      Lambda was idempotent on `put_item`, and aws_lambda_invocation
-#      already triggers only when its input hash changes.
+#   2. For the active `default` version it does a read-modify-write that
+#      preserves operator edits (tracked via a `TerraformSeed#<version>`
+#      provenance sibling row); managed baselines and non-active additional
+#      versions keep the historical unconditional write.
 
+import gzip
+import hashlib
 import json
 import logging
 import os
@@ -28,13 +31,89 @@ from typing import Any, Dict, Optional
 
 import boto3
 import yaml  # noqa: F401 — kept for parity with upstream; not used in current invocation shape
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
 
+# Provenance marker prefix. The marker is a SEPARATE sibling item, never a
+# top-level attribute on the Config# row: the runtime treats any non-metadata
+# top-level attribute as config data, and list_config_versions only scans
+# `begins_with(Configuration, "Config#")`, so a TerraformSeed# row is invisible.
+_MARKER_PREFIX = "TerraformSeed"
+
+# Row metadata / storage plumbing, NOT config data. Mirrors idp_common's
+# _DYNAMODB_METADATA_FIELDS plus its compressed-storage markers; copied locally
+# because idp_common lives in the (offline-absent) layer and sources/ is
+# read-only.
+_METADATA_FIELDS = frozenset(
+    {
+        "Configuration",
+        "CreatedAt",
+        "UpdatedAt",
+        "IsActive",
+        "Description",
+        "BdaProjectArn",
+        "BdaSyncStatus",
+        "BdaLastSyncedAt",
+        "Managed",
+        "_config_storage",
+        "_compressed_config",
+        "_config_format",
+    }
+)
+_COMPRESSED_STORAGE_MARKER = "_config_storage"
+_COMPRESSED_STORAGE_VALUE = "compressed"
+_COMPRESSED_DATA_FIELD = "_compressed_config"
+
+
 def _isoformat_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _marker_key(version: str) -> str:
+    """Partition key of the provenance sibling row for a config version."""
+    return f"{_MARKER_PREFIX}#{version}"
+
+
+def _seed_hash(merged_config: Dict[str, Any]) -> str:
+    """Canonical-JSON sha256 of the stringified config the seeder writes, so it
+    matches what a later invocation reconstructs via ``_stored_config_data``."""
+    canonical = json.dumps(
+        _stringify_values(merged_config),
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _decompress_if_needed(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Expand a runtime-compressed row (gzip blob under ``_compressed_config``)
+    to its inline shape, mirroring the runtime's own _decompress_item. Rows that
+    are not compressed are returned unchanged."""
+    if item.get(_COMPRESSED_STORAGE_MARKER) != _COMPRESSED_STORAGE_VALUE:
+        return item
+
+    blob = item.get(_COMPRESSED_DATA_FIELD)
+    if blob is None:
+        return item
+    try:
+        raw = bytes(blob) if not isinstance(blob, bytes) else blob
+        config_data = json.loads(gzip.decompress(raw).decode("utf-8"))
+    except Exception as exc:  # pragma: no cover - corrupt/unknown blob
+        logger.warning("Could not decompress stored config row: %s", exc)
+        return item
+
+    metadata = {k: v for k, v in item.items() if k in _METADATA_FIELDS}
+    return {**metadata, **config_data}
+
+
+def _stored_config_data(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Config-data portion of a stored row: decompress, then drop metadata."""
+    expanded = _decompress_if_needed(item)
+    return {k: v for k, v in expanded.items() if k not in _METADATA_FIELDS}
 
 
 def _stringify_values(obj: Any) -> Any:
@@ -295,9 +374,10 @@ def _put_config_default(
     is_active: bool = True,
     managed: bool = False,
     bda_project_arn: Optional[str] = None,
+    preserve_edits: bool = False,
 ) -> Dict[str, Any]:
     """
-    Write a versioned Config item to DynamoDB.
+    Write a versioned Config item to DynamoDB, preserving operator edits.
 
     DynamoDB key shape: ``Configuration = "Config#<version>"``.
     Merged config sections are spread as top-level attributes (matching
@@ -322,32 +402,146 @@ def _put_config_default(
     ``queue_processor`` reads it back and injects ``document.bda_project_arn`` so
     a ``use_bda: true`` version routes to BDA. Absent leaves the item unchanged,
     like the ``Managed`` marker.
+
+    With ``preserve_edits`` (the active, non-managed ``default`` row) the write
+    is read-modify-write: absent row → create + stamp; present with no marker →
+    adopt once (first upgrade) + stamp; marker matches stored config → update +
+    re-stamp, preserving ``CreatedAt``; marker mismatches → operator edit, skip.
+    A ``ConditionExpression`` guards against a concurrent write. To overwrite a
+    diverged row, delete its ``TerraformSeed#<version>`` marker and re-invoke
+    (falls into the adopt branch); see the processor-configuration module.
+
+    Without ``preserve_edits`` (managed baselines / non-active additional
+    versions) the historical unconditional ``put_item`` is kept.
     """
+    config_key = f"Config#{version}"
+
+    existing_item: Optional[Dict[str, Any]] = None
+    if preserve_edits:
+        # Read error must fail the invocation, never default to overwrite.
+        existing_item = _get_item(table, config_key)
+        if existing_item is not None:
+            stored_marker = _get_marker(table, version)
+            decision = _reseed_decision(existing_item, stored_marker, merged_config)
+            if decision == "skip":
+                logger.info(
+                    "Config#%s has diverged from what Terraform last seeded "
+                    "(operator-owned) — skipping re-seed to preserve edits. "
+                    "To overwrite, delete the TerraformSeed#%s marker item and "
+                    "re-invoke.",
+                    version,
+                    version,
+                )
+                return {
+                    "seeded": False,
+                    "reason": "operator-owned-row-preserved",
+                    "version": version,
+                }
+            logger.info("Config#%s re-seed decision: %s", version, decision)
+
     now = _isoformat_now()
+    # Preserve CreatedAt on update; only a genuine create stamps it fresh.
+    created_at = (
+        existing_item.get("CreatedAt", now)
+        if isinstance(existing_item, dict)
+        else now
+    )
 
     item: Dict[str, Any] = {
-        "Configuration": f"Config#{version}",
+        "Configuration": config_key,
         "IsActive": is_active,
         "Description": description,
-        "CreatedAt": now,
+        "CreatedAt": created_at,
         "UpdatedAt": now,
         **_stringify_values(merged_config),
     }
 
-    # Only stamp the Managed marker when requested so non-managed rows are
-    # byte-identical to the pre-B11 seeder output.
     if managed:
         item["Managed"] = True
 
-    # Stamp the BDA link only when supplied, so unlinked rows are unchanged.
-    # Mirrors upstream set_bda_project_arn (BdaProjectArn + BdaSyncStatus +
-    # BdaLastSyncedAt as top-level metadata).
+    # Mirrors upstream set_bda_project_arn; only stamped when a link is supplied.
     if bda_project_arn:
         item["BdaProjectArn"] = bda_project_arn
         item["BdaSyncStatus"] = "synced"
         item["BdaLastSyncedAt"] = now
 
+    if preserve_edits:
+        # Guard against a concurrent write between our read and this write:
+        # absent row → require still-absent; present → require unchanged UpdatedAt.
+        if existing_item is None:
+            condition = "attribute_not_exists(Configuration)"
+            expr_values = None
+        else:
+            prior_updated = existing_item.get("UpdatedAt")
+            if prior_updated is None:
+                condition = "attribute_exists(Configuration)"
+                expr_values = None
+            else:
+                condition = "UpdatedAt = :prev"
+                expr_values = {":prev": prior_updated}
+        try:
+            kwargs: Dict[str, Any] = {"Item": item, "ConditionExpression": condition}
+            if expr_values is not None:
+                kwargs["ExpressionAttributeValues"] = expr_values
+            response = table.put_item(**kwargs)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                logger.warning(
+                    "Config#%s changed between read and write (concurrent "
+                    "edit) — skipping re-seed to avoid clobbering it.",
+                    version,
+                )
+                return {
+                    "seeded": False,
+                    "reason": "concurrent-modification",
+                    "version": version,
+                }
+            raise
+        _put_marker(table, version, merged_config)
+        return response
+
     return table.put_item(Item=item)
+
+
+def _get_item(table, config_key: str) -> Optional[Dict[str, Any]]:
+    """Read a row by partition key, raising on any error (never swallow)."""
+    response = table.get_item(Key={"Configuration": config_key})
+    return response.get("Item")
+
+
+def _get_marker(table, version: str) -> Optional[str]:
+    """Read the stored provenance hash for a version, or None if unstamped."""
+    response = table.get_item(Key={"Configuration": _marker_key(version)})
+    item = response.get("Item")
+    if not item:
+        return None
+    return item.get("SeedHash")
+
+
+def _put_marker(table, version: str, merged_config: Dict[str, Any]) -> None:
+    """Stamp the provenance sibling row with the hash of what we just wrote."""
+    table.put_item(
+        Item={
+            "Configuration": _marker_key(version),
+            "SeedHash": _seed_hash(merged_config),
+            "UpdatedAt": _isoformat_now(),
+        }
+    )
+
+
+def _reseed_decision(
+    existing_item: Dict[str, Any],
+    stored_marker: Optional[str],
+    merged_config: Dict[str, Any],
+) -> str:
+    """Classify a present row: ``adopt`` (no marker → first upgrade), ``update``
+    (stored config matches provenance → Terraform owns it), or ``skip`` (stored
+    config diverged → operator edit, leave intact). Divergence is conservative:
+    any byte change, including a benign runtime re-compress, counts as an edit."""
+    if stored_marker is None:
+        return "adopt"
+    current_hash = _seed_hash(_stored_config_data(existing_item))
+    return "update" if current_hash == stored_marker else "skip"
 
 
 def _put_schema(table, schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -429,12 +623,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # key == "Default"
         version = event.get("Version", "default")
         description = event.get("Description", "Default IDP configuration")
-        # Managed baseline configs are seeded as non-active, non-editable
-        # rows. Default invocations keep the historical is_active=true behavior.
         managed = bool(event.get("Managed", False))
         is_active = bool(event.get("IsActive", not managed))
-        # Optional BDA project link (empty/absent leaves the item unchanged).
         bda_project_arn = event.get("BdaProjectArn") or None
+        # Only the active, non-managed default is the runtime's resolved config
+        # (the only row an operator edits), so preservation applies there. Managed baselines (upstream-protected)
+        # and additional versions (IsActive=false) keep the unconditional write.
+        preserve_edits = is_active and not managed
 
         if not isinstance(value, dict):
             raise ValueError(
@@ -456,17 +651,26 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             is_active=is_active,
             managed=managed,
             bda_project_arn=bda_project_arn,
+            preserve_edits=preserve_edits,
         )
+
+        seeded = not (isinstance(response, dict) and response.get("seeded") is False)
 
         return {
             "statusCode": 200,
             "body": json.dumps(
                 {
-                    "message": f"Stored Config#{version}",
+                    "message": (
+                        f"Stored Config#{version}"
+                        if seeded
+                        else f"Preserved existing Config#{version} "
+                        f"({response.get('reason')})"
+                    ),
                     "key": "Default",
                     "version": version,
                     "managed": managed,
                     "isActive": is_active,
+                    "seeded": seeded,
                     "bdaProjectArn": bda_project_arn,
                     "merged_sections": sorted(merged.keys()),
                     "response": response,

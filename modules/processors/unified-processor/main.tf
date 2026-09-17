@@ -120,18 +120,20 @@ locals {
   # missing sections rather than failing at plan time.
   config_with_overrides = merge(
     local.base_config,
-    # Override classification model: per-step var → model_id default
-    {
+    # Model keys are YAML-authoritative: written ONLY when the per-step variable
+    # is set, so the config library / system defaults are otherwise respected.
+    var.classification_model_id != null ? {
       classification = merge(
         try(local.base_config.classification, {}),
-        { model = coalesce(var.classification_model_id, var.model_id) }
+        { model = var.classification_model_id }
       )
-    },
-    # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
+    } : {},
+    # Extraction: model override conditional; the non-model overrides
+    # (section_splitting_strategy, agentic) still apply unconditionally.
     {
       extraction = merge(
         try(local.base_config.extraction, {}),
-        { model = coalesce(var.extraction_model_id, var.model_id) },
+        var.extraction_model_id != null ? { model = var.extraction_model_id } : {},
         var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
         var.enable_agentic_extraction ? {
           agentic = merge(
@@ -145,13 +147,14 @@ locals {
         } : {}
       )
     },
-    # Override summarization model: per-step var → model_id default
-    {
+    # Summarization: written only when the variable is set AND the step is
+    # enabled, so a disabled step gets no summarization.model key.
+    var.summarization_model_id != null && var.is_summarization_enabled ? {
       summarization = merge(
         try(local.base_config.summarization, {}),
-        { model = coalesce(var.summarization_model_id, var.model_id) }
+        { model = var.summarization_model_id }
       )
-    },
+    } : {},
     # Only override evaluation model if provided (evaluation uses a different config path)
     var.evaluation_model_id != null ? {
       evaluation = merge(
