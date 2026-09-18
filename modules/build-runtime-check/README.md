@@ -9,7 +9,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_external"></a> [external](#provider\_external) | 2.4.0 |
+| <a name="provider_external"></a> [external](#provider\_external) | 2.4.2 |
 
 ## Modules
 

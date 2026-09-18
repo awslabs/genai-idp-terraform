@@ -86,7 +86,7 @@ resource "aws_kms_key" "encryption_key" {
         Sid    = "Allow CloudWatch Logs"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.id}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -98,7 +98,7 @@ resource "aws_kms_key" "encryption_key" {
         Resource = "*"
         Condition = {
           ArnEquals = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       }
@@ -331,10 +331,11 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   # OAuth settings
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_scopes                 = ["email", "openid", "profile"]
-  callback_urls                        = ["http://localhost:3000"] # Will be updated by web UI if enabled
-  logout_urls                          = ["http://localhost:3000"] # Will be updated by web UI if enabled
-  supported_identity_providers         = ["COGNITO"]
+  # Federated sign-in fails with invalid_scope without "phone".
+  allowed_oauth_scopes         = ["email", "openid", "phone", "profile"]
+  callback_urls                = ["http://localhost:3000"] # Will be updated by web UI if enabled
+  logout_urls                  = ["http://localhost:3000"] # Will be updated by web UI if enabled
+  supported_identity_providers = ["COGNITO"]
 
   # Token validity
   access_token_validity  = 60 # 1 hour
@@ -487,6 +488,10 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
   user_pool_id = aws_cognito_user_pool.user_pool.id
   group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
+
+  # With RBAC on, the group is created inside the module, but rbac_group_names is
+  # derived from variables (to avoid a cycle), so nothing else orders us after it.
+  depends_on = [module.genai_idp_accelerator]
 }
 
 # Read configuration from config library (pattern-1 for BDA processor)
@@ -513,13 +518,11 @@ module "genai_idp_accelerator" {
     aws.us-east-1 = aws.us-east-1
   }
 
-  # Processor configuration
-  bda_processor = {
+  # Processor configuration (per-stage models come from the config YAML)
+  processor = {
+    type        = "bda"
     project_arn = awscc_bedrock_data_automation_project.bda_project.project_arn
-    summarization = {
-      enabled  = var.summarization_enabled
-      model_id = var.summarization_model_id
-    }
+    # Summarization enablement + model come from the config YAML.
     config                    = local.config
     additional_configurations = local.additional_configurations
   }
@@ -539,12 +542,14 @@ module "genai_idp_accelerator" {
   encryption_key_arn = aws_kms_key.encryption_key.arn
   enable_encryption  = true
 
-  # Evaluation configuration
-  evaluation = var.enable_evaluation ? {
-    enabled             = true
-    model_id            = var.evaluation_model_id
-    baseline_bucket_arn = aws_s3_bucket.evaluation_baseline_bucket[0].arn
-  } : { enabled = false }
+  # Evaluation configuration (model comes from the config YAML)
+  # Evaluation enablement is config-authoritative (config.evaluation.enabled);
+  # this example owns the baseline-bucket infra via var.enable_evaluation.
+  evaluation = {
+    # Static opt-in; the ARN below is computed and cannot gate count/for_each.
+    enabled             = var.enable_evaluation
+    baseline_bucket_arn = var.enable_evaluation ? aws_s3_bucket.evaluation_baseline_bucket[0].arn : null
+  }
 
   # Reporting configuration
   reporting = var.enable_reporting ? {

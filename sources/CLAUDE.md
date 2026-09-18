@@ -250,12 +250,16 @@ See `lib/idp_common_pkg/idp_common/extraction/README.md` for detailed documentat
 **`idp_common_pkg`** (`lib/idp_common_pkg/`):
 - Core shared library powering the accelerator
 - Modular installation: Install only needed components to minimize Lambda package size
-  - `pip install "idp_common[core]"` - minimal dependencies
-  - `pip install "idp_common[ocr]"` - OCR support
-  - `pip install "idp_common[classification]"` - Classification support
-  - `pip install "idp_common[extraction]"` - Extraction support (includes optional agentic mode with deterministic table parsing tool)
-  - `pip install "idp_common[evaluation]"` - Evaluation support
-  - `pip install "idp_common[all]"` - everything
+  - ⚠️ Always install first-party packages **from the local checkout**, never by
+    bare name — those names on public PyPI belong to unrelated parties, so a bare
+    `pip install` fetches someone else's code. See
+    `docs/dependency-confusion.md`.
+  - `pip install -e "lib/idp_common_pkg[core]"` - minimal dependencies
+  - `pip install -e "lib/idp_common_pkg[ocr]"` - OCR support
+  - `pip install -e "lib/idp_common_pkg[classification]"` - Classification support
+  - `pip install -e "lib/idp_common_pkg[extraction]"` - Extraction support (includes optional agentic mode with deterministic table parsing tool)
+  - `pip install -e "lib/idp_common_pkg[evaluation]"` - Evaluation support
+  - `pip install -e "lib/idp_common_pkg[all]"` - everything
 - Components: OCR, Classification, Extraction (supports traditional and agentic modes with intelligent table parsing), Evaluation, Summarization, AppSync integration, Reporting, BDA integration
 - Configuration management via DynamoDB
 - Document models and data structures
@@ -341,12 +345,13 @@ The codebase maintains GovCloud compatibility:
 - Use `${AWS::URLSuffix}` instead of hardcoded `amazonaws.com`
 - Validation enforced via `make check-arn-partitions`
 
-### Nested Template Generation
+### Nested Stacks
 
-AppSync resources are split into a nested template to work around CloudFormation resource limits:
-- Script: `scripts/generate_nested_template.py`
-- Generated template: `nested/appsync-nested-template.yaml`
-- Automatically extracted from main template during build
+The solution is split into nested stacks to stay under CloudFormation resource
+limits. Notably, `nested/api-resolvers/` holds the UI API resolver Lambdas plus
+the API Gateway REST API + dispatcher that the web UI calls (logical id
+`APIRESOLVERSTACK`). (This stack was historically named `nested/appsync` /
+`APPSYNCSTACK` when the UI used AWS AppSync, which has since been removed.)
 
 ### Lambda Layer Dependencies
 
@@ -456,9 +461,22 @@ that domain:
 | `.claude/skills/infrastructure.md` | CloudFormation / SAM templates, nested stacks, GovCloud |
 | `.claude/skills/extraction-pipeline.md` | Document processing pipeline, configuration, agentic extraction |
 | `.claude/skills/code-review.md` | Pre-commit self-review checklist for your own changes |
+| `.claude/skills/srt-security-scan.md` | Running the SRT security scan (`make srt-scan`), triaging HIGH findings, and mitigating (`# nosec`/code fix) or suppressing (`scripts/srt/issues.json`) them |
+| `.claude/skills/curate-security-results.md` | Publishing a public-safe, auditable snapshot of the four security tests (SRT, ZAP DAST, RBAC static/dynamic) into `security/test-results/<version>/` via `scripts/security/curate_results.py` |
+| `.claude/skills/api-rbac-test.md` | Verifying API authorization (Cognito groups + config-version scope) via `make api-test` / `make api-test-static`; adding a new API operation |
+| `.claude/skills/run-stack-tests.md` | Running the deploy-variant stack-tests (`make stacktest-*`: ZAP DAST, Jobs API, WAF, APIGateway hosting variants) manually against a live stack — they no longer run automatically in CI. Includes VPC auto-discovery + confirm for the VPC-requiring ones |
 | `.claude/skills/pr-review.md` | Reviewing an external GitHub PR or GitLab MR at a URL (e.g. `review <url>`) |
+| `.claude/skills/dependabot-prs.md` | Triaging Dependabot PRs — retarget to `develop`, per-PR risk assessment, redundancy check vs develop, merge-if-safe, mandatory post-merge test validation |
+| `.claude/skills/create-hf-dataset-pr.md` | Contributing a data/label correction to an external HuggingFace dataset via a community PR (parquet key-order gotcha, verification, review artifacts) |
 | `.claude/skills/testing-qa.md` | Writing tests, pytest patterns, moto, conftest setup |
+| `.claude/skills/full-test-battery.md` | Running the FULL test battery (all suites + lint/typecheck) to validate a branch/merge; includes the known pre-existing-failure baseline so real regressions stand out |
+| `.claude/skills/test-upgrade.md` | Validating an in-place CloudFormation stack upgrade between two published releases (X→Y) — deploy the FROM template, `update-stack` to the TO template, watch the `UpdateDefaultConfig` custom resource, diagnose/recover a rollback deadlock, tear down |
+| `.claude/skills/live-eval-and-cost.md` | Live benchmark A/B, upgrade testing, reading accuracy/cost/confidence + prompt-cache/model cost facts |
+| `.claude/skills/run-benchmarks.md` | Running the empirical benchmark suite in `benchmarks/` (config × doc-size matrix with exact ground truth; success/completeness/accuracy/calibration/time/tokens/cost) to produce the guidance paper or gate a change vs baseline |
 | `.claude/skills/documentation.md` | Documentation standards, two doc tiers, CHANGELOG, docs-site, and the "adding a Bedrock model" checklist |
+| `.claude/skills/add-model.md` | Adding or changing a selectable Bedrock model (model IDs, regions, limits, pricing, template enums, client routing, UI, both doc tiers, tests) — the full expanded checklist |
+| `.claude/skills/prepare-changelog.md` | Preparing the `[Unreleased]` CHANGELOG section for release — three-section shape (Added/Changed/Fixed), net-since-release entries (drop intra-cycle churn), compact entries with doc/PR links |
+| `.claude/skills/cut-release-changelog.md` | Cutting the release section at tag time — relabel `[Unreleased]` to the `VERSION` number (no date) and append the version-pinned `## Templates` URLs for the three published regions |
 
 > **Note:** `.claude/skills/` is canonical. The Cline assistant's
 > `.cline/skills/` files are **symlinks** to these (different filenames), so

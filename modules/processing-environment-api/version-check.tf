@@ -4,30 +4,31 @@
 # Version-check sub-feature (upstream v0.5.11)
 #
 # Provisions the shipped `version_check_resolver` Lambda backing the
-# `Query.getLatestPublishedVersion` AppSync field. It lists a public artifacts
-# S3 bucket for `<prefix>/idp-main_<version>.yaml` objects and returns the
-# newest published IDP version so the web UI can surface an "update available"
-# banner.
+# `getLatestPublishedVersion` field. It lists a public artifacts S3 bucket for
+# `<prefix>/idp-main_<version>.yaml` objects and returns the newest published IDP
+# version so the web UI can surface an "update available" banner.
 #
-# Default-off: resources are created only when `var.public_artifacts_bucket`
-# is non-empty. When unset (the default) the plan is a no-op, matching the
-# shipped resolver's opt-in semantics (it returns `checkEnabled=false` when
-# `PUBLIC_ARTIFACTS_BUCKET` is empty).
+# Created UNCONDITIONALLY, matching upstream, which gives its
+# VersionCheckResolverFunction no Condition and routes the field in the
+# unconditional part of its field map. Only the S3 read grant is conditional.
+#
+# Gating the Lambda itself instead (what this module used to do) left the field
+# unmapped, so the dispatcher answered 404 on every page load — the UI calls it
+# from the layout on every mount. The resolver already handles the disabled case
+# itself, returning 200 `{"checkEnabled": false}` when PUBLIC_ARTIFACTS_BUCKET is
+# unset, which is the response the UI expects.
 
 locals {
+  # Whether the S3-backed check is actually configured. The Lambda exists either
+  # way; this only decides its env and its S3 grant.
   version_check_enabled = var.public_artifacts_bucket != ""
 
-  # The shipped resolver reads PUBLIC_ARTIFACTS_PREFIX / PUBLIC_ARTIFACTS_REGION
-  # with its own defaults; only set them when the wrapper input is non-empty so
-  # the Lambda env stays minimal otherwise.
-  version_check_env = local.version_check_enabled ? merge(
-    {
-      LOG_LEVEL               = var.log_level
-      PUBLIC_ARTIFACTS_BUCKET = var.public_artifacts_bucket
-    },
+  version_check_env = merge(
+    { LOG_LEVEL = var.log_level },
+    local.version_check_enabled ? { PUBLIC_ARTIFACTS_BUCKET = var.public_artifacts_bucket } : {},
     var.public_artifacts_prefix != "" ? { PUBLIC_ARTIFACTS_PREFIX = var.public_artifacts_prefix } : {},
     var.public_artifacts_region != "" ? { PUBLIC_ARTIFACTS_REGION = var.public_artifacts_region } : {},
-  ) : {}
+  )
 }
 
 # =============================================================================
@@ -35,7 +36,6 @@ locals {
 # =============================================================================
 
 resource "aws_cloudwatch_log_group" "version_check_resolver" {
-  count             = local.version_check_enabled ? 1 : 0
   name              = "/aws/lambda/${local.api_name}-version-check-resolver"
   retention_in_days = var.log_retention_days
   kms_key_id        = local.encryption_key_arn
@@ -47,7 +47,6 @@ resource "aws_cloudwatch_log_group" "version_check_resolver" {
 # =============================================================================
 
 data "archive_file" "version_check_resolver" {
-  count       = local.version_check_enabled ? 1 : 0
   type        = "zip"
   source_dir  = "${path.module}/../../sources/src/lambda/version_check_resolver"
   output_path = "${path.module}/../../.terraform/archives/version_check_resolver.zip"
@@ -58,8 +57,7 @@ data "archive_file" "version_check_resolver" {
 # =============================================================================
 
 resource "aws_iam_role" "version_check_resolver" {
-  count = local.version_check_enabled ? 1 : 0
-  name  = "${local.api_name}-version-check-resolver"
+  name = "${local.api_name}-version-check-resolver"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -74,44 +72,49 @@ resource "aws_iam_role" "version_check_resolver" {
 }
 
 resource "aws_iam_role_policy" "version_check_resolver" {
-  count = local.version_check_enabled ? 1 : 0
-  name  = "version-check-resolver-policy"
-  role  = aws_iam_role.version_check_resolver[0].id
+  name = "version-check-resolver-policy"
+  role = aws_iam_role.version_check_resolver.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        # Scoped to exactly this Lambda's own log group (and its streams).
-        Effect = "Allow"
-        Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = [
-          aws_cloudwatch_log_group.version_check_resolver[0].arn,
-          "${aws_cloudwatch_log_group.version_check_resolver[0].arn}:*",
-        ]
-      },
-      {
-        # Read-only access to exactly the public artifacts bucket. The resolver
-        # first attempts unsigned (anonymous) reads, then falls back to these
-        # signed credentials if the bucket is not anonymously listable.
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:ListBucket"]
-        Resource = [
-          "arn:${data.aws_partition.current.partition}:s3:::${var.public_artifacts_bucket}",
-          "arn:${data.aws_partition.current.partition}:s3:::${var.public_artifacts_bucket}/*",
-        ]
-      },
-    ]
+    Statement = concat(
+      [
+        {
+          # Scoped to exactly this Lambda's own log group (and its streams).
+          Effect = "Allow"
+          Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
+          Resource = [
+            aws_cloudwatch_log_group.version_check_resolver.arn,
+            "${aws_cloudwatch_log_group.version_check_resolver.arn}:*",
+          ]
+        },
+      ],
+      # Omitted when no bucket is configured: interpolating an empty name yields
+      # the invalid ARN `arn:aws:s3:::`, and the resolver needs no S3 access to
+      # report checkEnabled=false.
+      local.version_check_enabled ? [
+        {
+          # The resolver first attempts unsigned (anonymous) reads, then falls
+          # back to these signed credentials if the bucket is not anonymously
+          # listable.
+          Effect = "Allow"
+          Action = ["s3:GetObject", "s3:ListBucket"]
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:s3:::${var.public_artifacts_bucket}",
+            "arn:${data.aws_partition.current.partition}:s3:::${var.public_artifacts_bucket}/*",
+          ]
+        },
+      ] : [],
+    )
   })
 }
 
 resource "aws_lambda_function" "version_check_resolver" {
   architectures    = [var.lambda_architecture]
-  count            = local.version_check_enabled ? 1 : 0
   function_name    = "${local.api_name}-version-check-resolver"
-  role             = aws_iam_role.version_check_resolver[0].arn
-  filename         = data.archive_file.version_check_resolver[0].output_path
-  source_code_hash = data.archive_file.version_check_resolver[0].output_base64sha256
+  role             = aws_iam_role.version_check_resolver.arn
+  filename         = data.archive_file.version_check_resolver.output_path
+  source_code_hash = data.archive_file.version_check_resolver.output_base64sha256
   handler          = "index.lambda_handler"
   runtime          = "python3.12"
   timeout          = 30
@@ -134,49 +137,31 @@ resource "aws_lambda_function" "version_check_resolver" {
   tags       = var.tags
 }
 
-# =============================================================================
-# AppSync: data source + Query.getLatestPublishedVersion resolver
-# =============================================================================
-
-resource "aws_appsync_datasource" "version_check" {
-  count            = local.version_check_enabled ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "VersionCheckDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.version_check_resolver[0].arn }
+# These resources were `count`-gated on public_artifacts_bucket, so on a
+# deployment that HAD set it they exist at index [0]. Without these blocks that
+# address change is a destroy-and-recreate, which for the IAM role means a
+# same-name create racing its own delete.
+moved {
+  from = aws_cloudwatch_log_group.version_check_resolver[0]
+  to   = aws_cloudwatch_log_group.version_check_resolver
 }
 
-resource "aws_appsync_resolver" "get_latest_published_version" {
-  count       = local.version_check_enabled ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getLatestPublishedVersion"
-  data_source = aws_appsync_datasource.version_check[0].name
+moved {
+  from = aws_iam_role.version_check_resolver[0]
+  to   = aws_iam_role.version_check_resolver
 }
 
-# =============================================================================
-# IAM: allow AppSync to invoke exactly the version-check Lambda
-# (mirrors the Test Studio invoke-policy pattern)
-# =============================================================================
-
-resource "aws_iam_policy" "appsync_invoke_version_check_policy" {
-  count       = local.version_check_enabled ? 1 : 0
-  name        = "AppSyncInvokeVersionCheckPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to invoke the version-check resolver Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = [aws_lambda_function.version_check_resolver[0].arn]
-    }]
-  })
+moved {
+  from = aws_iam_role_policy.version_check_resolver[0]
+  to   = aws_iam_role_policy.version_check_resolver
 }
 
-resource "aws_iam_role_policy_attachment" "appsync_invoke_version_check_attachment" {
-  count      = local.version_check_enabled ? 1 : 0
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_version_check_policy[0].arn
+moved {
+  from = aws_lambda_function.version_check_resolver[0]
+  to   = aws_lambda_function.version_check_resolver
 }
+
+# AppSync data source/resolver (Query.getLatestPublishedVersion) + invoke policy
+# removed in the v0.6.4 REST migration. getLatestPublishedVersion is now routed
+# to version_check_resolver by the dispatcher (see dispatcher.tf); the
+# dispatcher role grants the invoke.

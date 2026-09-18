@@ -1,0 +1,761 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+notes: Default settings for rvil_cdip configuration
+classes:
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: letter
+    x-aws-idp-document-type: letter
+    type: object
+    description: >-
+      A formal written correspondence with sender/recipient addresses, date,
+      salutation, body, and closing signature
+    properties:
+      sender_name:
+        type: string
+        description: >-
+          The name of the person or entity who wrote or sent the letter. Look
+          for text following or near terms like 'from', 'sender', 'authored by',
+          'written by', or at the end of the letter before a signature.
+        x-aws-idp-confidence-threshold: 0.85
+      sender_address:
+        type: string
+        description: >-
+          The physical address of the sender, typically appearing at the top of
+          the letter. May be labeled as 'address', 'location', or 'from
+          address'.
+        x-aws-idp-confidence-threshold: 0.8
+      recipient_name:
+        type: string
+        description: >-
+          The name of the person or entity receiving the letter. Look for this
+          after 'to', 'recipient', 'addressee', or at the beginning of the
+          letter.
+        x-aws-idp-confidence-threshold: 0.9
+      recipient_address:
+        type: string
+        description: >-
+          The physical address where the letter is to be delivered. Often
+          labeled as 'to address' or 'delivery address', typically appearing
+          below the recipient name.
+      date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the letter was written. Look for a standalone date or
+          text following phrases like 'written on' or 'dated'.
+      subject:
+        type: string
+        description: >-
+          The topic or main point of the letter. Often preceded by 'subject',
+          'RE:', or 'regarding'.
+      letter_type:
+        type: string
+        description: >-
+          The category or classification of the letter, such as 'complaint',
+          'inquiry', 'invitation', etc. May be indicated by 'type' or
+          'category'.
+      signature:
+        type: string
+        description: >-
+          The handwritten name or mark of the sender at the end of the letter.
+          May follow terms like 'signed by' or simply appear at the bottom of
+          the document.
+      cc:
+        type: string
+        description: >-
+          Names of people who receive a copy of the letter in addition to the
+          main recipient. Often preceded by 'cc', 'carbon copy', or 'copy to'.
+      reference_number:
+        type: string
+        description: >-
+          An identifying number or code associated with the letter. Look for
+          labels like 'ref', 'reference', or 'our ref'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: form
+    x-aws-idp-document-type: form
+    type: object
+    description: >-
+      A structured document with labeled fields, checkboxes, or blanks requiring
+      user input and completion
+    properties:
+      form_type:
+        type: string
+        description: >-
+          The category or purpose of the form, such as 'application',
+          'registration', 'request', etc. May be identified by 'form name',
+          'document type', or 'form category'.
+      form_id:
+        type: string
+        description: >-
+          The unique identifier for the form, typically a number or alphanumeric
+          code. Often labeled as 'form number', 'id', or 'reference number'.
+      submission_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the form was submitted or filed. Look for text near
+          'date', 'submitted on', or 'filed on'.
+      submitter_name:
+        type: string
+        description: >-
+          The name of the person who submitted the form. May be labeled as
+          'name', 'submitted by', or 'filed by'.
+      submitter_id:
+        type: string
+        description: >-
+          An identification number for the person submitting the form, such as
+          social security number, employee ID, etc. Often labeled as 'id
+          number', 'identification', or 'reference'.
+      approval_status:
+        type: string
+        description: >-
+          The current state of approval for the form, such as 'approved',
+          'pending', 'rejected', etc. Look for terms like 'status', 'approved',
+          or 'pending'.
+      processed_by:
+        type: string
+        description: >-
+          The name of the person or department that processed the form. May be
+          indicated by 'processor', 'handled by', or 'approved by'.
+      processing_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the form was processed or completed. Look for labels
+          like 'processed on' or 'completion date'.
+      department:
+        type: string
+        description: >-
+          The organizational unit responsible for the form. Often abbreviated as
+          'dept' or may appear as 'department' or 'division'.
+      comments:
+        type: string
+        description: >-
+          Additional notes or remarks about the form. Look for sections labeled
+          'notes', 'remarks', or 'comments'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: invoice
+    x-aws-idp-document-type: invoice
+    type: object
+    description: >-
+      A billing document listing items/services, quantities, prices, payment
+      terms, and transaction totals
+    properties:
+      invoice_number:
+        type: string
+        description: The unique identifier for the invoice. Look for 'invoice no', 'invoice
+      invoice_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the invoice was issued. May be labeled as 'date',
+          'invoice date', or 'billing date'.
+      due_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The deadline by which payment must be made. Look for 'due date',
+          'payment due', or 'payable by'.
+      vendor_name:
+        type: string
+        description: >-
+          The name of the business providing goods or services. May be labeled
+          as 'vendor', 'seller', 'supplier', or simply appear prominently at the
+          top of the invoice.
+      vendor_address:
+        type: string
+        description: >-
+          The physical location of the vendor. Look for 'address', 'location',
+          or 'business address', typically near the vendor name.
+      customer_name:
+        type: string
+        description: >-
+          The name of the person or entity being billed. Often preceded by
+          'customer', 'buyer', or 'bill to'.
+      customer_address:
+        type: string
+        description: >-
+          The address where the invoice is sent or goods are delivered. May be
+          labeled as 'billing address' or 'ship to'.
+      items:
+        type: string
+        description: >-
+          Descriptions of the products or services provided. Look for a section
+          with 'description', 'item details', or 'products', usually in a table
+          format.
+      quantities:
+        type: string
+        description: >-
+          The number of each item provided. Often abbreviated as 'qty' or may
+          appear as 'quantity' or 'amount' in a table column.
+      unit_prices:
+        type: string
+        description: >-
+          The cost per unit of each item. May be labeled as 'price', 'rate', or
+          'unit cost'.
+      subtotal:
+        type: string
+        description: >-
+          The sum of all items before tax and other charges. Look for 'subtotal'
+          or 'net amount', typically found toward the bottom of the invoice.
+      tax:
+        type: string
+        description: >-
+          The amount of tax charged on the invoice. May be labeled as 'tax',
+          'VAT', or 'GST', usually appearing after the subtotal.
+      total_amount:
+        type: string
+        description: >-
+          The final amount to be paid including all charges. Look for 'total',
+          'grand total', or 'amount due', typically the last figure on the
+          invoice.
+      payment_terms:
+        type: string
+        description: >-
+          The conditions under which payment should be made, such as '30 days',
+          'COD', etc. Often labeled as 'terms', 'payment terms', or
+          'conditions'.
+      po_number:
+        type: string
+        description: >-
+          The purchase order reference number. May be abbreviated as 'PO' or
+          appear as 'purchase order' or 'order reference'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: resume
+    x-aws-idp-document-type: resume
+    type: object
+    description: >-
+      A professional summary showcasing work experience, education, skills, and
+      achievements for job applications
+    properties:
+      full_name:
+        type: string
+        description: >-
+          The complete name of the job applicant, typically appearing
+          prominently at the top of the resume. May be simply labeled as 'name'
+          or 'applicant name'.
+      contact_info:
+        type: string
+        description: >-
+          The phone number, email, and address of the applicant. Look for a
+          section with 'contact', 'phone', 'email', or 'address', usually near
+          the top of the resume.
+      objective:
+        type: string
+        description: >-
+          A statement outlining the applicant's career goals. May be labeled as
+          'objective', 'summary', or 'profile', typically appearing early in the
+          resume.
+      education:
+        type: string
+        description: >-
+          The academic history and qualifications of the applicant. Look for a
+          section with 'education', 'academic background', or 'qualifications'.
+      experience:
+        type: string
+        description: >-
+          The work history and previous roles of the applicant. Often labeled as
+          'experience', 'work history', or 'employment'.
+      skills:
+        type: string
+        description: >-
+          The abilities and competencies of the applicant. Look for a section
+          titled 'skills', 'competencies', or 'expertise'.
+      certifications:
+        type: string
+        description: >-
+          Professional credentials and qualifications. May be labeled as
+          'certifications', 'certificates', or 'credentials'.
+      languages:
+        type: string
+        description: >-
+          Languages known and level of proficiency. Often appears in a section
+          labeled 'languages' or 'language proficiency'.
+      references:
+        type: string
+        description: >-
+          People who can vouch for the applicant's abilities. Look for
+          'references' or 'referees', typically at the end of the resume.
+      achievements:
+        type: string
+        description: >-
+          Notable accomplishments and recognition. May be labeled as
+          'achievements', 'accomplishments', or 'awards'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: scientific_publication
+    x-aws-idp-document-type: scientific_publication
+    type: object
+    description: >-
+      A peer-reviewed academic document with abstract, methodology, results,
+      citations, and research findings
+    properties:
+      title:
+        type: string
+        description: >-
+          The name of the scientific paper, typically appearing prominently at
+          the beginning. May be labeled as 'title', 'paper title', or 'article
+          title'.
+      authors:
+        type: string
+        description: >-
+          The researchers who conducted the study and wrote the paper. Look for
+          names after 'authors', 'contributors', or 'researchers', usually
+          following the title.
+      abstract:
+        type: string
+        description: >-
+          A brief summary of the paper's content. Often labeled as 'abstract' or
+          'summary', appearing before the main text.
+      keywords:
+        type: string
+        description: >-
+          Terms that represent the core topics of the paper. Look for a list
+          labeled 'keywords' or 'key terms', typically after the abstract.
+      publication_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the paper was published. May be preceded by 'published'
+          or labeled as 'publication date'.
+      journal_name:
+        type: string
+        description: >-
+          The name of the journal where the paper was published. Look for text
+          following 'journal' or 'publication'.
+      volume:
+        type: string
+        description: >-
+          The volume number of the journal. Often abbreviated as 'vol' or may
+          appear as 'volume'.
+      issue:
+        type: string
+        description: >-
+          The issue number of the journal. May be labeled as 'issue' or
+          abbreviated as 'no'.
+      pages:
+        type: string
+        description: >-
+          The page range of the paper in the journal. Often abbreviated as 'pp'
+          or may appear as 'pages'.
+      doi:
+        type: string
+        description: >-
+          The Digital Object Identifier for the paper, a unique alphanumeric
+          string. Look for 'DOI' or 'digital object identifier'.
+      funding:
+        type: string
+        description: >-
+          Financial support received for the research. May be indicated by
+          'funding', 'grants', or 'financial support'.
+      corresponding_author:
+        type: string
+        description: >-
+          The author responsible for communication regarding the paper. Look for
+          'corresponding author' or 'contact author'.
+      institutions:
+        type: string
+        description: >-
+          The organizations with which the authors are affiliated. May be
+          labeled as 'affiliations' or 'institutions'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: memo
+    x-aws-idp-document-type: memo
+    type: object
+    description: >-
+      An internal business communication with TO/FROM/DATE/SUBJECT headers for
+      organizational announcements or directives
+    properties:
+      memo_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the memo was written. Look for 'date' or 'memo date',
+          typically near the top of the document.
+      from:
+        type: string
+        description: >-
+          The person or department that wrote the memo. May be labeled as
+          'from', 'sender', or 'author'.
+      to:
+        type: string
+        description: >-
+          The intended recipient of the memo. Look for text after 'to',
+          'recipient', or 'addressee'.
+      subject:
+        type: string
+        description: >-
+          The topic of the memo. Often preceded by 'subject', 'RE:', or
+          'regarding'.
+      memo_type:
+        type: string
+        description: >-
+          The category or classification of the memo, such as 'informational',
+          'directive', etc. May be indicated by 'type' or 'category'.
+      priority:
+        type: string
+        description: >-
+          The urgency level of the memo, such as 'urgent', 'high', 'normal',
+          etc. Look for 'priority' or 'urgency'.
+      distribution_list:
+        type: string
+        description: >-
+          Additional people who receive copies of the memo. May be labeled as
+          'distribution', 'cc', or 'copy'.
+      reference_number:
+        type: string
+        description: >-
+          An identifying number or code for the memo. Look for 'reference' or
+          'ref no'.
+      department:
+        type: string
+        description: >-
+          The organizational unit issuing the memo. Often abbreviated as 'dept'
+          or may appear as 'department' or 'division'.
+      action_required:
+        type: string
+        description: >-
+          Steps that should be taken in response to the memo. Look for 'action',
+          'response needed', or 'next steps'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: advertisement
+    x-aws-idp-document-type: advertisement
+    type: object
+    description: >-
+      A promotional material featuring product images, marketing text,
+      calls-to-action, and branding elements
+    properties:
+      product_name:
+        type: string
+        description: >-
+          The name of the item or service being advertised. Look for prominently
+          displayed text that could be a 'product', 'item', or 'service' name.
+      brand:
+        type: string
+        description: >-
+          The company or manufacturer of the product. May be indicated by a logo
+          or text labeled as 'brand', 'company', or 'manufacturer'.
+      price:
+        type: string
+        description: >-
+          The cost of the product or service. Look for currency symbols or
+          numbers followed by terms like 'price', 'cost', or 'special offer'.
+      promotion_details:
+        type: string
+        description: >-
+          Information about special deals or discounts. May be introduced with
+          'promotion', 'offer', or 'deal'.
+      validity_period:
+        type: string
+        description: >-
+          The timeframe during which the offer is valid. Look for phrases like
+          'valid until', 'offer ends', or 'expires'.
+      contact_info:
+        type: string
+        description: >-
+          How to reach the advertiser. May include phone numbers, websites, or
+          addresses following 'contact', 'call', or 'visit'.
+      features:
+        type: string
+        description: >-
+          Notable qualities or benefits of the product. Often listed under
+          'features', 'benefits', or 'highlights'.
+      terms_conditions:
+        type: string
+        description: >-
+          Legal constraints or limitations of the offer. Look for fine print
+          labeled as 'terms', 'conditions', or 'restrictions'.
+      call_to_action:
+        type: string
+        description: >-
+          What the advertisement encourages the reader to do. Often appears as
+          imperative phrases like 'call now', 'visit today', or 'order now'.
+      disclaimer:
+        type: string
+        description: >-
+          Legal statements limiting liability or making clarifications. Usually
+          appears as fine print introduced by 'disclaimer' or phrases like
+          'terms apply' or 'conditions apply'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: email
+    x-aws-idp-document-type: email
+    type: object
+    description: >-
+      A digital message with email headers (To/From/Subject), timestamps, and
+      conversational threading
+    properties:
+      from_address:
+        type: string
+        description: >-
+          The email address of the sender. Look for text following 'from',
+          'sender', or 'sent by', typically at the beginning of the email
+          header.
+      to_address:
+        type: string
+        description: >-
+          The email address of the primary recipient. May be labeled as 'to',
+          'recipient', or 'sent to'.
+      cc_address:
+        type: string
+        description: >-
+          Email addresses of additional recipients who receive copies. Look for
+          'cc' or 'carbon copy' followed by one or more email addresses.
+      bcc_address:
+        type: string
+        description: >-
+          Email addresses of hidden recipients. May be labeled as 'bcc' or
+          'blind copy'.
+      subject:
+        type: string
+        description: >-
+          The topic of the email. Often preceded by 'subject', 'RE:', or
+          'regarding'.
+      date_sent:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date and time when the email was sent. Look for 'date', 'sent on',
+          or 'received', typically in the email header.
+      attachments:
+        type: string
+        description: >-
+          Files included with the email. May be indicated by 'attached',
+          'attachment', or 'enclosed', often with icons or file names.
+      priority:
+        type: string
+        description: >-
+          The urgency level of the email, such as 'high', 'normal', etc. Look
+          for 'priority' or 'importance'.
+      thread_id:
+        type: string
+        description: >-
+          An identifier for the email conversation. May be labeled as 'thread'
+          or 'conversation', typically not visible to regular users.
+      message_id:
+        type: string
+        description: >-
+          A unique identifier for the specific email. Look for 'message id' or
+          'email id', usually hidden in the email metadata.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: questionnaire
+    x-aws-idp-document-type: questionnaire
+    type: object
+    description: >-
+      A survey instrument containing numbered questions with multiple choice,
+      rating scales, or open-ended responses
+    properties:
+      form_title:
+        type: string
+        description: >-
+          The name or title of the questionnaire. Look for prominently displayed
+          text at the beginning that could be a 'title', 'survey name', or
+          'questionnaire name'.
+      respondent_info:
+        type: string
+        description: >-
+          Information about the person completing the questionnaire. May include
+          fields labeled 'respondent', 'participant', or 'name'.
+      submission_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the questionnaire was completed. Look for 'date',
+          'completed on', or 'submitted'.
+      section_headers:
+        type: string
+        description: >-
+          Titles for different segments of the questionnaire. Often appear as
+          bold or larger text introducing a new 'section', 'part', or 'segment'.
+      question_types:
+        type: string
+        description: >-
+          The format of questions (multiple choice, free text, etc.). May be
+          indicated by 'type', 'question format', or 'response format'.
+      response_options:
+        type: string
+        description: >-
+          Possible answers for multiple-choice questions. Look for checkboxes,
+          radio buttons, or dropdown menus with 'options', 'choices', or
+          'answers'.
+      required_fields:
+        type: string
+        description: >-
+          Questions that must be answered to complete the questionnaire. Often
+          marked with an asterisk (*) or explicitly labeled as 'required',
+          'mandatory', or 'must answer'.
+      instructions:
+        type: string
+        description: >-
+          Guidance on how to complete the questionnaire. Look for text
+          introduced by 'instructions', 'directions', or 'guidelines'.
+      survey_id:
+        type: string
+        description: >-
+          A unique identifier for the questionnaire. May be labeled as 'survey
+          id', 'reference number', or 'form id'.
+      completion_status:
+        type: string
+        description: >-
+          Whether the questionnaire has been fully completed. Look for
+          indicators of 'status', 'completion', or 'progress', often shown as a
+          percentage or progress bar.
+      Phone Call Representative Courtesy:
+        type: string
+        description: >-
+          Measures the perceived politeness and professionalism of the customer
+          service representative during the phone interaction. Checkbox
+          selection on the satisfaction scale with options like "Very
+          Satisfied", "Somewhat Satisfied" etc.
+        x-aws-idp-evaluation-method: ""
+      Phone call representative knowledge rating:
+        type: string
+        description: >-
+          Measures the perceived knowledge level of the customer service
+          representative during the phone interaction. Checkbox selection on the
+          satisfaction scale with options like "Very Satisfied", "Somewhat
+          Satisfied" etc.
+      Request handling satisfaction rating:
+        type: string
+        description: >-
+          Measures the customer's level of satisfaction with the way their
+          request was handled. Checkbox selection on the satisfaction scale with
+          options like "Very Satisfied", "Somewhat Satisfied" etc.
+      Overall Satisfaction rating:
+        type: string
+        description: >-
+          This rating BEST describes the way the customer feels about the
+          representative's response to their request for asssistance. Checkbox
+          selection on the satisfaction scale with options like "I was very
+          satisfied", "I was somewhat satisfied" etc.
+      Future purchase intent:
+        type: string
+        description: >-
+          A measure of whether the user will continue to buy the product they
+          contacted about. Checkbox selection with options like "I definitely
+          would", "I probably would" etc.
+      Product recommendation intent:
+        type: string
+        description: >-
+          A measure of whether the caller is willing to recommend the product
+          that they called about to others. Checkbox selection with options like
+          "I definitely would", "I probably would" etc.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: specification
+    x-aws-idp-document-type: specification
+    type: object
+    description: >-
+      A technical document detailing precise requirements, measurements,
+      standards, and implementation criteria
+    properties:
+      product_name:
+        type: string
+        description: >-
+          The name of the item being specified. Look for text labeled as
+          'product', 'item', or 'model', typically appearing prominently at the
+          beginning.
+      version:
+        type: string
+        description: >-
+          The iteration or release number. May be indicated by 'version',
+          'revision', or 'release', often followed by a number or code.
+      technical_details:
+        type: string
+        description: >-
+          Specific characteristics and capabilities. Look for sections labeled
+          'specifications', 'tech specs', or 'details', often presented in a
+          detailed list.
+      requirements:
+        type: string
+        description: >-
+          Necessary conditions or resources. May be introduced with
+          'requirements', 'prerequisites', or 'needed'.
+      compatibility:
+        type: string
+        description: >-
+          What the product can work with. Look for text following 'compatible
+          with', 'works with', or 'supports'.
+      dimensions:
+        type: string
+        description: >-
+          Physical measurements of the product. Often labeled as 'dimensions',
+          'size', or 'measurements', usually including length, width, height,
+          etc.
+      materials:
+        type: string
+        description: >-
+          What the product is made from. May be indicated by 'materials',
+          'composition', or phrases like 'made from'.
+      standards:
+        type: string
+        description: >-
+          Industry guidelines or certifications met. Look for references to
+          'standards', 'certifications', or 'compliance'.
+      revision_history:
+        type: string
+        description: >-
+          Record of changes to the specification. Often labeled as 'revisions',
+          'changes', or 'updates', typically in a table format.
+      approval_info:
+        type: string
+        description: >-
+          Details about who has validated the specification. May be indicated by
+          phrases like 'approved by', 'certified by', or 'validated'.
+  - $schema: https://json-schema.org/draft/2020-12/schema
+    $id: generic
+    x-aws-idp-document-type: generic
+    type: object
+    description: >-
+      An unstructured document lacking distinctive formatting or
+      purpose-specific elements of other categories
+    properties:
+      document_type:
+        type: string
+        description: >-
+          The classification or category of the document. Look for terms like
+          'type', 'category', or 'class' that indicate what kind of document
+          this is.
+      document_date:
+        x-aws-idp-evaluation-method: DATE
+        type: string
+        description: >-
+          The date when the document was created. May be labeled as 'date',
+          'created on', or 'issued on'.
+      document_id:
+        type: string
+        description: >-
+          A unique identifier for the document. Look for 'id', 'reference', or
+          'number', typically appearing near the top of the document.
+      title:
+        type: string
+        description: >-
+          The name or heading of the document. Often appears prominently at the
+          beginning, may be labeled as 'title', 'heading', or 'subject'.
+      author:
+        type: string
+        description: >-
+          The person who created the document. Look for 'author', 'creator', or
+          'sender'.
+      recipient:
+        type: string
+        description: >-
+          The person for whom the document is intended. May be indicated by
+          'recipient', 'to', or 'addressee'.
+      content_summary:
+        type: string
+        description: >-
+          A brief description of the document's contents. Look for 'summary',
+          'abstract', or 'overview', typically appearing early in the document.
+      status:
+        type: string
+        description: >-
+          The current state of the document, such as 'draft', 'final',
+          'pending', etc. May be labeled as 'status', 'state', or 'condition'.
+      department:
+        type: string
+        description: >-
+          The organizational unit associated with the document. Often
+          abbreviated as 'dept' or may appear as 'department' or 'division'.
+      comments:
+        type: string
+        description: >-
+          Additional notes or remarks about the document. Look for sections
+          labeled 'notes', 'remarks', or 'comments'.

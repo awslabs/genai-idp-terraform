@@ -72,12 +72,6 @@ variable "enable_evaluation" {
   default     = false
 }
 
-variable "evaluation_model_id" {
-  description = "Model ID for evaluation processing"
-  type        = string
-  default     = null
-}
-
 # Reporting Configuration
 variable "enable_reporting" {
   description = "Enable reporting functionality (simplified flag)"
@@ -86,29 +80,11 @@ variable "enable_reporting" {
 }
 
 # Model Configuration
-variable "classification_model_id" {
-  description = "Model ID for document classification (Bedrock LLM processor only)"
-  type        = string
-  default     = null
-}
+#
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
+# Summarization enablement comes from the config YAML (summarization.enabled).
 
-variable "extraction_model_id" {
-  description = "Model ID for information extraction (Bedrock LLM processor only)"
-  type        = string
-  default     = null
-}
-
-variable "summarization_enabled" {
-  description = "Enable document summarization for Bedrock LLM processor"
-  type        = bool
-  default     = true
-}
-
-variable "summarization_model_id" {
-  description = "Model ID for document summarization"
-  type        = string
-  default     = null
-}
+# Rule-validation enablement comes from the config YAML (rule_validation.enabled).
 
 
 
@@ -149,7 +125,6 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, false)
       guardrail_id_and_version = optional(string, null)
-      processor_memory_size    = optional(number, 4096)
     }), { enabled = false })
 
     process_changes = optional(object({
@@ -176,9 +151,10 @@ variable "api" {
     enable_omni_ai_dataset          = optional(bool, false)
     enable_docplit_poly_seq_dataset = optional(bool, false)
 
-    # AppSync API visibility. Set to "PRIVATE" to require all callers
-    # to reach the API via the `appsync-api` interface VPC endpoint.
-    visibility = optional(string, "GLOBAL")
+    # REST API visibility (v0.6.4). Set to "PRIVATE" to require all callers to
+    # reach the API Gateway REST endpoint via the `execute-api` interface VPC
+    # endpoint this example provisions.
+    api_gateway_visibility = optional(string, "GLOBAL")
   })
   default = { enabled = false }
 }
@@ -233,8 +209,8 @@ variable "build" {
   }
 }
 
-variable "web_ui_alb_certificate_arn" {
-  description = "ACM certificate ARN for the internal ALB HTTPS listener. When set, the Web UI is served via ALB hosting (WebUIHosting=ALB) in this isolated VPC; when null, the Web UI is disabled."
-  type        = string
-  default     = null
+variable "enable_web_ui" {
+  description = "Whether to deploy the Web UI. Defaults to false because this example provisions a fully-isolated VPC and the default CloudFront hosting is public-internet facing. ALB hosting was removed in v0.6.4; a VPC-capable private hosting mode arrives with APIGateway hosting."
+  type        = bool
+  default     = false
 }

@@ -68,7 +68,6 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-      processor_memory_size    = optional(number, 4096)
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -244,12 +243,6 @@ variable "enable_evaluation" {
   default     = false
 }
 
-variable "evaluation_model_id" {
-  description = "Model ID for evaluation processing"
-  type        = string
-  default     = "anthropic.claude-3-sonnet-20240229-v1:0"
-}
-
 # Reporting Configuration
 variable "enable_reporting" {
   description = "Enable reporting functionality (simplified flag)"
@@ -258,44 +251,15 @@ variable "enable_reporting" {
 }
 
 # Model Configuration
-variable "classification_model_id" {
-  description = "Model ID for document classification (Bedrock LLM processor only)"
-  type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-}
+#
+# Per-stage model IDs are set in the config YAML, not here.
+# Summarization enablement comes from the config YAML (summarization.enabled).
 
-variable "extraction_model_id" {
-  description = "Model ID for information extraction (Bedrock LLM processor only)"
-  type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-}
-
-variable "summarization_enabled" {
-  description = "Enable document summarization for Bedrock LLM processor"
-  type        = bool
-  default     = true
-}
-
-variable "summarization_model_id" {
-  description = "Model ID for document summarization"
-  type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-}
-
-
-
-variable "enable_hitl" {
-  description = "Enable Human-in-the-Loop (HITL) functionality for document review"
-  type        = bool
-  default     = false
-}
+# Processor-pipeline HITL enablement comes from the config YAML (hitl.enabled).
+# The API-side HITL review feature is controlled by api.enable_hitl.
 
 # v0.4.16: Rule Validation
-variable "enable_rule_validation" {
-  description = "Enable rule validation for compliance checking (v0.4.16+)"
-  type        = bool
-  default     = false
-}
+# Rule-validation enablement comes from the config YAML (rule_validation.enabled).
 
 # v0.4.16: Lambda Hook Inference — custom Lambda ARNs injected into the Step Functions workflow.
 # Each ARN must start with the 'GENAIIDP-' prefix (enforced by the bedrock-llm-processor module).
@@ -385,4 +349,15 @@ variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
   type        = bool
   default     = false
+}
+
+variable "deployer_role_arn" {
+  description = "IAM role ARN granted data access on the OpenSearch Serverless collection. Must be a role ARN, not a session ARN: AOSS matches any session of a role, so a session ARN pins the policy to one operator. Defaults to deriving the role from the caller, which drops any path on the role."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.deployer_role_arn == "" || !can(regex(":assumed-role/", var.deployer_role_arn))
+    error_message = "deployer_role_arn must be an IAM role ARN (arn:<partition>:iam::<account>:role/<name>), not an STS assumed-role session ARN."
+  }
 }

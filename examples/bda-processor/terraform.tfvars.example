@@ -6,10 +6,10 @@ prefix      = "my-idp"
 admin_email = "admin@example.com" # creates the initial Web UI admin user
 
 # ── Optional overrides (defaults shown; uncomment to change) ────────────────
-# summarization_enabled  = true
-# summarization_model_id = "us.amazon.nova-pro-v1:0"
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
 # enable_evaluation      = false
 # enable_reporting       = false
+# config_file_path       = "../../sources/config_library/unified/rule-validation/config.yaml"
 # web_ui  = { enabled = true }     # set enabled = false to skip CloudFront/UI
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }

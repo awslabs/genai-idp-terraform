@@ -1,88 +1,32 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-locals {
-  # Mutation resolver request template — passes identity through to the
-  # lightweight resolver Lambda so it can record/verify session ownership.
-  # Mirrors upstream SendChatDocumentMessageResolver (nested appsync template).
-  send_chat_request_template = <<-VTL
-    {
-      "version": "2017-02-28",
-      "operation": "Invoke",
-      "payload": {
-        "arguments": $util.toJson($context.arguments),
-        "identity": {
-          "username": $util.toJson($context.identity.username),
-          "sub": $util.toJson($context.identity.sub),
-          "sourceIp": $util.toJson($context.identity.sourceIp),
-          "userArn": $util.toJson($context.identity.userArn),
-          "claims": $util.toJson($context.identity.claims)
-        }
-      }
-    }
-  VTL
-
-  send_chat_response_template = <<-VTL
-    #if($ctx.error)
-      $util.error($ctx.error.message, $ctx.error.type)
-    #end
-    $util.toJson($ctx.result)
-  VTL
-
-  # Subscription fan-out resolver (NONE data source) — filters by sessionId so
-  # one user cannot eavesdrop on another user's chat session. Mirrors upstream
-  # OnChatDocumentMessageUpdateResolver.
-  on_chat_request_template = <<-VTL
-    {
-      "version": "2018-05-29",
-      "payload": {}
-    }
-  VTL
-
-  on_chat_response_template = <<-VTL
-    #if($context.arguments.sessionId && $context.source.sessionId)
-      #if($context.arguments.sessionId == $context.source.sessionId)
-        $util.toJson($context.source)
-      #else
-        #set($result = $util.appendError("Session ID does not match", "Unauthorized"))
-        $util.toJson(null)
-      #end
-    #else
-      $util.toJson($context.source)
-    #end
-  VTL
-
-  chat_resolvers = {
-    sendChatDocumentMessage = {
-      type              = "Mutation"
-      field             = "sendChatDocumentMessage"
-      data_source       = aws_appsync_datasource.send_chat_document_message.name
-      request_template  = local.send_chat_request_template
-      response_template = local.send_chat_response_template
-    }
-    onChatDocumentMessageUpdate = {
-      type              = "Subscription"
-      field             = "onChatDocumentMessageUpdate"
-      data_source       = aws_appsync_datasource.chat_document_none.name
-      request_template  = local.on_chat_request_template
-      response_template = local.on_chat_response_template
-    }
-  }
-}
+# NOTE (IDP v0.6.4): the AppSync VTL request/response templates and the
+# `chat_resolvers` map that used to live here are deleted along with AppSync.
+# The REST dispatcher builds the AppSync-shaped event (including the identity
+# block the resolver reads) itself in http_api_dispatcher/index.py, so no
+# mapping templates are needed. Transport wiring is now the `field_functions`
+# map in the contract output below.
 
 output "contract" {
   description = <<-EOT
     Feature-plugin contract consumed by `processing-environment-api` via its
     `enabled_feature_contracts` input (mirrors the CDK `api.enable(feature)`
     mechanism). The Chat-with-Document submodule owns its Lambdas, execution
-    roles, session table, and AppSync data sources, so the contract contributes
-    only the two resolvers (the async `sendChatDocumentMessage` mutation and the
-    `onChatDocumentMessageUpdate` subscription fan-out). `iam_statements` and
-    `environment` are empty because the submodule is fully self-contained.
+    roles, and session table, so the contract contributes only transport wiring.
+    `iam_statements` and `environment` are empty because the submodule is fully
+    self-contained.
+
+    IDP v0.6.4: `resolvers` (AppSync) is replaced by `field_functions` — the
+    field -> Lambda ARN map the REST dispatcher routes on. Only
+    `sendChatDocumentMessage` appears. The `onChatDocumentMessageUpdate`
+    subscription is gone: API Gateway REST has no GraphQL subscriptions, and
+    upstream replaced that fan-out with the streaming Lambda Function URL plus
+    polling.
   EOT
   value = {
     enabled          = true
-    resolvers        = local.chat_resolvers
+    field_functions  = { sendChatDocumentMessage = aws_lambda_function.chat_resolver.arn }
     iam_statements   = []
     environment      = {}
     schema_additions = null

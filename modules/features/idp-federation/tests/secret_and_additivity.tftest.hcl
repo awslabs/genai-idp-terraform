@@ -9,11 +9,11 @@
 # Cognito identity provider's `provider_details.client_secret`, and is never a
 # plaintext module input value nor carried by any non-sensitive module output.
 #
-# Additivity: federation is additive to the user-pool client and targets the
-# RBAC group names. The `supported_identity_providers_contribution` is the
-# external provider-name list (the root merges it WITH `COGNITO`, keeping
-# `COGNITO`), and the group-mapping Lambda's `*_GROUP_NAME` environment values
-# equal `var.rbac_group_names`.
+# Additivity: federation is additive to the user-pool client. The
+# `supported_identity_providers_contribution` is the external provider-name list
+# (the root merges it WITH `COGNITO`, keeping `COGNITO`), and the group-mapping
+# Lambda's `*_GROUP_NAME` environment values are the external IdP group names
+# from `var.group_mapping`.
 #
 # Offline harness: the aws provider is mocked so the suite runs with no AWS
 # credentials and no network. The secret-resolution data sources
@@ -24,6 +24,8 @@
 # the Lambda `environment` map are all known at plan time with the mocked
 # provider.
 
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_data "aws_partition" {
     defaults = {
@@ -33,8 +35,11 @@ mock_provider "aws" {
   }
   mock_data "aws_region" {
     defaults = {
-      id   = "us-east-1"
-      name = "us-east-1"
+      # `region` is what local.user_pool_arn reads (provider v6 rename); an
+      # unmocked attribute gets a random value and yields an invalid ARN.
+      region = "us-east-1"
+      id     = "us-east-1"
+      name   = "us-east-1"
     }
   }
   mock_data "aws_caller_identity" {
@@ -59,8 +64,8 @@ mock_provider "aws" {
 }
 
 # Shared dummy inputs for an enabled OIDC federation with group mapping turned
-# on (group_attribute_name != "") and an RBAC group-name override so the test
-# can assert the env vars track the supplied names rather than the defaults.
+# on (group_attribute_name != "") and all four roles mapped, so the test can
+# assert the env vars carry the external group names.
 variables {
   enabled       = true
   provider_type = "OIDC"
@@ -71,11 +76,11 @@ variables {
 
   group_attribute_name = "groups"
 
-  rbac_group_names = {
-    Admin    = "Administrators"
-    Author   = "Writers"
-    Reviewer = "Approvers"
-    Viewer   = "Observers"
+  group_mapping = {
+    "idp-admins"    = "Admin"
+    "idp-authors"   = "Author"
+    "idp-reviewers" = "Reviewer"
+    "idp-viewers"   = "Viewer"
   }
 
   user_pool_id        = "us-east-1_TESTPOOL"
@@ -159,22 +164,22 @@ run "oidc_secret_from_secretsmanager_and_additive_rbac_env" {
     error_message = "supported_identity_providers_contribution must be exactly the external provider-name list when federation is enabled."
   }
 
-  # --- Group-mapping Lambda *_GROUP_NAME == rbac_group_names ---------------
+  # --- Group-mapping Lambda *_GROUP_NAME == external group names ------------
   assert {
-    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["ADMIN_GROUP_NAME"] == var.rbac_group_names["Admin"]
-    error_message = "ADMIN_GROUP_NAME env must equal rbac_group_names[\"Admin\"]."
+    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["ADMIN_GROUP_NAME"] == "idp-admins"
+    error_message = "ADMIN_GROUP_NAME env must be the external IdP group mapped to Admin."
   }
   assert {
-    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["AUTHOR_GROUP_NAME"] == var.rbac_group_names["Author"]
-    error_message = "AUTHOR_GROUP_NAME env must equal rbac_group_names[\"Author\"]."
+    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["AUTHOR_GROUP_NAME"] == "idp-authors"
+    error_message = "AUTHOR_GROUP_NAME env must be the external IdP group mapped to Author."
   }
   assert {
-    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["REVIEWER_GROUP_NAME"] == var.rbac_group_names["Reviewer"]
-    error_message = "REVIEWER_GROUP_NAME env must equal rbac_group_names[\"Reviewer\"]."
+    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["REVIEWER_GROUP_NAME"] == "idp-reviewers"
+    error_message = "REVIEWER_GROUP_NAME env must be the external IdP group mapped to Reviewer."
   }
   assert {
-    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["VIEWER_GROUP_NAME"] == var.rbac_group_names["Viewer"]
-    error_message = "VIEWER_GROUP_NAME env must equal rbac_group_names[\"Viewer\"]."
+    condition     = aws_lambda_function.group_mapping[0].environment[0].variables["VIEWER_GROUP_NAME"] == "idp-viewers"
+    error_message = "VIEWER_GROUP_NAME env must be the external IdP group mapped to Viewer."
   }
 }
 

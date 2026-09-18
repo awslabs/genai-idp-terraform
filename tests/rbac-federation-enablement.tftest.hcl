@@ -116,7 +116,8 @@ variables {
 
   web_ui = { enabled = false }
 
-  bedrock_llm_processor = {
+  processor = {
+    type = "bedrock-llm"
     config = {
       classification = { model = "us.amazon.nova-lite-v1:0" }
       extraction     = { model = "us.amazon.nova-lite-v1:0" }

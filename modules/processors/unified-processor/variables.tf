@@ -130,22 +130,6 @@ variable "enable_rule_validation" {
   default     = false
 }
 
-variable "rule_validation_memory_size" {
-  description = <<-EOT
-    Memory (MB) for the rule-validation and rule-validation-orchestration Lambdas
-    (only created when enable_rule_validation = true). Defaults to 4096 (upstream).
-    Lower it for accounts whose Lambda per-function memory service quota is below
-    4096 MB (some sandbox accounts cap at 3008 MB).
-  EOT
-  type        = number
-  default     = 4096
-
-  validation {
-    condition     = var.rule_validation_memory_size >= 128 && var.rule_validation_memory_size <= 10240
-    error_message = "rule_validation_memory_size must be between 128 and 10240 MB (and within the account's Lambda memory service quota)."
-  }
-}
-
 # Lambda hook inference variables (v0.4.15+). Pre-grant Step Functions
 # InvokeFunction for custom hooks; ARNs are stored in DynamoDB config
 # (model_lambda_hook_arn) and used when model_id = "LambdaHook". Names must start
@@ -223,12 +207,6 @@ variable "classification_sagemaker_endpoint_arn" {
   default     = null
 }
 
-variable "model_id" {
-  description = "Default Bedrock model ID for all processing steps. Supports global./ us. prefixes and :flex/:priority/:standard suffixes. (v0.4.12+)"
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
-
 variable "bedrock_hub_role_arn" {
   description = "Optional ARN of a centralized 'hub' account role that owns Bedrock access (BedrockHubRoleArn, v0.5.12). When non-empty, the Bedrock-calling processing Lambdas are granted sts:AssumeRole scoped to exactly this ARN and receive BEDROCK_ASSUME_ROLE_ARN in their environment so they assume it for Bedrock calls. When empty (default), processors use same-account Bedrock access unchanged (fully additive)."
   type        = string
@@ -239,12 +217,6 @@ variable "bedrock_assume_role_external_id" {
   description = "Optional ExternalId passed to sts:AssumeRole when assuming var.bedrock_hub_role_arn (rendered as BEDROCK_ASSUME_ROLE_EXTERNAL_ID). Only used when bedrock_hub_role_arn is set. Common requirement for cross-account trust policies."
   type        = string
   default     = ""
-}
-
-variable "classification_model_id" {
-  description = "Optional model ID for document classification. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "classification_max_workers" {
@@ -271,12 +243,6 @@ variable "classification_guardrail" {
     guardrail_arn = string
   })
   default = null
-}
-
-variable "extraction_model_id" {
-  description = "Optional model ID for information extraction. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "extraction_guardrail" {
@@ -306,22 +272,10 @@ variable "evaluation_baseline_bucket_arn" {
   default     = null
 }
 
-variable "evaluation_model_id" {
-  description = "Optional model ID for evaluating extraction results. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
-}
-
 variable "is_summarization_enabled" {
   description = "Controls whether document summarization is enabled"
   type        = bool
   default     = false
-}
-
-variable "summarization_model_id" {
-  description = "Optional model ID for document summarization. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "summarization_guardrail" {
@@ -343,6 +297,12 @@ variable "config" {
   description = "Optional configuration values to override defaults from config.yaml"
   type        = any
   default     = null
+}
+
+variable "allowed_bedrock_model_ids" {
+  description = "Bedrock model IDs every processing step is allowed to invoke, on top of the models resolved from the seeded configs. Set this for models operators will select in the UI later, which Terraform cannot see. Use [\"*\"] to allow any Bedrock model. Empty (default) grants only the resolved models."
+  type        = list(string)
+  default     = []
 }
 
 variable "additional_configurations" {
@@ -383,10 +343,24 @@ variable "enable_hitl" {
   default     = false
 }
 
-variable "assessment_model_id" {
-  description = "The Bedrock model ID to use for assessment (when assessment is enabled)"
-  type        = string
-  default     = null
+variable "enable_bda_ocr_backend" {
+  description = <<-EOT
+    Provision the deployment-scoped Bedrock Data Automation OCR project required
+    by the IDP v0.6 `ocr.backend: bda` configuration setting, which runs a BDA
+    standard-output SYNC project as a pure OCR engine in place of Textract.
+
+    Set this to true only if a config version selects `ocr.backend: bda`, and only
+    in a region where Bedrock Data Automation is available. Upstream provisions
+    the project unconditionally; it is gated here because an unconditional
+    control-plane create fails `apply` in regions without BDA. Left false, the OCR
+    function receives an empty BDA_OCR_PROJECT_ARN and the `bda` backend errors
+    clearly — the same behaviour upstream documents for unsupported regions.
+
+    Independent of the BDA *processing* branch (`use_bda` on a config version),
+    which uses async invocation against a customer-supplied BDA project.
+  EOT
+  type        = bool
+  default     = false
 }
 
 variable "assessment_guardrail" {
@@ -447,4 +421,22 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "reporting_bucket_name" {
+  description = "Name of the reporting bucket the evaluation function forwards accuracy results to. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_name" {
+  description = "Name of the save_reporting_data Lambda the evaluation function invokes to persist accuracy results. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_arn" {
+  description = "ARN of the save_reporting_data Lambda, used to scope the evaluation function's invoke grant."
+  type        = string
+  default     = null
 }

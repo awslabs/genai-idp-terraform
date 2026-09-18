@@ -3,13 +3,11 @@
 #
 # Native `terraform test` for the RBAC submodule. Two checks:
 #
-#   * Schema directives: every RBAC-governed operation in the shipped AppSync
-#     schema carries a server-side `@aws_auth(cognito_groups: [...])` directive,
-#     so authorization is enforced server-side by AppSync rather than
-#     client-side. Asserted STATICALLY against the read-only v0.5.12 snapshot
-#     (`sources/nested/appsync/src/api/schema.graphql`) — the directives ship in
-#     `sources/`, so RBAC's contribution is to make them enforceable, not to
-#     inject SDL.
+#   * Schema directives: every RBAC-governed operation in the shipped schema
+#     carries a `@aws_cognito_user_pools(cognito_groups: [...])` directive naming
+#     the roles that govern it. Not `@aws_auth`, which a multi-auth API silently
+#     ignores. Asserted statically against the read-only snapshot
+#     (`sources/nested/api-resolvers/src/api/schema.graphql`).
 #
 #   * Server-side scoping wiring: Reviewer document filtering and
 #     `allowedConfigVersions` scoping are enforced server-side. The filtering
@@ -33,61 +31,55 @@
 # read-only shipped schema via `file()` and exposes it. All invariant assertions
 # use `regexall(...)` against that text and live here for visibility. The fixture
 # has no providers/resources, so no AWS mock is needed for this run.
-run "schema_aws_auth_directive_invariant" {
+run "schema_role_directive_invariant" {
   command = plan
 
   module {
     source = "./tests/schema_fixture"
   }
 
-  # (a) The schema actually carries `@aws_auth(cognito_groups: [...])` directives
-  # at all — the foundation of server-side RBAC enforcement.
   assert {
-    condition     = length(regexall("@aws_auth\\(cognito_groups:\\s*\\[", output.schema)) > 0
-    error_message = "The shipped schema must carry @aws_auth(cognito_groups: [...]) directives for server-side RBAC enforcement."
+    condition     = length(regexall("@aws_cognito_user_pools\\(cognito_groups:\\s*\\[", output.schema)) > 0
+    error_message = "The shipped schema must carry @aws_cognito_user_pools(cognito_groups: [...]) directives naming the governing roles."
   }
 
-  # Each RBAC-governed user-management mutation carries the Admin-only directive
-  # IMMEDIATELY after its signature (only whitespace between the return type and
-  # `@aws_auth`), so the directive is genuinely ATTACHED to that operation and
-  # the match cannot bleed onto a later operation's directive. This is the
-  # "no RBAC-governed user-management operation lacks the directive" assertion:
-  # exactly one attached-directive match per operation.
+  # Non-comment matches only, so the schema's own warning does not satisfy it.
   assert {
-    condition     = length(regexall("createUser\\([^)]*\\):\\s*User\\s+@aws_auth\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
-    error_message = "createUser must carry an attached @aws_auth(cognito_groups: [\"Admin\"]) directive."
-  }
-  assert {
-    condition     = length(regexall("updateUser\\([^)]*\\):\\s*User\\s+@aws_auth\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
-    error_message = "updateUser must carry an attached @aws_auth(cognito_groups: [\"Admin\"]) directive."
-  }
-  assert {
-    condition     = length(regexall("deleteUser\\([^)]*\\):\\s*Boolean\\s+@aws_auth\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
-    error_message = "deleteUser must carry an attached @aws_auth(cognito_groups: [\"Admin\"]) directive."
+    condition     = length(regexall("(?m)^[^#\\n]*@aws_auth\\(cognito_groups:", output.schema)) == 0
+    error_message = "The schema must not decorate any field with @aws_auth(cognito_groups: [...]): a multi-auth API ignores it, leaving the field open to any authenticated user."
   }
 
-  # Config-version deletion is Admin-only and RBAC-governed (config-version
-  # governance) — assert its attached directive too.
+  # Whitespace-only between the return type and the directive, so it is attached
+  # to this operation and cannot bleed onto a later one.
   assert {
-    condition     = length(regexall("deleteConfigVersion\\([^)]*\\):[^@]*\\s+@aws_auth\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
-    error_message = "deleteConfigVersion must carry an attached @aws_auth(cognito_groups: [\"Admin\"]) directive."
+    condition     = length(regexall("createUser\\([^)]*\\):\\s*User\\s+@aws_cognito_user_pools\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
+    error_message = "createUser must carry an attached @aws_cognito_user_pools(cognito_groups: [\"Admin\"]) directive."
+  }
+  assert {
+    condition     = length(regexall("updateUser\\([^)]*\\):\\s*User\\s+@aws_cognito_user_pools\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
+    error_message = "updateUser must carry an attached @aws_cognito_user_pools(cognito_groups: [\"Admin\"]) directive."
+  }
+  assert {
+    condition     = length(regexall("deleteUser\\([^)]*\\):\\s*Boolean\\s+@aws_cognito_user_pools\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
+    error_message = "deleteUser must carry an attached @aws_cognito_user_pools(cognito_groups: [\"Admin\"]) directive."
   }
 
-  # Admin+Author and Admin+Reviewer governed operations are present, proving the
-  # role-to-operation mapping is server-side (not just Admin-only).
   assert {
-    condition     = length(regexall("@aws_auth\\(cognito_groups:\\s*\\[\"Admin\",\\s*\"Author\"\\]\\)", output.schema)) > 0
-    error_message = "Admin+Author governed operations must carry server-side @aws_auth directives."
-  }
-  assert {
-    condition     = length(regexall("@aws_auth\\(cognito_groups:\\s*\\[\"Admin\",\\s*\"Reviewer\"\\]\\)", output.schema)) > 0
-    error_message = "Admin+Reviewer (HITL) governed operations must carry server-side @aws_auth directives."
+    condition     = length(regexall("deleteConfigVersion\\([^)]*\\):[^@]*\\s+@aws_cognito_user_pools\\(cognito_groups:\\s*\\[\"Admin\"\\]\\)", output.schema)) == 1
+    error_message = "deleteConfigVersion must carry an attached @aws_cognito_user_pools(cognito_groups: [\"Admin\"]) directive."
   }
 
-  # (b) The profile query exposes `allowedConfigVersions` so the web UI can
-  # reflect scoping. `getMyProfile: User` returns the `User` type, which
-  # declares `allowedConfigVersions: [String]`. Both are asserted against the
-  # shipped schema (no SDL injection by RBAC).
+  # Both multi-role sets are present, so the mapping is not just Admin-only.
+  assert {
+    condition     = length(regexall("@aws_cognito_user_pools\\(cognito_groups:\\s*\\[\"Admin\",\\s*\"Author\"\\]\\)", output.schema)) > 0
+    error_message = "Admin+Author governed operations must carry a role directive naming both roles."
+  }
+  assert {
+    condition     = length(regexall("@aws_cognito_user_pools\\(cognito_groups:\\s*\\[\"Admin\",\\s*\"Reviewer\"\\]\\)", output.schema)) > 0
+    error_message = "Admin+Reviewer (HITL) governed operations must carry a role directive naming both roles."
+  }
+
+  # The profile query must expose allowedConfigVersions so the UI reflects scoping.
   assert {
     condition     = length(regexall("type\\s+User\\s+@aws_cognito_user_pools", output.schema)) == 1
     error_message = "The shipped schema must declare the `User` type."
@@ -116,6 +108,8 @@ run "schema_aws_auth_directive_invariant" {
 # ARN that the IAM statements scope to (the same pattern as
 # role_least_privilege.tftest.hcl). The Lambda validates its role ARN, so the
 # IAM role's `arn` is mocked to a well-formed value.
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_resource "aws_iam_role" {
     defaults = {

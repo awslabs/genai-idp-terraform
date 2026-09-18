@@ -28,8 +28,8 @@ variable "configuration_table_arn" {
   type        = string
 }
 
-variable "appsync_api_url" {
-  description = "URL of the AppSync GraphQL API for status updates"
+variable "configuration_table_name" {
+  description = "Name of the DynamoDB configuration table (read by the discovery processor)"
   type        = string
   default     = null
 }
@@ -40,19 +40,10 @@ variable "allowed_cors_origins" {
   default     = []
 }
 
-variable "appsync_api_id" {
-  description = "ID of the AppSync GraphQL API"
+variable "appsync_api_url" {
+  description = "URL of the AppSync GraphQL API for status updates"
   type        = string
-}
-
-variable "appsync_lambda_role_arn" {
-  description = "ARN of the AppSync Lambda service role"
-  type        = string
-}
-
-variable "appsync_dynamodb_role_arn" {
-  description = "ARN of the AppSync DynamoDB service role"
-  type        = string
+  default     = null
 }
 
 variable "idp_common_layer_arn" {

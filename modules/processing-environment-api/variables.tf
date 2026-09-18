@@ -23,6 +23,34 @@ variable "visibility" {
   }
 }
 
+# =============================================================================
+# REST API TRANSPORT (API Gateway) — replaces AppSync (v0.6.4)
+# =============================================================================
+
+variable "api_gateway_vpc_endpoint_id" {
+  description = "VPC interface endpoint id for execute-api. Required when visibility=PRIVATE — the REST API becomes a PRIVATE endpoint reachable only through this VPC endpoint, with a matching resource policy restricting aws:SourceVpce. Empty (default) for a REGIONAL (public, Cognito-authorized) endpoint."
+  type        = string
+  default     = ""
+}
+
+variable "waf_allowed_ipv4_ranges" {
+  description = "IPv4 CIDRs allowed to call the REST API. The allow-all default ([\"0.0.0.0/0\"]) disables WAF; any other value attaches a REGIONAL WAFv2 WebACL (DefaultAction Block + IP allow-list) to the API stage that blocks non-listed source IPs."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "serve_web_ui" {
+  description = "When true, serve the React SPA from web_ui_bucket_name as an S3 proxy on this REST API (GET / -> index.html, GET /{proxy+} -> assets). Mirrors upstream ServeWebUI / WebUIHosting=APIGateway. The SPA then inherits the API's endpoint type (visibility) and stage WAF. Requires web_ui_bucket_name."
+  type        = bool
+  default     = false
+}
+
+variable "web_ui_bucket_name" {
+  description = "Name of the web-app S3 bucket holding the built SPA, proxied by the GET routes when serve_web_ui = true. Must be supplied as a plain name derived by the caller (not read from the web-ui module) to keep the module graph acyclic. Empty (default) disables the S3-proxy routes."
+  type        = string
+  default     = ""
+}
+
 variable "resolver_count_limit" {
   description = "A number indicating the maximum number of resolvers that should be accepted when handling queries"
   type        = number
@@ -160,6 +188,21 @@ variable "tracking_table_arn" {
   default     = null
 }
 
+variable "tracking_table_available" {
+  description = <<-EOT
+    Plan-time-known override for whether the tracking table exists, used to gate
+    resources that would otherwise key their count/for_each off
+    `tracking_table_arn`. Callers pass `tracking_table_arn` as a COMPUTED value
+    (a resource attribute created in the same apply), so `tracking_table_arn !=
+    null` is unknown at plan time and breaks a cold `terraform plan`. Set this to
+    a value the caller knows at plan time (e.g. "am I creating the tracking
+    table?"). Null (default) preserves the legacy behaviour of deriving the gate
+    from `tracking_table_arn != null`.
+  EOT
+  type        = bool
+  default     = null
+}
+
 variable "configuration_table_arn" {
   description = "ARN of the DynamoDB table for storing configuration settings"
   type        = string
@@ -247,10 +290,11 @@ variable "log_retention_days" {
 }
 
 variable "vpc_config" {
-  description = "VPC configuration for Lambda functions"
+  description = "VPC configuration for Lambda functions. Supply vpc_id to also place the CodeBuild projects in the VPC; those builds run `pip install`, so the subnets MUST have egress to the package index."
   type = object({
     subnet_ids         = list(string)
     security_group_ids = list(string)
+    vpc_id             = optional(string)
   })
   default = null
 }
@@ -275,10 +319,11 @@ variable "lambda_tracing_mode" {
 variable "agent_analytics" {
   description = "Agent analytics configuration"
   type = object({
-    enabled                 = bool
-    model_id                = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-    reporting_database_name = optional(string)
-    reporting_bucket_arn    = optional(string)
+    enabled                   = bool
+    model_id                  = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    reporting_database_name   = optional(string)
+    reporting_bucket_arn      = optional(string)
+    allowed_bedrock_model_ids = optional(list(string), [])
   })
   default = { enabled = false }
 }
@@ -346,10 +391,40 @@ variable "idp_common_layer_arn" {
   default     = null
 }
 
+variable "evaluation_layer_arn" {
+  description = "ARN of the evaluation Lambda layer (idp_common with the evaluation extra). Required when evaluation_enabled is true: the Test Studio aggregation function carries it as its only layer."
+  type        = string
+  default     = null
+}
+
 variable "base_layer_arn" {
   description = "ARN of the base Lambda layer containing shared Python dependencies (from processing-environment module)"
   type        = string
   default     = null
+}
+
+variable "agents_layer_arn" {
+  description = "ARN of the IDP agents (strands) Lambda layer. Required by the chat token-streaming Function URL processor, which imports both processor modules (base + agents). Wired from module.idp_agents_layer.layer_arn at the root."
+  type        = string
+  default     = null
+}
+
+variable "lambda_web_adapter_layer_arn" {
+  description = "ARN of the AWS Lambda Web Adapter (LWA) layer attached to the chat token-streaming processor. When empty (default), the module constructs the upstream default (arn:<partition>:lambda:<region>:753240598075:layer:LambdaAdapterLayerX86:25)."
+  type        = string
+  default     = ""
+}
+
+variable "users_table_name" {
+  description = "Name of the RBAC Users DynamoDB table (USERS_TABLE_NAME for the chat token-streaming processor). Threaded from module.rbac[0].users_table_name at the root when RBAC is enabled, else empty."
+  type        = string
+  default     = ""
+}
+
+variable "settings_parameter_name" {
+  description = "Deterministic SSM parameter name of the web-ui settings document (SETTINGS_PARAMETER_NAME for the chat token-streaming processor). Passed as a plain string from the root (never a module reference) to avoid a dependency cycle with the web-ui module. Empty when the web UI is disabled."
+  type        = string
+  default     = ""
 }
 
 variable "enable_encryption" {
@@ -398,12 +473,18 @@ variable "enable_w2_dataset" {
   default     = false
 }
 
+variable "enable_finetuning" {
+  description = "Enable fine-tuning / Custom Models subsystem (Bedrock model customization from Test Studio test sets). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # VERSION-CHECK FEATURE VARIABLES (v0.5.11)
 # =============================================================================
 
 variable "public_artifacts_bucket" {
-  description = "Name of the (optionally public / cross-account) S3 bucket the version_check_resolver Lambda lists for `<prefix>/idp-main_<version>.yaml` templates. When empty (default), the version-check Lambda, AppSync data source, and resolver are not created (default-off)."
+  description = "Name of the (optionally public / cross-account) S3 bucket the version_check_resolver Lambda lists for `<prefix>/idp-main_<version>.yaml` templates. When empty (default) the Lambda is still created and routed (matching upstream), but gets no S3 grant and reports `checkEnabled: false`, so the UI simply shows no update banner."
   type        = string
   default     = ""
 }
@@ -549,4 +630,21 @@ variable "s3_endpoint_url" {
   EOT
   type        = string
   default     = null
+}
+
+variable "feature_platform_field_functions" {
+  description = <<-EOT
+    Feature Platform API field -> Lambda ARN map, merged into the REST
+    dispatcher's field-function map (IDP v0.6.4).
+
+    Supplied as its own input rather than through `enabled_feature_contracts`
+    because the Feature Platform module is wired at the root outside the
+    feature-contract map. Wire it from `module.feature_platform[0].field_functions`.
+
+    Replaces the AppSync data sources and per-field resolvers the Feature Platform
+    module used to create against the GraphQL API. Empty by default, so the
+    dispatcher is unchanged when the Feature Platform is disabled.
+  EOT
+  type        = map(string)
+  default     = {}
 }

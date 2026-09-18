@@ -31,7 +31,15 @@ data "aws_caller_identity" "current" {}
 
 locals {
   # GovCloud guard: AgentCore not available in us-gov-* regions.
-  enable_mcp_effective = var.enabled && !startswith(data.aws_region.current.id, "us-gov-")
+  enable_mcp_effective = var.enabled && !startswith(data.aws_region.current.region, "us-gov-")
+
+  # Plan-time-known "a user pool will exist" test. Prefer the caller's
+  # config-derived flag; fall back to inspecting the ID for callers that have not
+  # been updated. See var.user_pool_available for why the ID itself is unusable as
+  # a count gate on a fresh deploy.
+  user_pool_present = var.user_pool_available != null ? var.user_pool_available : var.user_pool_id != null
+
+  enable_mcp_cognito = local.enable_mcp_effective && local.user_pool_present
 
   api_name           = var.name_prefix
   output_bucket_arn  = var.output_bucket_arn
@@ -273,7 +281,7 @@ resource "aws_iam_role_policy" "agentcore_gateway_manager" {
           "kms:GenerateDataKey*",
           "kms:DescribeKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -302,7 +310,7 @@ resource "aws_iam_role" "agentcore_gateway_execution" {
           "aws:SourceAccount" = data.aws_caller_identity.current.account_id
         }
         ArnLike = {
-          "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+          "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
         }
       }
     }]
@@ -353,6 +361,20 @@ data "archive_file" "agentcore_gateway_manager" {
 locals {
   agentcore_gateway_manager_src       = "${path.module}/../../../sources/src/lambda/agentcore_gateway_manager"
   agentcore_gateway_manager_build_dir = "${path.module}/../../../.terraform/tmp/agentcore_gateway_manager_build"
+
+  # pip platform tag for the TARGET Lambda architecture, not the build host.
+  #
+  # This must track `var.lambda_architecture` (which is what
+  # aws_lambda_function.agentcore_gateway_manager sets on the function). It used
+  # to be hardcoded to manylinux2014_x86_64 with a comment saying to switch it
+  # manually for arm64 — and since `lambda_architecture` DEFAULTS to arm64, the
+  # default configuration shipped x86_64 wheels to an arm64 function. The native
+  # Rust extension in `pydantic_core` (pulled in transitively by
+  # bedrock_agentcore_starter_toolkit -> pydantic) then failed to load with
+  # `No module named 'pydantic_core._pydantic_core'`, the handler never imported,
+  # and the CloudFormation custom resource hung until its timeout because
+  # cfnresponse was never reached.
+  agentcore_pip_platform = var.lambda_architecture == "arm64" ? "manylinux2014_aarch64" : "manylinux2014_x86_64"
 }
 
 resource "null_resource" "build_agentcore_gateway_manager" {
@@ -365,8 +387,10 @@ resource "null_resource" "build_agentcore_gateway_manager" {
     ]))
     # Bump this string when the build pipeline below changes (e.g. adding /
     # removing pip flags). `null_resource.triggers` are the only signal
-    # terraform has for "re-run the build".
-    build_pipeline_version = "manylinux2014_x86_64"
+    # terraform has for "re-run the build". It carries the platform tag so that
+    # flipping var.lambda_architecture forces a rebuild against the right wheels
+    # instead of silently reusing the previous architecture's build dir.
+    build_pipeline_version = local.agentcore_pip_platform
   }
 
   provisioner "local-exec" {
@@ -381,19 +405,19 @@ resource "null_resource" "build_agentcore_gateway_manager" {
       # Copy source files
       cp -r "$SRC_DIR"/. "$BUILD_DIR/"
 
-      # Install deps for the Lambda runtime (Linux x86_64), not the build host.
-      # `bedrock_agentcore_starter_toolkit` pulls in `pydantic`, whose
-      # transitive `pydantic_core` package ships native (Rust-compiled)
-      # binaries. The `--platform` / `--only-binary` / `--implementation` flags
-      # force pip to fetch the manylinux x86_64 wheel that Lambda can load at
-      # runtime. Switch `manylinux2014_x86_64` to `manylinux2014_aarch64` if the
-      # function is rebuilt for arm64.
+      # Install deps for the Lambda runtime (Linux), not the build host.
+      # `bedrock_agentcore_starter_toolkit` pulls in `pydantic`, whose transitive
+      # `pydantic_core` package ships native (Rust-compiled) binaries. The
+      # `--platform` / `--only-binary` / `--implementation` flags force pip to
+      # fetch the manylinux wheel Lambda can load at runtime. The platform tag is
+      # derived from var.lambda_architecture (see local.agentcore_pip_platform) so
+      # it can never drift from the function's own `architectures`.
       pip3 install \
         --target "$BUILD_DIR" \
         --upgrade \
         --no-cache-dir \
         --quiet \
-        --platform manylinux2014_x86_64 \
+        --platform ${local.agentcore_pip_platform} \
         --python-version 3.12 \
         --implementation cp \
         --only-binary=:all: \
@@ -467,14 +491,17 @@ resource "aws_cloudformation_stack" "agentcore_gateway" {
       AgentCoreGateway = {
         Type = "Custom::AgentCoreGateway"
         Properties = {
-          ServiceToken     = aws_lambda_function.agentcore_gateway_manager[0].arn
-          StackName        = local.api_name
-          Region           = data.aws_region.current.id
-          LambdaArn        = aws_lambda_function.agentcore_mcp_handler[0].arn
-          UserPoolId       = var.user_pool_id
-          ClientId         = aws_cognito_user_pool_client.mcp_client[0].id
-          ClientSecret     = aws_cognito_user_pool_client.mcp_client[0].client_secret
-          ExecutionRoleArn = aws_iam_role.agentcore_gateway_execution[0].arn
+          ServiceToken = aws_lambda_function.agentcore_gateway_manager[0].arn
+          StackName    = local.api_name
+          Region       = data.aws_region.current.region
+          LambdaArn    = aws_lambda_function.agentcore_mcp_handler[0].arn
+          UserPoolId   = var.user_pool_id
+          ClientId     = aws_cognito_user_pool_client.mcp_client[0].id
+          ClientSecret = aws_cognito_user_pool_client.mcp_client[0].client_secret
+          # The gateway's JWT authorizer only accepts clients passed here, so
+          # without the connector the client_credentials path is rejected.
+          ConnectorClientId = try(aws_cognito_user_pool_client.mcp_connector[0].id, null)
+          ExecutionRoleArn  = aws_iam_role.agentcore_gateway_execution[0].arn
           # Force replacement when the manager Lambda code changes so the custom
           # resource re-runs against the latest logic.
           SourceCodeHash = data.archive_file.agentcore_gateway_manager[0].output_base64sha256
@@ -535,10 +562,10 @@ resource "aws_cognito_user_pool_client" "mcp_client" {
   # be wired to the CloudFront distribution domain by the caller. When unset, we
   # fall back to a Cognito-hosted UI placeholder so apply still succeeds.
   callback_urls = length(var.mcp_callback_urls) > 0 ? var.mcp_callback_urls : [
-    "https://${var.user_pool_id}.auth.${data.aws_region.current.id}.amazoncognito.com/oauth2/idpresponse",
+    "https://${var.user_pool_id}.auth.${data.aws_region.current.region}.amazoncognito.com/oauth2/idpresponse",
   ]
   logout_urls = length(var.mcp_callback_urls) > 0 ? var.mcp_callback_urls : [
-    "https://${var.user_pool_id}.auth.${data.aws_region.current.id}.amazoncognito.com/oauth2/idpresponse",
+    "https://${var.user_pool_id}.auth.${data.aws_region.current.region}.amazoncognito.com/oauth2/idpresponse",
   ]
 }
 
@@ -551,7 +578,7 @@ resource "aws_cognito_user_pool_client" "mcp_client" {
 # AgentCore Gateway validates.
 
 resource "aws_cognito_resource_server" "mcp" {
-  count        = local.enable_mcp_effective && var.user_pool_id != null ? 1 : 0
+  count        = local.enable_mcp_cognito ? 1 : 0
   user_pool_id = var.user_pool_id
   identifier   = "idp-mcp-connector"
   name         = "idp-mcp-connector"
@@ -563,7 +590,7 @@ resource "aws_cognito_resource_server" "mcp" {
 }
 
 resource "aws_cognito_user_pool_client" "mcp_connector" {
-  count        = local.enable_mcp_effective && var.user_pool_id != null ? 1 : 0
+  count        = local.enable_mcp_cognito ? 1 : 0
   name         = "mcp-connector-client"
   user_pool_id = var.user_pool_id
 

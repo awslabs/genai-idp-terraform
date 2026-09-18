@@ -19,6 +19,8 @@
 # the Lambda `environment` maps are input-derived, so both are known at plan
 # time with the mocked provider.
 
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_data "aws_partition" {
     defaults = {

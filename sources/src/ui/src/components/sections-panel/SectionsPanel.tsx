@@ -18,17 +18,19 @@ import {
   Modal,
   Alert,
   Badge,
+  Popover,
 } from '@cloudscape-design/components';
 import type { ButtonDropdownProps } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from '../../api/client-shim';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import FileViewer from '../document-viewer/JSONViewer';
 import { getSectionConfidenceAlertCount, getSectionConfidenceAlerts } from '../common/confidence-alerts-utils';
-import useConfiguration from '../../hooks/use-configuration';
+import { getSectionIssueStatus, type ProcessingIssue } from '../common/processing-issues-utils';
 import useSettingsContext from '../../contexts/settings';
 import useUserRole from '../../hooks/use-user-role';
-import { processChanges, getFileContents, skipAllSectionsReview } from '../../graphql/generated';
+import { useDocumentVersion } from '../../contexts/document-version';
+import { processChanges, getFilePresignedUrl, skipAllSectionsReview } from '../../graphql/generated';
 import { parseHITLReviewHistory } from '../../graphql/awsjson-parsers';
 
 const client = generateClient();
@@ -47,6 +49,8 @@ interface SectionItem {
   // is performed for excluded sections; the UI renders a "Skipped" badge.
   Excluded?: boolean;
   ExclusionReason?: string | null;
+  // Structured self-healing / quality issues detected for this section.
+  ProcessingIssues?: ProcessingIssue[] | null;
 }
 
 interface PageItem {
@@ -123,6 +127,60 @@ const ConfidenceAlertsCell = ({
   }
 
   return <StatusIndicator type="warning">{alertCount}</StatusIndicator>;
+};
+
+// Processing status cell: a worst-severity StatusIndicator over the section's
+// structured ProcessingIssues, wrapped in a hover Popover listing each issue's
+// message + root cause. Reuses the getSectionIssueStatus helper (mirrors the
+// hitl-status-renderer + confidence-alerts-utils conventions).
+const StatusCell = ({ item }: { item: SectionItem }): React.JSX.Element => {
+  const issues = item.ProcessingIssues || [];
+  const { type, label } = getSectionIssueStatus(item);
+
+  const indicator = <StatusIndicator type={type}>{label}</StatusIndicator>;
+
+  if (issues.length === 0) {
+    return indicator;
+  }
+
+  return (
+    <Popover
+      dismissButton={false}
+      position="top"
+      size="large"
+      triggerType="custom"
+      header="Processing issues"
+      content={
+        <SpaceBetween size="s">
+          {issues.map((issue, idx) => (
+            <div key={`${issue.code ?? 'issue'}-${issue.message?.slice(0, 24) ?? idx}`}>
+              <Box variant="awsui-key-label">
+                <StatusIndicator
+                  type={
+                    (issue.severity || 'info').toLowerCase() === 'error'
+                      ? 'error'
+                      : (issue.severity || 'info').toLowerCase() === 'warning'
+                        ? 'warning'
+                        : 'info'
+                  }
+                >
+                  {issue.code || issue.stage || 'issue'}
+                </StatusIndicator>
+              </Box>
+              <Box variant="p">{issue.message}</Box>
+              {issue.rootCause && (
+                <Box variant="small" color="text-body-secondary">
+                  Root cause: {issue.rootCause}
+                </Box>
+              )}
+            </div>
+          ))}
+        </SpaceBetween>
+      }
+    >
+      <span style={{ cursor: 'pointer' }}>{indicator}</span>
+    </Popover>
+  );
 };
 
 const ActionsCell = ({
@@ -226,23 +284,28 @@ const ActionsCell = ({
 
       logger.info(`Downloading ${type} data from:`, fileUri);
 
-      // Fetch file contents using GraphQL
+      // Resolve a presigned GET URL and fetch the bytes directly from S3.
+      // Section result.json files can exceed Lambda's 6 MB synchronous
+      // response cap, so we must not proxy the content through the resolver.
       const response = await client.graphql({
-        query: getFileContents,
+        query: getFilePresignedUrl,
         variables: { s3Uri: fileUri },
       });
 
-      const result = response.data.getFileContents;
+      const result = response.data.getFilePresignedUrl;
 
-      if (result?.isBinary) {
-        alert('This file contains binary content that cannot be downloaded');
-        return;
+      if (!result?.presignedUrl) {
+        throw new Error('No presigned URL returned');
       }
 
-      const content = result?.content;
+      const s3Response = await fetch(result.presignedUrl);
+      if (!s3Response.ok) {
+        throw new Error(`S3 fetch failed: ${s3Response.status} ${s3Response.statusText}`);
+      }
+      const content = await s3Response.text();
 
       // Create blob and download
-      const blob = new Blob([content as string], { type: 'application/json' });
+      const blob = new Blob([content], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
 
@@ -354,7 +417,7 @@ const EditableClassCell = ({
   item: SectionItem;
   validationErrors: Record<string, string[]>;
   updateSection: (id: string, field: string, value: string) => void;
-  getAvailableClasses: () => { value: string; label: string }[];
+  getAvailableClasses: () => { value: string; label: string; description?: string }[];
 }): React.JSX.Element => (
   <FormField errorText={validationErrors[item.Id]?.find((err) => err.includes('class'))}>
     <Select
@@ -363,6 +426,8 @@ const EditableClassCell = ({
       options={getAvailableClasses()}
       placeholder="Select class/type"
       invalid={validationErrors[item.Id]?.some((err) => err.includes('class'))}
+      filteringType="auto"
+      expandToViewport
     />
   </FormField>
 );
@@ -538,6 +603,14 @@ const createColumnDefinitions = (
       cell: (item: SectionItem) => <ConfidenceAlertsCell item={item} mergedConfig={mergedConfig} />,
       minWidth: 140,
       width: 140,
+      isResizable: true,
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      cell: (item: SectionItem) => <StatusCell item={item} />,
+      minWidth: 150,
+      width: 150,
       isResizable: true,
     },
     {
@@ -750,9 +823,17 @@ const SectionsPanel = ({ sections, pages = [], documentItem, mergedConfig, onDoc
   const [isSkipping, setIsSkipping] = useState(false);
   // Track which section's viewer is open for navigation
   const [openViewerSectionIndex, setOpenViewerSectionIndex] = useState<number | null>(null);
-  const { mergedConfig: configuration } = useConfiguration();
+  // `mergedConfig` is the config VERSION the document was processed with
+  // (see DocumentPanel: it fetches `documentVersionConfig` from the doc's
+  // `configVersion` and passes it in here). Using the current live config
+  // instead would show the wrong class vocabulary in Edit Mode for docs
+  // processed under a previous or different config version.
+  const configuration = mergedConfig;
   const { settings: settings2 } = useSettingsContext();
   const { isReviewerOnly, canWrite, canReview } = useUserRole();
+  // When viewing a past document version, all edits are disabled — the panels
+  // write to the *current* output objects, not the historical snapshot.
+  const { isHistorical } = useDocumentVersion();
 
   // Check if current pattern is Pattern-1 (for data-only edit mode)
   const isPattern1 = () => {
@@ -766,7 +847,8 @@ const SectionsPanel = ({ sections, pages = [], documentItem, mergedConfig, onDoc
   const isHitlCompleted = hitlStatusLower === 'completed' || hitlStatusLower === 'reviewcompleted';
   const hasPendingHITL = documentItem?.hitlTriggered && !isHitlCompleted && !isHitlSkipped;
   // Show skip button only if HITL pending and not already completed/skipped
-  const showSkipAllButton = canReview && hasPendingHITL;
+  // (never while viewing a historical version — it mutates current state).
+  const showSkipAllButton = canReview && hasPendingHITL && !isHistorical;
 
   // Log for debugging
   logger.debug('HITL Status Check:', {
@@ -792,19 +874,26 @@ const SectionsPanel = ({ sections, pages = [], documentItem, mergedConfig, onDoc
   // - User has no write or review permissions (Viewer role), OR
   // - REVIEWER only: HITL triggered but not claimed, document processing, or HITL completed/skipped
   // Admins and Authors can always edit
+  // - Viewing a historical version (read-only snapshot)
   const isEditModeDisabled =
+    isHistorical ||
     (!canWrite && !canReview) ||
     (isReviewerOnly && ((hitlTriggered && !hasReviewOwner) || isDocumentProcessing || isHitlCompleted || isHitlSkipped));
 
   logger.debug('Edit Mode Check:', { isReviewerOnly, isEditModeDisabled, isHitlCompleted, isHitlSkipped });
 
-  // Auto-exit edit mode for reviewers when document starts processing or HITL is completed/skipped
+  // Auto-exit edit mode when switching to a historical version, or (for
+  // reviewers) when the document starts processing or HITL is completed/skipped.
   useEffect(() => {
+    if (isHistorical && isEditMode) {
+      setIsEditMode(false);
+      return;
+    }
     if (isReviewerOnly && isEditMode && (isDocumentProcessing || isHitlCompleted || isHitlSkipped)) {
       logger.info('Auto-exiting edit mode due to status change');
       setIsEditMode(false);
     }
-  }, [isReviewerOnly, isDocumentProcessing, isHitlCompleted, isHitlSkipped, isEditMode]);
+  }, [isHistorical, isReviewerOnly, isDocumentProcessing, isHitlCompleted, isHitlSkipped, isEditMode]);
 
   // Handle skip all sections review (Admin only)
   const handleSkipAllSections = async () => {
@@ -875,7 +964,9 @@ const SectionsPanel = ({ sections, pages = [], documentItem, mergedConfig, onDoc
     }
   }, [isEditMode, sections]);
 
-  // Get available classes from configuration
+  // Get available classes from the document's config version (passed in as
+  // `mergedConfig`). Each option surfaces the class description so users can
+  // pick the correct class without leaving the dropdown.
   const getAvailableClasses = () => {
     if (!configuration?.classes) return [];
     return (configuration.classes as Record<string, unknown>[])
@@ -884,10 +975,12 @@ const SectionsPanel = ({ sections, pages = [], documentItem, mergedConfig, onDoc
         // JSON Schema: $id or x-aws-idp-document-type
         // Legacy: name
         const className = String(cls.$id || cls['x-aws-idp-document-type'] || cls.name || '');
+        const description = typeof cls.description === 'string' ? cls.description.trim() : '';
 
         return {
           label: className,
           value: className,
+          description: description || undefined,
         };
       })
       .filter((option) => option.value); // Remove any undefined entries

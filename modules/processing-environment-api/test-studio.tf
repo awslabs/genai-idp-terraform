@@ -100,7 +100,7 @@ resource "aws_iam_role_policy" "test_studio_lambdas" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -109,8 +109,9 @@ resource "aws_iam_role_policy" "test_studio_lambdas" {
       {
         Effect = "Allow"
         Action = [
-          "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"
+          "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:PutItem",
+          "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query",
+          "dynamodb:Scan"
         ]
         Resource = [
           aws_dynamodb_table.test_sets[0].arn,
@@ -122,14 +123,18 @@ resource "aws_iam_role_policy" "test_studio_lambdas" {
       {
         Effect = "Allow"
         Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
-        Resource = [
+        Resource = compact([
           aws_s3_bucket.test_sets[0].arn,
           "${aws_s3_bucket.test_sets[0].arn}/*",
           local.input_bucket_arn,
           "${local.input_bucket_arn}/*",
           local.output_bucket_arn,
-          "${local.output_bucket_arn}/*"
-        ]
+          "${local.output_bucket_arn}/*",
+          # Ground truth is read from here when a test set is built from the
+          # input bucket, and each run's baselines are staged back into it.
+          var.evaluation_baseline_bucket_arn,
+          var.evaluation_baseline_bucket_arn != null ? "${var.evaluation_baseline_bucket_arn}/*" : null
+        ])
       },
       {
         Effect   = "Allow"
@@ -142,14 +147,75 @@ resource "aws_iam_role_policy" "test_studio_lambdas" {
         Resource = [
           aws_sqs_queue.test_set_copy_queue[0].arn,
           aws_sqs_queue.test_file_copy_queue[0].arn,
+          aws_sqs_queue.test_result_cache_update_queue[0].arn,
         ]
       },
       {
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
-    ]
+      ],
+      # test_runner._capture_config reads CONFIG_TABLE; read-only and separate
+      # from the CRUD statement above.
+      local.configuration_table_arn != null ? [
+        {
+          Effect   = "Allow"
+          Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"]
+          Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*"]
+        }
+      ] : [],
+      # test_results_resolver invokes the aggregation function for accuracy.
+      var.evaluation_enabled ? [
+        {
+          Effect   = "Allow"
+          Action   = ["lambda:InvokeFunction"]
+          Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.api_name}-test-execution-aggregation"
+        }
+      ] : [],
+      # Supplementary Athena query for split-classification metrics, confidence
+      # and cost. s3:GetBucketLocation is required by Athena itself, not by any
+      # call the resolver makes directly.
+      var.agent_analytics.reporting_database_name != null ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "athena:StartQueryExecution",
+            "athena:GetQueryExecution",
+            "athena:GetQueryResults",
+            "athena:StopQueryExecution"
+          ]
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:datacatalog/*"
+          ]
+        },
+        {
+          Effect = "Allow"
+          Action = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetPartitions"]
+          Resource = [
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:database/${var.agent_analytics.reporting_database_name}",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.agent_analytics.reporting_database_name}/*"
+          ]
+        }
+      ] : [],
+      var.agent_analytics.reporting_bucket_arn != null ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:ListBucket",
+            "s3:GetBucketLocation"
+          ]
+          Resource = [
+            var.agent_analytics.reporting_bucket_arn,
+            "${var.agent_analytics.reporting_bucket_arn}/*"
+          ]
+        }
+      ] : []
+    )
   })
 }
 
@@ -203,11 +269,44 @@ resource "aws_sqs_queue" "test_file_copy_queue" {
   tags = var.tags
 }
 
+resource "aws_sqs_queue" "test_result_cache_update_dlq" {
+  count                     = var.enable_test_studio ? 1 : 0
+  name                      = "${local.api_name}-test-result-cache-update-dlq"
+  message_retention_seconds = 1209600 # 14 days
+  kms_master_key_id         = local.encryption_key_arn
+  tags                      = var.tags
+}
+
+# getTestRun serves metrics from the cached testRunResult on the tracking item
+# and, when that is missing, enqueues an aggregation here. The consumer is
+# test_results_resolver itself (handle_cache_update_request). Without the queue
+# the resolver logs "cannot queue cache update" and answers with no metrics,
+# which the UI renders as "No Accuracy Data" even when the aggregation function
+# can compute them.
+resource "aws_sqs_queue" "test_result_cache_update_queue" {
+  count                      = var.enable_test_studio ? 1 : 0
+  name                       = "${local.api_name}-test-result-cache-update-queue"
+  visibility_timeout_seconds = 900
+  kms_master_key_id          = local.encryption_key_arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.test_result_cache_update_dlq[0].arn
+    maxReceiveCount     = 3
+  })
+  tags = var.tags
+}
+
 # SQS event source mappings for file copier Lambdas
 resource "aws_lambda_event_source_mapping" "test_set_copy" {
   count            = var.enable_test_studio ? 1 : 0
   event_source_arn = aws_sqs_queue.test_set_copy_queue[0].arn
   function_name    = aws_lambda_function.test_set_file_copier[0].arn
+  batch_size       = 1
+}
+
+resource "aws_lambda_event_source_mapping" "test_result_cache_update" {
+  count            = var.enable_test_studio ? 1 : 0
+  event_source_arn = aws_sqs_queue.test_result_cache_update_queue[0].arn
+  function_name    = aws_lambda_function.test_results_resolver[0].arn
   batch_size       = 1
 }
 
@@ -223,16 +322,48 @@ resource "aws_lambda_event_source_mapping" "test_file_copy" {
 # =============================================================================
 
 locals {
-  test_studio_env = var.enable_test_studio ? {
-    LOG_LEVEL               = var.log_level
-    TEST_SET_BUCKET         = aws_s3_bucket.test_sets[0].id
-    BASELINE_BUCKET         = aws_s3_bucket.test_sets[0].id
-    INPUT_BUCKET            = local.input_bucket_name
-    OUTPUT_BUCKET           = local.output_bucket_name
-    TRACKING_TABLE          = local.tracking_table_name
-    CONFIG_TABLE            = local.configuration_table_name
-    TEST_SET_COPY_QUEUE_URL = aws_sqs_queue.test_set_copy_queue[0].url
-    FILE_COPY_QUEUE_URL     = aws_sqs_queue.test_file_copy_queue[0].url
+  test_studio_env_base = var.enable_test_studio ? {
+    LOG_LEVEL       = var.log_level
+    TEST_SET_BUCKET = aws_s3_bucket.test_sets[0].id
+    # The evaluation baseline bucket, not the test-set bucket. The copiers use
+    # this to find ground truth for input-bucket test sets and to stage each
+    # run's baselines under {test_run_id}/, and the evaluation function only
+    # reads the evaluation baseline bucket. Pointing it at the test-set bucket
+    # made every input-bucket file look like it had no baseline and left run
+    # baselines somewhere evaluation never looks. Matches upstream, which wires
+    # EvaluationBaselineBucketName here.
+    BASELINE_BUCKET                    = local.evaluation_baseline_bucket_name != null ? local.evaluation_baseline_bucket_name : ""
+    INPUT_BUCKET                       = local.input_bucket_name
+    OUTPUT_BUCKET                      = local.output_bucket_name
+    TRACKING_TABLE                     = local.tracking_table_name
+    CONFIG_TABLE                       = local.configuration_table_name
+    TEST_SET_COPY_QUEUE_URL            = aws_sqs_queue.test_set_copy_queue[0].url
+    FILE_COPY_QUEUE_URL                = aws_sqs_queue.test_file_copy_queue[0].url
+    TEST_RESULT_CACHE_UPDATE_QUEUE_URL = aws_sqs_queue.test_result_cache_update_queue[0].url
+  } : {}
+
+  # Left absent rather than empty when evaluation is off: the resolver routes on
+  # any value being present and only falls back when the variable is unset.
+  test_studio_env = merge(
+    local.test_studio_env_base,
+    length(aws_lambda_function.test_execution_aggregation) > 0 ? {
+      TEST_EXECUTION_AGGREGATION_FUNCTION_ARN = aws_lambda_function.test_execution_aggregation[0].arn
+    } : {},
+    local.test_studio_athena_env
+  )
+
+  # Athena only supplements the aggregation figures with split-classification
+  # metrics, confidence and cost, and the resolver skips that query when
+  # ATHENA_DATABASE is unset, so both vars are published together or not at all.
+  test_studio_reporting_bucket_name = try(element(split(":", var.agent_analytics.reporting_bucket_arn), 5), null)
+
+  test_studio_athena_env = (
+    var.enable_test_studio &&
+    var.agent_analytics.reporting_database_name != null &&
+    local.test_studio_reporting_bucket_name != null
+    ) ? {
+    ATHENA_DATABASE        = var.agent_analytics.reporting_database_name
+    ATHENA_OUTPUT_LOCATION = "s3://${local.test_studio_reporting_bucket_name}/athena-results/"
   } : {}
 }
 
@@ -251,7 +382,7 @@ resource "aws_cloudwatch_log_group" "test_runner" {
 data "archive_file" "test_runner" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/test_runner"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/test_runner"
   output_path = "${path.module}/../../.terraform/archives/test_runner.zip"
 }
 
@@ -295,7 +426,7 @@ resource "aws_cloudwatch_log_group" "test_results_resolver" {
 data "archive_file" "test_results_resolver" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/test_results_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/test_results_resolver"
   output_path = "${path.module}/../../.terraform/archives/test_results_resolver.zip"
 }
 
@@ -338,7 +469,7 @@ resource "aws_cloudwatch_log_group" "test_set_resolver" {
 data "archive_file" "test_set_resolver" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/test_set_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/test_set_resolver"
   output_path = "${path.module}/../../.terraform/archives/test_set_resolver.zip"
 }
 
@@ -512,7 +643,7 @@ resource "aws_cloudwatch_log_group" "delete_tests" {
 data "archive_file" "delete_tests" {
   count       = var.enable_test_studio ? 1 : 0
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/delete_tests"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/delete_tests"
   output_path = "${path.module}/../../.terraform/archives/delete_tests.zip"
 }
 
@@ -637,201 +768,161 @@ resource "aws_lambda_function" "w2_dataset_deployer" {
 }
 
 # =============================================================================
-# AppSync data sources and resolvers for Test Studio
+# NOTE: The Test Studio AppSync invoke policy, data sources, and resolvers were
+# removed in the v0.6.4 REST migration. Test Studio fields (startTestRun,
+# getTestRun/getTestRuns/getTestRunStatus/compareTestRuns, getTestSets,
+# updateTestSet, validateTestFileName, listBucketFiles, addTestSet,
+# addTestSetFromUpload, deleteTests, deleteTestSets, ...) are now routed to the
+# same Test Studio Lambdas by the dispatcher via canonical keys + FIELD_ALIASES
+# (see dispatcher.tf: startTestRun/compareTestRuns/addDocumentsToTestSet/
+# deleteTests). The dispatcher role grants the invokes. Lambdas/queues/buckets
+# above are unchanged.
 # =============================================================================
 
 # =============================================================================
-# IAM: Allow AppSync to invoke Test Studio Lambda functions
+# Lambda: test_execution_aggregation
+#
+# Produces the accuracy/precision/recall figures the Test Execution view shows.
+# test_results_resolver treats this as the primary source and only supplements
+# it from Athena, so without it the view reports "No Accuracy Data".
+#
+# Upstream builds this in the pattern stack and passes its ARN into the API
+# stack. Here the API module is created before the processors, so taking it from
+# a processor output would be a dependency cycle; it is built alongside the
+# other Test Studio Lambdas instead and reuses their role, which already grants
+# the tracking-table reads and output-bucket reads it needs.
+#
+# It carries exactly one layer: the code needs idp_common[evaluation] and the
+# combined base + idp_common layers push the function past the unzipped size
+# limit. The count keys off var.evaluation_enabled rather than the layer ARN so
+# the gate stays known at plan time.
 # =============================================================================
 
-resource "aws_iam_policy" "appsync_invoke_test_studio_policy" {
-  count       = var.enable_test_studio ? 1 : 0
-  name        = "AppSyncInvokeTestStudioPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to invoke Test Studio Lambda functions"
+resource "aws_cloudwatch_log_group" "test_execution_aggregation" {
+  count             = var.enable_test_studio && var.evaluation_enabled ? 1 : 0
+  name              = "/aws/lambda/${local.api_name}-test-execution-aggregation"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = var.tags
+}
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = "lambda:InvokeFunction"
-      Resource = [
-        aws_lambda_function.test_runner[0].arn,
-        aws_lambda_function.test_set_resolver[0].arn,
-        aws_lambda_function.test_results_resolver[0].arn,
-        aws_lambda_function.test_set_zip_extractor[0].arn,
-        aws_lambda_function.test_set_file_copier[0].arn,
-        aws_lambda_function.delete_tests[0].arn,
-      ]
-    }]
+data "archive_file" "test_execution_aggregation" {
+  count       = var.enable_test_studio && var.evaluation_enabled ? 1 : 0
+  type        = "zip"
+  source_dir  = "${path.module}/../../sources/patterns/unified/src/test_execution_aggregation_function"
+  output_path = "${path.module}/../../.terraform/archives/test_execution_aggregation.zip"
+}
+
+resource "aws_lambda_function" "test_execution_aggregation" {
+  architectures    = [var.lambda_architecture]
+  count            = var.enable_test_studio && var.evaluation_enabled ? 1 : 0
+  function_name    = "${local.api_name}-test-execution-aggregation"
+  role             = aws_iam_role.test_studio_lambdas[0].arn
+  filename         = data.archive_file.test_execution_aggregation[0].output_path
+  source_code_hash = data.archive_file.test_execution_aggregation[0].output_base64sha256
+  handler          = "index.handler"
+  runtime          = "python3.12"
+  timeout          = 300
+  memory_size      = 2048
+  layers           = compact([var.evaluation_layer_arn])
+
+  # Deliberately not local.test_studio_env: that map carries this function's own
+  # ARN for the resolvers, which would be a self-reference.
+  environment {
+    variables = {
+      LOG_LEVEL      = var.log_level
+      TRACKING_TABLE = local.tracking_table_name != null ? local.tracking_table_name : ""
+      OUTPUT_BUCKET  = local.output_bucket_name
+    }
+  }
+
+  tracing_config { mode = var.lambda_tracing_mode }
+
+  dynamic "vpc_config" {
+    for_each = var.vpc_config != null ? [var.vpc_config] : []
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.test_execution_aggregation]
+  tags       = var.tags
+}
+
+# =============================================================================
+# Dataset deployments
+#
+# Both deployers are CloudFormation custom resources upstream: they read
+# RequestType and ResourceProperties and answer through cfnresponse, so a plain
+# lambda invocation cannot drive them (there would be no ResponseURL to reply
+# to). The functions were being created but nothing ever ran them, so neither
+# labelled corpus was deployed. Wrapping each in a one-resource stack mirrors
+# how mcp-integration drives its own custom resource and keeps CFN's
+# create/update/delete idempotency.
+#
+# DatasetVersion is the deployer's idempotency key: it skips work when that
+# version is already present, so bumping it is how a redeploy is forced.
+# Versions, names and descriptions match sources/template.yaml.
+# =============================================================================
+
+resource "aws_cloudformation_stack" "w2_dataset" {
+  count = var.enable_test_studio && var.enable_w2_dataset ? 1 : 0
+  name  = "${local.api_name}-w2-dataset"
+
+  template_body = jsonencode({
+    AWSTemplateFormatVersion = "2010-09-09"
+    Description              = "Fake W-2 tax form dataset for Test Studio"
+    Resources = {
+      W2DatasetDeployment = {
+        Type = "Custom::W2DatasetDeployer"
+        Properties = {
+          ServiceToken       = aws_lambda_function.w2_dataset_deployer[0].arn
+          DatasetVersion     = "1.0"
+          DatasetName        = "Fake-W2-Tax-Forms"
+          DatasetDescription = "Test set with 2,000 synthetic US W-2 tax form images and 45-field structured ground truth for extraction evaluation. Source: HuggingFace singhsays/fake-w2-us-tax-form-dataset (CC0: Public Domain)."
+          # Re-runs the deployer when its code changes, as upstream does.
+          SourceCodeHash = data.archive_file.w2_dataset_deployer[0].output_base64sha256
+        }
+      }
+    }
   })
+
+  tags = var.tags
+
+  depends_on = [
+    aws_lambda_function.w2_dataset_deployer,
+    aws_cloudwatch_log_group.w2_dataset_deployer,
+    aws_s3_bucket.test_sets,
+  ]
 }
 
-resource "aws_iam_role_policy_attachment" "appsync_invoke_test_studio_attachment" {
-  count      = var.enable_test_studio ? 1 : 0
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_test_studio_policy[0].arn
-}
+resource "aws_cloudformation_stack" "fcc_dataset" {
+  count = var.enable_test_studio && var.enable_fcc_dataset ? 1 : 0
+  name  = "${local.api_name}-fcc-dataset"
 
-# =============================================================================
-# AppSync data sources and resolvers for Test Studio
-# =============================================================================
+  template_body = jsonencode({
+    AWSTemplateFormatVersion = "2010-09-09"
+    Description              = "RealKIE-FCC-Verified dataset for Test Studio"
+    Resources = {
+      FccDatasetDeployment = {
+        Type = "Custom::FccDatasetDeployer"
+        Properties = {
+          ServiceToken       = aws_lambda_function.fcc_dataset_deployer[0].arn
+          DatasetVersion     = "1.1"
+          DatasetName        = "RealKIE-FCC-Verified"
+          DatasetDescription = "Test set with single and multi-page invoices sourced from the Federal Communications Commission (FCC) to evaluate extraction performance."
+          SourceCodeHash     = data.archive_file.fcc_dataset_deployer[0].output_base64sha256
+        }
+      }
+    }
+  })
 
-resource "aws_appsync_datasource" "test_runner" {
-  count            = var.enable_test_studio ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "TestRunnerDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.test_runner[0].arn }
-}
+  tags = var.tags
 
-resource "aws_appsync_datasource" "test_results_resolver" {
-  count            = var.enable_test_studio ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "TestResultsResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.test_results_resolver[0].arn }
-}
-
-resource "aws_appsync_datasource" "test_set_resolver" {
-  count            = var.enable_test_studio ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "TestSetResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.test_set_resolver[0].arn }
-}
-
-resource "aws_appsync_datasource" "test_set_zip_extractor" {
-  count            = var.enable_test_studio ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "TestSetZipExtractorDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.test_set_zip_extractor[0].arn }
-}
-
-resource "aws_appsync_datasource" "delete_tests" {
-  count            = var.enable_test_studio ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "DeleteTestsDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.delete_tests[0].arn }
-}
-
-resource "aws_appsync_datasource" "test_set_file_copier" {
-  count            = var.enable_test_studio ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "TestSetFileCopierDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.test_set_file_copier[0].arn }
-}
-
-resource "aws_appsync_resolver" "run_test" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "startTestRun"
-  data_source = aws_appsync_datasource.test_runner[0].name
-}
-
-resource "aws_appsync_resolver" "get_test_run" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getTestRun"
-  data_source = aws_appsync_datasource.test_results_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "get_test_results" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getTestRuns"
-  data_source = aws_appsync_datasource.test_results_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "get_test_run_status" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getTestRunStatus"
-  data_source = aws_appsync_datasource.test_results_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "compare_test_runs" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "compareTestRuns"
-  data_source = aws_appsync_datasource.test_results_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "list_test_sets" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "getTestSets"
-  data_source = aws_appsync_datasource.test_set_resolver[0].name
-}
-
-# Edit test-set metadata (description, classification type). Mirrors upstream
-# v0.5.14 UpdateTestSetResolver (nested/appsync).
-resource "aws_appsync_resolver" "update_test_set" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "updateTestSet"
-  data_source = aws_appsync_datasource.test_set_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "validate_test_file_name" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "validateTestFileName"
-  data_source = aws_appsync_datasource.test_set_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "list_bucket_files" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "listBucketFiles"
-  data_source = aws_appsync_datasource.test_set_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "upload_test_set" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "addTestSetFromUpload"
-  data_source = aws_appsync_datasource.test_set_zip_extractor[0].name
-}
-
-resource "aws_appsync_resolver" "add_test_set" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "addTestSet"
-  data_source = aws_appsync_datasource.test_set_resolver[0].name
-}
-
-resource "aws_appsync_resolver" "delete_tests" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "deleteTests"
-  data_source = aws_appsync_datasource.delete_tests[0].name
-}
-
-resource "aws_appsync_resolver" "delete_test_set" {
-  count       = var.enable_test_studio ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "deleteTestSets"
-  data_source = aws_appsync_datasource.delete_tests[0].name
+  depends_on = [
+    aws_lambda_function.fcc_dataset_deployer,
+    aws_cloudwatch_log_group.fcc_dataset_deployer,
+    aws_s3_bucket.test_sets,
+  ]
 }

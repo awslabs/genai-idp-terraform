@@ -67,6 +67,45 @@ variable "concurrency_table_arn" {
   default     = null
 }
 
+variable "core_table_capacity" {
+  description = <<-EOT
+    Billing mode and provisioned capacity for the core DynamoDB tables this
+    module creates (tracking, configuration, concurrency). Each table's settings
+    are optional and default to on-demand (PAY_PER_REQUEST); read_capacity /
+    write_capacity apply only under PROVISIONED billing (the table modules null
+    them out otherwise). Inert for any table supplied via its *_table_arn input
+    (that table is not created).
+  EOT
+  type = object({
+    tracking = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+    configuration = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+    concurrency = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+  })
+  default = {}
+  validation {
+    condition = alltrue([
+      for mode in [
+        var.core_table_capacity.tracking.billing_mode,
+        var.core_table_capacity.configuration.billing_mode,
+        var.core_table_capacity.concurrency.billing_mode,
+      ] : contains(["PROVISIONED", "PAY_PER_REQUEST"], mode)
+    ])
+    error_message = "billing_mode for each core table must be \"PROVISIONED\" or \"PAY_PER_REQUEST\"."
+  }
+}
+
 variable "idp_common_layer_arn" {
   description = "ARN of the IDP common Lambda layer to use for functions that require idp_common"
   type        = string
@@ -196,4 +235,10 @@ variable "container_runtime" {
     condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
     error_message = "container_runtime must be one of: auto, docker, podman, finch."
   }
+}
+
+variable "vpc_id" {
+  description = "VPC to place the layer-build CodeBuild project in, alongside subnet_ids and security_group_ids. Null builds outside a VPC."
+  type        = string
+  default     = null
 }

@@ -86,6 +86,10 @@ PRICING
   View pricing                    ✅      ✅       ❌        ✅
   Edit pricing                    ✅      ❌       ❌        ❌
 
+MODEL LIMITS
+  View model limits               ✅      ✅       ❌        ✅
+  Edit model limits               ✅      ❌       ❌        ❌
+
 ✅* = Reviewer sees only HITL-pending docs + their own completed reviews (server-side filtered)
 ✅† = Scoped by allowedConfigVersions if set (see Config-Version Scoping below)
 ```
@@ -181,6 +185,7 @@ Every GraphQL **mutation** and many **queries** have `@aws_cognito_user_pools(co
 | `deleteConfigVersion` | Admin |
 | `createUser`, `updateUser`, `deleteUser` | Admin |
 | `updatePricing`, `restoreDefaultPricing` | Admin |
+| `updateModelConfigLimits`, `restoreDefaultModelConfigLimits` | Admin |
 | `deleteDocument`, `updateConfiguration`, `setActiveVersion` | Admin, Author |
 | `uploadDocument`, `reprocessDocument`, `abortWorkflow` | Admin, Author |
 | `startTestRun`, `addTestSet`, `addTestSetFromUpload`, `deleteTests`, `deleteTestSets` | Admin, Author |
@@ -188,10 +193,13 @@ Every GraphQL **mutation** and many **queries** have `@aws_cognito_user_pools(co
 | `copyToBaseline` | Admin, Author |
 | `createFinetuningJob`, `deleteFinetuningJob` | Admin, Author |
 | `processChanges`, `completeSectionReview`, `claimReview`, `releaseReview`, `skipAllSectionsReview` | Admin, Reviewer |
-| `sendAgentChatMessage`, `deleteChatSession`, `updateChatSessionTitle`, `deleteAgentJob` | All authenticated users (see note below) |
+| `sendAgentChatMessage` | Admin, Author, Viewer (Reviewer excluded; also IAM for backend) |
+| `deleteChatSession`, `updateChatSessionTitle`, `deleteAgentJob` | All authenticated users (session-scoped; see note below) |
 | `updateAgentChatMessage` | All authenticated users (also IAM for backend) |
 
-> **AppSync Limitation**: Agent Chat mutations and queries require both `@aws_cognito_user_pools` and `@aws_iam` (for backend Lambda calls and return type resolution). AppSync does not support a `@aws_cognito_user_pools(cognito_groups: [...])` group restriction combined with `@aws_iam` on the same field — it causes "Not Authorized" errors for all users. Therefore, Agent Chat mutations (`sendAgentChatMessage`, `deleteChatSession`, etc.) and queries (`listAvailableAgents`, `listChatSessions`, `getChatMessages`) use unrestricted `@aws_cognito_user_pools @aws_iam` instead. Reviewer exclusion from Agent Chat is enforced via **UI navigation** (Agent Chat page is hidden for Reviewer) and **session scoping** (each user only sees their own sessions).
+> **Agent Chat authorization**: `sendAgentChatMessage` and `listAvailableAgents` restrict Agent Chat to **Admin, Author, Viewer** (Reviewer excluded). The restriction is declared in `schema.graphql` **and** enforced server-side in each resolver via a `_caller_in_groups` check — the single REST route's Cognito authorizer only authenticates, so the group gate lives in the resolver. The IAM backend publish path has no Cognito identity and bypasses the check. The session-scoped operations (`deleteChatSession`, `getChatMessages`, `listChatSessions`, etc.) remain open to any authenticated user, bounded by **session scoping** (each user only sees their own sessions).
+>
+> *(Previously the Reviewer exclusion was UI-only — tracked as accepted-risk gap GAP-03 — because AppSync could not combine a `cognito_groups` restriction with `@aws_iam` on one field. AppSync has since been removed, so the real groups are now enforced.)*
 
 **Key queries and their allowed roles:**
 
@@ -199,8 +207,9 @@ Every GraphQL **mutation** and many **queries** have `@aws_cognito_user_pools(co
 |-------|---------------|
 | `getDocument`, `listDocuments`, `listDocumentsByDateRange`, etc. | All authenticated (server-side filtering in resolvers) |
 | `getFileContents`, `getStepFunctionExecution` | All authenticated |
-| `getConfigVersions`, `getConfigVersion`, `getPricing`, `calculateCapacity` | Admin, Author, Viewer |
-| `listAvailableAgents`, `listChatSessions`, `getChatMessages`, `getAgentChatMessages` | All authenticated (UI-enforced, see AppSync limitation above) |
+| `getConfigVersions`, `getConfigVersion`, `getPricing`, `getModelConfigLimits`, `calculateCapacity` | Admin, Author, Viewer |
+| `listAvailableAgents` | Admin, Author, Viewer (Reviewer excluded; enforced server-side — see Agent Chat note above) |
+| `listChatSessions`, `getChatMessages`, `getAgentChatMessages` | All authenticated (session-scoped) |
 | `submitAgentQuery`, `getAgentJobStatus`, `listAgentJobs` | Admin, Author, Viewer |
 | `listConfigurationLibrary`, `getConfigurationLibraryFile` | Admin, Author, Viewer |
 | `listDiscoveryJobs` | Admin, Author |
@@ -247,8 +256,9 @@ The UI adapts based on the user's role and scope:
 - Action buttons (delete, reprocess, upload, save, import) are hidden for roles that can't perform those actions
 - Version dropdowns are automatically filtered to show only scoped versions
 - The top navigation badge shows the user's role with color coding (blue=Admin, green=Author, grey=Reviewer/Viewer)
-- **Admin-only buttons**: "Save as Version", "Save as Default" in Configuration; Import/Restore/Save in Pricing
+- **Admin-only buttons**: "Save as Version", "Save as Default" in Configuration; Import/Restore/Save in Pricing and Model Limits
 - **Pricing page**: Shows "View Pricing" (read-only) for non-admin; "Pricing Configuration" (editable) for admin
+- **Model Limits page**: Shows "View Model Limits" (read-only) for non-admin; "Model Limits Configuration" (editable) for admin
 
 **This layer is NOT a security boundary** — it's purely for user experience. Security is enforced at Layers 1 & 2.
 

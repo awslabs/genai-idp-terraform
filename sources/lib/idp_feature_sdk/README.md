@@ -27,7 +27,7 @@ the end-to-end authoring walkthrough see the
 - **AWS SAM CLI** (`sam`) on `PATH` — required by `build`, `publish`, and
   `deploy` to package the feature's Lambda functions. Without it those commands
   fail fast with a clear message.
-- **Node.js** (only if the feature's `ui.buildCommand` runs a bundler).
+- **Node.js** (only if the feature's `ui.build` steps run a bundler).
 
 ## Install (editable)
 
@@ -144,6 +144,65 @@ Typical output of `publish`:
 🚀 Launch Stack URL (placeholder MAINSTACKNAME):
 https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate?...
 ```
+
+## Artifacts-bucket security
+
+The artifacts bucket (`idp-accelerator-artifacts-<account>-<region>` when you
+omit `--bucket-basename`) is hardened by `ensure_artifacts_bucket`:
+
+| Control | New bucket | Pre-existing bucket |
+|---|---|---|
+| `EnforceSSLOnly` bucket policy (deny `s3:*` when `aws:SecureTransport` is false) | Applied; failure is fatal | Applied best-effort — a `PutBucketPolicy` denial warns and continues |
+| S3 Block Public Access (all four flags) | Enabled | **Left untouched** |
+| `PackPublicArtifactsRead` public-read on `extensions/*` + `host/*` | Only with `--public` | Only with `--public` |
+
+Two deliberate asymmetries:
+
+- **Block Public Access is never changed on a bucket the CLI didn't create.**
+  Relaxing it could silently revert a manual security remediation, so a
+  pre-existing bucket keeps whatever BPA settings its operator set.
+- **`EnforceSSLOnly` *is* applied to pre-existing buckets**, because it only
+  ever *tightens* access. It's merged additively: your own statements survive,
+  and a stale `EnforceSSLOnly` is replaced rather than duplicated, so
+  re-publishing is idempotent. On a bucket you own but haven't granted us
+  `s3:PutBucketPolicy` on, the publish warns and continues rather than failing
+  — add the statement manually in that case.
+
+ARNs use the region's real partition (`arn:aws-us-gov:` in GovCloud), mirroring
+`arn:${AWS::Partition}:` in the CloudFormation templates.
+
+## Build & package commands in `feature.yaml`
+
+The publisher can (re)build the UI bundle and package agent source before
+uploading. Declare the commands as **structured step lists** — each step is an
+`argv` array executed directly (`shell=False`, so no `&&`, pipes, globs, or
+variable expansion), with an optional `cwd` relative to the project root:
+
+```yaml
+ui:
+  bundlePath: feature-ui/dist/ui-bundle.js
+  build:
+    - cwd: feature-ui
+      argv: ["npm", "ci"]
+    - cwd: feature-ui
+      argv: ["npm", "run", "build"]
+
+agentSource:
+  artifactPath: dist/agent-source.zip
+  package:
+    - argv: ["python3", "scripts/package_agent.py"]
+```
+
+Steps run in order; publishing aborts on the first non-zero exit. Because no
+shell is involved, there is no command-injection surface (Bandit B602) and the
+manifest stays portable across shells/OSes. Anything that genuinely needs shell
+features belongs in a script the step invokes (e.g.
+`argv: ["bash", "scripts/build.sh"]`).
+
+The legacy single-string forms (`ui.buildCommand`, `agentSource.packageCommand`)
+are still accepted for existing manifests but are **deprecated** — they run
+through a shell and emit a runtime deprecation notice. A manifest may declare
+either the structured or the legacy form, not both.
 
 ## Library API
 

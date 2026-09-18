@@ -29,6 +29,13 @@ locals {
   evaluation_enabled             = var.evaluation_baseline_bucket_name != ""
   evaluation_baseline_bucket_arn = local.evaluation_enabled ? "arn:${data.aws_partition.current.partition}:s3:::${var.evaluation_baseline_bucket_name}" : null
 
+  # Summarization enablement is config-authoritative: config value, falling back
+  # to the upstream system default (base-summarization.yaml => true) the seeder
+  # merges in when the config omits the section. A plain try(..., false) would
+  # wrongly disable summarization for the sparse example configs.
+  _default_summarization_enabled = try(yamldecode(file("${path.module}/../../../sources/lib/idp_common_pkg/idp_common/config/system_defaults/base-summarization.yaml")).summarization.enabled, false)
+  is_summarization_enabled       = try(var.config.summarization.enabled, local._default_summarization_enabled)
+
   common_tags = merge(var.tags, {
     Component = "SagemakerUdopProcessor"
   })
@@ -43,10 +50,15 @@ locals {
 module "engine" {
   source = "../unified-processor"
 
+  allowed_bedrock_model_ids = var.allowed_bedrock_model_ids
+
   name = var.name
 
   # Lambda architecture (must match the idp_common layer build architecture).
   lambda_architecture = var.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = var.enable_bda_ocr_backend
 
   classification_backend                = "sagemaker"
   classification_sagemaker_endpoint_arn = var.classification_endpoint_arn
@@ -82,19 +94,24 @@ module "engine" {
   base_layer_arn       = var.base_layer_arn
   evaluation_layer_arn = var.evaluation_layer_arn
 
-  # Model configuration
-  extraction_model_id        = var.extraction_model_id
+  # Model configuration (per-stage models come from the YAML config, not TF)
   classification_max_workers = var.classification_max_workers
   ocr_max_workers            = var.ocr_max_workers
 
   # Evaluation (derived from the baseline bucket name supplied by the root)
   evaluation_enabled             = local.evaluation_enabled
   evaluation_baseline_bucket_arn = local.evaluation_baseline_bucket_arn
-  evaluation_model_id            = var.evaluation_model_id
+  reporting_bucket_name          = var.reporting_bucket_name
+  save_reporting_function_name   = var.save_reporting_function_name
+  save_reporting_function_arn    = var.save_reporting_function_arn
 
-  # Summarization
-  is_summarization_enabled = var.summarization_model_id != null
-  summarization_model_id   = var.summarization_model_id
+  # Rule validation
+  enable_rule_validation = var.enable_rule_validation
+
+  # Summarization enablement is config-authoritative: config value, falling back
+  # to the upstream system default (base-summarization.yaml => true) the seeder
+  # merges in when the config omits the section (see local._default_summarization_enabled).
+  is_summarization_enabled = local.is_summarization_enabled
 
   # Concurrency
   max_processing_concurrency = var.max_processing_concurrency

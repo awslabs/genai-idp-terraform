@@ -2,43 +2,39 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 output "api_id" {
-  description = "The ID of the AppSync GraphQL API"
-  value       = aws_appsync_graphql_api.api.id
+  description = "The ID of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.http_api.id
 }
 
 output "api_name" {
-  description = "The name of the AppSync GraphQL API"
-  value       = aws_appsync_graphql_api.api.name
+  description = "The name of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.http_api.name
 }
 
 output "api_arn" {
-  description = "The ARN of the AppSync GraphQL API"
-  value       = aws_appsync_graphql_api.api.arn
+  description = "The execution ARN of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.http_api.execution_arn
 }
 
-output "graphql_url" {
-  description = "The URL endpoint for the GraphQL API"
-  value       = aws_appsync_graphql_api.api.uris["GRAPHQL"]
+# Base URL of the REST transport (stage 'api'). Mirrors the upstream
+# HttpApiEndpoint output. The web UI points VITE_API_BASE_URL here and POSTs to
+# ${api_base_url}/op/<field>.
+output "api_base_url" {
+  description = "Base URL of the REST API transport (stage 'api')."
+  value       = "https://${aws_api_gateway_rest_api.http_api.id}.execute-api.${data.aws_region.current.region}.${data.aws_partition.current.dns_suffix}/api"
 }
 
-# Fully-qualified AppSync GraphQL hostname (host portion of the GraphQL URL),
-# for Route 53 Private Hosted Zone setup in private-network (cross-VPC / hybrid)
-# topologies. Mirrors upstream v0.5.15 AppSyncEndpointForDNS. See
-# docs/deployment-private-network.md.
-output "appsync_endpoint_for_dns" {
-  description = "Fully-qualified AppSync GraphQL hostname for Route 53 Private Hosted Zone setup in private-network topologies."
-  value       = split("/", aws_appsync_graphql_api.api.uris["GRAPHQL"])[2]
+# IAM role API Gateway assumes to read the web-app bucket when serving the SPA
+# (serve_web_ui = true). The caller grants this principal s3:GetObject in the
+# bucket policy. Null when Web UI hosting on this API is disabled.
+output "web_ui_proxy_role_arn" {
+  description = "ARN of the IAM role API Gateway uses to read the web-app bucket for the Web UI S3 proxy (null unless serve_web_ui is enabled)."
+  value       = local.serve_web_ui ? aws_iam_role.web_ui_proxy[0].arn : null
 }
 
-output "realtime_url" {
-  description = "The URL endpoint for the Realtime API"
-  value       = aws_appsync_graphql_api.api.uris["REALTIME"]
-}
-
-output "api_key" {
-  description = "The API key for the GraphQL API (if API key authentication is enabled)"
-  value       = length(aws_appsync_api_key.api_key) > 0 ? aws_appsync_api_key.api_key[0].key : null
-  sensitive   = true
+output "http_api_dispatcher_function_arn" {
+  description = "ARN of the HTTP API dispatcher Lambda function."
+  value       = aws_lambda_function.http_api_dispatcher.arn
 }
 
 output "lambda_functions" {
@@ -82,6 +78,19 @@ output "lambda_functions" {
 output "edit_sections_enabled" {
   description = "Whether the Edit Sections feature is enabled"
   value       = local.edit_sections_enabled
+}
+
+# Chat token-streaming endpoint (v0.6.4). Null when neither chat sub-feature is
+# enabled. The Function URL is threaded to the web UI as VITE_STREAM_URL; the
+# ARN is consumed at the root to grant the authenticated Cognito role invoke.
+output "chat_stream_function_url" {
+  description = "Function URL of the chat token-streaming processor (RESPONSE_STREAM). Null when chat streaming is disabled."
+  value       = local.chat_stream_enabled ? aws_lambda_function_url.chat_stream[0].function_url : null
+}
+
+output "chat_stream_function_arn" {
+  description = "ARN of the chat token-streaming processor Lambda. Null when chat streaming is disabled."
+  value       = local.chat_stream_enabled ? aws_lambda_function.chat_stream_processor[0].arn : null
 }
 
 output "discovery_bucket_name" {
@@ -131,3 +140,15 @@ output "agent_table_name" {
 # MCP outputs (gateway endpoint, OAuth client, etc.) from
 # `module.mcp_integration` directly; they are no longer surfaced by the API
 # module.
+
+# Test Studio test-set bucket. Surfaced so the root can publish it to the Web UI
+# settings (the UI reads settings.TestSetBucket) and give the bucket CORS.
+output "test_set_bucket_name" {
+  description = "Name of the Test Studio test-set bucket (null when Test Studio is disabled)"
+  value       = var.enable_test_studio ? aws_s3_bucket.test_sets[0].id : null
+}
+
+output "test_set_bucket_arn" {
+  description = "ARN of the Test Studio test-set bucket (null when Test Studio is disabled)"
+  value       = var.enable_test_studio ? aws_s3_bucket.test_sets[0].arn : null
+}

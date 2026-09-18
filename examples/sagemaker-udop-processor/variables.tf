@@ -69,7 +69,6 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-      processor_memory_size    = optional(number, 4096)
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -190,11 +189,7 @@ variable "enable_evaluation" {
   default     = false
 }
 
-variable "evaluation_model_id" {
-  description = "Model ID for evaluation processing"
-  type        = string
-  default     = "anthropic.claude-3-sonnet-20240229-v1:0"
-}
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
 
 # Reporting Configuration
 variable "enable_reporting" {
@@ -269,25 +264,15 @@ variable "encryption_key_arn" {
 }
 
 # Summarization Configuration
-variable "summarization_enabled" {
-  description = "Enable document summarization for SageMaker UDOP processor"
-  type        = bool
-  default     = true
-}
+# Summarization enablement comes from the config YAML (summarization.enabled).
 
-variable "summarization_model_id" {
-  description = "Model ID for document summarization (SageMaker UDOP processor)"
-  type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-}
+# Rule-validation enablement comes from the config YAML (rule_validation.enabled).
+
+
 
 # Extraction model is required by the UDOP Lambda env vars; the slim
 # rvl-cdip config doesn't ship one so we expose it explicitly.
-variable "extraction_model_id" {
-  description = "Model ID for information extraction (SageMaker UDOP processor)"
-  type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-}
+
 
 # Configuration File Path
 variable "config_file_path" {
@@ -385,4 +370,15 @@ variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
   type        = bool
   default     = false
+}
+
+variable "deployer_role_arn" {
+  description = "IAM role ARN granted data access on the OpenSearch Serverless collection. Must be a role ARN, not a session ARN: AOSS matches any session of a role, so a session ARN pins the policy to one operator. Defaults to deriving the role from the caller, which drops any path on the role."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.deployer_role_arn == "" || !can(regex(":assumed-role/", var.deployer_role_arn))
+    error_message = "deployer_role_arn must be an IAM role ARN (arn:<partition>:iam::<account>:role/<name>), not an STS assumed-role session ARN."
+  }
 }

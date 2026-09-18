@@ -42,14 +42,13 @@ locals {
           var.tracking_table_arn != null ? "${var.tracking_table_arn}/index/*" : null,
         ])
       },
-      {
-        Sid    = "AppSyncPublish"
-        Effect = "Allow"
-        Action = ["appsync:GraphQL"]
-        # Scoped to Mutation fields — the processor only publishes streaming
-        # updates via `sendChatDocumentMessage`.
-        Resource = "${var.appsync_graphql_api_arn}/types/Mutation/*"
-      },
+      # The former "AppSyncPublish" statement (appsync:GraphQL on
+      # "${var.appsync_graphql_api_arn}/types/Mutation/*") is removed: IDP v0.6.4
+      # deleted AppSync, so there is no GraphQL endpoint to publish streaming
+      # updates to. The processor now writes chat state to DynamoDB and tokens
+      # stream over the chat-stream Lambda Function URL, neither of which needs
+      # this grant. Keeping it would have granted appsync:GraphQL against an API
+      # Gateway ARN, which cannot match anything.
       {
         Sid    = "BedrockInvoke"
         Effect = "Allow"
@@ -58,11 +57,7 @@ locals {
           "bedrock:InvokeModelWithResponseStream",
           "bedrock:GetInferenceProfile",
         ]
-        Resource = [
-          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
-        ]
+        Resource = local.bedrock_invoke_resources
       },
       {
         Sid = "BedrockMantle"
@@ -113,7 +108,7 @@ locals {
         Sid      = "Guardrail"
         Effect   = "Allow"
         Action   = "bedrock:ApplyGuardrail"
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
       }
     ] : [],
   )

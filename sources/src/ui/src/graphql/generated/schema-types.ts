@@ -126,6 +126,7 @@ export type CatalogFeature = {
   latestVersion: Scalars['String']['output'];
   marketplaceListingUrl?: Maybe<Scalars['String']['output']>;
   productCode?: Maybe<Scalars['String']['output']>;
+  showInNav?: Maybe<Scalars['Boolean']['output']>;
   source?: Maybe<Scalars['String']['output']>;
 };
 
@@ -174,6 +175,15 @@ export type ConfidenceThresholdAlertInput = {
   attributeName?: InputMaybe<Scalars['String']['input']>;
   confidence?: InputMaybe<Scalars['Float']['input']>;
   confidenceThreshold?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type ConfigBootstrapJob = {
+  configVersion?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  jobId: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  statusMessage?: Maybe<Scalars['String']['output']>;
+  testSetId?: Maybe<Scalars['String']['output']>;
 };
 
 export type ConfigSetting = {
@@ -346,6 +356,7 @@ export type Document = DynamoDbBase & {
   PK: Scalars['ID']['output'];
   PageCount?: Maybe<Scalars['Int']['output']>;
   Pages?: Maybe<Array<Maybe<Page>>>;
+  ProcessingIssueCount?: Maybe<Scalars['Int']['output']>;
   QueuedTime?: Maybe<Scalars['AWSDateTime']['output']>;
   RuleValidationResult?: Maybe<Scalars['AWSJSON']['output']>;
   RuleValidationResultUri?: Maybe<Scalars['String']['output']>;
@@ -353,6 +364,7 @@ export type Document = DynamoDbBase & {
   Sections?: Maybe<Array<Maybe<Section>>>;
   SummaryReportUri?: Maybe<Scalars['String']['output']>;
   TraceId?: Maybe<Scalars['String']['output']>;
+  VersionCount?: Maybe<Scalars['Int']['output']>;
   WorkflowExecutionArn?: Maybe<Scalars['String']['output']>;
   WorkflowStartTime?: Maybe<Scalars['AWSDateTime']['output']>;
   WorkflowStatus?: Maybe<Scalars['String']['output']>;
@@ -381,12 +393,38 @@ export type DocumentListItem = DynamoDbBase & {
   InitialEventTime?: Maybe<Scalars['AWSDateTime']['output']>;
   ObjectKey?: Maybe<Scalars['ID']['output']>;
   PK: Scalars['ID']['output'];
+  ProcessingIssueCount?: Maybe<Scalars['Int']['output']>;
   SK: Scalars['ID']['output'];
 };
 
 export type DocumentPage = {
   Documents?: Maybe<Array<Maybe<Document>>>;
   nextToken?: Maybe<Scalars['String']['output']>;
+};
+
+export type DocumentVersion = {
+  CompletionTime?: Maybe<Scalars['AWSDateTime']['output']>;
+  ConfigVersion?: Maybe<Scalars['String']['output']>;
+  EvaluationReportUri?: Maybe<Scalars['String']['output']>;
+  FileCount?: Maybe<Scalars['Int']['output']>;
+  Files?: Maybe<Array<Maybe<DocumentVersionFile>>>;
+  ManifestUri?: Maybe<Scalars['String']['output']>;
+  Metering?: Maybe<Scalars['AWSJSON']['output']>;
+  ObjectKey?: Maybe<Scalars['ID']['output']>;
+  PageCount?: Maybe<Scalars['Int']['output']>;
+  Pages?: Maybe<Array<Maybe<Page>>>;
+  QueuedTime?: Maybe<Scalars['AWSDateTime']['output']>;
+  RunId: Scalars['String']['output'];
+  Sections?: Maybe<Array<Maybe<Section>>>;
+  SummaryReportUri?: Maybe<Scalars['String']['output']>;
+  WorkflowExecutionArn?: Maybe<Scalars['String']['output']>;
+  WorkflowStartTime?: Maybe<Scalars['AWSDateTime']['output']>;
+};
+
+export type DocumentVersionFile = {
+  Key?: Maybe<Scalars['String']['output']>;
+  Size?: Maybe<Scalars['Float']['output']>;
+  VersionId?: Maybe<Scalars['String']['output']>;
 };
 
 export type DynamoDbBase = {
@@ -439,6 +477,12 @@ export type FileContentsResponse = {
   content: Scalars['String']['output'];
   contentType: Scalars['String']['output'];
   isBinary?: Maybe<Scalars['Boolean']['output']>;
+  size: Scalars['Int']['output'];
+};
+
+export type FilePresignedUrlResponse = {
+  contentType: Scalars['String']['output'];
+  presignedUrl: Scalars['String']['output'];
   size: Scalars['Int']['output'];
 };
 
@@ -509,6 +553,7 @@ export type InstalledFeature = {
   displayName: Scalars['String']['output'];
   featureApiEndpoint?: Maybe<Scalars['String']['output']>;
   featureId: Scalars['String']['output'];
+  generationQueueArn?: Maybe<Scalars['String']['output']>;
   iconUrl?: Maybe<Scalars['String']['output']>;
   installedAt: Scalars['AWSDateTime']['output'];
   installedBy?: Maybe<Scalars['String']['output']>;
@@ -553,6 +598,13 @@ export type LatestPublishedVersion = {
 
 export type MessageContent = {
   text?: Maybe<Scalars['String']['output']>;
+};
+
+export type ModelConfigLimitsResponse = {
+  defaultModelConfigLimits?: Maybe<Scalars['AWSJSON']['output']>;
+  error?: Maybe<ConfigurationError>;
+  modelConfigLimits?: Maybe<Scalars['AWSJSON']['output']>;
+  success: Scalars['Boolean']['output'];
 };
 
 export type ModifiedPageInput = {
@@ -614,6 +666,7 @@ export type Mutation = {
   deleteConfigVersion?: Maybe<UpdateConfigurationResponse>;
   deleteDiscoveryJob: Scalars['Boolean']['output'];
   deleteDocument: Scalars['Boolean']['output'];
+  deleteDocumentVersion: Scalars['Boolean']['output'];
   deleteFinetuningJob?: Maybe<Scalars['Boolean']['output']>;
   deleteTestSets: Scalars['Boolean']['output'];
   deleteTests: Scalars['Boolean']['output'];
@@ -644,6 +697,7 @@ export type Mutation = {
    */
   removeFeatureConfigPreset: Scalars['Boolean']['output'];
   reprocessDocument: Scalars['Boolean']['output'];
+  restoreDefaultModelConfigLimits?: Maybe<UpdateModelConfigLimitsResponse>;
   restoreDefaultPricing?: Maybe<UpdatePricingResponse>;
   resumeCircuitBreaker?: Maybe<CircuitBreakerStatus>;
   sendAgentChatMessage?: Maybe<AgentChatMessage>;
@@ -683,18 +737,21 @@ export type Mutation = {
   updateAgentChatMessage?: Maybe<AgentChatMessage>;
   updateAgentJobStatus?: Maybe<Scalars['Boolean']['output']>;
   updateChatSessionTitle?: Maybe<ChatSession>;
+  updateConfigBootstrapJobStatus?: Maybe<ConfigBootstrapJob>;
   updateConfiguration?: Maybe<UpdateConfigurationResponse>;
   updateDiscoveryJobStatus?: Maybe<DiscoveryJob>;
   updateDocument?: Maybe<Document>;
   updateDocumentSection?: Maybe<Document>;
   updateDocumentStatus?: Maybe<Document>;
   updateFinetuningJobStatus?: Maybe<FinetuningJob>;
+  updateModelConfigLimits?: Maybe<UpdateModelConfigLimitsResponse>;
   updatePricing?: Maybe<UpdatePricingResponse>;
   updateTestSet?: Maybe<TestSet>;
   updateUser?: Maybe<User>;
   uploadDiscoveryDocument: DisPresignedUrlResponse;
   uploadDocument: PresignedUrlResponse;
   uploadMultiDocDiscoveryZip?: Maybe<TestSetUploadResponse>;
+  uploadSampleDocument: SampleDocumentUploadResponse;
 };
 
 
@@ -809,6 +866,12 @@ export type MutationDeleteDocumentArgs = {
 };
 
 
+export type MutationDeleteDocumentVersionArgs = {
+  objectKey: Scalars['ID']['input'];
+  runId: Scalars['String']['input'];
+};
+
+
 export type MutationDeleteFinetuningJobArgs = {
   jobId: Scalars['ID']['input'];
 };
@@ -919,6 +982,7 @@ export type MutationStartMultiDocDiscoveryArgs = {
   configVersion: Scalars['String']['input'];
   s3Bucket?: InputMaybe<Scalars['String']['input']>;
   s3Prefix?: InputMaybe<Scalars['String']['input']>;
+  saveMode?: InputMaybe<Scalars['String']['input']>;
   zipFileName?: InputMaybe<Scalars['String']['input']>;
   zipFileSize?: InputMaybe<Scalars['Int']['input']>;
 };
@@ -980,6 +1044,16 @@ export type MutationUpdateChatSessionTitleArgs = {
 };
 
 
+export type MutationUpdateConfigBootstrapJobStatusArgs = {
+  configVersion?: InputMaybe<Scalars['String']['input']>;
+  errorMessage?: InputMaybe<Scalars['String']['input']>;
+  jobId: Scalars['ID']['input'];
+  status: Scalars['String']['input'];
+  statusMessage?: InputMaybe<Scalars['String']['input']>;
+  testSetId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type MutationUpdateConfigurationArgs = {
   customConfig: Scalars['AWSJSON']['input'];
   description?: InputMaybe<Scalars['String']['input']>;
@@ -1024,6 +1098,11 @@ export type MutationUpdateFinetuningJobStatusArgs = {
 };
 
 
+export type MutationUpdateModelConfigLimitsArgs = {
+  modelConfigLimits: Scalars['AWSJSON']['input'];
+};
+
+
 export type MutationUpdatePricingArgs = {
   pricingConfig: Scalars['AWSJSON']['input'];
 };
@@ -1049,6 +1128,7 @@ export type MutationUploadDiscoveryDocumentArgs = {
   pageLabels?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
   pageRanges?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
   prefix?: InputMaybe<Scalars['String']['input']>;
+  saveMode?: InputMaybe<Scalars['String']['input']>;
   skipJobCreation?: InputMaybe<Scalars['Boolean']['input']>;
   version?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1067,6 +1147,13 @@ export type MutationUploadMultiDocDiscoveryZipArgs = {
   configVersion: Scalars['String']['input'];
   fileName: Scalars['String']['input'];
   fileSize: Scalars['Int']['input'];
+};
+
+
+export type MutationUploadSampleDocumentArgs = {
+  prefix?: InputMaybe<Scalars['String']['input']>;
+  sampleId: Scalars['String']['input'];
+  version?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type Page = {
@@ -1124,6 +1211,14 @@ export type ProcessChangesResponse = {
   success: Scalars['Boolean']['output'];
 };
 
+export type ProcessingIssue = {
+  code?: Maybe<Scalars['String']['output']>;
+  message?: Maybe<Scalars['String']['output']>;
+  rootCause?: Maybe<Scalars['String']['output']>;
+  severity?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+};
+
 export type Query = {
   calculateCapacity?: Maybe<CapacityResult>;
   /**
@@ -1131,6 +1226,7 @@ export type Query = {
    * Returns null when EnableFeaturePlatform=false (no resolver attached).
    */
   checkFeatureEntitlement?: Maybe<FeatureEntitlement>;
+  compareDocumentVersions?: Maybe<Scalars['AWSJSON']['output']>;
   compareTestRuns?: Maybe<TestRunComparison>;
   getAgentChatMessages?: Maybe<Array<Maybe<AgentChatMessage>>>;
   getAgentJobStatus?: Maybe<AgentJob>;
@@ -1141,20 +1237,25 @@ export type Query = {
   getConfigurationLibraryFile?: Maybe<ConfigurationLibraryFileResponse>;
   getDocument?: Maybe<Document>;
   getDocumentCount?: Maybe<DocumentCount>;
+  getDocumentVersion?: Maybe<DocumentVersion>;
   /**
    * Admin-only: get a CloudFormation Console quick-create URL for installing or updating a feature.
    * Returns null when EnableFeaturePlatform=false (no resolver attached).
    */
   getFeatureLaunchUrl?: Maybe<FeatureLaunchUrl>;
   getFileContents?: Maybe<FileContentsResponse>;
+  getFilePresignedUrl?: Maybe<FilePresignedUrlResponse>;
   getFinetuningJob?: Maybe<FinetuningJob>;
   getLatestPublishedVersion?: Maybe<LatestPublishedVersion>;
+  getModelConfigLimits?: Maybe<ModelConfigLimitsResponse>;
   getMyProfile?: Maybe<User>;
   getPricing?: Maybe<PricingResponse>;
+  getSampleDocumentUrl?: Maybe<SampleDocumentUrl>;
   getStepFunctionExecution?: Maybe<StepFunctionExecutionResponse>;
   getTestRun?: Maybe<TestRun>;
   getTestRunStatus?: Maybe<TestRunStatus>;
   getTestRuns?: Maybe<Array<Maybe<TestRun>>>;
+  getTestSetDocuments?: Maybe<TestSetDocumentsPage>;
   getTestSets?: Maybe<Array<Maybe<TestSet>>>;
   listAgentJobs?: Maybe<AgentJobConnection>;
   listAvailableAgents?: Maybe<Array<Maybe<Agent>>>;
@@ -1170,6 +1271,7 @@ export type Query = {
   listChatSessions?: Maybe<ChatSessionConnection>;
   listConfigurationLibrary?: Maybe<ConfigurationLibraryResponse>;
   listDiscoveryJobs?: Maybe<DiscoveryJobList>;
+  listDocumentVersions?: Maybe<Array<Maybe<DocumentVersion>>>;
   listDocuments?: Maybe<DocumentPage>;
   listDocumentsByDateRange?: Maybe<DocumentPage>;
   listDocumentsDateHour?: Maybe<DocumentList>;
@@ -1178,8 +1280,11 @@ export type Query = {
   /**
    * List all features currently installed in this IDP stack.
    * Returns null when EnableFeaturePlatform=false (no resolver attached).
+   * Also @aws_iam so backend Lambdas (e.g. the Quick Start agent) can discover
+   * installed extensions via SigV4 — the InstalledFeature type is already @aws_iam.
    */
   listInstalledFeatures?: Maybe<Array<InstalledFeature>>;
+  listSampleDocuments?: Maybe<SampleDocumentListResponse>;
   listUsers?: Maybe<UserList>;
   queryKnowledgeBase?: Maybe<Scalars['String']['output']>;
   submitAgentQuery?: Maybe<AgentJob>;
@@ -1195,6 +1300,13 @@ export type QueryCalculateCapacityArgs = {
 
 export type QueryCheckFeatureEntitlementArgs = {
   featureId: Scalars['String']['input'];
+};
+
+
+export type QueryCompareDocumentVersionsArgs = {
+  objectKey: Scalars['ID']['input'];
+  runIdA: Scalars['String']['input'];
+  runIdB: Scalars['String']['input'];
 };
 
 
@@ -1241,6 +1353,12 @@ export type QueryGetDocumentCountArgs = {
 };
 
 
+export type QueryGetDocumentVersionArgs = {
+  objectKey: Scalars['ID']['input'];
+  runId: Scalars['String']['input'];
+};
+
+
 export type QueryGetFeatureLaunchUrlArgs = {
   featureId: Scalars['String']['input'];
   version?: InputMaybe<Scalars['String']['input']>;
@@ -1249,11 +1367,23 @@ export type QueryGetFeatureLaunchUrlArgs = {
 
 export type QueryGetFileContentsArgs = {
   s3Uri: Scalars['String']['input'];
+  versionId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryGetFilePresignedUrlArgs = {
+  s3Uri: Scalars['String']['input'];
+  versionId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
 export type QueryGetFinetuningJobArgs = {
   jobId: Scalars['ID']['input'];
+};
+
+
+export type QueryGetSampleDocumentUrlArgs = {
+  s3Key: Scalars['String']['input'];
 };
 
 
@@ -1279,6 +1409,14 @@ export type QueryGetTestRunsArgs = {
 };
 
 
+export type QueryGetTestSetDocumentsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  nextToken?: InputMaybe<Scalars['String']['input']>;
+  objectKey?: InputMaybe<Scalars['String']['input']>;
+  testSetId: Scalars['String']['input'];
+};
+
+
 export type QueryListAgentJobsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   nextToken?: InputMaybe<Scalars['String']['input']>;
@@ -1295,11 +1433,17 @@ export type QueryListBucketFilesArgs = {
 export type QueryListChatSessionsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   nextToken?: InputMaybe<Scalars['String']['input']>;
+  surface?: InputMaybe<Scalars['String']['input']>;
 };
 
 
 export type QueryListConfigurationLibraryArgs = {
   pattern: Scalars['String']['input'];
+};
+
+
+export type QueryListDocumentVersionsArgs = {
+  objectKey: Scalars['ID']['input'];
 };
 
 
@@ -1385,6 +1529,7 @@ export type RegisterFeatureInput = {
   displayName: Scalars['String']['input'];
   featureApiEndpoint?: InputMaybe<Scalars['String']['input']>;
   featureId: Scalars['String']['input'];
+  generationQueueArn?: InputMaybe<Scalars['String']['input']>;
   iconUrl?: InputMaybe<Scalars['String']['input']>;
   installedBy?: InputMaybe<Scalars['String']['input']>;
   installedVersion: Scalars['String']['input'];
@@ -1396,6 +1541,33 @@ export type RegisterFeatureInput = {
   uiBundlePath: Scalars['String']['input'];
 };
 
+export type SampleDocument = {
+  configId?: Maybe<Scalars['String']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  fileCount?: Maybe<Scalars['Int']['output']>;
+  id: Scalars['String']['output'];
+  kind: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  s3Key: Scalars['String']['output'];
+};
+
+export type SampleDocumentListResponse = {
+  error?: Maybe<Scalars['String']['output']>;
+  samples?: Maybe<Array<Maybe<SampleDocument>>>;
+  success: Scalars['Boolean']['output'];
+};
+
+export type SampleDocumentUploadResponse = {
+  error?: Maybe<Scalars['String']['output']>;
+  objectKeys?: Maybe<Array<Maybe<Scalars['String']['output']>>>;
+  success: Scalars['Boolean']['output'];
+};
+
+export type SampleDocumentUrl = {
+  s3Key: Scalars['String']['output'];
+  url: Scalars['String']['output'];
+};
+
 export type Section = {
   Class?: Maybe<Scalars['String']['output']>;
   ConfidenceThresholdAlerts?: Maybe<Array<Maybe<ConfidenceThresholdAlert>>>;
@@ -1404,6 +1576,7 @@ export type Section = {
   Id?: Maybe<Scalars['String']['output']>;
   OutputJSONUri?: Maybe<Scalars['String']['output']>;
   PageIds?: Maybe<Array<Maybe<Scalars['Int']['output']>>>;
+  ProcessingIssues?: Maybe<Array<Maybe<ProcessingIssue>>>;
 };
 
 export type SectionInput = {
@@ -1445,6 +1618,7 @@ export type Subscription = {
   onAgentJobComplete?: Maybe<Scalars['Boolean']['output']>;
   onChatDocumentMessageUpdate?: Maybe<ChatDocumentMessage>;
   onCircuitBreakerStatusChange?: Maybe<CircuitBreakerStatus>;
+  onConfigBootstrapJobStatusChange?: Maybe<ConfigBootstrapJob>;
   onCreateDocument?: Maybe<CreateDocumentOutput>;
   onDiscoveryJobStatusChange?: Maybe<DiscoveryJob>;
   onUpdateDocument?: Maybe<Document>;
@@ -1463,6 +1637,11 @@ export type SubscriptionOnAgentJobCompleteArgs = {
 
 export type SubscriptionOnChatDocumentMessageUpdateArgs = {
   sessionId: Scalars['String']['input'];
+};
+
+
+export type SubscriptionOnConfigBootstrapJobStatusChangeArgs = {
+  jobId: Scalars['ID']['input'];
 };
 
 
@@ -1495,6 +1674,7 @@ export type TestRun = {
   failedFiles?: Maybe<Scalars['Int']['output']>;
   fieldMetrics?: Maybe<Scalars['AWSJSON']['output']>;
   filesCount: Scalars['Int']['output'];
+  gradedPacketMetrics?: Maybe<Scalars['AWSJSON']['output']>;
   overallAccuracy?: Maybe<Scalars['Float']['output']>;
   splitClassificationMetrics?: Maybe<Scalars['AWSJSON']['output']>;
   status: Scalars['String']['output'];
@@ -1528,6 +1708,7 @@ export type TestRunStatus = {
 };
 
 export type TestSet = {
+  configVersion?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   description?: Maybe<Scalars['String']['output']>;
   documentClassType?: Maybe<DocumentClassType>;
@@ -1538,6 +1719,24 @@ export type TestSet = {
   lastAddResult?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   status?: Maybe<Scalars['String']['output']>;
+};
+
+export type TestSetDocument = {
+  inputKey: Scalars['String']['output'];
+  lastModified?: Maybe<Scalars['AWSDateTime']['output']>;
+  objectKey: Scalars['String']['output'];
+  sections: Array<TestSetDocumentSection>;
+  size?: Maybe<Scalars['Int']['output']>;
+};
+
+export type TestSetDocumentSection = {
+  baselineKey: Scalars['String']['output'];
+  sectionId: Scalars['String']['output'];
+};
+
+export type TestSetDocumentsPage = {
+  documents: Array<TestSetDocument>;
+  nextToken?: Maybe<Scalars['String']['output']>;
 };
 
 export type TestSetDocumentsUploadInput = {
@@ -1642,6 +1841,12 @@ export type UpdateDocumentStatusInput = {
   ObjectStatus: Scalars['String']['input'];
   WorkflowExecutionArn?: InputMaybe<Scalars['String']['input']>;
   WorkflowStatus?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateModelConfigLimitsResponse = {
+  error?: Maybe<ConfigurationError>;
+  message?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
 };
 
 export type UpdatePricingResponse = {

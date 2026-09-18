@@ -14,13 +14,18 @@ output "state_machine_name" {
 # Routing topology exposed so terraform test can assert routing at plan time (the
 # full definition string is unknown at plan because it interpolates computed ARNs).
 output "state_machine_start_at" {
-  description = "The StartAt state of the document-processing state machine. Always 'RouteByProcessingMode'; documents route at runtime by their config version's use_bda flag."
-  value       = "RouteByProcessingMode"
+  description = "The StartAt state of the document-processing state machine. Always 'PreprocessingHook' (IDP v0.6): the preprocessing extension point runs before the BDA/pipeline routing decision, so it fires in both modes. Documents then route at runtime by their config version's use_bda flag."
+  value       = "PreprocessingHook"
 }
 
 output "state_machine_state_names" {
   description = "The set of state names in the document-processing state machine definition (both BDA-branch and pipeline-branch states)."
   value       = keys(local.sfn_states)
+}
+
+output "state_machine_transition_targets" {
+  description = "Every state name referenced as a transition target by a top-level state (Next / Choices[*].Next / Catch[*].Next / Default). Exposed for graph-closure assertions in terraform test."
+  value       = local.sfn_transition_targets
 }
 
 output "max_processing_concurrency" {
@@ -34,23 +39,23 @@ output "configuration" {
 }
 
 output "classification_model" {
-  description = "The classification model being used (from variable override or config.yaml)"
-  value       = local.config_with_overrides.classification.model
+  description = "The classification model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id). This is the model the Bedrock IAM grant is scoped to."
+  value       = local.bedrock_step_model_ids.classification
 }
 
 output "extraction_model" {
-  description = "The extraction model being used (from variable override or config.yaml)"
-  value       = local.config_with_overrides.extraction.model
+  description = "The extraction model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id). This is the model the Bedrock IAM grant is scoped to."
+  value       = local.bedrock_step_model_ids.extraction
 }
 
 output "summarization_model" {
-  description = "The summarization model being used (from variable override or config.yaml)"
-  value       = var.is_summarization_enabled ? local.config_with_overrides.summarization.model : null
+  description = "The summarization model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id), or null when summarization is off."
+  value       = var.is_summarization_enabled ? local.bedrock_step_model_ids.summarization : null
 }
 
 output "evaluation_model" {
-  description = "The evaluation model being used (from variable override or config.yaml)"
-  value       = var.evaluation_enabled ? local.config_with_overrides.evaluation.llm_method.model : null
+  description = "The evaluation model the runtime will invoke (resolved: per-step variable > config YAML > system default > model_id), or null when evaluation is off."
+  value       = var.evaluation_enabled ? local.bedrock_step_model_ids.evaluation : null
 }
 
 output "schema_definition" {
@@ -80,6 +85,20 @@ output "lambda_functions" {
     summarization = var.is_summarization_enabled ? {
       name = aws_lambda_function.summarization[0].function_name
       arn  = aws_lambda_function.summarization[0].arn
+    } : null
+    # Rule-validation functions, deployed and wired into the workflow only when
+    # var.enable_rule_validation is set (null otherwise).
+    rule_validation = var.enable_rule_validation ? {
+      name = aws_lambda_function.rule_validation_function[0].function_name
+      arn  = aws_lambda_function.rule_validation_function[0].arn
+    } : null
+    rule_validation_orchestration = var.enable_rule_validation ? {
+      name = aws_lambda_function.rule_validation_orchestration_function[0].function_name
+      arn  = aws_lambda_function.rule_validation_orchestration_function[0].arn
+    } : null
+    rule_validation_policy_classification = var.enable_rule_validation ? {
+      name = aws_lambda_function.rule_validation_policy_classification_function[0].function_name
+      arn  = aws_lambda_function.rule_validation_policy_classification_function[0].arn
     } : null
     # BDA branch functions, always deployed (count = 1).
     bda_invoke = {
@@ -122,18 +141,17 @@ output "model_permission_debug" {
   value = {
     partition  = data.aws_partition.current.partition
     account_id = data.aws_caller_identity.current.account_id
+    wildcard   = local.bedrock_wildcard_access
     models = {
-      for model_name, model_config in local.bedrock_model_permissions : model_name => model_config != null ? {
-        type          = model_config.is_cross_region ? "cross_region_inference_profile" : "foundation_model"
-        is_arn        = model_config.is_arn
-        base_model_id = model_config.base_model_id
+      for step, perms in local.bedrock_model_permissions : step => perms != null ? {
+        model_ids = local.bedrock_step_model_id_sets[step]
         foundation_permissions = {
-          actions   = model_config.foundation_statement.actions
-          resources = model_config.foundation_statement.resources
+          actions   = perms.foundation_statement.actions
+          resources = perms.foundation_statement.resources
         }
-        inference_profile_permissions = model_config.inference_profile_statement != null ? {
-          actions   = model_config.inference_profile_statement.actions
-          resources = model_config.inference_profile_statement.resources
+        inference_profile_permissions = perms.inference_profile_statement != null ? {
+          actions   = perms.inference_profile_statement.actions
+          resources = perms.inference_profile_statement.resources
         } : null
       } : null
     }

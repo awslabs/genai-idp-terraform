@@ -27,6 +27,17 @@ check "web_ui_requires_api" {
   }
 }
 
+# Validation: APIGateway Web UI hosting requires the API. In this mode the SPA is
+# served BY the REST API (S3-proxy GET routes on the same stage as /op), so
+# without the API there is nothing to serve the bucket from.
+#tfsec:ignore:*
+check "web_ui_apigateway_hosting_requires_api" {
+  assert {
+    condition     = !(var.web_ui.enabled && var.web_ui.hosting == "APIGateway") || local.api_enabled
+    error_message = "web_ui.hosting = \"APIGateway\" requires api.enabled = true: the SPA is served as an S3 proxy on the REST API stage, so the API must exist. Use \"CloudFront\" hosting or enable the API."
+  }
+}
+
 # Validation: Agent Analytics requires Reporting (it needs reporting.bucket_arn
 # and reporting.database_name; otherwise the API config is silently downgraded).
 # See https://github.com/awslabs/genai-idp-terraform/issues/84
@@ -38,18 +49,33 @@ check "agent_analytics_requires_reporting" {
   }
 }
 
-# Validation: exactly one processor façade must be configured.
+# Validation: Chat-with-Document is only reachable through the API. It
+# contributes `sendChatDocumentMessage` to the dispatcher's field-function map,
+# so with the API off its Lambdas and tables are built but nothing can route to
+# them.
 #tfsec:ignore:*
-check "exactly_one_processor" {
+check "chat_with_document_requires_api" {
   assert {
-    condition = length(compact([
-      var.bda_processor != null ? "bda" : "",
-      var.bedrock_llm_processor != null ? "bedrock_llm" : "",
-      var.sagemaker_udop_processor != null ? "sagemaker_udop" : "",
-    ])) == 1
-    error_message = "Exactly one of var.bda_processor, var.bedrock_llm_processor, or var.sagemaker_udop_processor must be set. Set one processor façade."
+    condition     = !local.feature_enable.chat_with_document || local.api_enabled
+    error_message = "When Chat-with-Document is enabled (api.chat_with_document.enabled or the deprecated chat_with_document.enabled), the API must also be enabled (api.enabled / enable_api). Its sendChatDocumentMessage field is served by the API dispatcher, so with the API off the feature is unreachable."
   }
 }
+
+# Deprecation notice: `api.visibility` was renamed to
+# `api.api_gateway_visibility` in v0.6.4, when upstream replaced AppSync with
+# the API Gateway REST transport (AppSyncVisibility -> ApiGatewayVisibility).
+# The old spelling still works and takes precedence, so this is a non-blocking
+# check (it warns on plan/apply without failing).
+#tfsec:ignore:*
+check "api_visibility_deprecated" {
+  assert {
+    condition     = var.api.visibility == null
+    error_message = "DEPRECATED: api.visibility is renamed to api.api_gateway_visibility (upstream v0.6.4 renamed AppSyncVisibility to ApiGatewayVisibility when AppSync was replaced by the API Gateway REST transport). Your value is still being honored. Migrate by moving it to api.api_gateway_visibility; see docs/migration-v0.5.16-to-v0.6.4.md."
+  }
+}
+
+# Processor selection and per-type required fields are enforced by validation on
+# var.processor.
 
 # Validation: enable_encryption requires a KMS key (some module IAM policies
 # otherwise fall back to a KMS wildcard), so fail fast when the key is null.
@@ -58,6 +84,18 @@ check "enable_encryption_requires_key" {
   assert {
     condition     = !var.enable_encryption || var.encryption_key_arn != null
     error_message = "When enable_encryption is true, encryption_key_arn must be set to a non-null KMS key ARN."
+  }
+}
+
+# Advisory: the configuration enables evaluation but no baseline bucket ARN was
+# supplied, so evaluation will NOT run (local.evaluation_enabled AND-gates on the
+# bucket). This is a soft check (warning, not error) because "evaluation enabled
+# in config, no baseline wired" is a valid state the runtime tolerates — it just
+# means no scoring happens. Supply var.evaluation.baseline_bucket_arn to activate.
+check "evaluation_enabled_without_baseline_bucket" {
+  assert {
+    condition     = !local._config_evaluation_enabled || var.evaluation.baseline_bucket_arn != null
+    error_message = "The configuration enables evaluation (config.evaluation.enabled = true) but var.evaluation.baseline_bucket_arn is not set, so evaluation will not run. Supply the baseline S3 bucket ARN to activate evaluation, or disable it in the config."
   }
 }
 
@@ -70,37 +108,15 @@ check "web_ui_logging_bucket" {
   }
 }
 
-# Validation: ALB hosting mode requires VPC, subnets, and an ACM certificate.
-#tfsec:ignore:*
-check "web_ui_alb_inputs" {
-  assert {
-    condition = !(var.web_ui.enabled && var.web_ui.hosting == "ALB") || (
-      var.web_ui.alb.vpc_id != null &&
-      length(var.web_ui.alb.subnet_ids) >= 2 &&
-      var.web_ui.alb.certificate_arn != null
-    )
-    error_message = "When web_ui.hosting is \"ALB\", web_ui.alb.vpc_id, at least two web_ui.alb.subnet_ids, and web_ui.alb.certificate_arn are required."
-  }
-}
-
 # Validation: presigned-URL-via-VPCE requires a supplied endpoint DNS name.
-# The ALB-created VPCE DNS cannot be auto-wired here without a dependency cycle,
-# so the DNS name (web-ui-alb output s3_vpc_endpoint_dns_name) must be supplied
-# via web_ui.s3_vpc_endpoint_dns_name_override. Mirrors upstream override rule.
+# The S3 interface endpoint is owned outside this module (the deployment's own
+# VPC wiring), so its DNS name must be supplied via
+# web_ui.s3_vpc_endpoint_dns_name_override. Mirrors upstream override rule.
 #tfsec:ignore:*
 check "web_ui_presign_vpce_dns" {
   assert {
     condition     = !var.web_ui.s3_presigned_url_via_vpc_endpoint || var.web_ui.s3_vpc_endpoint_dns_name_override != null
-    error_message = "web_ui.s3_vpc_endpoint_dns_name_override is required when web_ui.s3_presigned_url_via_vpc_endpoint is true (set it to the web_ui_alb output s3_vpc_endpoint_dns_name)."
-  }
-}
-
-# Validation: SageMaker UDOP processor endpoint ARN requirement
-#tfsec:ignore:*
-check "sagemaker_processor_endpoint_arn" {
-  assert {
-    condition     = var.sagemaker_udop_processor != null ? var.sagemaker_udop_processor.classification_endpoint_arn != null : true
-    error_message = "classification_endpoint_arn is required in sagemaker_udop_processor configuration."
+    error_message = "web_ui.s3_vpc_endpoint_dns_name_override is required when web_ui.s3_presigned_url_via_vpc_endpoint is true (set it to the DNS name of the S3 interface VPC endpoint serving the deployment)."
   }
 }
 
@@ -109,6 +125,20 @@ data "aws_partition" "current" {}
 
 # Random suffix for unique resource names.
 resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# Random suffix for the web-app bucket name in APIGateway hosting mode.
+#
+# Owned by the root (not the web-ui module) so the API module can be told the
+# bucket name for its S3-proxy integration without depending on module.web_ui —
+# see local.web_ui_apigw_bucket_name in locals.tf for the cycle rationale. This
+# resource exists in every configuration but only feeds the bucket name when
+# web_ui.hosting = "APIGateway"; CloudFront deployments keep the web-ui module's
+# internal suffix and are unaffected.
+resource "random_string" "web_ui_bucket_suffix" {
   length  = 8
   special = false
   upper   = false
@@ -175,6 +205,10 @@ module "idp_common_layer" {
   lambda_local        = var.build.lambda_local
   lambda_architecture = var.build.lambda_architecture
   container_runtime   = var.build.container_runtime
+
+  vpc_id             = try(var.private_network.vpc_id, null)
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 }
 
 # Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
@@ -229,7 +263,7 @@ module "idp_agents_layer" {
 # Evaluation layer: evaluation + docs_service extras for the per-processor
 # evaluation Lambda (munkres + numpy). Built only when evaluation is enabled.
 module "idp_evaluation_layer" {
-  count  = var.evaluation.enabled ? 1 : 0
+  count  = local.evaluation_enabled ? 1 : 0
   source = "./modules/idp-common-layer"
 
   layer_prefix             = "${local.name_prefix}-evaluation-layer"
@@ -255,11 +289,18 @@ module "user_identity" {
   allowed_signup_email_domain = var.web_ui.enable_signup
   deletion_protection         = var.deletion_protection
 
-  # Register the Web UI custom domain / ALB URL as an OAuth callback+logout URL
+  # Register the Web UI custom domain URL as an OAuth callback+logout URL
   # so hosted-UI redirects succeed. CloudFront domains are not known until the
   # distribution exists, so only the explicit custom_domain_url is wired here.
   additional_callback_urls = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
   additional_logout_urls   = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
+
+  # All no-ops when federation is off.
+  additional_identity_providers     = local.federation_supported_identity_providers
+  enable_idp_groups_attribute       = local.feature_enable.federation
+  pre_token_generation_function_arn = local.federation_group_mapping_function_arn
+  create_hosted_ui_domain           = local.feature_enable.federation
+  hosted_ui_domain_prefix           = try(var.idp_federation.hosted_ui_domain_prefix, null)
 
   tags = var.tags
 }
@@ -286,6 +327,10 @@ module "processing_environment" {
   output_bucket_arn  = var.output_bucket_arn
   working_bucket_arn = var.working_bucket_arn
 
+  # Reporting ingest: creates save_reporting_data and wires workflow_tracker
+  enable_reporting     = var.reporting.enabled
+  reporting_bucket_arn = var.reporting.bucket_arn
+
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
   enable_encryption  = var.enable_encryption
@@ -303,9 +348,7 @@ module "processing_environment" {
     api_id           = module.processing_environment_api[0].api_id
     api_name         = module.processing_environment_api[0].api_name
     api_arn          = module.processing_environment_api[0].api_arn
-    graphql_url      = module.processing_environment_api[0].graphql_url
-    realtime_url     = module.processing_environment_api[0].realtime_url
-    api_key          = module.processing_environment_api[0].api_key
+    graphql_url      = ""
     lambda_functions = module.processing_environment_api[0].lambda_functions
   } : null
 
@@ -314,9 +357,13 @@ module "processing_environment" {
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
 
+  # Core table capacity / billing (see variables.tf; defaults preserve on-demand)
+  core_table_capacity = var.core_table_capacity
+
   # VPC configuration
   subnet_ids         = var.vpc_subnet_ids
   security_group_ids = var.vpc_security_group_ids
+  vpc_id             = try(var.private_network.vpc_id, null)
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -339,8 +386,9 @@ module "processing_environment_api" {
   name = "${local.name_prefix}-api"
 
   # Presigned-URL-via-VPCE (v0.5.16). When enabled with a supplied endpoint DNS
-  # name, presigner Lambdas target the S3 interface VPC endpoint. Supplied as an
-  # input (not derived from the web-ui-alb module) to keep the graph acyclic.
+  # name, presigner Lambdas target the S3 interface VPC endpoint. Supplied as a
+  # user input rather than derived from an in-module endpoint, which keeps the
+  # graph acyclic.
   s3_endpoint_url = local.web_ui_s3_endpoint_url
 
   # User identity - Dynamic authorization based on user_identity availability
@@ -372,14 +420,21 @@ module "processing_environment_api" {
   tracking_table_arn      = module.processing_environment.tracking_table_arn
   configuration_table_arn = module.processing_environment.configuration_table_arn
 
+  # processing_environment is always instantiated, so the tracking table always
+  # exists. Pass this plan-time-known flag so the api module's tracking-table
+  # gates don't key their count off the COMPUTED tracking_table_arn (which is
+  # unknown at plan time and breaks a cold `terraform plan`).
+  tracking_table_available = true
+
   # S3 bucket ARNs
   input_bucket_arn   = var.input_bucket_arn
   output_bucket_arn  = var.output_bucket_arn
   working_bucket_arn = var.working_bucket_arn
 
   # Optional: Evaluation baseline bucket
-  evaluation_enabled             = var.evaluation.enabled
-  evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
+  evaluation_enabled             = local.evaluation_enabled
+  evaluation_baseline_bucket_arn = local.evaluation_enabled ? var.evaluation.baseline_bucket_arn : null
+  evaluation_layer_arn           = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # Knowledge Base configuration
   knowledge_base = local.knowledge_base_config
@@ -391,18 +446,27 @@ module "processing_environment_api" {
   vpc_config = length(var.vpc_subnet_ids) > 0 ? {
     subnet_ids         = var.vpc_subnet_ids
     security_group_ids = var.vpc_security_group_ids
+    vpc_id             = try(var.private_network.vpc_id, null)
   } : null
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
   # Agent Analytics configuration
+  # Both branches need the same attribute set, or Terraform cannot unify them.
   agent_analytics = local.agent_analytics_config.enabled && var.reporting.enabled ? {
-    enabled                 = true
-    model_id                = local.agent_analytics_config.model_id
-    reporting_database_name = var.reporting.database_name
-    reporting_bucket_arn    = var.reporting.bucket_arn
-  } : { enabled = false }
+    enabled                   = true
+    model_id                  = local.agent_analytics_config.model_id
+    reporting_database_name   = var.reporting.database_name
+    reporting_bucket_arn      = var.reporting.bucket_arn
+    allowed_bedrock_model_ids = local.agent_analytics_config.allowed_bedrock_model_ids
+    } : {
+    enabled                   = false
+    model_id                  = local.agent_analytics_config.model_id
+    reporting_database_name   = null
+    reporting_bucket_arn      = null
+    allowed_bedrock_model_ids = []
+  }
 
   # Discovery configuration
   discovery = local.discovery_config.enabled ? {
@@ -419,14 +483,16 @@ module "processing_environment_api" {
 
   # Process Changes configuration (Edit Sections feature)
   enable_edit_sections = local.process_changes_config.enabled
-  document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
-  document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
+  # Unconditional: the reprocess resolver also re-queues through this queue.
+  document_queue_url = module.processing_environment.document_queue_url
+  document_queue_arn = module.processing_environment.document_queue_arn
 
   # v0.4.8 feature flags
   enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
   enable_test_studio          = try(var.api.enable_test_studio, false)
   enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
   enable_w2_dataset           = try(var.api.enable_w2_dataset, false)
+  enable_finetuning           = try(var.api.enable_finetuning, false)
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
 
   # version-check resolver (v0.5.11). Default-off: empty public_artifacts_bucket
@@ -445,9 +511,22 @@ module "processing_environment_api" {
   enable_docplit_poly_seq_dataset = try(var.api.enable_docplit_poly_seq_dataset, false)
   bda_project_arn                 = length(module.bda_processor) > 0 ? module.bda_processor[0].data_automation_project_arn : ""
 
-  # AppSync API visibility. "PRIVATE" makes the endpoint reachable only through
-  # the appsync-api interface VPC endpoint (for fully isolated VPC deployments).
-  visibility = try(var.api.visibility, "GLOBAL")
+  # REST API visibility (v0.6.4). "PRIVATE" makes the API Gateway REST endpoint
+  # reachable only through the execute-api interface VPC endpoint (fully
+  # isolated VPC deployments); "GLOBAL" is a public REGIONAL endpoint still
+  # gated by the Cognito authorizer. Resolved from
+  # api.api_gateway_visibility (or the deprecated api.visibility) in locals.tf.
+  visibility                  = local.api_gateway_visibility
+  api_gateway_vpc_endpoint_id = try(var.api.api_gateway_vpc_endpoint_id, "")
+  waf_allowed_ipv4_ranges     = try(var.api.waf_allowed_ipv4_ranges, ["0.0.0.0/0"])
+
+  # Web UI hosting on the REST API (v0.6.4, web_ui.hosting = "APIGateway").
+  # Adds GET / and GET /{proxy+} S3-proxy routes on the same stage as the /op
+  # transport, so the SPA inherits the PRIVATE-endpoint + WAF posture above.
+  # The bucket name comes from a ROOT-derived local, never from module.web_ui —
+  # see local.web_ui_apigw_bucket_name for why.
+  serve_web_ui       = var.web_ui.enabled && var.web_ui.hosting == "APIGateway"
+  web_ui_bucket_name = var.web_ui.hosting == "APIGateway" ? local.web_ui_apigw_bucket_name : ""
 
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
@@ -460,7 +539,23 @@ module "processing_environment_api" {
   # Lambda layers
   base_layer_arn           = module.processing_environment.base_layer_arn
   idp_common_layer_arn     = module.idp_common_layer.layer_arn
+  agents_layer_arn         = module.idp_agents_layer.layer_arn
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+
+  # Chat token-streaming endpoint (v0.6.4): AWS Lambda Web Adapter layer for the
+  # streaming Function URL. Empty => API module constructs the upstream default.
+  lambda_web_adapter_layer_arn = var.lambda_web_adapter_layer_arn
+
+  # RBAC Users table for the streaming processor's scope enforcement (empty when
+  # RBAC is off).
+  users_table_name = local.feature_enable.rbac ? module.rbac[0].users_table_name : ""
+
+  # Deterministic web-ui settings SSM parameter name for the streaming
+  # processor. Passed as a plain string (NOT module.web_ui) to avoid a
+  # dependency cycle: the web-ui module names the parameter
+  # "/${name_prefix}/web-ui-settings" where its name_prefix is
+  # "${local.name_prefix}-web-ui". Empty when the web UI is disabled.
+  settings_parameter_name = var.web_ui.enabled ? "/${local.name_prefix}-web-ui/web-ui-settings" : ""
 
   # Build strategy (see var.build in variables.tf)
   lambda_local        = var.build.lambda_local
@@ -472,6 +567,11 @@ module "processing_environment_api" {
   enabled_feature_contracts = local.enabled_feature_contracts
   has_feature_iam           = local.feature_enable.rbac
 
+  # Feature Platform API fields -> Lambda ARNs for the REST dispatcher. Passed
+  # separately because the Feature Platform is wired outside the contract map.
+  # Safe (no cycle): the module no longer takes any input from the API module.
+  feature_platform_field_functions = length(module.feature_platform) > 0 ? module.feature_platform[0].field_functions : {}
+
   tags = var.tags
 }
 
@@ -481,10 +581,14 @@ module "processing_environment_api" {
 
 # BDA Processor
 module "bda_processor" {
-  source = "./modules/processors/bda-processor"
-  count  = var.bda_processor != null ? 1 : 0
+  allowed_bedrock_model_ids = var.processor.allowed_bedrock_model_ids
+  source                    = "./modules/processors/bda-processor"
+  count                     = var.processor.type == "bda" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = local.bda_ocr_backend_enabled
 
   name = "${local.name_prefix}-processor"
 
@@ -495,7 +599,7 @@ module "bda_processor" {
   enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # S3 bucket ARNs
   input_bucket_arn        = var.input_bucket_arn
@@ -520,20 +624,22 @@ module "bda_processor" {
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # BDA-specific configurations
-  data_automation_project_arn = var.bda_processor.project_arn
+  data_automation_project_arn = var.processor.project_arn
 
-  # Optional: Evaluation configuration
-  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  # Optional: Evaluation configuration (model comes from the YAML config)
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
+  reporting_bucket_name           = local.reporting_bucket_name
+  save_reporting_function_name    = module.processing_environment.save_reporting_data_function_name
+  save_reporting_function_arn     = module.processing_environment.save_reporting_data_function_arn
 
-  # Optional: Summarization configuration (BDA only)
-  summarization_model_id = var.bda_processor.summarization.enabled ? var.bda_processor.summarization.model_id : null
+  # Rule validation
+  enable_rule_validation = local.rule_validation_enabled
 
   # Optional: Document processing configuration
-  config = var.bda_processor.config
+  config = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
-  additional_configurations = var.bda_processor.additional_configurations
+  additional_configurations = var.processor.additional_configurations
   seed_managed_configs      = var.seed_managed_configs
 
   # Lambda tracing configuration
@@ -545,10 +651,14 @@ module "bda_processor" {
 
 # Bedrock LLM Processor
 module "bedrock_llm_processor" {
-  source = "./modules/processors/bedrock-llm-processor"
-  count  = var.bedrock_llm_processor != null ? 1 : 0
+  allowed_bedrock_model_ids = var.processor.allowed_bedrock_model_ids
+  source                    = "./modules/processors/bedrock-llm-processor"
+  count                     = var.processor.type == "bedrock-llm" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = local.bda_ocr_backend_enabled
 
   name = "${local.name_prefix}-processor"
 
@@ -556,7 +666,7 @@ module "bedrock_llm_processor" {
   enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # S3 bucket ARNs
   input_bucket_arn        = var.input_bucket_arn
@@ -575,41 +685,39 @@ module "bedrock_llm_processor" {
   enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
   base_layer_arn       = module.processing_environment.base_layer_arn
-  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  evaluation_layer_arn = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
   vpc_security_group_ids = var.vpc_security_group_ids
 
-  # Model configurations - pass model IDs directly for optional override
-  # The processor will use config.yaml by default and override with these if provided
-  classification_model_id      = var.bedrock_llm_processor.classification_model_id
-  extraction_model_id          = var.bedrock_llm_processor.extraction_model_id
-  evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
-  max_pages_for_classification = var.bedrock_llm_processor.max_pages_for_classification
+  # Per-stage models come from the YAML configuration, not Terraform.
+  max_pages_for_classification = var.processor.max_pages_for_classification
 
   # Evaluation: per-pattern Lambda built from sources/patterns/pattern-2, the
   # only evaluation surface, matching upstream.
-  evaluation_enabled             = var.evaluation.enabled
-  evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
+  evaluation_enabled             = local.evaluation_enabled
+  evaluation_baseline_bucket_arn = local.evaluation_enabled ? var.evaluation.baseline_bucket_arn : null
+  reporting_bucket_name          = local.reporting_bucket_name
+  save_reporting_function_name   = module.processing_environment.save_reporting_data_function_name
+  save_reporting_function_arn    = module.processing_environment.save_reporting_data_function_arn
 
   # Optional: Document processing configuration
-  config = var.bedrock_llm_processor.config
+  config = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
-  additional_configurations = var.bedrock_llm_processor.additional_configurations
+  additional_configurations = var.processor.additional_configurations
   seed_managed_configs      = var.seed_managed_configs
 
   # Optional fallback BDA project for use_bda:true additional versions (does not
   # relink the default)
-  bda_project_arn = var.bedrock_llm_processor.bda_project_arn
+  bda_project_arn = var.processor.bda_project_arn
 
-  # Feature flags
-  is_summarization_enabled = var.bedrock_llm_processor.summarization.enabled
-  enable_hitl              = var.bedrock_llm_processor.enable_hitl
-
-  # Optional: Summarization model configuration
-  summarization_model_id = var.bedrock_llm_processor.summarization.enabled ? var.bedrock_llm_processor.summarization.model_id : null
+  # Feature flags. Summarization enablement is config-authoritative (derived
+  # from var.processor.config at plan time); see local.summarization_enabled.
+  is_summarization_enabled = local.summarization_enabled
+  enable_hitl              = local.hitl_enabled
+  enable_rule_validation   = local.rule_validation_enabled
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -619,10 +727,14 @@ module "bedrock_llm_processor" {
 
 # SageMaker UDOP Processor
 module "sagemaker_udop_processor" {
-  source = "./modules/processors/sagemaker-udop-processor"
-  count  = var.sagemaker_udop_processor != null ? 1 : 0
+  allowed_bedrock_model_ids = var.processor.allowed_bedrock_model_ids
+  source                    = "./modules/processors/sagemaker-udop-processor"
+  count                     = var.processor.type == "sagemaker-udop" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = local.bda_ocr_backend_enabled
 
   name = "${local.name_prefix}-processor"
 
@@ -630,7 +742,7 @@ module "sagemaker_udop_processor" {
   enable_api      = local.api_enabled
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # S3 bucket ARNs
   input_bucket_arn        = var.input_bucket_arn
@@ -648,35 +760,38 @@ module "sagemaker_udop_processor" {
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
   base_layer_arn       = module.processing_environment.base_layer_arn
-  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  evaluation_layer_arn = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # SageMaker UDOP processor configuration
-  classification_endpoint_arn = var.sagemaker_udop_processor.classification_endpoint_arn
+  classification_endpoint_arn = var.processor.classification_endpoint_arn
 
   # Optional: Performance configuration
-  ocr_max_workers            = var.sagemaker_udop_processor.ocr_max_workers
-  classification_max_workers = var.sagemaker_udop_processor.classification_max_workers
+  ocr_max_workers            = var.processor.ocr_max_workers
+  classification_max_workers = var.processor.classification_max_workers
 
-  # Optional: Model configurations
-  extraction_model_id             = var.sagemaker_udop_processor.extraction_model_id
-  summarization_model_id          = var.sagemaker_udop_processor.summarization.enabled ? var.sagemaker_udop_processor.summarization.model_id : null
-  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  # Per-stage models come from the YAML configuration, not Terraform.
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
+  reporting_bucket_name           = local.reporting_bucket_name
+  save_reporting_function_name    = module.processing_environment.save_reporting_data_function_name
+  save_reporting_function_arn     = module.processing_environment.save_reporting_data_function_arn
+
+  # Rule validation
+  enable_rule_validation = local.rule_validation_enabled
 
   # Optional: Document processing configuration
-  config = var.sagemaker_udop_processor.config
+  config = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
-  additional_configurations = var.sagemaker_udop_processor.additional_configurations
+  additional_configurations = var.processor.additional_configurations
   seed_managed_configs      = var.seed_managed_configs
 
   # Optional fallback BDA project for use_bda:true additional versions (does not
   # relink the default)
-  bda_project_arn = var.sagemaker_udop_processor.bda_project_arn
+  bda_project_arn = var.processor.bda_project_arn
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -720,18 +835,41 @@ module "web_ui" {
     }
   }
 
+  # Federated sign-in entry point for the UI. Null when federation is off.
+  external_idp = local.feature_enable.federation ? {
+    provider_name  = try(var.idp_federation.provider_name, "ExternalIdP")
+    cognito_domain = local.federation_hosted_ui_domain
+    auto_login     = try(var.idp_federation.auto_login, false)
+  } : null
+
   # API configuration (if enabled)
-  api_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_url = local.api_enabled ? module.processing_environment_api[0].api_base_url : null
+
+  # Chat token-streaming Function URL (VITE_STREAM_URL). Null when the API (or
+  # chat streaming) is disabled.
+  stream_url = local.api_enabled ? module.processing_environment_api[0].chat_stream_function_url : null
 
   # S3 bucket ARNs
-  input_bucket_arn  = var.input_bucket_arn
-  output_bucket_arn = var.output_bucket_arn
+  input_bucket_arn   = var.input_bucket_arn
+  output_bucket_arn  = var.output_bucket_arn
+  working_bucket_arn = var.working_bucket_arn
+
+  # working_bucket_arn is a required root input, so the working bucket always
+  # exists here. Pass this plan-time-known flag so the web-ui CORS resource
+  # doesn't gate its count off the COMPUTED working_bucket_arn (unknown at plan
+  # time, which breaks a cold `terraform plan`).
+  working_bucket_cors_enabled = true
 
   # Optional: Logging bucket for CloudFront and S3 access logs
   logging_bucket = var.web_ui.logging_enabled ? {
     bucket_name = local.logging_bucket_name
     bucket_arn  = var.web_ui.logging_bucket_arn
   } : null
+
+  # Test Studio bucket, for settings.TestSetBucket + its CORS. Separate flag as
+  # with working_bucket_cors_enabled above: the name is computed.
+  test_set_bucket_name    = local.api_enabled ? module.processing_environment_api[0].test_set_bucket_name : null
+  test_set_bucket_enabled = local.api_enabled && try(var.api.enable_test_studio, false)
 
   # Reporting bucket name (extracted from ARN)
   reporting_bucket_name = local.web_ui_reporting_bucket_name
@@ -752,13 +890,29 @@ module "web_ui" {
   create_infrastructure             = var.web_ui.create_infrastructure
   web_app_bucket_name               = var.web_ui.bucket_name
   cloudfront_distribution_id        = var.web_ui.cloudfront_distribution_id
+  cloudfront_allowed_geos           = var.web_ui.allowed_geos
   should_allow_sign_up_email_domain = var.web_ui.enable_signup != ""
 
-  # Hosting mode (CloudFront vs. ALB) + public URL for CORS / UI build env.
-  # In ALB mode the CloudFront distribution is not created; the web-ui-alb
-  # module (below) serves the bucket via an internal ALB + S3 VPC endpoint.
-  hosting    = var.web_ui.hosting
-  web_ui_url = var.web_ui.custom_domain_url
+  # Hosting mode + public URL for CORS / UI build env. "CloudFront" creates the
+  # distribution; "APIGateway" serves the bucket through the REST API stage, so
+  # the app URL is the REST base (".../api") rather than a custom domain.
+  hosting = var.web_ui.hosting
+  web_ui_url = (
+    var.web_ui.hosting == "APIGateway"
+    ? (local.api_enabled ? module.processing_environment_api[0].api_base_url : null)
+    : var.web_ui.custom_domain_url
+  )
+
+  # APIGateway hosting: the bucket name must be known to the API module for its
+  # S3-proxy integration, so it is derived at the root instead of from the
+  # module's own random suffix. Null in CloudFront mode, which keeps the module's
+  # historical naming (and therefore the existing bucket) untouched.
+  bucket_name_override = var.web_ui.hosting == "APIGateway" ? local.web_ui_apigw_bucket_name : null
+
+  # Bucket policy principal for the API Gateway S3 proxy. The web-ui module
+  # already depends on the API module (api_url / stream_url), so this adds no new
+  # module edge.
+  apigw_proxy_role_arn = local.api_enabled ? module.processing_environment_api[0].web_ui_proxy_role_arn : null
 
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
@@ -769,77 +923,13 @@ module "web_ui" {
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
-  tags = var.tags
-}
-
-#
-# Web UI ALB hosting (Optional — when web_ui.hosting = "ALB")
-#
-# Serves the web app bucket through an internal Application Load Balancer and an
-# S3 interface VPC endpoint instead of CloudFront (private-network / GovCloud).
-# Depends on module.web_ui for the bucket name; the bucket *policy* granting
-# VPCE access is created below at the root (referencing this module's endpoint
-# id) to keep the dependency acyclic.
-#
-module "web_ui_alb" {
-  count  = var.web_ui.enabled && var.web_ui.hosting == "ALB" ? 1 : 0
-  source = "./modules/web-ui-alb"
-
-  name_prefix              = local.name_prefix
-  vpc_id                   = var.web_ui.alb.vpc_id
-  subnet_ids               = var.web_ui.alb.subnet_ids
-  certificate_arn          = var.web_ui.alb.certificate_arn
-  alb_scheme               = var.web_ui.alb.scheme
-  alb_allowed_cidrs        = var.web_ui.alb.allowed_cidrs
-  web_ui_bucket_name       = module.web_ui[0].bucket.bucket_name
-  logging_bucket_name      = var.web_ui.logging_enabled ? local.logging_bucket_name : null
-  lambda_security_group_id = var.web_ui.alb.lambda_security_group_id
-  manage_lambda_sg_rules   = var.web_ui.alb.manage_lambda_sg_rules
+  # Places the UI CodeBuild project in the VPC. The build runs npm install, so
+  # the subnets need egress to the registry.
+  vpc_id             = try(var.private_network.vpc_id, null)
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 
   tags = var.tags
-}
-
-# Web UI bucket policy for ALB hosting: allow anonymous GetObject only through
-# the S3 interface VPC endpoint, and deny insecure transport. Mirrors upstream
-# WebUIBucketPolicy (UseALBHosting branch). Created at the root so it can
-# reference both module.web_ui (bucket) and module.web_ui_alb (endpoint id)
-# without a module cycle.
-resource "aws_s3_bucket_policy" "web_ui_alb" {
-  count  = var.web_ui.enabled && var.web_ui.hosting == "ALB" && var.web_ui.create_infrastructure ? 1 : 0
-  bucket = module.web_ui[0].bucket.bucket_name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "AllowALBViaVpcEndpoint"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "s3:GetObject"
-        Resource  = "${module.web_ui[0].bucket.bucket_arn}/*"
-        Condition = {
-          StringEquals = {
-            "aws:sourceVpce" = module.web_ui_alb[0].s3_vpc_endpoint_id
-          }
-        }
-      },
-      {
-        Sid       = "DenyInsecureConnections"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          module.web_ui[0].bucket.bucket_arn,
-          "${module.web_ui[0].bucket.bucket_arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      }
-    ]
-  })
 }
 
 #
@@ -864,6 +954,34 @@ resource "aws_iam_role_policy" "authenticated_user_permissions" {
       local.human_review_a2i_statement,
       local.processing_environment_api_statements
     )
+  })
+}
+
+#
+# Chat token-streaming Function URL invoke grant (v0.6.4)
+# Mirrors upstream CognitoAuthorizedRole ChatStreamInvoke: grants the
+# authenticated Cognito Identity Pool role lambda:InvokeFunction +
+# lambda:InvokeFunctionUrl on the stream function ARN. Attached as a separate
+# inline policy on the same authenticated role (kept out of the big concat above
+# because the stream function ARN is only known when chat streaming is enabled).
+#
+resource "aws_iam_role_policy" "chat_stream_invoke" {
+  for_each = local.enable_chat_stream_invoke_grant ? toset(["enabled"]) : toset([])
+  name     = "${local.name_prefix}-chat-stream-invoke"
+  role     = basename(local.authenticated_role_arn)
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction",
+          "lambda:InvokeFunctionUrl"
+        ]
+        Resource = module.processing_environment_api[0].chat_stream_function_arn
+      }
+    ]
   })
 }
 
@@ -957,7 +1075,7 @@ module "processor_attachment" {
   # Optional: API configuration
   api_id          = local.api_enabled ? module.processing_environment_api[0].api_id : null
   api_arn         = local.api_enabled ? module.processing_environment_api[0].api_arn : null
-  api_graphql_url = local.api_enabled ? module.processing_environment_api[0].graphql_url : null
+  api_graphql_url = ""
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids

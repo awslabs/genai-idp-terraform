@@ -13,11 +13,10 @@ admin_email = "admin@example.com"
 #   base_model    = "microsoft/udop-large"
 #   retrain_model = false            # true = retrain on each apply
 # }
-# summarization_enabled = true
 # enable_evaluation     = false
 # enable_reporting      = false
+# config_file_path        = "../../sources/config_library/unified/rule-validation/config.yaml"
 # web_ui = { enabled = true }
-# config_file_path        = "../../sources/config_library/unified/rvl-cdip/config.yaml"
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }
 # tags = { Environment = "dev" }
 

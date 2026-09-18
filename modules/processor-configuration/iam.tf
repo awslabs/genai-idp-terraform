@@ -55,7 +55,7 @@ resource "aws_iam_policy" "dynamodb_access" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
+        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
       }
     ]
   })

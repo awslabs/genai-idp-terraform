@@ -19,6 +19,8 @@ locals {
   # Dispatcher switch. Computed once; referenced everywhere.
   use_local_build = var.lambda_local
 
+  has_network_environment = var.vpc_id != null && length(var.subnet_ids) > 0 && length(var.security_group_ids) > 0
+
   # Use the calling module's .terraform/tmp directory for build artifacts.
   module_build_dir = "${path.root}/.terraform/tmp/lambda-layer-codebuild"
 
@@ -112,7 +114,7 @@ resource "aws_s3_object" "requirements_source" {
   key    = "source/${var.name_prefix}-requirements_source.zip"
   source = data.archive_file.requirements_source.output_path
 
-  etag = md5(jsonencode({
+  source_hash = md5(jsonencode({
     for k, v in var.requirements_files : k => v
   }))
 }
@@ -155,8 +157,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "logs:DescribeLogStreams"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
         ]
       },
       {
@@ -233,6 +235,15 @@ resource "aws_codebuild_project" "lambda_layers_build" {
     aws_iam_role_policy.codebuild_policy,
     aws_cloudwatch_log_group.codebuild_log_group
   ]
+
+  dynamic "vpc_config" {
+    for_each = local.has_network_environment ? [1] : []
+    content {
+      vpc_id             = var.vpc_id
+      subnets            = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
 
   artifacts {
     type                   = "S3"
@@ -461,4 +472,11 @@ resource "null_resource" "cleanup_build_artifacts" {
   triggers = {
     build_id = random_id.build_id.hex
   }
+}
+
+# Grants the ENI management CodeBuild needs to attach to the VPC.
+resource "aws_iam_role_policy_attachment" "codebuild_vpc_access" {
+  count      = !local.use_local_build && local.has_network_environment ? 1 : 0
+  role       = aws_iam_role.codebuild_role[0].name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSCodeBuildVPCAccessExecutionRole"
 }

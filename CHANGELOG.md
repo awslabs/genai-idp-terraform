@@ -6,6 +6,340 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [Unreleased] — 0.6.4-tf.0 (in progress)
+
+Upgrade to upstream IDP v0.6.4. See
+[docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md) for
+the migration steps behind every breaking change below.
+
+### Breaking Changes
+
+- **Processor inputs collapsed into one `processor` variable.** The three
+  mutually exclusive root variables `bedrock_llm_processor`, `bda_processor`, and
+  `sagemaker_udop_processor` are replaced by a single required `processor` object
+  with a `type` discriminator (`bedrock-llm`, `bda`, or `sagemaker-udop`). Move
+  your old block under `processor` and add `type`. The `type` value drives which
+  fields are required: `bda` needs `project_arn`, `sagemaker-udop` needs
+  `classification_endpoint_arn`. This is an input-surface rename only. Internal
+  module block names are unchanged by design, so no `moved {}` blocks and no
+  state migration are required, and a plan shows no resource churn. See
+  [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md).
+- **AWS AppSync removed; the UI/API transport is now an API Gateway REST API.**
+  Upstream deleted AppSync in v0.6.0. Queries/mutations go through a single
+  dispatcher Lambda at `POST /op/{field}`, status updates are polled, and chat
+  tokens stream from a Lambda Function URL. The API module's `graphql_url`,
+  `realtime_url`, `api_key`, and `appsync_endpoint_for_dns` outputs are replaced
+  by `api_base_url`.
+- **ALB Web UI hosting removed** (`web_ui.hosting = "ALB"`), following upstream's
+  deletion of the `nested/alb-hosting/` stack. `modules/web-ui-alb`, the
+  `web_ui.alb` input, and the `web_ui_alb` output are gone. `removed-v0-6-4.tf`
+  ships `removed` blocks so a direct upgrade can still decommission the ALB.
+- **Root `required_version` raised to `>= 1.7.0`**, required by those `removed`
+  blocks. The effective floor was already 1.5 (existing `check` blocks).
+- **`api.visibility` renamed to `api.api_gateway_visibility`.** The old name
+  still works and takes precedence, with a deprecation `check`; it will be
+  removed in a future release.
+- **Step models are now config/system-default authoritative, not pinned to
+  `var.model_id`.** Previously the engine force-wrote `classification.model`,
+  `extraction.model`, and `summarization.model` from `coalesce(per_step_var,
+  var.model_id)`, so a deployment that set no model variables silently ran
+  `us.amazon.nova-2-lite-v1:0` for every step and ignored the models the config
+  library / upstream system defaults declare. Terraform now writes those keys
+  only when the corresponding per-step variable is explicitly set; otherwise the
+  config YAML (then the upstream system default, then `var.model_id` as a
+  backstop) wins. **Deployments that set no model variables will change which
+  models they invoke** — e.g. extraction moves from `nova-2-lite` to the v0.6
+  default `us.anthropic.claude-sonnet-5` — changing inference results and cost.
+  To keep the prior behaviour, set `classification_model_id`,
+  `extraction_model_id`, and `summarization_model_id` (or the per-processor
+  equivalents) explicitly to `us.amazon.nova-2-lite-v1:0`.
+- **The seeder no longer overwrites operator-edited configuration on every
+  apply.** The active `Config#default` row is now written read-modify-write:
+  once it has diverged from what Terraform last seeded (an edit made in the Web
+  UI), the seeder leaves it intact instead of clobbering it. Operators who
+  relied on `terraform apply` reasserting configuration must use the documented
+  force procedure (delete the `TerraformSeed#default` marker item, then
+  `terraform apply -replace=...seed_default`) to reassert Terraform's config.
+  This is also the supported path for adopting the model-authority defaults above
+  on a deployment whose config row was already edited.
+- **Per-stage Bedrock model IDs are no longer set from Terraform — the YAML
+  configuration is the single source of truth.** The removed inputs are, on the
+  `processor` object: `classification_model_id`, `extraction_model_id`,
+  `assessment_model_id`, and nested `summarization.model_id`; on the `evaluation`
+  object: `model_id`; and on the processor modules: the per-stage `*_model_id`
+  variables plus the `model_id` global backstop. Set each stage's model in the
+  configuration instead (`classification.model`, `extraction.model`,
+  `extraction.confidence.model` / `.escalation_model`, `summarization.model`,
+  `evaluation.llm_method.model`); a stage the config omits falls back to the
+  upstream system default. `allowed_bedrock_model_ids` (including `"*"`) is
+  retained as the operator escape hatch for models added post-deploy in the UI.
+  This is an input-surface change only: no resource addresses change, so no
+  `moved {}` blocks and no state migration are required, and a plan shows no
+  resource churn. The least-privilege `bedrock:InvokeModel` grant is now derived
+  from the union of models across every seeded config (the active default, all
+  `additional_configurations`, and — newly — the managed baselines seeded when
+  `seed_managed_configs = true`, closing a latent activate-a-baseline
+  `AccessDenied` gap). **Supersedes** the earlier `assessment_model_id` plumbing
+  added under this same release line (the DEFECT-3 fix in *Fixed* below): that
+  variable is now removed and the assessment model is read from the config's
+  `extraction.confidence.model`. See
+  [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md).
+- **Processing-pipeline feature enablement is now config-authoritative.**
+  Whether summarization, evaluation, rule validation, the HITL pipeline branch,
+  and the BDA-as-OCR backend are provisioned is derived at plan time from the
+  YAML configuration, not from duplicate Terraform toggles. Removed from the
+  root `processor` object: `summarization` (the `enabled` sub-field),
+  `enable_rule_validation`, `enable_hitl`, and `enable_bda_ocr_backend`; and the
+  `evaluation` object loses `enabled` (keeping only `baseline_bucket_arn`, the
+  infrastructure the config cannot express — now required via a `check` block
+  whenever the config enables evaluation). Set these in the configuration
+  instead: `summarization.enabled`, `evaluation.enabled`,
+  `rule_validation.enabled`, `hitl.enabled`, and `ocr.backend: bda`. This
+  eliminates a drift class (a config that enabled summarization while the
+  Terraform toggle defaulted off silently skipped building the summarization
+  Lambda, role, and `bedrock:InvokeModel` grant). **Limitation:** because these
+  flags gate resource creation, they are read at plan time from the config file;
+  toggling a feature's `enabled` at runtime in the Web UI / DynamoDB does **not**
+  create or destroy its resources — a `terraform apply` against the updated
+  config file is required. The API-side chat-with-document and discovery
+  features remain Terraform-controlled (they are API-topology decisions, and
+  `discovery` has no config `enabled` key). See
+  [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md).
+- **Federation group mapping now requires `idp_federation.group_mapping`.** The
+  group-mapping trigger's `*_GROUP_NAME` environment values were wired from the
+  RBAC Cognito group names, but the vendored handler reads them as *external IdP*
+  group names and matches them against the user's claim (upstream
+  `ExternalIdPAdminGroupName`: "The group name in your external IdP that should
+  map to the Cognito Admin role"). Federated users therefore landed in no role
+  group unless the IdP's groups happened to be named `Admin`/`Author`/
+  `Reviewer`/`Viewer`. The values now come from `group_mapping`, which becomes
+  required whenever `group_attribute_name` is set: name your IdP's groups as the
+  keys and one of the four canonical roles as each value. Two plan-time guards
+  replace the silent failure — an empty `group_mapping` and RBAC group names
+  renamed away from the four literals (which the handler hardcodes) both fail the
+  plan. Deployments with `group_attribute_name` unset are unaffected.
+
+### Added
+
+- **Core DynamoDB table capacity/billing is now configurable end-to-end.** A new
+  optional `core_table_capacity` object variable (with per-table `tracking` /
+  `configuration` / `concurrency` sub-objects, each carrying `billing_mode`,
+  `read_capacity`, and `write_capacity`) is passed through
+  `processing-environment` to the three core table modules, closing the gap where
+  the tables' own capacity knobs were unreachable from any calling module
+  (upstream [#195](https://github.com/awslabs/genai-idp-terraform/issues/195) /
+  [#196](https://github.com/awslabs/genai-idp-terraform/pull/196)). Purely
+  additive: every field defaults to the current on-demand (`PAY_PER_REQUEST`)
+  behavior, so an unset (or omitted) `core_table_capacity` is a zero-diff plan.
+  Set a table to `billing_mode = "PROVISIONED"` with tuned capacity for
+  cost-predictable steady workloads; `read_capacity` / `write_capacity` are
+  ignored under `PAY_PER_REQUEST`, and all settings are inert for a table
+  supplied via `processing-environment`'s `*_table_arn` inputs. Switching an
+  existing table's billing mode is an in-place update (DynamoDB permits moving to
+  on-demand only once per 24-hour window), not a replacement.
+- **Rule validation wired into the workflow.** The rule-validation stage now
+  runs as real Step Functions states in the unified-processor engine, mirroring
+  the upstream ASL: `CheckRuleValidationEnabled`, policy classification,
+  per-section `Map`, orchestration, then the `postRuleValidation` hook.
+  Previously the rule-validation Lambdas were packaged but never invoked. The
+  third Lambda (`rule-validation-policy-classification`) is now packaged too, and
+  the sixth pipeline hook point `postRuleValidation` is reachable. Available on
+  all three processor types (bedrock-llm, bda, sagemaker-udop): the states live
+  in the shared engine and every branch reaches the post-extraction join where
+  the stage attaches. Gated on `processor.enable_rule_validation` (default
+  `false`); when off, the rendered state machine and resources are unchanged
+  (zero-diff plan). At runtime the stage runs only for documents whose active
+  config sets `rule_validation.enabled = true` with non-empty `policy_classes`.
+- **`web_ui.hosting = "APIGateway"`** — serves the SPA as an S3 proxy on the same
+  REST API and stage as the data transport, so the UI inherits the API's PRIVATE
+  endpoint and WAF posture. Replaces ALB hosting for VPC-only deployments; needs
+  no CloudFront, ALB, ACM certificate, or S3 VPC endpoint.
+- **Chat token streaming** via a Lambda Web Adapter function behind a
+  `RESPONSE_STREAM` Function URL, replacing the AppSync
+  mutation-to-subscription fan-out. Surfaced to the UI as `VITE_STREAM_URL`.
+- `api.use_private_api`, `api.api_gateway_vpc_endpoint_id`, and
+  `api.waf_allowed_ipv4_ranges`, mirroring the upstream parameters.
+- **`preprocessing` and `postprocessing` pipeline hook points.** Two generic
+  extension points added in IDP v0.6, alongside the six existing per-step
+  `<step>.postHook` lists. `preprocessing` runs before the BDA/pipeline routing
+  decision (so it fires in both processing modes, and can halt an execution as
+  `REDACTED_SUPERSEDED` when it spawns a redacted copy); `postprocessing` runs
+  last, after evaluation, on the shared tail. Inert until a config version
+  populates the section.
+- **`ocr.backend: bda`** — runs a Bedrock Data Automation standard-output SYNC
+  project as a pure OCR engine in place of Textract. Enable with the new
+  `enable_bda_ocr_backend` flag on any processor. The deployment-scoped project is
+  created and deleted with the deployment.
+- **Configuration seeder edit-preservation provenance.** The seeder records what
+  it wrote as a sibling DynamoDB item, `Configuration = "TerraformSeed#<version>"`,
+  holding a hash of the seeded config. On the next apply it compares the stored
+  row against that hash to tell "Terraform's desired config changed" (update)
+  from "an operator edited the row" (skip). The marker is a separate item, never
+  a top-level attribute on the config row, so the runtime config loader never
+  surfaces it as a configuration section (`list_config_versions` only scans
+  `Config#*`). A row with no marker (a pre-existing deployment) is adopted once
+  on first upgrade. Divergence detection is deliberately coarse: **any** change
+  to the stored row freezes the whole row against future Terraform config
+  updates until the marker is deleted.
+- **Plan-time Bedrock model-ID validation.** Each resolved per-step model ID is
+  checked against a model-ID/ARN shape before it is used to build an IAM ARN, so
+  a typo in a config-YAML model fails `terraform plan` naming the step and value
+  rather than producing a malformed ARN / `AccessDenied` at invoke time.
+
+### Changed
+
+- `make test` and `make all` now run the native `terraform test` suites via a new
+  `make unit-test` target, and the CI pipeline gains a blocking `unit-test` job.
+  Nothing ran these suites before, so they had rotted: 7 runs across 4 modules
+  were failing and 5 more never executed at all. All 56 now pass. The target
+  discovers modules from their test files, so nested ones under
+  `modules/features/` and `modules/processors/` are covered — `validate` and
+  `lint` only walk `modules/*/` and still skip them.
+- Private networking requires the `execute-api` interface VPC endpoint instead of
+  `appsync-api`; `modules/vpc-endpoints` renames its `appsync_api_endpoint_id`
+  output to `execute_api_endpoint_id`.
+- The pipeline-hooks dispatcher timeout is raised from 60s to 900s. It fronts
+  hooks synchronously, and upstream budgets up to ~890s for the PII-redaction
+  preprocessing hook, so 60s would sever the invoke.
+- `idp_common` layer extras are reconciled with v0.6.4's `pyproject.toml`:
+  `criteria_validation` → `rule_validation`, and `multi_document_discovery` /
+  `synthesis` / `code_intel` are now accepted. `analytics` was never a real extra
+  and is rejected. This matters because pip does not fail on an unknown extra — it
+  installs nothing for it — so a stale name produced a layer silently missing
+  dependencies at runtime.
+- The tracking, configuration, and concurrency tables now default to
+  `PAY_PER_REQUEST` instead of `PROVISIONED` at 5 read / 5 write units. Document
+  processing writes per page and per section, so a single multi-page document
+  could exhaust that capacity and throttle. DynamoDB changes billing mode in
+  place, so this is not a replacement and no data is affected, but note that a
+  table can only switch to on-demand once in any 24-hour window. Set
+  `billing_mode = "PROVISIONED"` explicitly to keep the old behaviour.
+
+### Fixed
+
+- **Config-authoritative feature enablement resolves against the system
+  defaults.** The plan-time enablement derivation (summarization, evaluation,
+  rule validation, HITL, `ocr.backend`) resolves each flag as *config file value
+  → upstream system default*, reading the same
+  `sources/.../system_defaults/base-*.yaml` the seeder Lambda merges at apply
+  time. The shipped config files are sparse (they omit whole sections), so a
+  derivation that defaulted to `false`/off when the section was absent would
+  disagree with the merged runtime config — the drift that left the
+  summarization Lambda, role, and `bedrock:InvokeModel` grant unbuilt even though
+  the merged config enabled summarization. The root module reads those defaults
+  via `path.module` (not `path.root`, which resolves to the calling example
+  directory where `sources/` does not exist and would silently fall back to
+  off). Evaluation additionally AND-gates on `var.evaluation.baseline_bucket_arn`
+  being supplied, since the system default enables it but it needs a baseline
+  bucket the config cannot express.
+- **BDA (pattern-1) deployments no longer seed an unmerged configuration.**
+  Upstream v0.6.4's `system_defaults/pattern-1.yaml` inherits
+  `base-assessment.yaml`, a file that release deleted, and the merge raises
+  `FileNotFoundError` on a missing inherited file. Every BDA deployment therefore
+  fell back to storing the raw user config with no default prompts, models, or
+  classes. The seeder now retries with a loader that skips absent inherits, which
+  is semantically correct since assessment is retired in the v0.6 config model.
+- **Cross-region inference profiles with a `global.`, `ca.` or `sa.` prefix now
+  receive their IAM grant.** v0.6 defaults ship
+  `global.anthropic.claude-sonnet-4-6`, but all three copies of the model-ID IAM
+  derivation matched only `us|eu|apac`, so such models got the foundation-model
+  grant without the inference-profile grant — an `AccessDenied` at invoke time.
+  The `agent-analytics` copy additionally stripped the prefix with
+  `substr(id, 3, -1)`, which mangled `apac.` IDs; it now uses the same regex as
+  the others.
+- Evaluation without summarization passed the whole Step Functions state envelope
+  to the evaluation Lambda as its `document`, instead of the document.
+- With neither summarization nor evaluation enabled, the workflow's final output
+  was the raw envelope, so the workflow tracker matched `output_data["document"]`
+  and persisted the original pre-OCR document rather than the processed one.
+- The workflow tracker can now delete an original superseded by a redacted copy:
+  it gains `INPUT_BUCKET` plus the S3 rights to purge the input object and all
+  versions under the output prefix.
+- **The per-step Bedrock IAM allowlist is derived from the effective
+  configuration, so a grant can no longer disagree with the model the runtime
+  invokes.** Previously `classification`, `extraction`, and `summarization` were
+  pinned to `coalesce(per_step_var, var.model_id)` for both the seeded config and
+  IAM, while `evaluation`/`assessment` already read the config — the two
+  asymmetries cancelled out and hid the bug. All five steps now resolve through
+  one expression (per-step variable → config → upstream system default →
+  `var.model_id`) and share a single model-ID→ARN transform, so the grant always
+  matches the seeded model. The system-default layer is read directly from
+  `sources/.../system_defaults/base-*.yaml`, because those models are merged into
+  the config by the seeder Lambda at apply time and are otherwise invisible to
+  Terraform.
+- **Assessment (confidence) invocations no longer `AccessDenied`.** v0.6 folded
+  assessment under `extraction.confidence`; the assessment Lambda invokes
+  `extraction.confidence.model` (default `us.amazon.nova-lite-v1:0`) and, on
+  low-confidence sections, `extraction.confidence.escalation_model` (default
+  `us.anthropic.claude-sonnet-5:1m`). The assessment role now grants both,
+  resolved from the effective config, instead of a single model derived from the
+  wrong key.
+- **The legacy un-stripped assessment IAM fallback is removed.** When no
+  assessment model resolved, `iam.tf` built
+  `foundation-model/${var.assessment_model_id}` without stripping the geographic
+  prefix, producing a malformed ARN; the grant now comes from the shared,
+  prefix-aware transform.
+- **OCR / process-results / assessment roles can write the tracking table when
+  the API is enabled.** These roles gated the `dynamodb:UpdateItem` grant on the
+  tracking table behind `var.enable_api ? [] : [...]` — stale v0.5 logic assuming
+  the API path wrote status via AppSync. v0.6 removed AppSync and backend workers
+  write status to DynamoDB directly, so with `enable_api = true` (every web-UI
+  example) the pipeline failed at the OCR step with
+  `AccessDeniedException ... dynamodb:UpdateItem`. The grant is now unconditional.
+- **`api.visibility` validation no longer crashes on its null default.** The
+  deprecated-field validation was `var.api.visibility == null ||
+  contains([...], var.api.visibility)`; Terraform does not short-circuit `||`
+  when the right side's `contains(list, null)` throws, so `terraform validate` /
+  `plan` failed for every example. Rewritten as a null-guarding ternary.
+- **The OpenSearch Serverless data access policy no longer pins itself to one
+  operator.** The examples' policy listed `data.aws_caller_identity.current.arn`,
+  which for an assumed role is a per-session ARN
+  (`.../assumed-role/<role>/<session>`). Whoever applied last owned the
+  collection, and the next person got
+  `403 ... authorization_exception` on `opensearch_index`. It could not self-heal:
+  the index is read before the policy update applies, so the run that would fix
+  the policy dies first. AOSS matches any session of a role, so the policy now
+  names the role. `deployer_role_arn` sets it explicitly (CI passes
+  `AWS_CREDS_TARGET_ROLE`); otherwise it is derived from the caller, and a
+  validation rejects a session ARN. NOTE: an existing collection needs one
+  targeted apply to migrate, run by a principal already in the policy:
+  `terraform apply -target='aws_opensearchserverless_access_policy.knowledge_base_data_policy[0]'`.
+
+- **Bedrock grants now name the model ID as invoked, not as configured.**
+  `idp_common` rewrites the ID before the call: a trailing `:1m` becomes the
+  `context-1m` beta header and a `:flex`/`:priority` tail becomes the service
+  tier. The allowlist used the raw config value, so a `:1m` model produced
+  `inference-profile/<id>:1m`, an ARN that matches nothing, and every invoke
+  failed with `AccessDeniedException`. Latent until the YAML became
+  authoritative, because `base-summarization.yaml` ships
+  `us.anthropic.claude-sonnet-5:1m`; the assessment escalation grant had been
+  dead the same way, visible only on low-confidence escalation. A tier tail is
+  only stripped from the third segment on, matching `parse_model_id`, so
+  `nova-2-lite-v1:0` and `claude-sonnet-5:flex` are unaffected.
+
+### Not applicable
+
+- Upstream's `EnableHeadless` → `EnableJobsApi` rename (v0.6.2) needs no wrapper
+  change: the wrapper does not implement the upstream Jobs API (no `/jobs`
+  Private API Gateway, `api_handler`/`job_tracker`/`batch_pre_processor`
+  Lambdas, machine-to-machine OAuth client, or bastion). The wrapper's
+  `enable_api = false` "headless" posture is an unrelated concept and is
+  unchanged. See the migration guide.
+- Backend workers write status to DynamoDB directly (`APPSYNC_API_URL=""`),
+  matching upstream, and the UI polls for updates.
+- Upstream's `PermissionsBoundaryArn` fix for the Feature Platform nested stack
+  (v0.6.1) needs no wrapper change, because there are no nested stacks to forward
+  it to. Note separately that the wrapper does not implement permissions
+  boundaries at all — upstream added them in v0.3.9, so this is a pre-existing gap
+  rather than a regression in this release, and it is tracked as follow-up work.
+  Accounts whose SCP requires a boundary on every IAM role cannot deploy this
+  wrapper. See the migration guide.
+- Feature-Platform registration of the new `preprocessing` / `postprocessing` hook
+  points needs no wrapper change: the vendored `register_feature_hooks` Lambda
+  already accepts both flat points.
+
+---
+
 ## [0.5.16-tf.0]
 
 > This release bundles two tracks: the **local-build** work (`var.build`,
@@ -79,24 +413,6 @@ CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
   `tests/validate-web-ui-build-check.sh` unit test.
 - **Documentation page** `docs/content/deployment-guides/local-web-ui-build.md`
   covering Node.js prerequisites and the local UI build flow.
-- **Configurable Chat-with-Document and rule-validation Lambda memory** (#157).
-  The Chat-with-Document processor Lambda and the two rule-validation
-  Lambdas previously hardcoded `memory_size = 4096`, which fails
-  `CreateFunction` on accounts whose per-function Lambda memory service
-  quota is below 4096 MB (some sandbox accounts cap at 3008), blocking a
-  vanilla deploy of any example that enables chat (on by default). Now
-  configurable, defaulting to 4096 so existing behavior is unchanged:
-  - `modules/features/chat-with-document` — new `processor_memory_size`
-    variable (default `4096`, validated `128`-`10240`) drives the
-    processor Lambda memory; surfaced on the root module via
-    `api.chat_with_document.processor_memory_size`.
-  - All processor examples accept it through their `api.chat_with_document`
-    object type; `examples/unified-processor` adds a
-    `chat_processor_memory_size` convenience variable.
-  - `modules/processors/unified-processor` — new
-    `rule_validation_memory_size` variable (default `4096`) for the
-    rule-validation Lambdas (created only when `enable_rule_validation =
-    true`), threaded through the `bedrock-llm-processor` wrapper.
 
 ### Changed
 

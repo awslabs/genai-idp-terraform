@@ -58,6 +58,12 @@ variable "force_rebuild_layers" {
   default     = false
 }
 
+variable "lambda_web_adapter_layer_arn" {
+  description = "ARN of the AWS Lambda Web Adapter (LWA) layer attached to the chat token-streaming processor Function URL. When empty (default), the API module constructs the upstream default (arn:<partition>:lambda:<region>:753240598075:layer:LambdaAdapterLayerX86:25). Override to pin a specific LWA layer version/region/architecture."
+  type        = string
+  default     = ""
+}
+
 #
 # Required Resource ARNs
 #
@@ -194,6 +200,46 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "core_table_capacity" {
+  description = <<-EOT
+    Billing mode and provisioned capacity for the three core DynamoDB tables
+    (tracking, configuration, concurrency). Each table's settings are optional
+    and default to on-demand (PAY_PER_REQUEST), so leaving this unset is a no-op.
+    Set billing_mode = "PROVISIONED" with tuned read_capacity / write_capacity
+    for cost-predictable, steady high-volume workloads; read/write capacity is
+    ignored under PAY_PER_REQUEST. Applies only to tables this deployment creates
+    (inert for a table supplied via processing-environment's *_table_arn inputs).
+  EOT
+  type = object({
+    tracking = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+    configuration = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+    concurrency = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+  })
+  default = {}
+  validation {
+    condition = alltrue([
+      for mode in [
+        var.core_table_capacity.tracking.billing_mode,
+        var.core_table_capacity.configuration.billing_mode,
+        var.core_table_capacity.concurrency.billing_mode,
+      ] : contains(["PROVISIONED", "PAY_PER_REQUEST"], mode)
+    ])
+    error_message = "billing_mode for each core table must be \"PROVISIONED\" or \"PAY_PER_REQUEST\"."
+  }
+}
+
 #
 # Custom Configuration
 #
@@ -201,92 +247,92 @@ variable "data_tracking_retention_days" {
 # Processor-specific Configuration Objects
 #
 
-variable "bedrock_llm_processor" {
-  description = "Configuration for Bedrock LLM processor"
+variable "processor" {
+  description = <<-EOT
+    The document processor for this deployment. `type` selects the processor
+    (bedrock-llm, bda, or sagemaker-udop); the other fields configure it, and
+    which are required depends on `type`: bda needs `project_arn`,
+    sagemaker-udop needs `classification_endpoint_arn`. Fields that do not apply
+    to the chosen type are ignored.
+  EOT
   type = object({
-    classification_model_id      = optional(string, null)
-    extraction_model_id          = optional(string, null)
+    type = string
+
+    # bda
+    project_arn = optional(string, null)
+
+    # sagemaker-udop
+    classification_endpoint_arn = optional(string, null)
+    ocr_max_workers             = optional(number, 20)
+    classification_max_workers  = optional(number, 20)
+
+    # bedrock-llm
+    # Per-stage model IDs come from the YAML configuration (config /
+    # additional_configurations), NOT from Terraform. allowed_bedrock_model_ids
+    # is the operator escape hatch for models added post-deploy in the UI that
+    # Terraform cannot observe (["*"] = wildcard grant); it is not a model
+    # assignment.
+    allowed_bedrock_model_ids    = optional(list(string), [])
     max_pages_for_classification = optional(string, "ALL")
-    summarization = optional(object({
-      enabled  = optional(bool, true)
-      model_id = optional(string, null)
-    }), { enabled = true, model_id = null })
-    enable_hitl = optional(bool, false)
-    config      = any
-    # Extra non-active, editable config versions seeded alongside the default
-    # (version_name => config object). Shown in the UI version dropdown.
+    # Processor-pipeline HITL enablement is config-authoritative
+    # (config.hitl.enabled), derived at plan time (see local.hitl_enabled). The
+    # API-side HITL feature remains var.api.enable_hitl.
+
+    # shared
+    # Rule-validation enablement is config-authoritative
+    # (config.rule_validation.enabled), derived at plan time (see
+    # local.rule_validation_enabled). No rule-validation toggle here.
+    # Summarization is fully config-authoritative: both the model
+    # (summarization.model) and enablement (summarization.enabled) live in the
+    # YAML configuration, derived at plan time (see local.summarization_enabled).
+    # No summarization toggle on the processor object.
+    config                    = any
     additional_configurations = optional(any, {})
-    # Optional fallback BDA project for use_bda:true additional versions;
-    # does not relink the default configuration.
-    bda_project_arn = optional(string, null)
+    bda_project_arn           = optional(string, null)
+    # The BDA-as-OCR backend is config-authoritative (config.ocr.backend =
+    # "bda"), derived at plan time (see local.bda_ocr_backend_enabled). No
+    # separate toggle here.
   })
-  default = null
 
   validation {
-    condition = var.bedrock_llm_processor == null || (
-      try(var.bedrock_llm_processor.max_pages_for_classification, "ALL") == "ALL" ||
-      can(tonumber(try(var.bedrock_llm_processor.max_pages_for_classification, "ALL")))
-    )
-    error_message = "max_pages_for_classification must be 'ALL' or a numeric value."
+    condition     = contains(["bedrock-llm", "bda", "sagemaker-udop"], var.processor.type)
+    error_message = "processor.type must be one of: bedrock-llm, bda, sagemaker-udop."
   }
-}
-
-variable "bda_processor" {
-  description = "Configuration for BDA processor"
-  type = object({
-    project_arn = string
-    summarization = optional(object({
-      enabled  = optional(bool, true)
-      model_id = optional(string, null)
-    }), { enabled = true, model_id = null })
-    config = any
-    # Extra non-active, editable config versions seeded alongside the default
-    # (version_name => config object). Shown in the UI version dropdown.
-    additional_configurations = optional(any, {})
-  })
-  default = null
-}
-
-variable "sagemaker_udop_processor" {
-  description = "Configuration for SageMaker UDOP processor"
-  type = object({
-    classification_endpoint_arn = string
-    extraction_model_id         = optional(string, null)
-    summarization = optional(object({
-      enabled  = optional(bool, true)
-      model_id = optional(string, null)
-    }), { enabled = true, model_id = null })
-    ocr_max_workers            = optional(number, 20)
-    classification_max_workers = optional(number, 20)
-    config                     = any
-    # Extra non-active, editable config versions seeded alongside the default
-    # (version_name => config object). Shown in the UI version dropdown.
-    additional_configurations = optional(any, {})
-    # Optional fallback BDA project for use_bda:true additional versions;
-    # does not relink the default configuration.
-    bda_project_arn = optional(string, null)
-  })
-  default = null
+  validation {
+    condition     = var.processor.type != "bda" || var.processor.project_arn != null
+    error_message = "processor.project_arn is required when processor.type is \"bda\"."
+  }
+  validation {
+    condition     = var.processor.type != "sagemaker-udop" || var.processor.classification_endpoint_arn != null
+    error_message = "processor.classification_endpoint_arn is required when processor.type is \"sagemaker-udop\"."
+  }
+  validation {
+    condition     = var.processor.max_pages_for_classification == "ALL" || can(tonumber(var.processor.max_pages_for_classification))
+    error_message = "processor.max_pages_for_classification must be \"ALL\" or a numeric value."
+  }
 }
 
 #
 # Evaluation Configuration
 #
 variable "evaluation" {
-  description = "Configuration for document processing evaluation against baseline"
+  description = <<-EOT
+    Infrastructure inputs for document-processing evaluation against a baseline.
+    Whether evaluation runs is config-authoritative (config.evaluation.enabled);
+    this object carries only the infrastructure the config cannot express — the
+    baseline S3 bucket ARN. It is required whenever the config enables evaluation
+    (enforced by a check block, since a variable validation cannot see the
+    config). The evaluation model is set in the config
+    (evaluation.llm_method.model).
+  EOT
   type = object({
-    enabled             = optional(bool, false)
-    model_id            = optional(string, null)
     baseline_bucket_arn = optional(string)
-  })
-  default = {
-    enabled = false
-  }
 
-  validation {
-    condition     = var.evaluation.enabled == false || var.evaluation.baseline_bucket_arn != null
-    error_message = "When evaluation.enabled is true, baseline_bucket_arn is required."
-  }
+    # Static opt-in so enablement can gate count/for_each. Set it to the same
+    # flag that decides whether the caller creates the bucket.
+    enabled = optional(bool)
+  })
+  default = {}
 }
 
 #
@@ -358,39 +404,49 @@ variable "web_ui" {
     enable_signup              = optional(string, "")
     display_name               = optional(string, null)
     console_title              = optional(string, "IDP Accelerator Console")
+    # Country codes allowed to reach CloudFront; empty means no restriction.
+    allowed_geos = optional(list(string), [])
 
-    # Hosting mode. "CloudFront" (default) fronts the web app bucket with a
-    # CloudFront distribution. "ALB" skips CloudFront and serves the bucket via
-    # an internal Application Load Balancer + S3 interface VPC endpoint (for
-    # private-network / GovCloud deployments). Mirrors upstream WebUIHosting.
+    # Hosting mode, mirroring upstream WebUIHosting.
+    #
+    # "CloudFront" (default) fronts the web app bucket with a CloudFront
+    # distribution.
+    #
+    # "APIGateway" skips CloudFront entirely and serves the SPA as an S3 proxy on
+    # the SAME API Gateway REST API that carries the /op transport: GET / returns
+    # index.html and GET /{proxy+} returns the hashed assets. Consequences:
+    #   * The Web UI inherits the API's posture — api.api_gateway_visibility
+    #     (PRIVATE => VPC-only via the execute-api interface endpoint) and
+    #     api.waf_allowed_ipv4_ranges (WAFv2 on the stage) apply to the SPA too.
+    #   * No CloudFront distribution and no ACM certificate are needed, so this
+    #     is the mode for fully isolated VPC / GovCloud deployments.
+    #   * The app is served under the stage prefix, i.e. at the API base URL
+    #     (".../api"), and the UI is built with Vite base = "/api/" so asset URLs
+    #     resolve through the {proxy+} route.
+    #   * Requires api.enabled = true (the REST API is what serves the SPA); see
+    #     check "web_ui_apigateway_hosting_requires_api".
+    #   * Switching an existing CloudFront deployment to this mode REPLACES the
+    #     web app bucket (its name becomes root-derived). Only built static
+    #     assets live there and the next build repopulates them — see
+    #     docs/migration-v0.5.16-to-v0.6.4.md.
+    #
+    # "ALB" was REMOVED in v0.6.4 (upstream deleted ALB hosting in v0.6.0).
+    # See docs/migration-v0.5.16-to-v0.6.4.md.
     hosting = optional(string, "CloudFront")
 
-    # Public URL fronting the ALB (custom domain). Drives input/output bucket
+    # Public URL fronting the Web UI (custom domain). Drives input/output bucket
     # CORS and Cognito callback/logout URLs. Mirrors upstream CustomDomainUrl.
-    # Only used when hosting = "ALB"; when null, CORS falls back to "*".
+    # Only used for non-CloudFront hosting; ignored in APIGateway mode, where the
+    # app URL is the REST API base URL. When null, CORS falls back to "*".
     custom_domain_url = optional(string, null)
-
-    # ALB hosting settings (required when hosting = "ALB").
-    alb = optional(object({
-      vpc_id                   = optional(string, null)
-      subnet_ids               = optional(list(string), [])
-      certificate_arn          = optional(string, null)
-      scheme                   = optional(string, "internal")
-      allowed_cidrs            = optional(list(string), [])
-      lambda_security_group_id = optional(string, null)
-      # Explicit opt-in for the Lambda <-> S3 VPCE 443 rules. Set true (with
-      # lambda_security_group_id) to create them; kept separate from the id so
-      # `count` in the module stays plan-known even for a same-apply Lambda SG.
-      manage_lambda_sg_rules = optional(bool, false)
-    }), {})
 
     # Presigned-URL-via-VPCE settings (mirrors upstream
     # S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride). When
     # enabled, presigner Lambdas generate S3 URLs targeting the VPC interface
     # endpoint. Non-breaking default: off (presigned URLs use global S3).
-    # Because the ALB-created VPCE cannot feed back into the API module without
-    # a dependency cycle, supply the DNS name/id here (or from the web-ui-alb
-    # module outputs at the example level).
+    # The S3 interface endpoint is owned by the caller's VPC wiring, so supply
+    # its DNS name/id here (e.g. from the vpc-endpoints module outputs at the
+    # example level) rather than having this module derive it.
     s3_presigned_url_via_vpc_endpoint = optional(bool, false)
     s3_vpc_endpoint_dns_name_override = optional(string, null)
     s3_vpc_endpoint_id_override       = optional(string, null)
@@ -404,6 +460,13 @@ variable "web_ui" {
     logging_bucket_arn         = null
     enable_signup              = ""
     display_name               = null
+  }
+
+  # Reject the removed "ALB" hosting mode with an actionable message instead of
+  # letting it silently fall through to a bucket with no fronting layer.
+  validation {
+    condition     = contains(["CloudFront", "APIGateway"], var.web_ui.hosting)
+    error_message = "web_ui.hosting = \"ALB\" was removed in v0.6.4 (upstream deleted ALB hosting). Use \"APIGateway\" for a VPC-capable private posture, or \"CloudFront\". See docs/migration-v0.5.16-to-v0.6.4.md."
   }
 }
 
@@ -420,6 +483,10 @@ variable "api" {
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
       model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+      # Escape hatch for agent models set in the config after apply, which
+      # Terraform cannot see. Mirrors processor.allowed_bedrock_model_ids;
+      # ["*"] grants the account's whole model space.
+      allowed_bedrock_model_ids = optional(list(string), [])
     }), { enabled = false })
 
     # Discovery (Document discovery and classification workflow)
@@ -432,7 +499,9 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-      processor_memory_size    = optional(number, 4096)
+      # Escape hatch for chat models set in the config after apply; ["*"] grants
+      # the account's whole model space.
+      allowed_bedrock_model_ids = optional(list(string), [])
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -453,6 +522,7 @@ variable "api" {
     enable_test_studio          = optional(bool, false)
     enable_fcc_dataset          = optional(bool, false)
     enable_w2_dataset           = optional(bool, false)
+    enable_finetuning           = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
 
@@ -469,12 +539,37 @@ variable "api" {
     enable_omni_ai_dataset          = optional(bool, false)
     enable_docplit_poly_seq_dataset = optional(bool, false)
 
-    # AppSync API visibility. Use "PRIVATE" for fully isolated VPC
-    # deployments — only clients with a route to the
-    # `appsync-api` interface VPC endpoint can reach the API. The
-    # default "GLOBAL" exposes the API on the public internet (still
-    # protected by the configured authorization).
-    visibility = optional(string, "GLOBAL")
+    # ---------------------------------------------------------------------
+    # REST API transport visibility (v0.6.4). Upstream replaced AppSync with
+    # an API Gateway REST API and renamed AppSyncVisibility/UsePrivateAppSync
+    # to ApiGatewayVisibility/UsePrivateApi.
+    # ---------------------------------------------------------------------
+    # "PRIVATE" makes the REST API a PRIVATE endpoint reachable only through
+    # the `execute-api` interface VPC endpoint (supply
+    # api_gateway_vpc_endpoint_id), with a resource policy restricting
+    # aws:SourceVpce. The default "GLOBAL" exposes a REGIONAL endpoint on the
+    # public internet (still gated by the Cognito authorizer).
+    api_gateway_visibility = optional(string, "GLOBAL")
+
+    # Derived from api_gateway_visibility when null (PRIVATE => true). Set
+    # explicitly only to override. Mirrors upstream UsePrivateApi.
+    use_private_api = optional(bool, null)
+
+    # VPC interface endpoint id for execute-api. Required when
+    # api_gateway_visibility = "PRIVATE".
+    api_gateway_vpc_endpoint_id = optional(string, "")
+
+    # IPv4 CIDRs allowed to call the REST API. The allow-all default disables
+    # WAF; any other value attaches a REGIONAL WAFv2 WebACL to the API stage.
+    # Mirrors upstream WAFAllowedIPv4Ranges.
+    waf_allowed_ipv4_ranges = optional(list(string), ["0.0.0.0/0"])
+
+    # DEPRECATED (v0.6.4): renamed to `api_gateway_visibility` when the
+    # transport moved from AppSync to API Gateway. Still honored — when set it
+    # takes precedence and a `check` block surfaces a deprecation notice. Will
+    # be removed in a future release; see
+    # docs/migration-v0.5.16-to-v0.6.4.md.
+    visibility = optional(string, null)
   })
 
   default = {
@@ -489,6 +584,32 @@ variable "api" {
   validation {
     condition     = !var.api.agent_analytics.enabled || var.api.agent_analytics.model_id != null
     error_message = "When api.agent_analytics.enabled is true, model_id must be provided."
+  }
+
+  validation {
+    condition     = contains(["GLOBAL", "PRIVATE"], var.api.api_gateway_visibility)
+    error_message = "api.api_gateway_visibility must be \"GLOBAL\" or \"PRIVATE\"."
+  }
+
+  validation {
+    # Ternary, not `x == null || contains(...)`: Terraform does not short-circuit
+    # `||` when the right operand errors, and contains() rejects a null value, so
+    # the `||` form fails validation on the null default (the normal case now that
+    # api_gateway_visibility is the supported input).
+    condition     = var.api.visibility == null ? true : contains(["GLOBAL", "PRIVATE"], var.api.visibility)
+    error_message = "api.visibility (deprecated — use api.api_gateway_visibility) must be \"GLOBAL\" or \"PRIVATE\" when set."
+  }
+
+  # A PRIVATE REST API is only reachable through an execute-api interface VPC
+  # endpoint, and the endpoint id is required to build both the endpoint
+  # configuration and the aws:SourceVpce resource policy. Fail fast at plan
+  # time rather than producing an unreachable API.
+  validation {
+    condition = (
+      coalesce(var.api.visibility, var.api.api_gateway_visibility) != "PRIVATE" ||
+      trimspace(var.api.api_gateway_vpc_endpoint_id) != ""
+    )
+    error_message = "When the REST API is PRIVATE you must also set api.api_gateway_vpc_endpoint_id to the execute-api interface VPC endpoint id."
   }
 }
 
@@ -514,8 +635,9 @@ variable "tracking" {
 variable "agent_analytics" {
   description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
   type = object({
-    enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    enabled                   = optional(bool, false)
+    model_id                  = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    allowed_bedrock_model_ids = optional(list(string), [])
   })
   default = null
 }
@@ -537,8 +659,9 @@ variable "discovery_allowed_cors_origins" {
 variable "chat_with_document" {
   description = "DEPRECATED: Use api.chat_with_document instead. Configuration for chat with document functionality"
   type = object({
-    enabled                  = optional(bool, false)
-    guardrail_id_and_version = optional(string, null)
+    enabled                   = optional(bool, false)
+    guardrail_id_and_version  = optional(string, null)
+    allowed_bedrock_model_ids = optional(list(string), [])
   })
   default = null
 }
@@ -689,6 +812,19 @@ variable "idp_federation" {
     attribute_mapping      = optional(map(string), {})
     group_attribute_name   = optional(string, "")
     group_mapping          = optional(map(string), {})
+
+    # Send users straight to the external IdP instead of showing the hosted UI's
+    # provider chooser. Mirrors upstream ExternalIdPAutoLogin.
+    auto_login = optional(bool, false)
+
+    # Globally unique Cognito hosted UI domain prefix. Defaults to a sanitized
+    # name prefix. Only used when the pool is created by modules/user-identity.
+    hosted_ui_domain_prefix = optional(string)
+
+    # Hosted UI FQDN of a pool you created yourself (e.g.
+    # "my-prefix.auth.us-east-1.amazoncognito.com"). Required for a
+    # bring-your-own pool so the sign-in page knows where to redirect.
+    hosted_ui_domain = optional(string, "")
   })
   default = {
     enabled = false

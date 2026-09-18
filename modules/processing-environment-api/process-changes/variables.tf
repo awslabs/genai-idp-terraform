@@ -9,16 +9,6 @@ variable "name_prefix" {
   type        = string
 }
 
-variable "appsync_api_id" {
-  description = "AppSync API ID"
-  type        = string
-}
-
-variable "appsync_lambda_role_arn" {
-  description = "AppSync Lambda service role ARN"
-  type        = string
-}
-
 variable "idp_common_layer_arn" {
   description = "ARN of the IDP common Lambda layer"
   type        = string
@@ -74,11 +64,6 @@ variable "input_bucket_arn" {
 
 variable "output_bucket_arn" {
   description = "ARN of the output S3 bucket"
-  type        = string
-}
-
-variable "appsync_graphql_url" {
-  description = "AppSync GraphQL API URL"
   type        = string
 }
 

@@ -136,7 +136,7 @@ resource "aws_kms_key" "encryption_key" {
         Sid    = "Allow CloudWatch Logs"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.id}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -148,7 +148,7 @@ resource "aws_kms_key" "encryption_key" {
         Resource = "*"
         Condition = {
           ArnEquals = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       }
@@ -252,6 +252,46 @@ resource "aws_s3_bucket_public_access_block" "reporting_bucket" {
   restrict_public_buckets = true
 }
 
+# Evaluation baseline bucket. Holds the expected/ground-truth documents that
+# extraction results are scored against; the evaluation function reads it.
+resource "aws_s3_bucket" "evaluation_baseline_bucket" {
+  count         = var.enable_evaluation ? 1 : 0
+  bucket        = "${var.prefix}-baseline-${random_string.suffix.result}"
+  force_destroy = true
+  tags          = var.tags
+}
+
+resource "aws_s3_bucket_versioning" "evaluation_baseline_bucket" {
+  count  = var.enable_evaluation ? 1 : 0
+  bucket = aws_s3_bucket.evaluation_baseline_bucket[0].id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "evaluation_baseline_bucket" {
+  count  = var.enable_evaluation ? 1 : 0
+  bucket = aws_s3_bucket.evaluation_baseline_bucket[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.encryption_key.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "evaluation_baseline_bucket" {
+  count  = var.enable_evaluation ? 1 : 0
+  bucket = aws_s3_bucket.evaluation_baseline_bucket[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # Glue catalog database for reporting/analytics. The reporting module creates
 # the Glue *tables* and crawler but not the database itself, so the caller must
 # provide it. Referencing .name below wires the ordering dependency.
@@ -348,6 +388,34 @@ resource "aws_cognito_user_pool" "user_pool" {
     mutable             = true
   }
 
+  # Opt-in: Cognito can add a schema attribute in place but never remove one.
+  dynamic "schema" {
+    for_each = try(var.federation_pool_wiring.enable_idp_groups_attribute, false) ? [1] : []
+    content {
+      attribute_data_type = "String"
+      name                = "idp_groups"
+      required            = false
+      mutable             = true
+
+      string_attribute_constraints {
+        min_length = 0
+        max_length = 2048
+      }
+    }
+  }
+
+  # Set on a second apply from the module's federation_group_mapping_function_arn
+  # output: a direct reference would close a dependency cycle.
+  dynamic "lambda_config" {
+    for_each = try(var.federation_pool_wiring.pre_token_generation_function_arn, null) != null ? [1] : []
+    content {
+      pre_token_generation_config {
+        lambda_arn     = var.federation_pool_wiring.pre_token_generation_function_arn
+        lambda_version = "V2_0"
+      }
+    }
+  }
+
   admin_create_user_config {
     allow_admin_create_user_only = true
     invite_message_template {
@@ -412,10 +480,11 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
 
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_scopes                 = ["email", "openid", "profile"]
-  callback_urls                        = ["http://localhost:3000"]
-  logout_urls                          = ["http://localhost:3000"]
-  supported_identity_providers         = ["COGNITO"]
+  # Federated sign-in fails with invalid_scope without "phone".
+  allowed_oauth_scopes         = ["email", "openid", "phone", "profile"]
+  callback_urls                = ["http://localhost:3000"]
+  logout_urls                  = ["http://localhost:3000"]
+  supported_identity_providers = distinct(concat(["COGNITO"], try(var.federation_pool_wiring.supported_identity_providers, [])))
 
   access_token_validity  = 60
   id_token_validity      = 60
@@ -436,6 +505,13 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
     "ALLOW_USER_SRP_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
+}
+
+# Hosted UI domain, required for external-IdP sign-in redirects.
+resource "aws_cognito_user_pool_domain" "hosted_ui" {
+  count        = try(var.federation_pool_wiring.hosted_ui_domain_prefix, null) != null ? 1 : 0
+  domain       = var.federation_pool_wiring.hosted_ui_domain_prefix
+  user_pool_id = aws_cognito_user_pool.user_pool.id
 }
 
 resource "aws_cognito_identity_pool" "identity_pool" {
@@ -555,6 +631,10 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
   user_pool_id = aws_cognito_user_pool.user_pool.id
   group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
+
+  # With RBAC on, the group is created inside the module, but rbac_group_names is
+  # derived from variables (to avoid a cycle), so nothing else orders us after it.
+  depends_on = [module.genai_idp_accelerator]
 }
 
 # Deploy the GenAI IDP Accelerator with the Bedrock-LLM processor façade.
@@ -575,14 +655,12 @@ module "genai_idp_accelerator" {
   build = var.build
 
   # Processor configuration (Bedrock-LLM default + BDA-linked additional version)
-  bedrock_llm_processor = {
-    classification_model_id = var.classification_model_id
-    extraction_model_id     = var.extraction_model_id
-    summarization = {
-      enabled  = var.summarization_enabled
-      model_id = var.summarization_model_id
-    }
-    config = local.config
+  processor = {
+    type = "bedrock-llm"
+    # Summarization enablement + model come from the config YAML
+    # (summarization.enabled / .model), derived at plan time.
+    config                    = local.config
+    allowed_bedrock_model_ids = var.allowed_bedrock_model_ids
     # The BDA version carries its own per-version `bda_project_arn`, so no
     # top-level fallback is needed here. The default is never relinked.
     additional_configurations = local.additional_configurations
@@ -612,11 +690,8 @@ module "genai_idp_accelerator" {
   # false the KB is not created and knowledge_base_arn is null, leaving
   # chat-with-document to operate without a KB.
   api = {
-    enabled = true
-    chat_with_document = {
-      enabled               = var.chat_with_document_enabled
-      processor_memory_size = var.chat_processor_memory_size
-    }
+    enabled            = true
+    chat_with_document = { enabled = var.chat_with_document_enabled }
     knowledge_base = {
       enabled            = var.create_knowledge_base
       knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)
@@ -634,6 +709,12 @@ module "genai_idp_accelerator" {
     enable_agent_companion_chat = var.enable_agent_companion_chat
     agent_analytics             = { enabled = var.enable_agent_analytics }
     enable_mcp                  = var.enable_mcp
+
+    # Test Studio (Web UI "Test Sets" / "Test Execution" tabs).
+    enable_test_studio = var.enable_test_studio
+
+    # Fine-tuning / Custom Models (requires Test Studio; reads its test-sets bucket).
+    enable_finetuning = var.enable_finetuning
   }
 
   # Reporting is required by agent_analytics (analytics agent queries via Athena).
@@ -644,6 +725,18 @@ module "genai_idp_accelerator" {
     bucket_arn    = aws_s3_bucket.reporting_bucket[0].arn
     database_name = aws_glue_catalog_database.reporting[0].name
   } : { enabled = false }
+
+  # Evaluation scores extraction results against the baseline bucket above and
+  # feeds the accuracy tables that Test Studio reads.
+  # Evaluation ENABLEMENT is config-authoritative (config.evaluation.enabled).
+  # This example still owns the baseline-bucket INFRA decision via
+  # var.enable_evaluation; the bucket ARN is required by the check block when the
+  # config enables evaluation.
+  evaluation = {
+    # Static opt-in; the ARN below is computed and cannot gate count/for_each.
+    enabled             = var.enable_evaluation
+    baseline_bucket_arn = var.enable_evaluation ? aws_s3_bucket.evaluation_baseline_bucket[0].arn : null
+  }
 
   rbac = var.rbac
 

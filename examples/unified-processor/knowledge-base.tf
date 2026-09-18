@@ -68,7 +68,7 @@ resource "aws_opensearchserverless_access_policy" "knowledge_base_data_policy" {
       ],
       Principal = [
         aws_iam_role.knowledge_base_role[0].arn,
-        data.aws_caller_identity.current.arn
+        local.aoss_deployer_principal_arn,
       ]
     }
   ])
@@ -271,7 +271,7 @@ resource "aws_iam_role_policy" "knowledge_base_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${local.knowledge_base_embedding_model_id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}::foundation-model/${local.knowledge_base_embedding_model_id}"
         ]
       },
       {
@@ -309,7 +309,7 @@ resource "aws_bedrockagent_knowledge_base" "knowledge_base" {
 
   knowledge_base_configuration {
     vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${local.knowledge_base_embedding_model_id}"
+      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}::foundation-model/${local.knowledge_base_embedding_model_id}"
     }
     type = "VECTOR"
   }
@@ -486,3 +486,19 @@ resource "aws_lambda_permission" "allow_s3_invoke" {
 # aws_s3_bucket_notification.input_bucket_notification resource (Terraform allows
 # only one notification per bucket, and the input bucket already carries the
 # processor's EventBridge notification).
+
+locals {
+  _caller_arn = data.aws_caller_identity.current.arn
+
+  # AOSS matches any session of a role, so name the role. Naming the session
+  # locks out everyone but the last applier and cannot self-heal, because
+  # opensearch_index is read before the policy update applies.
+  _caller_is_session = can(regex("^arn:[^:]*:sts::[0-9]+:assumed-role/", local._caller_arn))
+
+  aoss_deployer_principal_arn = (
+    var.deployer_role_arn != "" ? var.deployer_role_arn :
+    local._caller_is_session ?
+    "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${split("/", local._caller_arn)[1]}" :
+    local._caller_arn
+  )
+}

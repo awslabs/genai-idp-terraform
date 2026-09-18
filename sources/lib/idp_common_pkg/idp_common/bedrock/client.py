@@ -26,7 +26,11 @@ from botocore.exceptions import (
 )
 from urllib3.exceptions import ReadTimeoutError as Urllib3ReadTimeoutError
 
-from .model_utils import parse_model_id
+from .model_utils import (
+    get_model_max_output_tokens,
+    parse_max_tokens_limit_from_error,
+    parse_model_id,
+)
 from .openai_responses import invoke_responses_api, is_openai_responses_model
 from .session import get_bedrock_session
 
@@ -81,6 +85,16 @@ DEFAULT_MAX_BACKOFF = 300  # 5 minutes
 _CLAUDE_4_7_BASE_NAMES = {
     "anthropic.claude-opus-4-7",
     "anthropic.claude-opus-4-8",
+    # Claude Opus 5 keeps the Opus 4.7/4.8 request surface: temperature/top_p/
+    # top_k are rejected (400). Thinking is ON by default on Opus 5 (unlike
+    # 4.7/4.8); the Converse path does not send a `thinking` field, so requests
+    # run adaptive thinking within max_tokens.
+    "anthropic.claude-opus-5",
+    # Claude Sonnet 5 shares the Opus-4.7+ request surface: it REJECTS non-default
+    # temperature/top_p/top_k (400). IDP's default decoding config sets top_k=5 /
+    # top_p=0.0, so Sonnet 5 must be treated like the sampling-param-stripped models
+    # (this is a deliberate deviation from Sonnet 4.6, which still accepts them).
+    "anthropic.claude-sonnet-5",
 }
 
 
@@ -112,6 +126,53 @@ def is_claude_4_7_model(model_id: str) -> bool:
 _is_claude_4_7_model = is_claude_4_7_model
 
 
+# Claude models that accept the reasoning-effort control
+# (output_config.effort: low|medium|high|xhigh|max). Verified live on Bedrock
+# Converse: effort measurably changes output tokens on these; Sonnet 4.5 and
+# Haiku 4.5 REJECT effort (400). Kept as base names (region prefix + :1m stripped
+# by is_claude_effort_model). GPT-5.x reasoning models use the OpenAI Responses
+# `reasoning.effort` control instead (see openai_responses.py), not this path.
+_CLAUDE_EFFORT_BASE_NAMES = {
+    "anthropic.claude-sonnet-5",
+    "anthropic.claude-sonnet-4-6",
+    "anthropic.claude-opus-4-5",
+    "anthropic.claude-opus-4-6",
+    "anthropic.claude-opus-4-7",
+    "anthropic.claude-opus-4-8",
+    "anthropic.claude-opus-5",
+    "anthropic.claude-fable-5",
+}
+
+# Effort levels accepted by Claude models (a superset of the OpenAI Responses
+# levels, which also allow "minimal"). "max"/"xhigh" are Claude-only.
+CLAUDE_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _strip_region_and_1m(model_id: str) -> str:
+    """Normalize a model ID to its base name: strip us./eu./global. prefix and
+    the :1m suffix. Also tolerates Opus 4.5/4.6 dated/`-v1` foundation IDs by
+    matching on a prefix in is_claude_effort_model."""
+    parts = model_id.split(".", 1)
+    base = (
+        parts[1] if len(parts) == 2 and parts[0] in ("us", "eu", "global") else model_id
+    )
+    if base.endswith(":1m"):
+        base = base[:-3]
+    return base
+
+
+def is_claude_effort_model(model_id: str) -> bool:
+    """True if the Claude model accepts output_config.effort.
+
+    Handles region prefixes, :1m, and dated/versioned foundation IDs
+    (e.g. anthropic.claude-opus-4-6-v1, ...-4-5-20250514-v1:0) by prefix match.
+    """
+    if not model_id:
+        return False
+    base = _strip_region_and_1m(model_id)
+    return any(base.startswith(name) for name in _CLAUDE_EFFORT_BASE_NAMES)
+
+
 # Base model names that support cachePoint (without region prefix)
 # Used to check inference profiles by resolving their underlying foundation model
 _CACHEPOINT_BASE_MODELS = set()
@@ -132,12 +193,16 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "us.anthropic.claude-opus-4-7:1m",
     "us.anthropic.claude-opus-4-8",
     "us.anthropic.claude-opus-4-8:1m",
+    "us.anthropic.claude-opus-5",
+    "us.anthropic.claude-opus-5:1m",
     "us.anthropic.claude-opus-4-1-20250805-v1:0",
     "us.anthropic.claude-opus-4-20250514-v1:0",
     "us.anthropic.claude-sonnet-4-20250514-v1:0",
     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "us.anthropic.claude-sonnet-4-6",
     "us.anthropic.claude-sonnet-4-6:1m",
+    "us.anthropic.claude-sonnet-5",
+    "us.anthropic.claude-sonnet-5:1m",
     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "us.amazon.nova-lite-v1:0",
     "us.amazon.nova-pro-v1:0",
@@ -148,6 +213,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "eu.anthropic.claude-sonnet-4-6",
     "eu.anthropic.claude-sonnet-4-6:1m",
+    "eu.anthropic.claude-sonnet-5",
+    "eu.anthropic.claude-sonnet-5:1m",
     "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
     "eu.anthropic.claude-opus-4-5-20251101-v1:0",
     "eu.anthropic.claude-opus-4-6-v1",
@@ -156,6 +223,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "eu.anthropic.claude-opus-4-7:1m",
     "eu.anthropic.claude-opus-4-8",
     "eu.anthropic.claude-opus-4-8:1m",
+    "eu.anthropic.claude-opus-5",
+    "eu.anthropic.claude-opus-5:1m",
     "eu.amazon.nova-lite-v1:0",
     "eu.amazon.nova-pro-v1:0",
     "eu.amazon.nova-2-lite-v1:0",
@@ -168,6 +237,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "global.anthropic.claude-sonnet-4-6",
     "global.anthropic.claude-sonnet-4-6:1m",
+    "global.anthropic.claude-sonnet-5",
+    "global.anthropic.claude-sonnet-5:1m",
     "global.anthropic.claude-opus-4-5-20251101-v1:0",
     "global.anthropic.claude-opus-4-6-v1",
     "global.anthropic.claude-opus-4-6-v1:1m",
@@ -175,6 +246,8 @@ CACHEPOINT_SUPPORTED_MODELS = [
     "global.anthropic.claude-opus-4-7:1m",
     "global.anthropic.claude-opus-4-8",
     "global.anthropic.claude-opus-4-8:1m",
+    "global.anthropic.claude-opus-5",
+    "global.anthropic.claude-opus-5:1m",
 ]
 
 # Build set of base model names (without region/tier prefixes) for inference profile resolution.
@@ -243,9 +316,7 @@ class BedrockClient:
         # Lambda invocations stay in the calling account, so this client
         # uses default credentials regardless of BEDROCK_ASSUME_ROLE_ARN.
         if self._lambda_client is None:
-            self._lambda_client = boto3.client(
-                "lambda", region_name=self.region
-            )
+            self._lambda_client = boto3.client("lambda", region_name=self.region)
         return self._lambda_client
 
     @property
@@ -261,9 +332,7 @@ class BedrockClient:
     def s3_client(self):
         """Lazy-loaded S3 client for LambdaHook image uploads."""
         if self._s3_client is None:
-            self._s3_client = boto3.client(
-                "s3", region_name=self.region
-            )
+            self._s3_client = boto3.client("s3", region_name=self.region)
         return self._s3_client
 
     def _is_model_cachepoint_supported(self, model_id: str) -> bool:
@@ -469,7 +538,9 @@ class BedrockClient:
                 content_type = (
                     "text"
                     if "text" in item
-                    else "image" if "image" in item else "other"
+                    else "image"
+                    if "image" in item
+                    else "other"
                 )
                 logger.debug(
                     f"No cachepoint tags in {content_type} content, passing through unchanged"
@@ -547,8 +618,10 @@ class BedrockClient:
         # an OpenAI-compatible REST endpoint. The backend translates the same
         # (system_prompt, content) inputs and returns the identical
         # {"response": ..., "metering": ...} structure, so callers are unaffected.
-        # <<CACHEPOINT>> markers are stripped during translation (prompt caching
-        # is not supported for these models).
+        # Prompt caching is handled inside openai_responses.py: GPT-5.4/5.5 cache
+        # automatically (markers stripped); GPT-5.6 translates <<CACHEPOINT>>
+        # markers into explicit prompt_cache_breakpoint fields. (This is separate
+        # from CACHEPOINT_SUPPORTED_MODELS, which governs the Converse path only.)
         if is_openai_responses_model(model_id):
             return invoke_responses_api(
                 client=self,
@@ -654,7 +727,9 @@ class BedrockClient:
                     inference_config["topP"] = top_p
                     # Remove temperature when using top_p to avoid conflicts
                     del inference_config["temperature"]
-                    logger.debug(f"Using top_p={top_p} for inference (temperature ignored)")
+                    logger.debug(
+                        f"Using top_p={top_p} for inference (temperature ignored)"
+                    )
                 else:
                     logger.debug(
                         f"Using temperature={temperature} for inference (top_p is 0 or None)"
@@ -672,9 +747,29 @@ class BedrockClient:
                     )
                     max_tokens = None
 
-            # Add to inferenceConfig as maxTokens for Nova models
-            if max_tokens is not None and "amazon" in model_id.lower():
-                inference_config["maxTokens"] = max_tokens
+        # Always request the model's maximum output when no explicit value is
+        # given. Bedrock's default-when-omitted is a small truncating value
+        # (measured 4096 for Claude, 2000 for Nova) — there is no "use model max"
+        # sentinel in the Converse API, so we set it explicitly from the single
+        # source of truth (model_config_limits.yaml). Completeness matters more
+        # than an output cap for this accelerator's extraction/confidence passes.
+        if max_tokens is None:
+            try:
+                max_tokens = get_model_max_output_tokens(model_id)
+            except (ValueError, FileNotFoundError):
+                # Unknown model, or limits file unavailable in this runtime: leave
+                # max_tokens unset. If Bedrock truncates or rejects, the over-limit
+                # retry below recovers the real cap.
+                logger.warning(
+                    "Could not resolve maxTokens for %s (missing entry or "
+                    "model_config_limits.yaml unavailable); Bedrock default "
+                    "applies.",
+                    model_id,
+                )
+
+        # Add to inferenceConfig as maxTokens for Nova models
+        if max_tokens is not None and "amazon" in model_id.lower():
+            inference_config["maxTokens"] = max_tokens
 
         # Add additional model fields if needed
         additional_model_fields = {}
@@ -705,6 +800,30 @@ class BedrockClient:
 
             if max_tokens is not None:
                 additional_model_fields["max_tokens"] = max_tokens
+
+            # Reasoning effort (output_config.effort) for effort-capable Claude
+            # models. Controls thinking depth / output-token spend
+            # (low|medium|high|xhigh|max). Ignored/omitted for models that don't
+            # support it (Sonnet 4.5, Haiku 4.5) to avoid a 400.
+            if reasoning_effort and is_claude_effort_model(model_id):
+                effort = str(reasoning_effort).lower().strip()
+                if effort in CLAUDE_EFFORT_LEVELS:
+                    additional_model_fields["output_config"] = {"effort": effort}
+                    logger.info("Using reasoning effort '%s' for %s", effort, model_id)
+                else:
+                    logger.warning(
+                        "Ignoring unsupported Claude reasoning effort '%s' for %s "
+                        "(valid: %s)",
+                        reasoning_effort,
+                        model_id,
+                        ", ".join(CLAUDE_EFFORT_LEVELS),
+                    )
+            elif reasoning_effort and not is_claude_effort_model(model_id):
+                logger.debug(
+                    "Model %s does not support reasoning effort; ignoring '%s'",
+                    model_id,
+                    reasoning_effort,
+                )
 
         # Handle Nova-specific parameters
         elif "amazon" in model_id.lower():
@@ -790,6 +909,31 @@ class BedrockClient:
         )
 
         return result
+
+    @staticmethod
+    def _apply_max_tokens_limit(converse_params: Dict[str, Any], limit: int) -> bool:
+        """Clamp the request's maxTokens to `limit` in place, if it exceeds it.
+
+        Handles both carriers: Nova's ``inferenceConfig.maxTokens`` and Claude's
+        ``additionalModelRequestFields.max_tokens``. Returns True if a value was
+        actually lowered (so a retry is warranted), False otherwise — the False
+        case prevents an infinite retry when no maxTokens was set or it's already
+        at/below the limit.
+        """
+        changed = False
+        inference_config = converse_params.get("inferenceConfig")
+        if isinstance(inference_config, dict):
+            current = inference_config.get("maxTokens")
+            if isinstance(current, int) and current > limit:
+                inference_config["maxTokens"] = limit
+                changed = True
+        amrf = converse_params.get("additionalModelRequestFields")
+        if isinstance(amrf, dict):
+            current = amrf.get("max_tokens")
+            if isinstance(current, int) and current > limit:
+                amrf["max_tokens"] = limit
+                changed = True
+        return changed
 
     def _invoke_with_retry(
         self,
@@ -961,8 +1105,43 @@ class BedrockClient:
                     context=context,
                 )
             else:
+                # Self-heal an over-limit maxTokens request. There is no AWS API
+                # for the per-model output cap, so when model_config_limits.yaml
+                # is stale/missing for a model we requested too many tokens for,
+                # Bedrock's ValidationException states the true limit — parse it,
+                # clamp, and retry once. This keeps a newly-added model working
+                # before its YAML entry is corrected.
+                discovered_limit = (
+                    parse_max_tokens_limit_from_error(error_message)
+                    if error_code == "ValidationException"
+                    else None
+                )
+                if discovered_limit is not None and self._apply_max_tokens_limit(
+                    converse_params, discovered_limit
+                ):
+                    logger.warning(
+                        "maxTokens exceeded model limit for %s; Bedrock reports "
+                        "%d. Clamping and retrying. Update model_config_limits.yaml.",
+                        model_id,
+                        discovered_limit,
+                    )
+                    return self._invoke_with_retry(
+                        model_id=model_id,
+                        converse_params=converse_params,
+                        retry_count=retry_count,
+                        max_retries=max_retries,
+                        request_start_time=request_start_time,
+                        last_exception=e,
+                        context=context,
+                    )
+
+                # Include model_id: errors like ResourceNotFoundException
+                # ("model version has reached the end of its life") do not name
+                # the model, so logging it here makes the offending model
+                # explicit in the function logs for troubleshooting.
                 logger.error(
-                    f"Non-retryable Bedrock error: {error_code} - {error_message}"
+                    f"Non-retryable Bedrock error for model {model_id}: "
+                    f"{error_code} - {error_message}"
                 )
                 self._put_metric("BedrockRequestsFailed", 1)
                 self._put_metric("BedrockNonRetryableErrors", 1)
@@ -1154,7 +1333,9 @@ class BedrockClient:
                 logger.warning(f"Failed to generate embedding for item {index}: {e}")
                 return (index, None)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_concurrent
+        ) as executor:
             futures = {
                 executor.submit(_embed_single, i, item): i
                 for i, item in enumerate(items)
@@ -1383,7 +1564,8 @@ class BedrockClient:
                 )
             else:
                 logger.error(
-                    f"Non-retryable Bedrock error for embedding: {error_code} - {error_message}"
+                    f"Non-retryable Bedrock error for embedding model {model_id}: "
+                    f"{error_code} - {error_message}"
                 )
                 self._put_metric("BedrockEmbeddingRequestsFailed", 1)
                 self._put_metric("BedrockEmbeddingNonRetryableErrors", 1)
@@ -1416,7 +1598,18 @@ class BedrockClient:
                 extra={"response": response_obj},
             )
             return ""
-        return content[0].get("text", "")
+        # Reasoning models (Claude Sonnet 5 / 4.6+, and any model with extended
+        # thinking on) prepend one or more `reasoningContent` blocks BEFORE the
+        # answer `text` block, so content[0] is often not the text. Concatenate
+        # every `text` block (skipping reasoningContent) so we return the actual
+        # answer regardless of block ordering. Falls back to the old behavior for
+        # single-block responses.
+        text_parts = [
+            item["text"]
+            for item in content
+            if isinstance(item, dict) and isinstance(item.get("text"), str)
+        ]
+        return "".join(text_parts)
 
     def format_prompt(
         self,
@@ -1585,7 +1778,9 @@ class BedrockClient:
         }
 
         # Invoke Lambda with retry logic
-        effective_max_retries = max_retries if max_retries is not None else self.max_retries
+        effective_max_retries = (
+            max_retries if max_retries is not None else self.max_retries
+        )
         request_start_time = time.time()
 
         return self._invoke_lambda_hook_with_retry(
@@ -1654,7 +1849,9 @@ class BedrockClient:
                 try:
                     img_bytes = base64.b64decode(img_bytes)
                 except Exception:
-                    logger.warning("Failed to decode base64 image data, passing through")
+                    logger.warning(
+                        "Failed to decode base64 image data, passing through"
+                    )
                     converted_content.append(item)
                     continue
 
@@ -1667,7 +1864,9 @@ class BedrockClient:
                     "gif": "image/gif",
                     "webp": "image/webp",
                 }
-                content_type = content_type_map.get(img_format, "application/octet-stream")
+                content_type = content_type_map.get(
+                    img_format, "application/octet-stream"
+                )
 
                 self.s3_client.put_object(
                     Bucket=working_bucket,
@@ -1686,14 +1885,16 @@ class BedrockClient:
                 if account_id and len(account_id) == 12:
                     s3_location["bucketOwner"] = account_id
 
-                converted_content.append({
-                    "image": {
-                        "format": img_format,
-                        "source": {
-                            "s3Location": s3_location,
-                        },
+                converted_content.append(
+                    {
+                        "image": {
+                            "format": img_format,
+                            "source": {
+                                "s3Location": s3_location,
+                            },
+                        }
                     }
-                })
+                )
 
                 logger.debug(f"Uploaded image to S3: {s3_uri} ({len(img_bytes)} bytes)")
 
@@ -1786,9 +1987,7 @@ class BedrockClient:
                     )
 
                 self._put_metric("LambdaHookRequestsFailed", 1)
-                raise RuntimeError(
-                    f"LambdaHook function error: {error_message}"
-                )
+                raise RuntimeError(f"LambdaHook function error: {error_message}")
 
             # Parse response payload
             response_payload = json.loads(response["Payload"].read().decode("utf-8"))
@@ -1810,10 +2009,14 @@ class BedrockClient:
 
             # Track metrics
             self._put_metric("LambdaHookRequestsSucceeded", 1)
-            self._put_metric("LambdaHookRequestLatency", duration * 1000, "Milliseconds")
+            self._put_metric(
+                "LambdaHookRequestLatency", duration * 1000, "Milliseconds"
+            )
 
             total_duration = time.time() - request_start_time
-            self._put_metric("LambdaHookTotalLatency", total_duration * 1000, "Milliseconds")
+            self._put_metric(
+                "LambdaHookTotalLatency", total_duration * 1000, "Milliseconds"
+            )
 
             # Build response in the same format as Bedrock responses
             response_with_metering = {
@@ -1856,9 +2059,7 @@ class BedrockClient:
                     context=context,
                 )
             else:
-                logger.error(
-                    f"LambdaHook error: {error_code} - {error_message}"
-                )
+                logger.error(f"LambdaHook error: {error_code} - {error_message}")
                 self._put_metric("LambdaHookRequestsFailed", 1)
                 raise
 

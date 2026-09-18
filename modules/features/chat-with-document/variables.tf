@@ -20,43 +20,26 @@ variable "name_prefix" {
   type        = string
 }
 
-variable "appsync_api_id" {
-  description = "ID of the AppSync GraphQL API the chat resolvers attach to."
-  type        = string
-}
-
-variable "appsync_graphql_api_arn" {
-  description = <<-EOT
-    ARN of the AppSync GraphQL API. Used to scope the `appsync:GraphQL` mutation
-    permission the long-running processor Lambda needs to publish streaming
-    status/delta/final messages back to subscribers.
-  EOT
-  type        = string
-}
+# NOTE (IDP v0.6.4): `appsync_api_id`, `appsync_graphql_api_arn`,
+# `data_source_name` and `none_data_source_name` were removed with AppSync. This
+# module no longer creates any AppSync resource, so it has no reason to know the
+# API's id/arn, and there are no data sources left to name. Dropping the id/arn
+# inputs also removes this module's dependency on the API module, which is what
+# lets the API module consume its `field_functions` without a dependency cycle.
 
 variable "appsync_graphql_url" {
-  description = "GraphQL endpoint URL of the AppSync API; the processor publishes streaming updates to it."
-  type        = string
-}
-
-variable "data_source_name" {
   description = <<-EOT
-    Name of the AppSync Lambda data source that fronts the
-    `sendChatDocumentMessage` resolver. The contract references it by name so
-    the composed mutation resolver attaches to it.
+    Legacy AppSync endpoint URL, passed to the processor Lambda as
+    `APPSYNC_API_URL`.
+
+    Retained ONLY because the vendored upstream processor code still reads that
+    env var. IDP v0.6.4 expects it to be the empty string, which selects the
+    DynamoDB-direct write path (`idp_common.docs_service` always resolves to
+    DynamoDB in v0.6); the root passes "". Do not set it to a real URL — there is
+    no AppSync API to publish to.
   EOT
   type        = string
-  default     = "SendChatDocumentMessageDataSource"
-}
-
-variable "none_data_source_name" {
-  description = <<-EOT
-    Name of the AppSync NONE (local) data source used by the
-    `onChatDocumentMessageUpdate` subscription fan-out resolver. The API module
-    owns the NONE data source; the contract references it by name.
-  EOT
-  type        = string
-  default     = "ChatDocumentNoneDataSource"
+  default     = ""
 }
 
 # ---------------------------------------------------------------------------
@@ -199,18 +182,12 @@ variable "lambda_architecture" {
   }
 }
 
-variable "processor_memory_size" {
+variable "allowed_bedrock_model_ids" {
   description = <<-EOT
-    Memory (MB) for the long-running Chat-with-Document processor Lambda. Defaults
-    to 4096 (upstream value, sized for large-context chat models). Lower it for
-    accounts whose Lambda per-function memory service quota is below 4096 MB
-    (some sandbox accounts cap at 3008 MB), or raise it up to the account limit.
+    Extra Bedrock model IDs the chat Lambdas may invoke, for chat models set in
+    the config after apply. Mirrors `processor.allowed_bedrock_model_ids`; use
+    `["*"]` to grant the account's whole model space.
   EOT
-  type        = number
-  default     = 4096
-
-  validation {
-    condition     = var.processor_memory_size >= 128 && var.processor_memory_size <= 10240
-    error_message = "processor_memory_size must be between 128 and 10240 MB (and within the account's Lambda memory service quota)."
-  }
+  type        = list(string)
+  default     = []
 }

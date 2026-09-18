@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import type { SelectProps, IconProps } from '@cloudscape-design/components';
 import { Container, Header, SpaceBetween, Button, FormField, Select, Alert, Textarea, Input } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from '../../api/client-shim';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { startTestRun, getTestSets } from '../../graphql/generated';
 import handlePrint from './PrintUtils';
@@ -28,6 +28,8 @@ interface TestSetData {
   filePattern?: string;
   fileCount: number;
   status: string;
+  /** Config version this test set declares for itself (optional). */
+  configVersion?: string | null;
 }
 
 interface TestRunnerProps {
@@ -42,6 +44,7 @@ const TestRunner = ({
   activeTestRuns: _activeTestRuns,
 }: TestRunnerProps): React.JSX.Element => {
   const [testSets, setTestSets] = useState<TestSetData[]>([]);
+  const [testSetsLoading, setTestSetsLoading] = useState(true);
   const [selectedTestSet, setSelectedTestSet] = useState<SelectProps.Option | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<SelectProps.Option | null>(null);
   const [numberOfFiles, setNumberOfFiles] = useState('');
@@ -94,6 +97,8 @@ const TestRunner = ({
     } catch (err) {
       console.error('TestRunner: Failed to load test sets:', err);
       setError(`Failed to load test sets: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setTestSetsLoading(false);
     }
   };
 
@@ -215,15 +220,27 @@ const TestRunner = ({
             onChange={({ detail }) => {
               setSelectedTestSet(detail.selectedOption);
               setNumberOfFiles(''); // Reset numberOfFiles when test set changes
-              // Auto-select matching config version for known test sets, otherwise reset to active.
-              // Convention: each managed test set (e.g. "fake-w2", "docsplit") has a corresponding
-              // managed config version with the same name as the test set ID. If the matching
-              // version exists in the dropdown options, select it; otherwise fall back to active.
+              // Auto-select the configuration version for the chosen test set, in
+              // priority order:
+              //
+              //   1. `configVersion` declared ON the test set record. Lets a test
+              //      set name its own config explicitly — required for test sets
+              //      deployed by an extension, whose config presets are named
+              //      `<featureId>-v<version>` by the Feature Platform and so can
+              //      never equal the test set id.
+              //   2. A config version whose name EQUALS the test set id. The
+              //      convention the stack-managed benchmark sets rely on
+              //      (e.g. "fake-w2", "docsplit").
+              //   3. The active version — nothing specific applies.
+              //
+              // A declared version that isn't in the dropdown (deleted, or out of
+              // the caller's config-version scope) falls through to 2 then 3
+              // rather than leaving the field empty.
               const testSetData = testSets.find((ts) => ts.id === detail.selectedOption.value);
-              const matchingVersion = testSetData?.id;
               const versionOptions = getVersionOptions();
-              if (matchingVersion) {
-                const matchOption = versionOptions.find((opt) => opt.value === matchingVersion);
+              for (const candidate of [testSetData?.configVersion, testSetData?.id]) {
+                if (!candidate) continue;
+                const matchOption = versionOptions.find((opt) => opt.value === candidate);
                 if (matchOption) {
                   setSelectedVersion(matchOption);
                   return;
@@ -235,6 +252,8 @@ const TestRunner = ({
             }}
             options={testSetOptions}
             placeholder="Choose a test set..."
+            statusType={testSetsLoading ? 'loading' : 'finished'}
+            loadingText="Loading test sets..."
             empty="No test sets available"
           />
         </FormField>

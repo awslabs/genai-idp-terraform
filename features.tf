@@ -38,6 +38,8 @@ module "mcp_integration" {
   name_prefix = "${local.name_prefix}-api"
 
   user_pool_id = local.user_pool_id
+  # Config-derived; the pool ID itself is unknown at plan on a fresh deploy.
+  user_pool_available = local.user_identity_available
 
   output_bucket_arn = var.output_bucket_arn
 
@@ -59,9 +61,13 @@ module "mcp_integration" {
   tags = var.tags
 }
 
-# Chat-with-Document: async streaming chat submodule. Consumes the AppSync
-# ids/url from the API module and emits its two resolvers as a contract; the API
-# module attaches them after both sides exist (not a cycle).
+# Chat-with-Document: async streaming chat submodule. Emits its
+# `sendChatDocumentMessage` field in the contract's `field_functions`; the API
+# module folds that into the REST dispatcher's field-function map.
+#
+# It intentionally takes NO id/arn from the API module (IDP v0.6.4). It creates no
+# AppSync resource any more, and staying free of that dependency is what lets the
+# API module consume the contract's field_functions without a cycle.
 module "chat_with_document" {
   source = "./modules/features/chat-with-document"
   count  = local.feature_enable.chat_with_document ? 1 : 0
@@ -70,9 +76,9 @@ module "chat_with_document" {
 
   name_prefix = "${local.name_prefix}-api"
 
-  appsync_api_id          = module.processing_environment_api[0].api_id
-  appsync_graphql_api_arn = module.processing_environment_api[0].api_arn
-  appsync_graphql_url     = module.processing_environment_api[0].graphql_url
+  # Empty string selects the DynamoDB-direct write path in the vendored
+  # processor code; there is no AppSync endpoint to publish to.
+  appsync_graphql_url = ""
 
   output_bucket_arn        = var.output_bucket_arn
   configuration_table_arn  = module.processing_environment.configuration_table_arn
@@ -83,9 +89,9 @@ module "chat_with_document" {
   base_layer_arn       = module.processing_environment.base_layer_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
-  config                   = local.chat_with_document_processor_config
-  guardrail_id_and_version = local.chat_with_document_config.guardrail_id_and_version
-  processor_memory_size    = try(local.chat_with_document_config.processor_memory_size, 4096)
+  config                    = local.chat_with_document_processor_config
+  guardrail_id_and_version  = local.chat_with_document_config.guardrail_id_and_version
+  allowed_bedrock_model_ids = local.chat_with_document_config.allowed_bedrock_model_ids
 
   encryption_key_arn  = var.encryption_key_arn
   data_retention_days = var.data_tracking_retention_days
@@ -162,7 +168,9 @@ module "idp_federation" {
   user_pool_id        = local.user_pool_id
   user_pool_client_id = local.user_pool_client_id
 
-  # Map external groups onto RBAC's resolved names when RBAC is on, else the fallback.
+  # Reachability check only: the trigger adds users to the literal role names, so
+  # the module fails the plan if RBAC renamed them. External group names come
+  # from idp_federation.group_mapping.
   rbac_group_names = local.feature_enable.rbac ? module.rbac[0].group_names : local.rbac_group_names_fallback
 
   base_layer_arn       = module.processing_environment.base_layer_arn
@@ -176,6 +184,23 @@ module "idp_federation" {
 }
 
 locals {
+  # Consumed by modules/user-identity when it owns the pool. For a
+  # bring-your-own pool these are surfaced as root outputs for a second apply
+  # instead. See docs/content/security/external-idp.md.
+  federation_supported_identity_providers = (
+    local.feature_enable.federation ? module.idp_federation[0].supported_identity_providers_contribution : []
+  )
+
+  # Created by modules/user-identity when it owns the pool, else operator-supplied.
+  federation_hosted_ui_domain = (
+    try(var.idp_federation.hosted_ui_domain, "") != "" ? var.idp_federation.hosted_ui_domain :
+    (length(module.user_identity) > 0 ? coalesce(module.user_identity[0].hosted_ui_domain, "") : "")
+  )
+
+  federation_group_mapping_function_arn = (
+    local.feature_enable.federation ? module.idp_federation[0].group_mapping_function_arn : null
+  )
+
   # Fallback group names when RBAC is off. The federation module expects
   # capitalized keys; var.rbac.group_names uses lowercase, so remap here.
   rbac_group_names_fallback = {
@@ -185,15 +210,7 @@ locals {
     Viewer   = try(var.rbac.group_names.viewer, "Viewer")
   }
 
-  # try() (not ? :) is deliberate: the processor config objects are any-typed
-  # with different attribute sets, so a conditional fails with inconsistent
-  # result types. try() returns the first that resolves; {} is the all-null fallback.
-  chat_with_document_processor_config = try(
-    var.bedrock_llm_processor.config,
-    var.bda_processor.config,
-    var.sagemaker_udop_processor.config,
-    {}
-  )
+  chat_with_document_processor_config = try(var.processor.config, {})
 
   # Enabled feature contracts composed by processing-environment-api. All-off resolves to {}.
   #
@@ -247,7 +264,10 @@ module "feature_platform" {
   name_prefix     = "${local.name_prefix}-api"
   main_stack_name = local.name_prefix
 
-  graphql_api_id           = module.processing_environment_api[0].api_id
+  # No graphql_api_id (IDP v0.6.4): this module creates no AppSync resource and
+  # publishes `field_functions` for the REST dispatcher instead. Keeping it free of
+  # any API-module input is what avoids a cycle, since the API module now consumes
+  # its output.
   configuration_table_name = module.processing_environment.configuration_table_name
   configuration_table_arn  = module.processing_environment.configuration_table_arn
 

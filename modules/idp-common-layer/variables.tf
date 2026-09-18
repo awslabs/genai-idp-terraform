@@ -73,3 +73,21 @@ variable "container_runtime" {
     error_message = "container_runtime must be one of: auto, docker, podman, finch."
   }
 }
+
+variable "vpc_id" {
+  description = "VPC to place the layer-build CodeBuild project in, alongside subnet_ids and security_group_ids. Null builds outside a VPC."
+  type        = string
+  default     = null
+}
+
+variable "subnet_ids" {
+  description = "Subnets for the layer-build CodeBuild project. The build runs `pip install`, so these MUST have egress to the package index."
+  type        = list(string)
+  default     = []
+}
+
+variable "security_group_ids" {
+  description = "Security groups for the layer-build CodeBuild project. Must allow outbound HTTPS."
+  type        = list(string)
+  default     = []
+}

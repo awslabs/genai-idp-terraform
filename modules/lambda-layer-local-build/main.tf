@@ -113,10 +113,9 @@ resource "null_resource" "build_layer" {
   depends_on = [local_file.requirements]
 }
 
-# Upload each produced zip to the shared assets bucket. Content-hash etag
-# (md5 of the requirements input) gives us deterministic change detection
-# without reading the zip itself (Terraform can't hash a file that may not
-# exist yet on first plan).
+# Upload each produced zip to the shared assets bucket. Change detection is keyed
+# on the requirements input hash, not the zip bytes, so plan converges when the
+# file does not exist yet on first run.
 resource "aws_s3_object" "layer_zip" {
   for_each = local.non_empty_requirements
 
@@ -124,9 +123,9 @@ resource "aws_s3_object" "layer_zip" {
   key    = "layers/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}/${each.key}.zip"
   source = "${local.module_build_dir}/${each.key}/layer.zip"
 
-  # Etag tied to the input hash, not the zip bytes, so plan converges even
-  # when the file hasn't been produced yet on first run.
-  etag = local.layer_hashes[each.key]
+  # source_hash, not etag: etag is compared against S3's own ETag, which is not a
+  # content md5 for SSE-KMS or multipart objects, so every plan showed an update.
+  source_hash = local.layer_hashes[each.key]
 
   depends_on = [null_resource.build_layer]
 }

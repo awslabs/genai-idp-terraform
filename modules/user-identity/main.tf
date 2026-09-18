@@ -18,6 +18,8 @@
  * perform administrative actions.
  */
 
+data "aws_region" "current" {}
+
 # Local values for resource configuration
 locals {
   # Determine user pool - use provided or create new
@@ -32,6 +34,11 @@ locals {
     Name        = "${var.name_prefix}-user-identity"
     Environment = var.name_prefix
   })
+
+  hosted_ui_domain_prefix = (
+    var.hosted_ui_domain_prefix != null ? var.hosted_ui_domain_prefix :
+    trim(substr(lower(replace(var.name_prefix, "/[^a-zA-Z0-9-]/", "-")), 0, 63), "-")
+  )
 
   # Identity pool configuration
   identity_pool_name = var.identity_pool_options.identity_pool_name != null ? var.identity_pool_options.identity_pool_name : "${var.name_prefix}IdentityPool"
@@ -115,6 +122,24 @@ resource "aws_cognito_user_pool" "user_pool" {
     }
   }
 
+  # Opt-in: Cognito can add a schema attribute in place but never remove one, so
+  # enabling this is a one-way door.
+  dynamic "schema" {
+    for_each = var.enable_idp_groups_attribute ? [1] : []
+    content {
+      attribute_data_type      = "String"
+      developer_only_attribute = false
+      mutable                  = true
+      name                     = "idp_groups"
+      required                 = false
+
+      string_attribute_constraints {
+        min_length = 0
+        max_length = 2048
+      }
+    }
+  }
+
   # Email verification
   verification_message_template {
     default_email_option = "CONFIRM_WITH_CODE"
@@ -130,6 +155,18 @@ resource "aws_cognito_user_pool" "user_pool" {
       email_subject = "Your temporary password"
       email_message = "Your username is {username} and temporary password is {####}"
       sms_message   = "Your username is {username} and temporary password is {####}"
+    }
+  }
+
+  # V2_0: the handler returns claimsAndScopeOverrideDetails.groupOverrideDetails,
+  # which V1_0 does not carry.
+  dynamic "lambda_config" {
+    for_each = var.pre_token_generation_function_arn != null ? [1] : []
+    content {
+      pre_token_generation_config {
+        lambda_arn     = var.pre_token_generation_function_arn
+        lambda_version = "V2_0"
+      }
     }
   }
 
@@ -176,14 +213,19 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   prevent_user_existence_errors = "ENABLED"
 
   # Read attributes following CDK configuration
-  read_attributes = [
-    "email",
-    "email_verified",
-    "preferred_username"
-  ]
+  read_attributes = concat(
+    [
+      "email",
+      "email_verified",
+      "preferred_username",
+      "given_name",
+      "family_name",
+    ],
+    var.enable_idp_groups_attribute ? ["custom:idp_groups"] : [],
+  )
 
-  # Supported identity providers
-  supported_identity_providers = ["COGNITO"]
+  # COGNITO is retained so direct sign-in keeps working alongside any federation.
+  supported_identity_providers = distinct(concat(["COGNITO"], var.additional_identity_providers))
 
   # OAuth scopes and flows
   allowed_oauth_flows_user_pool_client = true
@@ -195,10 +237,17 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
     "profile"
   ]
 
-  # Localhost is retained for local UI development; the Web UI custom domain /
-  # ALB URL (when set) is appended so hosted-UI OAuth redirects are accepted.
+  # Localhost is retained for local UI development; the Web UI custom domain URL
+  # (when set) is appended so hosted-UI OAuth redirects are accepted.
   callback_urls = distinct(concat(["https://localhost:3000"], var.additional_callback_urls))
   logout_urls   = distinct(concat(["https://localhost:3000"], var.additional_logout_urls))
+}
+
+# Federated sign-in has no redirect target without this.
+resource "aws_cognito_user_pool_domain" "hosted_ui" {
+  count        = var.create_hosted_ui_domain ? 1 : 0
+  domain       = local.hosted_ui_domain_prefix
+  user_pool_id = local.user_pool.user_pool_id
 }
 # Cognito Identity Pool following CDK configuration
 resource "aws_cognito_identity_pool" "identity_pool" {

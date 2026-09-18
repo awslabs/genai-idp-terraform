@@ -26,9 +26,9 @@ output "user_identity" {
 output "api" {
   description = "API resources (if enabled)"
   value = local.api_enabled ? {
-    api_id                   = module.processing_environment_api[0].api_id
-    graphql_url              = module.processing_environment_api[0].graphql_url
-    appsync_endpoint_for_dns = module.processing_environment_api[0].appsync_endpoint_for_dns
+    api_id                = module.processing_environment_api[0].api_id
+    api_base_url          = module.processing_environment_api[0].api_base_url
+    discovery_bucket_name = module.processing_environment_api[0].discovery_bucket_name
   } : null
 }
 
@@ -38,23 +38,6 @@ output "web_ui" {
     cloudfront_distribution_id = module.web_ui[0].cloudfront_distribution_id
     bucket                     = module.web_ui[0].bucket
     url                        = module.web_ui[0].application_url
-  } : null
-}
-
-output "web_ui_alb" {
-  description = <<-EOT
-    ALB hosting details (only when web_ui.hosting = "ALB"). Point your custom
-    domain DNS at alb_dns_name (alias/CNAME). Feed s3_vpc_endpoint_dns_name
-    into web_ui.s3_vpc_endpoint_dns_name_override if enabling presigned URLs
-    via the VPC endpoint.
-  EOT
-  value = length(module.web_ui_alb) > 0 ? {
-    web_ui_url               = module.web_ui_alb[0].web_ui_url
-    alb_dns_name             = module.web_ui_alb[0].alb_dns_name
-    alb_arn                  = module.web_ui_alb[0].alb_arn
-    alb_hosted_zone_id       = module.web_ui_alb[0].alb_hosted_zone_id
-    s3_vpc_endpoint_id       = module.web_ui_alb[0].s3_vpc_endpoint_id
-    s3_vpc_endpoint_dns_name = module.web_ui_alb[0].s3_vpc_endpoint_dns_name
   } : null
 }
 
@@ -96,14 +79,7 @@ locals {
 
 output "processor" {
   description = "Document processor details"
-  # Guard against a null processor_type: `lookup()` raises an uncatchable
-  # argument error when the key is null (zero processors configured). For any
-  # valid exactly-one configuration processor_type is non-null and this behaves
-  # identically to the bare lookup; the guard only changes the already-invalid
-  # zero-processor case (flagged by check "exactly_one_processor") from a hard
-  # crash to a graceful null, which also lets `terraform test` assert that
-  # validation via expect_failures. Non-behavioral for all valid deployments.
-  value = local.processor_type != null ? lookup(local.processor_details, local.processor_type, null) : null
+  value       = lookup(local.processor_details, local.processor_type, null)
 }
 
 output "agent_analytics" {
@@ -133,4 +109,17 @@ output "processing_environment" {
 output "rbac_group_names" {
   description = "Resolved RBAC Cognito group names keyed by role, or null when RBAC is disabled."
   value       = local.feature_enable.rbac ? module.rbac[0].group_names : null
+}
+
+# Wiring a bring-your-own pool by reference would close a dependency cycle, so
+# these feed a second apply. See docs/content/security/external-idp.md.
+
+output "federation_group_mapping_function_arn" {
+  description = "ARN of the external-IdP group-mapping Lambda, to attach as your user pool's PreTokenGeneration (V2_0) trigger when you supply your own pool. Null when federation or group mapping is disabled."
+  value       = local.federation_group_mapping_function_arn
+}
+
+output "federation_supported_identity_providers" {
+  description = "Identity-provider names to append to your user pool client's supported_identity_providers, alongside COGNITO, when you supply your own pool. Empty when federation is disabled."
+  value       = local.federation_supported_identity_providers
 }

@@ -35,15 +35,55 @@ variable "allowed_signup_email_domain" {
 }
 
 variable "additional_callback_urls" {
-  description = "Extra OAuth callback URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain / ALB URL. Mirrors upstream CustomDomainUrl callback wiring."
+  description = "Extra OAuth callback URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain URL. Mirrors upstream CustomDomainUrl callback wiring."
   type        = list(string)
   default     = []
 }
 
 variable "additional_logout_urls" {
-  description = "Extra OAuth logout URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain / ALB URL."
+  description = "Extra OAuth logout URLs to allow on the user pool client (in addition to the localhost dev URL). Used to register the Web UI custom domain URL."
   type        = list(string)
   default     = []
+}
+
+variable "additional_identity_providers" {
+  description = "External identity provider names to append to the user pool client's supported_identity_providers. COGNITO is always retained. Wired from the idp-federation feature's supported_identity_providers_contribution output."
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_idp_groups_attribute" {
+  description = "Add the custom `idp_groups` attribute to the user pool schema, required for external IdP group mapping. One-way: Cognito can add a schema attribute in place but can never remove one, so confirm your plan shows no pool replacement before enabling."
+  type        = bool
+  default     = false
+}
+
+variable "pre_token_generation_function_arn" {
+  description = "ARN of a Lambda to attach as the user pool's PreTokenGeneration (V2_0) trigger. Used to map external IdP groups onto Cognito groups. When null, no trigger is attached."
+  type        = string
+  default     = null
+}
+
+variable "create_hosted_ui_domain" {
+  description = "Create a Cognito hosted UI domain for the user pool. Required for external-IdP (SAML/OIDC) sign-in, which redirects through the hosted UI."
+  type        = bool
+  default     = false
+}
+
+variable "hosted_ui_domain_prefix" {
+  description = "Domain prefix for the Cognito hosted UI. Must be globally unique across all AWS accounts. Defaults to a sanitized name_prefix."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.hosted_ui_domain_prefix == null || can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.hosted_ui_domain_prefix))
+    error_message = "hosted_ui_domain_prefix must be 1-63 lowercase alphanumeric or hyphen characters and may not start or end with a hyphen."
+  }
+
+  validation {
+    condition     = var.hosted_ui_domain_prefix == null || !can(regex("aws|amazon|cognito", var.hosted_ui_domain_prefix))
+    error_message = "hosted_ui_domain_prefix may not contain the Cognito-reserved words aws, amazon or cognito."
+  }
 }
 
 # Legacy variables for backward compatibility

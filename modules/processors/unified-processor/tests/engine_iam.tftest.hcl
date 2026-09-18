@@ -17,6 +17,8 @@
 # so they are known at `command = plan` with the mocked provider — no AWS creds
 # or apply required.
 
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_data "aws_partition" {
     defaults = {

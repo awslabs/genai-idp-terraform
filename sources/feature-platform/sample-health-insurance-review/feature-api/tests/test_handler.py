@@ -37,7 +37,7 @@ def _claim_row(doc_id: str, status: str, updated_at: str) -> dict:
         "failCount": 1 if status == "REVIEW_REQUIRED" else 0,
         "notFoundCount": 0,
         "totalRules": 5,
-        "recommendationCounts": {"Pass": 4, "Fail": 1},
+        "recommendationCounts": {"Pass": 4, "Fail": 1},  # nosec B105 - rule counter fixture
         "policyTypes": ["global_periods"],
         "summaryJsonUri": _SUMMARY_URI,
         "summaryMdUri": _MD_URI,
@@ -88,7 +88,7 @@ def stack(aws_credentials, monkeypatch):
             Key=_SUMMARY_KEY,
             Body=json.dumps(
                 {
-                    "rule_summary": {"global_periods": {"Pass": 4, "Fail": 1}},
+                    "rule_summary": {"global_periods": {"Pass": 4, "Fail": 1}},  # nosec B105 - rule counter fixture
                     "rule_details": {
                         "global_periods": {
                             "rules": [
@@ -104,7 +104,7 @@ def stack(aws_credentials, monkeypatch):
                     "supporting_pages": ["1", "2"],
                     "overall_statistics": {
                         "total_rules": 5,
-                        "recommendation_counts": {"Pass": 4, "Fail": 1},
+                        "recommendation_counts": {"Pass": 4, "Fail": 1},  # nosec B105 - rule counter fixture
                     },
                 }
             ).encode("utf-8"),
@@ -124,11 +124,20 @@ def stack(aws_credentials, monkeypatch):
         yield mod
 
 
-def _event(path: str, qs: dict | None = None) -> dict:
+def _event(
+    path: str,
+    qs: dict | None = None,
+    method: str = "GET",
+    groups: str | None = None,
+) -> dict:
+    ctx: dict = {"http": {"method": method}}
+    if groups is not None:
+        # API GW HTTP API stringifies the cognito:groups list claim.
+        ctx["authorizer"] = {"jwt": {"claims": {"cognito:groups": groups}}}
     return {
         "rawPath": path,
         "queryStringParameters": qs,
-        "requestContext": {"http": {"method": "GET"}},
+        "requestContext": ctx,
     }
 
 
@@ -201,6 +210,55 @@ def test_markdown_proxy(stack):
 
 def test_unknown_claim_returns_404(stack):
     resp = stack.lambda_handler(_event("/claims/nope.pdf"), None)
+    assert resp["statusCode"] == 404
+
+
+def test_delete_claim_as_admin(stack):
+    path = f"/claims/{quote(_DOC_ID, safe='')}"
+    resp = stack.lambda_handler(_event(path, method="DELETE", groups="[Admin]"), None)
+    assert resp["statusCode"] == 200
+    assert _body(resp)["deleted"] == _DOC_ID
+    # Row is gone
+    resp2 = stack.lambda_handler(_event(path), None)
+    assert resp2["statusCode"] == 404
+
+
+def test_delete_claim_as_author(stack):
+    path = f"/claims/{quote(_DOC_ID, safe='')}"
+    resp = stack.lambda_handler(
+        _event(path, method="DELETE", groups="[Author Viewer]"), None
+    )
+    assert resp["statusCode"] == 200
+
+
+def test_delete_claim_forbidden_for_reviewer(stack):
+    path = f"/claims/{quote(_DOC_ID, safe='')}"
+    resp = stack.lambda_handler(
+        _event(path, method="DELETE", groups="[Reviewer]"), None
+    )
+    assert resp["statusCode"] == 403
+    # Row untouched
+    resp2 = stack.lambda_handler(_event(path), None)
+    assert resp2["statusCode"] == 200
+
+
+def test_delete_claim_forbidden_without_groups(stack):
+    path = f"/claims/{quote(_DOC_ID, safe='')}"
+    resp = stack.lambda_handler(_event(path, method="DELETE"), None)
+    assert resp["statusCode"] == 403
+
+
+def test_delete_unknown_claim_returns_404(stack):
+    resp = stack.lambda_handler(
+        _event("/claims/nope.pdf", method="DELETE", groups="[Admin]"), None
+    )
+    assert resp["statusCode"] == 404
+
+
+def test_delete_non_claims_path_returns_404(stack):
+    resp = stack.lambda_handler(
+        _event("/config", method="DELETE", groups="[Admin]"), None
+    )
     assert resp["statusCode"] == 404
 
 

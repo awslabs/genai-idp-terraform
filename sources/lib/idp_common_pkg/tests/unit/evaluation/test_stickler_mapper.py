@@ -12,6 +12,7 @@ arrays of free-form objects.
 import copy
 
 import pytest
+
 from idp_common.evaluation.stickler_mapper import SticklerConfigMapper
 
 
@@ -395,3 +396,278 @@ class TestUSPatentTableSchema:
         assert "DataType" in tables_items["properties"]
         # TableData should have been removed because its items are free-form objects
         assert "TableData" not in tables_items["properties"]
+
+
+class TestRequiredFieldsClearedForEvaluation:
+    """Explicit-config `required` arrays must be cleared so a correctly-null field
+    is scored as a miss, not a whole-document schema failure.
+
+    Regression: RealKIE Invoice marks `required: [Agency, Advertiser, LineItems]`.
+    A document where Agency is genuinely absent (extracted null) previously crashed
+    the entire doc with 'Field required [type=missing]' -> __EVALUATION_FAILURE__ and
+    a 0 score. All fields must be optional during evaluation.
+    """
+
+    def test_top_level_required_cleared(self):
+        schema = {
+            "$id": "Invoice",
+            "x-aws-idp-document-type": "Invoice",
+            "type": "object",
+            "required": ["Agency", "Advertiser", "LineItems"],
+            "properties": {
+                "Agency": {
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "LEVENSHTEIN",
+                },
+                "Advertiser": {
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "FUZZY",
+                },
+                "LineItems": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["LineItemRate"],
+                        "properties": {
+                            "LineItemRate": {
+                                "type": "number",
+                                "x-aws-idp-evaluation-method": "NUMERIC_EXACT",
+                            }
+                        },
+                    },
+                },
+            },
+        }
+        config = SticklerConfigMapper.build_stickler_model_config(schema)
+        result = config["schema"]
+
+        # Top-level required must be emptied (not left as the original 3 fields).
+        assert result.get("required") == []
+        # Nested object inside the list items must also be emptied.
+        nested = result["properties"]["LineItems"]["items"]
+        assert nested.get("required") == []
+
+
+@pytest.mark.unit
+class TestDateMethodMapping:
+    """The DATE evaluation method maps to Stickler's DateComparator (v0.5.0+)
+    and passes any x-aws-idp-evaluation-method-config through verbatim as
+    x-aws-stickler-comparator-config.
+    """
+
+    def test_date_method_maps_to_date_comparator(self):
+        schema = {
+            "$id": "Invoice",
+            "x-aws-idp-document-type": "Invoice",
+            "type": "object",
+            "properties": {
+                "InvoiceDate": {
+                    "type": "string",
+                    "format": "date",
+                    "x-aws-idp-evaluation-method": "DATE",
+                },
+            },
+        }
+        result = SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+        prop = result["properties"]["InvoiceDate"]
+        assert prop["x-aws-stickler-comparator"] == "DateComparator"
+        # No config provided -> no comparator-config extension emitted.
+        assert "x-aws-stickler-comparator-config" not in prop
+
+    def test_date_method_config_passed_through(self):
+        schema = {
+            "$id": "Invoice",
+            "x-aws-idp-document-type": "Invoice",
+            "type": "object",
+            "properties": {
+                "InvoiceDate": {
+                    "type": "string",
+                    "x-aws-idp-evaluation-method": "DATE",
+                    "x-aws-idp-evaluation-method-config": {
+                        "dayfirst": False,
+                        "range_mode": "contains",
+                    },
+                },
+            },
+        }
+        result = SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+        prop = result["properties"]["InvoiceDate"]
+        assert prop["x-aws-stickler-comparator"] == "DateComparator"
+        assert prop["x-aws-stickler-comparator-config"] == {
+            "dayfirst": False,
+            "range_mode": "contains",
+        }
+
+    def test_date_method_in_method_to_comparator_map(self):
+        assert SticklerConfigMapper.METHOD_TO_COMPARATOR["DATE"] == "DateComparator"
+
+    def test_date_method_rejected_on_structured_array(self):
+        # DATE is a scalar-field method; using it on a List[Object] is invalid
+        # and _validate_method_for_field must raise.
+        schema = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"d": {"type": "string"}},
+            },
+        }
+        with pytest.raises(ValueError, match="DATE"):
+            SticklerConfigMapper._validate_method_for_field(schema, "DATE", "dates")
+
+    def test_date_field_builds_end_to_end(self):
+        """A DATE field must convert cleanly through the real Stickler
+        JsonSchemaFieldConverter + Pydantic model build, and score
+        format-variant dates as a match."""
+        from pydantic import create_model
+        from stickler import StructuredModel
+        from stickler.structured_object_evaluator.models.json_schema_field_converter import (  # noqa: E501
+            JsonSchemaFieldConverter,
+        )
+
+        schema = {
+            "$id": "D",
+            "x-aws-idp-document-type": "D",
+            "type": "object",
+            "properties": {
+                "d": {"type": "string", "x-aws-idp-evaluation-method": "DATE"}
+            },
+            "required": ["d"],
+        }
+        sch = SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+        conv = JsonSchemaFieldConverter(sch)
+        fields = conv.convert_properties_to_fields(
+            sch.get("properties", {}), sch.get("required", [])
+        )
+        model = create_model(  # type: ignore  # pyright: reportCallIssue=false
+            "D", **fields, __base__=StructuredModel
+        )
+
+        # Same calendar day, different surface form -> perfect match.
+        assert model(d="2024-01-05").compare(model(d="January 5, 2024")) == 1.0
+        # Genuinely different dates -> no match.
+        assert model(d="2024-01-05").compare(model(d="2024-06-30")) == 0.0
+
+
+@pytest.mark.unit
+class TestNumericExactToleranceRouting:
+    """R1: NUMERIC_EXACT with evaluation-threshold must route to
+    comparator-config.tolerance, not x-aws-stickler-threshold (NumericComparator
+    is binary 1.0/0.0 so a score-threshold gate is a no-op)."""
+
+    def _build(self, threshold):
+        schema = {
+            "$id": "N",
+            "x-aws-idp-document-type": "N",
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "x-aws-idp-evaluation-method": "NUMERIC_EXACT",
+                    "x-aws-idp-evaluation-threshold": threshold,
+                }
+            },
+        }
+        return SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+
+    def test_small_tolerance_routed_to_comparator_config(self):
+        result = self._build(0.5)
+        prop = result["properties"]["amount"]
+        assert prop["x-aws-stickler-comparator"] == "NumericComparator"
+        assert prop["x-aws-stickler-comparator-config"] == {"tolerance": 0.5}
+        assert "x-aws-stickler-threshold" not in prop
+
+    def test_large_tolerance_over_one_routed_to_comparator_config(self):
+        """>1.0 tolerance (e.g. ±$5) would crash the 0.0–1.0 threshold
+        validator; comparator-config accepts any positive number."""
+        result = self._build(5.0)
+        prop = result["properties"]["amount"]
+        assert prop["x-aws-stickler-comparator-config"] == {"tolerance": 5.0}
+        assert "x-aws-stickler-threshold" not in prop
+
+    def test_numeric_exact_no_threshold_leaves_config_absent(self):
+        schema = {
+            "$id": "N",
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "x-aws-idp-evaluation-method": "NUMERIC_EXACT",
+                }
+            },
+        }
+        result = SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+        prop = result["properties"]["amount"]
+        assert prop["x-aws-stickler-comparator"] == "NumericComparator"
+        assert "x-aws-stickler-comparator-config" not in prop
+        assert "x-aws-stickler-threshold" not in prop
+
+    def test_tolerance_reaches_comparator_end_to_end(self):
+        """A tolerance of 0.5 must actually make Stickler match values within
+        ±0.5 — the original bug was that the tolerance never reached the
+        comparator, so any nonzero diff scored 0.0."""
+        from pydantic import create_model
+        from stickler import StructuredModel
+        from stickler.structured_object_evaluator.models.json_schema_field_converter import (  # noqa: E501
+            JsonSchemaFieldConverter,
+        )
+
+        sch = self._build(0.5)
+        conv = JsonSchemaFieldConverter(sch)
+        fields = conv.convert_properties_to_fields(
+            sch.get("properties", {}), sch.get("required", [])
+        )
+        model = create_model(  # type: ignore
+            "N", **fields, __base__=StructuredModel
+        )
+        # diff 0.25 <= tolerance 0.5 -> match
+        assert model(amount=100.0).compare(model(amount=100.25)) == 1.0
+        # diff 1.0 > tolerance 0.5 -> no match
+        assert model(amount=100.0).compare(model(amount=101.0)) == 0.0
+
+
+@pytest.mark.unit
+class TestMatchThresholdOnItemsSchema:
+    """R2 (mapper part): match_threshold for structured arrays must land on
+    the items schema so Stickler's element-class builder picks it up."""
+
+    def test_match_threshold_copied_to_items(self):
+        schema = {
+            "$id": "I",
+            "x-aws-idp-document-type": "I",
+            "type": "object",
+            "properties": {
+                "LineItems": {
+                    "type": "array",
+                    "x-aws-idp-evaluation-match-threshold": 0.55,
+                    "items": {
+                        "type": "object",
+                        "properties": {"sku": {"type": "string"}},
+                    },
+                }
+            },
+        }
+        result = SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+        arr = result["properties"]["LineItems"]
+        assert arr["x-aws-stickler-match-threshold"] == 0.55
+        # Items schema now also carries the threshold so Stickler's
+        # element-class builder reads it (structured_model.py:594).
+        assert arr["items"]["x-aws-stickler-match-threshold"] == 0.55
+
+    def test_no_match_threshold_leaves_items_untouched(self):
+        schema = {
+            "$id": "I",
+            "type": "object",
+            "properties": {
+                "LineItems": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"sku": {"type": "string"}},
+                    },
+                }
+            },
+        }
+        result = SticklerConfigMapper.build_stickler_model_config(schema)["schema"]
+        arr = result["properties"]["LineItems"]
+        assert "x-aws-stickler-match-threshold" not in arr
+        assert "x-aws-stickler-match-threshold" not in arr["items"]
