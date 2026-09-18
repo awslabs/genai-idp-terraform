@@ -6,7 +6,7 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
-## [Unreleased] — 0.6.4-tf.0 (in progress)
+## [0.6.4-tf.0] - 2026-09-14
 
 Upgrade to upstream IDP v0.6.4. See
 [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md) for
