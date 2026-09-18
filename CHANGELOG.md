@@ -217,6 +217,22 @@ the migration steps behind every breaking change below.
 
 ### Fixed
 
+- **Restored configurable Chat-with-Document and rule-validation Lambda memory**
+  (#157). This branch's v0.5.16 line ran in parallel with `main`'s and never
+  picked up #157, so `memory_size` was hardcoded back to `4096` on four Lambdas —
+  re-breaking deploys on accounts whose per-function Lambda memory service quota
+  caps below 4096 MB (some sandbox accounts cap at 3008), which blocks any
+  example with chat enabled (the default). `processor_memory_size`,
+  `api.chat_with_document.processor_memory_size`, `chat_processor_memory_size`,
+  and `rule_validation_memory_size` are back, all defaulting to `4096` so
+  behavior is unchanged for everyone else. Extended past #157's original scope to
+  match v0.6.4's shape: rule validation now has **three** Lambdas (the added
+  `rule-validation-policy-class`), and `rule_validation_memory_size` is threaded
+  through all three processor wrappers plus the new
+  `processor.rule_validation_memory_size` root input — #157 only wired the
+  `bedrock-llm-processor` wrapper, which in v0.6.4 would have left the `bda` and
+  `sagemaker-udop` processor types unable to lower it.
+
 - **Config-authoritative feature enablement resolves against the system
   defaults.** The plan-time enablement derivation (summarization, evaluation,
   rule validation, HITL, `ocr.backend`) resolves each flag as *config file value
@@ -413,6 +429,24 @@ CodeBuild project from the stack. Requires Node.js >= 18 on the deploy host.
   `tests/validate-web-ui-build-check.sh` unit test.
 - **Documentation page** `docs/content/deployment-guides/local-web-ui-build.md`
   covering Node.js prerequisites and the local UI build flow.
+- **Configurable Chat-with-Document and rule-validation Lambda memory** (#157).
+  The Chat-with-Document processor Lambda and the two rule-validation
+  Lambdas previously hardcoded `memory_size = 4096`, which fails
+  `CreateFunction` on accounts whose per-function Lambda memory service
+  quota is below 4096 MB (some sandbox accounts cap at 3008), blocking a
+  vanilla deploy of any example that enables chat (on by default). Now
+  configurable, defaulting to 4096 so existing behavior is unchanged:
+  - `modules/features/chat-with-document` — new `processor_memory_size`
+    variable (default `4096`, validated `128`-`10240`) drives the
+    processor Lambda memory; surfaced on the root module via
+    `api.chat_with_document.processor_memory_size`.
+  - All processor examples accept it through their `api.chat_with_document`
+    object type; `examples/unified-processor` adds a
+    `chat_processor_memory_size` convenience variable.
+  - `modules/processors/unified-processor` — new
+    `rule_validation_memory_size` variable (default `4096`) for the
+    rule-validation Lambdas (created only when `enable_rule_validation =
+    true`), threaded through the `bedrock-llm-processor` wrapper.
 
 ### Changed
 

@@ -123,7 +123,8 @@ module "engine" {
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # Rule validation
-  enable_rule_validation = var.enable_rule_validation
+  enable_rule_validation      = var.enable_rule_validation
+  rule_validation_memory_size = var.rule_validation_memory_size
 
   # Summarization
   is_summarization_enabled = local.is_summarization_enabled

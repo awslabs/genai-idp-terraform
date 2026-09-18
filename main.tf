@@ -633,7 +633,8 @@ module "bda_processor" {
   save_reporting_function_arn     = module.processing_environment.save_reporting_data_function_arn
 
   # Rule validation
-  enable_rule_validation = local.rule_validation_enabled
+  enable_rule_validation      = local.rule_validation_enabled
+  rule_validation_memory_size = var.processor.rule_validation_memory_size
 
   # Optional: Document processing configuration
   config = var.processor.config
@@ -719,6 +720,9 @@ module "bedrock_llm_processor" {
   enable_hitl              = local.hitl_enabled
   enable_rule_validation   = local.rule_validation_enabled
 
+  # Rule validation
+  rule_validation_memory_size = var.processor.rule_validation_memory_size
+
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
@@ -780,7 +784,8 @@ module "sagemaker_udop_processor" {
   save_reporting_function_arn     = module.processing_environment.save_reporting_data_function_arn
 
   # Rule validation
-  enable_rule_validation = local.rule_validation_enabled
+  enable_rule_validation      = local.rule_validation_enabled
+  rule_validation_memory_size = var.processor.rule_validation_memory_size
 
   # Optional: Document processing configuration
   config = var.processor.config

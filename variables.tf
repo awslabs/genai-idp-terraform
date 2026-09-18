@@ -281,7 +281,11 @@ variable "processor" {
     # shared
     # Rule-validation enablement is config-authoritative
     # (config.rule_validation.enabled), derived at plan time (see
-    # local.rule_validation_enabled). No rule-validation toggle here.
+    # local.rule_validation_enabled). No rule-validation toggle here — but the
+    # Lambda memory is infrastructure the YAML config cannot express, so it stays
+    # a Terraform input. 4096 matches upstream; lower it for accounts whose
+    # Lambda per-function memory service quota caps below 4096 MB.
+    rule_validation_memory_size = optional(number, 4096)
     # Summarization is fully config-authoritative: both the model
     # (summarization.model) and enablement (summarization.enabled) live in the
     # YAML configuration, derived at plan time (see local.summarization_enabled).
@@ -502,6 +506,9 @@ variable "api" {
       # Escape hatch for chat models set in the config after apply; ["*"] grants
       # the account's whole model space.
       allowed_bedrock_model_ids = optional(list(string), [])
+      # Memory (MB) for the chat processor Lambda. 4096 matches upstream; lower
+      # it for accounts whose Lambda memory service quota caps below 4096.
+      processor_memory_size = optional(number, 4096)
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -662,6 +669,7 @@ variable "chat_with_document" {
     enabled                   = optional(bool, false)
     guardrail_id_and_version  = optional(string, null)
     allowed_bedrock_model_ids = optional(list(string), [])
+    processor_memory_size     = optional(number, 4096)
   })
   default = null
 }

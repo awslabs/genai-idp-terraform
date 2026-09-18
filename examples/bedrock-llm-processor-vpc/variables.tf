@@ -125,6 +125,9 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, false)
       guardrail_id_and_version = optional(string, null)
+      # Memory (MB) for the chat processor Lambda. 4096 matches upstream; lower it
+      # for accounts whose Lambda memory service quota caps below 4096 MB.
+      processor_memory_size = optional(number, 4096)
     }), { enabled = false })
 
     process_changes = optional(object({
@@ -175,6 +178,7 @@ variable "chat_with_document" {
   type = object({
     enabled                  = optional(bool, false)
     guardrail_id_and_version = optional(string, null)
+    processor_memory_size    = optional(number, 4096)
   })
   default = null
 }
