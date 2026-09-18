@@ -19,7 +19,7 @@ This repository uses a dual-version scheme to track both the upstream IDP soluti
 
 ### Current Version
 
-The current release is **`0.5.12-tf.0`** (compatible with upstream IDP v0.5.12). See [`CHANGELOG.md`](CHANGELOG.md) for the full history and upgrade notes.
+The current release is **`0.6.4-tf.0`** (compatible with upstream IDP v0.6.4). See [`CHANGELOG.md`](CHANGELOG.md) for the full history and upgrade notes.
 
 ### Version Format Examples
 
@@ -28,7 +28,9 @@ The current release is **`0.5.12-tf.0`** (compatible with upstream IDP v0.5.12).
 | `0.3.18-tf.1` | IDP v0.3.18, initial Terraform release |
 | `0.4.8-tf.0` | IDP v0.4.8, initial Terraform release |
 | `0.4.16-tf.2` | IDP v0.4.16, sagemaker-udop fixes |
-| `0.5.12-tf.0` | IDP v0.5.12, façade processors, feature-plugins, RBAC/federation/VPC, parity drop-ins (current) |
+| `0.5.12-tf.0` | IDP v0.5.12, façade processors, feature-plugins, RBAC/federation/VPC, parity drop-ins |
+| `0.5.16-tf.0` | IDP v0.5.16, opt-in local build path for Lambda layers, processor images, and the web UI (`var.build`) |
+| `0.6.4-tf.0` | IDP v0.6.4, single `processor` variable, API Gateway REST transport replacing AppSync, models and pipeline features driven by the YAML config (current) |
 
 The Terraform version (`tf.X`) resets to `0` when the upstream IDP version changes.
 
