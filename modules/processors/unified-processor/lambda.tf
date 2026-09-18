@@ -30,6 +30,10 @@ resource "aws_lambda_function" "ocr" {
       WORKING_BUCKET           = local.working_bucket_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
+      # ARN of the deployment-scoped BDA OCR project for `ocr.backend: bda`
+      # (IDP v0.6). Empty unless var.enable_bda_ocr_backend is set — see
+      # bda_ocr_project.tf — and the `bda` backend then errors clearly.
+      BDA_OCR_PROJECT_ARN = local.bda_ocr_project_arn
     }
   }
 
@@ -447,7 +451,7 @@ resource "aws_lambda_function" "evaluation_function" {
       WORKING_BUCKET           = local.working_bucket_name
       DOCUMENT_TRACKING_MODE   = local.api_id != null ? "appsync" : "dynamodb"
       APPSYNC_API_URL          = local.api_graphql_url != null ? local.api_graphql_url : ""
-    }, local.bedrock_assume_role_env)
+    }, local.bedrock_assume_role_env, local.evaluation_reporting_env)
   }
 
   dynamic "vpc_config" {

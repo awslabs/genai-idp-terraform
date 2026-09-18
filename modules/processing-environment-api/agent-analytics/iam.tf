@@ -184,7 +184,7 @@ resource "aws_iam_policy" "agent_processor_policy" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
+        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
       },
       # Foundation model permissions (always needed)
       {
@@ -232,8 +232,8 @@ resource "aws_iam_policy" "agent_processor_policy" {
             "athena:ListTableMetadata"
           ]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
-            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:datacatalog/*"
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:datacatalog/*"
           ]
         },
         {
@@ -246,9 +246,9 @@ resource "aws_iam_policy" "agent_processor_policy" {
             "glue:GetPartitions"
           ]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:catalog",
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:database/${var.reporting_database_name}",
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.reporting_database_name}/*"
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:database/${var.reporting_database_name}",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.reporting_database_name}/*"
           ]
         },
         {
@@ -289,30 +289,8 @@ resource "aws_iam_role_policy_attachment" "agent_processor_policy_attachment" {
   policy_arn = aws_iam_policy.agent_processor_policy.arn
 }
 
-# AppSync policy for processor (to update job status)
-resource "aws_iam_policy" "agent_processor_appsync_policy" {
-  name = "${var.name_prefix}-agent-processor-appsync-policy-${local.suffix}"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "agent_processor_appsync_attachment" {
-  role       = aws_iam_role.agent_processor_role.name
-  policy_arn = aws_iam_policy.agent_processor_appsync_policy.arn
-}
+# AppSync GraphQL policy removed in the v0.6.4 REST migration — the agent
+# processor writes the AgentTable directly (no AppSync mutation publish).
 
 # VPC policy for processor
 resource "aws_iam_policy" "agent_processor_vpc_policy" {

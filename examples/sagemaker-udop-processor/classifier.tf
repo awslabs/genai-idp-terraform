@@ -73,7 +73,7 @@ resource "aws_iam_role_policy" "sagemaker_model_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/sagemaker/*"
+        Resource = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/sagemaker/*"
       }
     ]
   })
@@ -112,14 +112,14 @@ resource "aws_sagemaker_model" "udop_model" {
 
   primary_container {
     # Using PyTorch inference container for UDOP model
-    image          = "763104351884.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/pytorch-inference:2.1.0-gpu-py310"
+    image          = "763104351884.dkr.ecr.${data.aws_region.current.region}.amazonaws.com/pytorch-inference:2.1.0-gpu-py310"
     model_data_url = local.model_data_uri
 
     environment = {
       SAGEMAKER_PROGRAM             = "inference.py"
       SAGEMAKER_SUBMIT_DIRECTORY    = "/opt/ml/model/code"
       SAGEMAKER_CONTAINER_LOG_LEVEL = "20"
-      SAGEMAKER_REGION              = data.aws_region.current.id
+      SAGEMAKER_REGION              = data.aws_region.current.region
     }
   }
 

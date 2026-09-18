@@ -192,44 +192,6 @@ resource "aws_lambda_function" "calculate_capacity_resolver" {
   tags = var.tags
 }
 
-# =============================================================================
-# AppSync data source + resolver
-# =============================================================================
-
-resource "aws_appsync_datasource" "calculate_capacity_resolver" {
-  count            = var.enable_capacity_planning ? 1 : 0
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "CalculateCapacityResolverDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.calculate_capacity_resolver[0].arn }
-}
-
-resource "aws_appsync_resolver" "calculate_capacity" {
-  count       = var.enable_capacity_planning ? 1 : 0
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Query"
-  field       = "calculateCapacity"
-  data_source = aws_appsync_datasource.calculate_capacity_resolver[0].name
-}
-
-resource "aws_iam_policy" "appsync_invoke_capacity_planning" {
-  count       = var.enable_capacity_planning ? 1 : 0
-  name        = "${local.api_name}-appsync-invoke-capacity-planning"
-  description = "Allow AppSync to invoke calculate_capacity_resolver Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.calculate_capacity_resolver[0].arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "appsync_invoke_capacity_planning" {
-  count      = var.enable_capacity_planning ? 1 : 0
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_capacity_planning[0].arn
-}
+# AppSync data source/resolver + invoke policy removed in the v0.6.4 REST
+# migration. calculateCapacity is now routed to calculate_capacity_resolver by
+# the dispatcher (see dispatcher.tf); the dispatcher role grants the invoke.

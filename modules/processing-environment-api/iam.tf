@@ -8,164 +8,14 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
-# IAM Role for AppSync to access DynamoDB
-resource "aws_iam_role" "appsync_dynamodb_role" {
-  name = "AppSyncDynamoDBRole-${random_string.suffix.result}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "appsync.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-# IAM Policy for AppSync to access DynamoDB
-resource "aws_iam_policy" "appsync_dynamodb_policy" {
-  name        = "AppSyncDynamoDBPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to access DynamoDB"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(
-      # DynamoDB permissions - only if tracking table ARN is provided
-      local.tracking_table_arn != null ? [
-        {
-          Action = [
-            "dynamodb:GetItem",
-            "dynamodb:PutItem",
-            "dynamodb:UpdateItem",
-            "dynamodb:DeleteItem",
-            "dynamodb:Query",
-            "dynamodb:Scan",
-            "dynamodb:BatchGetItem",
-            "dynamodb:BatchWriteItem",
-            "dynamodb:TransactWriteItems"
-          ]
-          Effect = "Allow"
-          Resource = compact([
-            local.tracking_table_arn,
-            local.tracking_table_arn != null ? "${local.tracking_table_arn}/index/*" : null
-          ])
-        }
-      ] : [],
-      # Agent Analytics DynamoDB permissions (conditional)
-      var.agent_analytics.enabled ? [
-        {
-          Action = [
-            "dynamodb:GetItem",
-            "dynamodb:PutItem",
-            "dynamodb:UpdateItem",
-            "dynamodb:DeleteItem",
-            "dynamodb:Query",
-            "dynamodb:Scan"
-          ]
-          Effect = "Allow"
-          Resource = [
-            module.agent_analytics[0].agent_table_arn,
-            "${module.agent_analytics[0].agent_table_arn}/index/*"
-          ]
-        }
-      ] : [],
-      # KMS permissions - always included
-      [
-        {
-          Action = [
-            "kms:Encrypt",
-            "kms:Decrypt",
-            "kms:ReEncrypt*",
-            "kms:GenerateDataKey*"
-          ]
-          Effect   = "Allow"
-          Resource = local.kms_policy_resource_arn
-        }
-      ]
-    )
-  })
-}
-
-# Attach DynamoDB policy to role
-resource "aws_iam_role_policy_attachment" "appsync_dynamodb_attachment" {
-  role       = aws_iam_role.appsync_dynamodb_role.name
-  policy_arn = aws_iam_policy.appsync_dynamodb_policy.arn
-}
-
-# IAM Role for AppSync to invoke Lambda functions
-resource "aws_iam_role" "appsync_lambda_role" {
-  name = "AppSyncLambdaRole-${random_string.suffix.result}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "appsync.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
-# IAM Policy for AppSync to invoke Lambda functions
-resource "aws_iam_policy" "appsync_lambda_policy" {
-  name        = "AppSyncLambdaPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to invoke Lambda functions"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "lambda:InvokeFunction"
-        Effect = "Allow"
-        Resource = concat(
-          [
-            aws_lambda_function.upload_resolver.arn,
-            aws_lambda_function.delete_document_resolver.arn,
-            aws_lambda_function.reprocess_document_resolver.arn,
-            aws_lambda_function.get_file_contents_resolver.arn,
-            aws_lambda_function.configuration_resolver.arn,
-            aws_lambda_function.get_stepfunction_execution_resolver.arn
-          ],
-          local.knowledge_base_id != null ? [aws_lambda_function.query_knowledge_base_resolver["enabled"].arn] : [],
-          local.evaluation_baseline_bucket_arn != null ? [aws_lambda_function.copy_to_baseline_resolver["enabled"].arn] : [],
-          var.agent_analytics.enabled ? [
-            module.agent_analytics[0].agent_request_handler_function_arn,
-            module.agent_analytics[0].list_available_agents_function_arn
-          ] : [],
-          var.discovery.enabled ? [
-            module.discovery[0].discovery_upload_resolver_function_arn,
-            module.discovery[0].discovery_processor_function_arn
-          ] : [],
-          var.enable_agent_companion_chat ? [
-            aws_lambda_function.agent_chat_resolver[0].arn,
-            aws_lambda_function.create_chat_session_resolver[0].arn,
-            aws_lambda_function.list_agent_chat_sessions_resolver[0].arn,
-            aws_lambda_function.get_agent_chat_messages_resolver[0].arn,
-            aws_lambda_function.delete_agent_chat_session_resolver[0].arn
-          ] : []
-        )
-      }
-    ]
-  })
-}
-
-# Attach Lambda policy to role
-resource "aws_iam_role_policy_attachment" "appsync_lambda_attachment" {
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_lambda_policy.arn
-}
+# =============================================================================
+# NOTE (v0.6.4 REST migration): The AppSync service roles/policies
+# (appsync_dynamodb_role + appsync_dynamodb_policy, appsync_lambda_role +
+# appsync_lambda_policy, and their attachments) were removed. AppSync no longer
+# fronts these resolver Lambdas; the HTTP API dispatcher invokes them directly
+# and its own role (see dispatcher.tf: aws_iam_role.http_api_dispatcher) grants
+# the required lambda:InvokeFunction + DynamoDB + KMS permissions.
+# =============================================================================
 
 # =============================================================================
 # LAMBDA EXECUTION ROLES AND POLICIES
@@ -273,25 +123,6 @@ resource "aws_iam_policy" "configuration_resolver_vpc_policy" {
       }
     ]
   })
-}
-resource "aws_iam_policy" "appsync_invoke_configuration_resolver_policy" {
-  name        = "AppSyncInvokeConfigurationResolverPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to invoke the Configuration Resolver Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action   = "lambda:InvokeFunction"
-        Effect   = "Allow"
-        Resource = aws_lambda_function.configuration_resolver.arn
-      }
-    ]
-  })
-}
-resource "aws_iam_role_policy_attachment" "appsync_invoke_configuration_resolver_attachment" {
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_configuration_resolver_policy.arn
 }
 resource "aws_iam_role_policy_attachment" "configuration_resolver_logs_attachment" {
   role       = aws_iam_role.configuration_resolver_role.name
@@ -409,23 +240,7 @@ resource "aws_iam_policy" "copy_to_baseline_resolver_self_invoke_policy" {
       {
         Action   = "lambda:InvokeFunction"
         Effect   = "Allow"
-        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:CopyToBaselineResolver-${random_string.suffix.result}"
-      }
-    ]
-  })
-}
-resource "aws_iam_policy" "copy_to_baseline_resolver_appsync_policy" {
-  for_each    = var.evaluation_enabled ? { "enabled" = true } : {}
-  name        = "CopyToBaselineResolverAppSyncPolicy-${random_string.suffix.result}"
-  description = "Policy for Copy To Baseline Resolver Lambda to access AppSync GraphQL API"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action   = "appsync:GraphQL"
-        Effect   = "Allow"
-        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/*/types/Mutation/*"
+        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:CopyToBaselineResolver-${random_string.suffix.result}"
       }
     ]
   })
@@ -485,11 +300,6 @@ resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_self_invoke
   count      = var.evaluation_enabled ? 1 : 0
   role       = aws_iam_role.copy_to_baseline_resolver_role["enabled"].name
   policy_arn = aws_iam_policy.copy_to_baseline_resolver_self_invoke_policy["enabled"].arn
-}
-resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_appsync_attachment" {
-  count      = var.evaluation_enabled ? 1 : 0
-  role       = aws_iam_role.copy_to_baseline_resolver_role["enabled"].name
-  policy_arn = aws_iam_policy.copy_to_baseline_resolver_appsync_policy["enabled"].arn
 }
 resource "aws_iam_role_policy_attachment" "copy_to_baseline_resolver_kms_attachment" {
   count      = var.evaluation_enabled ? 1 : 0
@@ -709,7 +519,11 @@ resource "aws_iam_policy" "get_file_contents_resolver_s3_policy" {
           local.output_bucket_arn,
           local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null,
           local.working_bucket_arn,
-          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null
+          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null,
+          # The Test Studio ground-truth editor reads baseline result.json from
+          # the test-set bucket through a presigned URL issued here.
+          var.enable_test_studio ? aws_s3_bucket.test_sets[0].arn : null,
+          var.enable_test_studio ? "${aws_s3_bucket.test_sets[0].arn}/*" : null
         ])
       }
     ]
@@ -857,25 +671,6 @@ resource "aws_iam_policy" "get_stepfunction_execution_resolver_vpc_policy" {
     ]
   })
 }
-resource "aws_iam_policy" "appsync_invoke_get_stepfunction_execution_resolver_policy" {
-  name        = "AppSyncInvokeGetStepFunctionExecutionResolverPolicy-${random_string.suffix.result}"
-  description = "Policy for AppSync to invoke the Get Step Function Execution Resolver Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action   = "lambda:InvokeFunction"
-        Effect   = "Allow"
-        Resource = aws_lambda_function.get_stepfunction_execution_resolver.arn
-      }
-    ]
-  })
-}
-resource "aws_iam_role_policy_attachment" "appsync_invoke_get_stepfunction_execution_resolver_attachment" {
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_get_stepfunction_execution_resolver_policy.arn
-}
 resource "aws_iam_role_policy_attachment" "get_stepfunction_execution_resolver_logs_attachment" {
   role       = aws_iam_role.get_stepfunction_execution_resolver_role.name
   policy_arn = aws_iam_policy.get_stepfunction_execution_resolver_logs_policy.arn
@@ -969,7 +764,7 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}::foundation-model/${var.knowledge_base.model_id}"
         ]
       }] : []
     )
@@ -1093,8 +888,63 @@ resource "aws_iam_policy" "reprocess_document_resolver_s3_policy" {
           local.input_bucket_arn,
           local.input_bucket_arn != null ? "${local.input_bucket_arn}/*" : null
         ])
+      },
+      # Reprocessing clears the document's previous results before re-queueing
+      # it, so it lists and deletes under the output prefix as well.
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = compact([
+          local.output_bucket_arn,
+          local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null
+        ])
       }
     ]
+  })
+}
+
+resource "aws_iam_policy" "reprocess_document_resolver_dynamodb_policy" {
+  count       = local.tracking_table_exists ? 1 : 0
+  name        = "ReprocessDocumentResolverDynamoDBPolicy-${random_string.suffix.result}"
+  description = "Policy for Reprocess Document Resolver Lambda to update document tracking records"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query"
+        ]
+        Effect = "Allow"
+        Resource = [
+          local.tracking_table_arn,
+          "${local.tracking_table_arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
+resource "aws_iam_policy" "reprocess_document_resolver_sqs_policy" {
+  name        = "ReprocessDocumentResolverSQSPolicy-${random_string.suffix.result}"
+  description = "Policy for Reprocess Document Resolver Lambda to re-queue documents"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = var.document_queue_arn != null ? [
+      {
+        Action   = ["sqs:SendMessage"]
+        Effect   = "Allow"
+        Resource = var.document_queue_arn
+      }
+    ] : []
   })
 }
 resource "aws_iam_policy" "reprocess_document_resolver_kms_policy" {
@@ -1145,6 +995,15 @@ resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_logs_atta
 resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_s3_attachment" {
   role       = aws_iam_role.reprocess_document_resolver_role.name
   policy_arn = aws_iam_policy.reprocess_document_resolver_s3_policy.arn
+}
+resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_sqs_attachment" {
+  role       = aws_iam_role.reprocess_document_resolver_role.name
+  policy_arn = aws_iam_policy.reprocess_document_resolver_sqs_policy.arn
+}
+resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_dynamodb_attachment" {
+  count      = local.tracking_table_exists ? 1 : 0
+  role       = aws_iam_role.reprocess_document_resolver_role.name
+  policy_arn = aws_iam_policy.reprocess_document_resolver_dynamodb_policy[0].arn
 }
 resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_kms_attachment" {
   for_each   = toset(["enabled"])

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import useAppContext from '../contexts/app';
@@ -9,6 +9,7 @@ import { Notification } from '../types/common';
 const logger = new ConsoleLogger('useNotifications');
 
 const dismissedInitialNotificationsStorageKey = 'dismissedInitialNotifications';
+
 const initialNotifications: Omit<Notification, 'onDismiss'>[] = [
   {
     type: 'info',
@@ -20,9 +21,22 @@ const initialNotifications: Omit<Notification, 'onDismiss'>[] = [
 ];
 
 const useNotifications = (): Notification[] => {
-  const { errorMessage, setErrorMessage } = useAppContext();
+  const { errorMessage, setErrorMessage, successMessage, setSuccessMessage } = useAppContext();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Pending auto-dismiss timers, cleared only on unmount. They cannot live in an
+  // effect cleanup: the success effect resets successMessage as it fires, so the
+  // very next render re-runs it, and a cleanup would clear the timeout it just set
+  // — which is why success toasts used to linger on screen indefinitely.
+  const dismissTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(
+    () => () => {
+      dismissTimersRef.current.forEach(clearTimeout);
+      dismissTimersRef.current = [];
+    },
+    [],
+  );
 
   useEffect(() => {
     // sets initial notifications and persists state of dismissed notifications in local storage
@@ -107,6 +121,35 @@ const useNotifications = (): Notification[] => {
     setNotifications((current) => [...current, errorNotification]);
     setErrorMessage('');
   }, [errorMessage, notifications]);
+
+  useEffect(() => {
+    // adds success messages to notifications; auto-dismisses after a few seconds
+    // so transient confirmations (e.g. "Configuration saved") don't linger.
+    if (!successMessage) {
+      return undefined;
+    }
+
+    const id = performance.now();
+    const successNotification: Notification = {
+      type: 'success',
+      content: successMessage,
+      dismissible: true,
+      dismissLabel: 'Dismiss message',
+      id,
+      onDismiss: () => {
+        setNotifications((current) => current.filter((i) => i.id !== id));
+      },
+    };
+    setNotifications((current) => [...current, successNotification]);
+    setSuccessMessage('');
+
+    dismissTimersRef.current.push(
+      setTimeout(() => {
+        setNotifications((current) => current.filter((i) => i.id !== id));
+      }, 5000),
+    );
+    return undefined;
+  }, [successMessage]);
 
   return notifications;
 };

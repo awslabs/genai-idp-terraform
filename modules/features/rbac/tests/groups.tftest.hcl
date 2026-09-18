@@ -14,6 +14,8 @@
 # input), so a `plan` is sufficient to assert names/cardinality.
 
 mock_provider "aws" {}
+mock_provider "archive" {}
+mock_provider "time" {}
 
 variables {
   name_prefix  = "idp-test"

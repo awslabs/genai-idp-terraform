@@ -7,6 +7,19 @@ make lint               # Full lint (ruff + format + ARN + buildspec + UI + code
 make test               # All tests
 make typecheck          # basedpyright
 ```
+
+**Before opening an MR** (not needed on every commit), also run the SRT
+security scan so new findings are known and addressed up front — CI runs it
+on MRs to `develop` and will fail on HIGH open findings:
+```bash
+make srt-scan           # requires one-time `make srt-setup`; ~5–10 min
+# or: make srt          # clean → setup → scan → optional interactive fix
+```
+Locally the scan exits 0 even with findings — read the
+`OPEN HIGH PRIORITY SECURITY ISSUES` table it prints (or `.srt/issues.json`),
+don't rely on the exit code. Fix real issues; for false positives use
+`make srt-fix` to suppress **with a specific justification** and commit the
+updated `scripts/srt/issues.json`.
 Or use the convenience command:
 ```bash
 make commit             # lint + test + auto-generate commit message + push
@@ -29,6 +42,19 @@ make fastcommit         # fastlint (skip UI) + auto-commit + push
 - [ ] Type hints on function signatures
 - [ ] Explicit `ClientError` catches with `exc_info=True`
 - [ ] No hardcoded AWS account IDs or regions
+
+### DynamoDB Access
+- [ ] `make check-filtered-scans` passes — a filtered `Scan` must **paginate**
+      (`LastEvaluatedKey`), because DynamoDB bounds `Limit` and the 1MB page by
+      items **examined**, not items matching `FilterExpression`. An unpaginated
+      one finds a match only when it lands in the examined window, so it breaks
+      *silently* and *later*, as data grows (issue #599). Deliberate bounded
+      samples need an inline `# filtered-scan-ok: <reason>`.
+- [ ] Project only the attributes you need (`ProjectionExpression`) on a scan
+      used to locate a row — without it the page is spent reading whole item
+      bodies, so far fewer rows are examined per call
+- [ ] A boto3 paginator for one service is NOT pagination for another; check
+      that the paginator in view actually wraps *this* call
 
 ### idp_common Library
 - [ ] New modules use lazy loading pattern (register in `__init__.py.__getattr__`)
@@ -60,6 +86,7 @@ make fastcommit         # fastlint (skip UI) + auto-commit + push
 - [ ] `make check-arn-partitions` passes — NO hardcoded `arn:aws:`
 - [ ] Service endpoints use `${AWS::URLSuffix}` — NO hardcoded `amazonaws.com`
 - [ ] PermissionsBoundary conditional on all IAM roles
+- [ ] New IAM role or AWS service? → both `docs/aws-services-and-roles.md` AND `iam-roles/cloudformation-management/` updated (see infrastructure.md)
 - [ ] Dedicated LogGroup per Lambda with KMS encryption
 - [ ] cfn-nag + checkov suppression metadata where needed (with justification)
 - [ ] `make validate-buildspec` passes

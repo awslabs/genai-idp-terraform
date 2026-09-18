@@ -21,11 +21,16 @@
 module "engine" {
   source = "../unified-processor"
 
+  allowed_bedrock_model_ids = var.allowed_bedrock_model_ids
+
   # The engine resources adopt the façade's name.
   name = var.name
 
   # Lambda architecture (must match the idp_common layer build architecture).
   lambda_architecture = var.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = var.enable_bda_ocr_backend
 
   # API wiring
   enable_api      = var.enable_api
@@ -60,8 +65,7 @@ module "engine" {
   evaluation_layer_arn = var.evaluation_layer_arn
 
   # Rule validation
-  enable_rule_validation      = var.enable_rule_validation
-  rule_validation_memory_size = var.rule_validation_memory_size
+  enable_rule_validation = var.enable_rule_validation
 
   # Lambda hook inference (v0.4.15+)
   lambda_hook_ocr            = var.lambda_hook_ocr
@@ -77,16 +81,12 @@ module "engine" {
     var.lambda_hook_summarization,
   ])) > 0
 
-  # Model configuration
-  model_id                     = var.model_id
-  classification_model_id      = var.classification_model_id
+  # Model configuration (per-stage models come from the YAML config, not TF)
   classification_max_workers   = var.classification_max_workers
   max_pages_for_classification = var.max_pages_for_classification
   classification_guardrail     = var.classification_guardrail
-  extraction_model_id          = var.extraction_model_id
   extraction_guardrail         = var.extraction_guardrail
   ocr_max_workers              = var.ocr_max_workers
-  assessment_model_id          = var.assessment_model_id
   assessment_guardrail         = var.assessment_guardrail
 
   # Section splitting / agentic extraction
@@ -97,11 +97,12 @@ module "engine" {
   # Evaluation
   evaluation_enabled             = var.evaluation_enabled
   evaluation_baseline_bucket_arn = var.evaluation_baseline_bucket_arn
-  evaluation_model_id            = var.evaluation_model_id
+  reporting_bucket_name          = var.reporting_bucket_name
+  save_reporting_function_name   = var.save_reporting_function_name
+  save_reporting_function_arn    = var.save_reporting_function_arn
 
   # Summarization
   is_summarization_enabled = var.is_summarization_enabled
-  summarization_model_id   = var.summarization_model_id
   summarization_guardrail  = var.summarization_guardrail
 
   # Concurrency

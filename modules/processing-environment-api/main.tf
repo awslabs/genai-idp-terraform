@@ -4,9 +4,13 @@
 /**
  * # Processing Environment API Module
  *
- * This module creates an AppSync GraphQL API for tracking and managing document processing.
- * It provides resolvers for querying document status, managing document processing,
- * accessing document contents, uploading new documents, and querying document knowledge base.
+ * This module creates an API Gateway REST API for tracking and managing document
+ * processing (the AppSync-free transport shipped in IDP v0.6.4). A single HTTP
+ * dispatcher Lambda behind `POST /op/{field}` routes each operation to the same
+ * resolver Lambdas AppSync used, or serves DynamoDB-direct fields in-process.
+ * It provides operations for querying document status, managing document
+ * processing, accessing document contents, uploading new documents, and
+ * querying the document knowledge base.
  */
 
 locals {
@@ -27,8 +31,8 @@ locals {
   # For each resource, prioritize the ARN variable if provided, otherwise use the object variable
 
   # S3 Buckets
-  input_bucket_name  = element(split(":", var.input_bucket_arn), 5)
-  output_bucket_name = element(split(":", var.output_bucket_arn), 5)
+  input_bucket_name  = var.input_bucket_arn != null ? element(split(":", var.input_bucket_arn), 5) : null
+  output_bucket_name = var.output_bucket_arn != null ? element(split(":", var.output_bucket_arn), 5) : null
 
   input_bucket_arn  = var.input_bucket_arn
   output_bucket_arn = var.output_bucket_arn
@@ -40,6 +44,13 @@ locals {
   # DynamoDB Tables
   tracking_table_arn  = var.tracking_table_arn
   tracking_table_name = var.tracking_table_arn != null ? element(split("/", var.tracking_table_arn), 1) : null
+
+  # Deterministic flag for tracking table existence. Prefer the caller-supplied
+  # plan-time-known override; fall back to deriving from the (possibly computed)
+  # ARN so existing callers behave unchanged. Gating count/for_each on this
+  # instead of `tracking_table_arn != null` keeps a cold `terraform plan` valid
+  # when the ARN is a resource attribute created in the same apply.
+  tracking_table_exists = var.tracking_table_available != null ? var.tracking_table_available : var.tracking_table_arn != null
 
   configuration_table_arn  = var.configuration_table_arn
   configuration_table_name = var.configuration_table_arn != null ? element(split("/", var.configuration_table_arn), 1) : null
@@ -57,7 +68,7 @@ locals {
   # a syntactically-valid placeholder key ARN so the policy is well-formed (and
   # grants nothing usable, since the key does not exist). Mirrors the inline
   # guard already used by the appsync_dynamodb_policy KMS statement.
-  kms_policy_resource_arn = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+  kms_policy_resource_arn = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
 
   # Knowledge Base - Extract ID from ARN
   knowledge_base_arn = var.knowledge_base.knowledge_base_arn
@@ -103,15 +114,12 @@ module "discovery" {
 
   lambda_architecture = var.lambda_architecture
 
-  name_prefix               = "discovery-${random_string.suffix.result}"
-  allowed_cors_origins      = var.discovery_allowed_cors_origins
-  input_bucket_arn          = local.input_bucket_arn
-  configuration_table_arn   = local.configuration_table_arn
-  appsync_api_url           = "https://${aws_appsync_graphql_api.api.uris["GRAPHQL"]}"
-  appsync_api_id            = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn   = aws_iam_role.appsync_lambda_role.arn
-  appsync_dynamodb_role_arn = aws_iam_role.appsync_dynamodb_role.arn
-  idp_common_layer_arn      = var.idp_common_layer_arn
+  name_prefix              = "discovery-${random_string.suffix.result}"
+  allowed_cors_origins     = var.discovery_allowed_cors_origins
+  input_bucket_arn         = local.input_bucket_arn
+  configuration_table_arn  = local.configuration_table_arn
+  configuration_table_name = local.configuration_table_name
+  idp_common_layer_arn     = var.idp_common_layer_arn
 
   # Configuration
   log_level                      = var.log_level
@@ -149,10 +157,8 @@ module "process_changes" {
 
   lambda_architecture = var.lambda_architecture
 
-  name_prefix             = "process-changes-${random_string.suffix.result}"
-  appsync_api_id          = aws_appsync_graphql_api.api.id
-  appsync_lambda_role_arn = aws_iam_role.appsync_lambda_role.arn
-  idp_common_layer_arn    = var.idp_common_layer_arn
+  name_prefix          = "process-changes-${random_string.suffix.result}"
+  idp_common_layer_arn = var.idp_common_layer_arn
 
   # DynamoDB tables
   tracking_table_name = local.tracking_table_name
@@ -169,9 +175,6 @@ module "process_changes" {
   working_bucket_arn = var.working_bucket_arn
   input_bucket_arn   = local.input_bucket_arn
   output_bucket_arn  = local.output_bucket_arn
-
-  # AppSync GraphQL URL
-  appsync_graphql_url = aws_appsync_graphql_api.api.uris["GRAPHQL"]
 
   # Configuration
   log_level           = var.log_level
@@ -198,8 +201,6 @@ module "agent_analytics" {
   reporting_database_name   = var.agent_analytics.reporting_database_name
   athena_results_bucket_arn = var.agent_analytics.reporting_bucket_arn
   reporting_bucket_arn      = var.agent_analytics.reporting_bucket_arn
-  appsync_api_url           = aws_appsync_graphql_api.api.uris["GRAPHQL"]
-  appsync_api_id            = aws_appsync_graphql_api.api.id
   idp_common_layer_arn      = var.idp_common_layer_arn
   configuration_table_name  = local.configuration_table_name
 
@@ -207,17 +208,19 @@ module "agent_analytics" {
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
 
   # Configuration
-  bedrock_model_id    = var.agent_analytics.model_id
-  log_level           = var.log_level
-  log_retention_days  = var.log_retention_days
-  data_retention_days = var.data_retention_in_days
-  encryption_key_arn  = local.encryption_key_arn
-  enable_encryption   = var.enable_encryption
-  lambda_tracing_mode = var.lambda_tracing_mode
+  bedrock_model_id          = var.agent_analytics.model_id
+  allowed_bedrock_model_ids = var.agent_analytics.allowed_bedrock_model_ids
+  log_level                 = var.log_level
+  log_retention_days        = var.log_retention_days
+  data_retention_days       = var.data_retention_in_days
+  encryption_key_arn        = local.encryption_key_arn
+  enable_encryption         = var.enable_encryption
+  lambda_tracing_mode       = var.lambda_tracing_mode
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
   vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
+  vpc_id                 = try(var.vpc_config.vpc_id, null)
 
   # Build strategy (see root var.build)
   lambda_local        = var.lambda_local
@@ -227,88 +230,6 @@ module "agent_analytics" {
   tags = var.tags
 }
 
-# AppSync GraphQL API
-resource "aws_appsync_graphql_api" "api" {
-  name                = local.api_name
-  authentication_type = local.auth_type
-  xray_enabled        = var.xray_enabled
-  visibility          = var.visibility
-
-  dynamic "log_config" {
-    for_each = var.log_config != null ? [var.log_config] : []
-    content {
-      cloudwatch_logs_role_arn = log_config.value.cloudwatch_logs_role_arn
-      exclude_verbose_content  = log_config.value.exclude_verbose_content
-      field_log_level          = log_config.value.field_log_level
-    }
-  }
-
-  dynamic "user_pool_config" {
-    for_each = local.has_cognito_auth ? [var.authorization_config.default_authorization.user_pool_config] : []
-    content {
-      user_pool_id        = user_pool_config.value.user_pool_id
-      app_id_client_regex = user_pool_config.value.app_id_client_regex
-      aws_region          = user_pool_config.value.aws_region
-      default_action      = user_pool_config.value.default_action
-    }
-  }
-
-  dynamic "openid_connect_config" {
-    for_each = local.has_oidc_auth ? [var.authorization_config.default_authorization.openid_connect_config] : []
-    content {
-      auth_ttl  = openid_connect_config.value.auth_ttl
-      client_id = openid_connect_config.value.client_id
-      iat_ttl   = openid_connect_config.value.iat_ttl
-      issuer    = openid_connect_config.value.issuer
-    }
-  }
-
-  dynamic "lambda_authorizer_config" {
-    for_each = local.has_lambda_auth ? [var.authorization_config.default_authorization.lambda_authorizer_config] : []
-    content {
-      # authorizer_result_ttl_seconds = lambda_authorizer_config.value.authorizer_result_ttl_seconds
-      authorizer_uri                 = lambda_authorizer_config.value.authorizer_uri
-      identity_validation_expression = lambda_authorizer_config.value.identity_validation_expression
-    }
-  }
-
-  dynamic "additional_authentication_provider" {
-    for_each = local.additional_auth_modes
-    content {
-      authentication_type = additional_authentication_provider.value.authorization_type
-
-      dynamic "user_pool_config" {
-        for_each = additional_authentication_provider.value.authorization_type == "AMAZON_COGNITO_USER_POOLS" ? [additional_authentication_provider.value.user_pool_config] : []
-        content {
-          user_pool_id        = user_pool_config.value.user_pool_id
-          app_id_client_regex = user_pool_config.value.app_id_client_regex
-          aws_region          = user_pool_config.value.aws_region
-          # default_action      = user_pool_config.value.default_action
-        }
-      }
-
-      dynamic "openid_connect_config" {
-        for_each = additional_authentication_provider.value.authorization_type == "OPENID_CONNECT" ? [additional_authentication_provider.value.openid_connect_config] : []
-        content {
-          auth_ttl  = openid_connect_config.value.auth_ttl
-          client_id = openid_connect_config.value.client_id
-          iat_ttl   = openid_connect_config.value.iat_ttl
-          issuer    = openid_connect_config.value.issuer
-        }
-      }
-
-      dynamic "lambda_authorizer_config" {
-        for_each = additional_authentication_provider.value.authorization_type == "AWS_LAMBDA" ? [additional_authentication_provider.value.lambda_authorizer_config] : []
-        content {
-          # authorizer_result_ttl_seconds = lambda_authorizer_config.value.authorizer_result_ttl_seconds
-          authorizer_uri                 = lambda_authorizer_config.value.authorizer_uri
-          identity_validation_expression = lambda_authorizer_config.value.identity_validation_expression
-        }
-      }
-    }
-  }
-
-  schema = file("${path.module}/../../sources/nested/appsync/src/api/schema.graphql")
-
-  tags = var.tags
-}
+# NOTE: The AppSync GraphQL API (aws_appsync_graphql_api.api), its datasources,
+# resolvers, API key, and AppSync service roles were removed in the v0.6.4
+# migration to the API Gateway REST transport. See rest-api.tf and dispatcher.tf.

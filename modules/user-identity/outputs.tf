@@ -13,6 +13,7 @@ output "user_pool" {
 
 output "user_pool_client" {
   description = "The Cognito UserPool Client used by the web application for OAuth flows"
+  sensitive   = true
   value = {
     user_pool_client_id = aws_cognito_user_pool_client.user_pool_client.id
     client_secret       = aws_cognito_user_pool_client.user_pool_client.client_secret
@@ -63,4 +64,14 @@ output "authenticated_role_arn" {
 output "unauthenticated_role_arn" {
   description = "ARN of the unauthenticated IAM role (if enabled)"
   value       = var.identity_pool_options.allow_unauthenticated_identities ? aws_iam_role.unauthenticated[0].arn : null
+}
+
+output "hosted_ui_domain_prefix" {
+  description = "Domain prefix of the Cognito hosted UI, or null when no domain was created"
+  value       = var.create_hosted_ui_domain ? aws_cognito_user_pool_domain.hosted_ui[0].domain : null
+}
+
+output "hosted_ui_domain" {
+  description = "Fully qualified Cognito hosted UI domain, or null when no domain was created"
+  value       = var.create_hosted_ui_domain ? "${aws_cognito_user_pool_domain.hosted_ui[0].domain}.auth.${data.aws_region.current.region}.amazoncognito.com" : null
 }

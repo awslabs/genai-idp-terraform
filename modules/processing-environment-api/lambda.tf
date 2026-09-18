@@ -41,7 +41,7 @@ resource "random_id" "build_id" {
 # Upload Document Resolver Lambda
 data "archive_file" "upload_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/upload_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/upload_resolver"
   output_path = "${local.module_build_dir}/upload-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -90,7 +90,7 @@ resource "aws_lambda_function" "upload_resolver" {
 # Delete Document Resolver Lambda
 data "archive_file" "delete_document_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/delete_document_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/delete_document_resolver"
   output_path = "${local.module_build_dir}/delete-document-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -139,7 +139,7 @@ resource "aws_lambda_function" "delete_document_resolver" {
 # Reprocess Document Resolver Lambda
 data "archive_file" "reprocess_document_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/reprocess_document_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/reprocess_document_resolver"
   output_path = "${local.module_build_dir}/reprocess-document-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -164,7 +164,15 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
 
   environment {
     variables = {
-      INPUT_BUCKET = local.input_bucket_name
+      LOG_LEVEL = var.log_level
+      # create_document_service() runs at import time and is always
+      # DynamoDB-backed, so a missing table name fails the whole function on
+      # cold start rather than at the point of use.
+      TRACKING_TABLE         = local.tracking_table_name != null ? local.tracking_table_name : ""
+      INPUT_BUCKET           = local.input_bucket_name
+      OUTPUT_BUCKET          = local.output_bucket_name
+      QUEUE_URL              = var.document_queue_url != null ? var.document_queue_url : ""
+      DATA_RETENTION_IN_DAYS = tostring(var.data_retention_in_days)
     }
   }
 
@@ -186,6 +194,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
     aws_iam_role_policy_attachment.reprocess_document_resolver_logs_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_s3_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_kms_attachment,
+    aws_iam_role_policy_attachment.reprocess_document_resolver_sqs_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_vpc_attachment
   ]
 }
@@ -197,7 +206,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
 # Get File Contents Resolver Lambda
 data "archive_file" "get_file_contents_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_file_contents_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/get_file_contents_resolver"
   output_path = "${local.module_build_dir}/get-file-contents-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -225,6 +234,9 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
       INPUT_BUCKET   = local.input_bucket_name
       OUTPUT_BUCKET  = local.output_bucket_name
       WORKING_BUCKET = local.working_bucket_name != null ? local.working_bucket_name : ""
+      # Named buckets form the resolver's allow-list, so the Test Studio
+      # ground-truth editor cannot get a presigned URL without this.
+      TEST_SET_BUCKET = var.enable_test_studio ? aws_s3_bucket.test_sets[0].id : ""
     }
   }
 
@@ -248,7 +260,7 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
 # pricing, and config library operations via fieldName dispatch.
 data "archive_file" "configuration_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/configuration_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/configuration_resolver"
   output_path = "${local.module_build_dir}/configuration_resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -304,7 +316,7 @@ resource "aws_lambda_function" "configuration_resolver" {
 # Get Step Function Execution Resolver Lambda
 data "archive_file" "get_stepfunction_execution_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/get_stepfunction_execution_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/get_stepfunction_execution_resolver"
   output_path = "${local.module_build_dir}/get-stepfunction-execution-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -361,7 +373,7 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
 # Query Knowledge Base Resolver Lambda
 data "archive_file" "query_knowledge_base_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/query_knowledgebase_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/query_knowledgebase_resolver"
   output_path = "${local.module_build_dir}/query-knowledge-base-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -389,7 +401,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
     variables = {
       KB_ID                    = local.knowledge_base_id != null ? local.knowledge_base_id : ""
       KB_ACCOUNT_ID            = data.aws_caller_identity.current.account_id
-      KB_REGION                = data.aws_region.current.id
+      KB_REGION                = data.aws_region.current.region
       MODEL_ID                 = local.knowledge_base_model_id != null ? local.knowledge_base_model_id : ""
       LOG_LEVEL                = var.log_level
       GUARDRAIL_ID_AND_VERSION = var.knowledge_base.guardrail_id_and_version != null ? var.knowledge_base.guardrail_id_and_version : ""
@@ -418,7 +430,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
 # Copy to Baseline Resolver Lambda
 data "archive_file" "copy_to_baseline_resolver_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/copy_to_baseline_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/copy_to_baseline_resolver"
   output_path = "${local.module_build_dir}/copy-to-baseline-resolver.zip_${random_id.build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -466,108 +478,8 @@ resource "aws_lambda_function" "copy_to_baseline_resolver" {
 }
 
 # =============================================================================
-# APPSYNC DATASOURCES
-# =============================================================================
-
-# Upload Resolver Data Source
-resource "aws_appsync_datasource" "upload_resolver" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "UploadResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.upload_resolver.arn
-  }
-}
-
-# Delete Document Resolver Data Source
-resource "aws_appsync_datasource" "delete_document_resolver" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "DeleteDocumentResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.delete_document_resolver.arn
-  }
-}
-
-# Reprocess Document Resolver Data Source
-resource "aws_appsync_datasource" "reprocess_document_resolver" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "ReprocessDocumentResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.reprocess_document_resolver.arn
-  }
-}
-
-# Get File Contents Resolver Data Source
-resource "aws_appsync_datasource" "get_file_contents_resolver" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "GetFileContentsResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.get_file_contents_resolver.arn
-  }
-}
-
-# Configuration Resolver Data Source
-resource "aws_appsync_datasource" "configuration" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "ConfigurationDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.configuration_resolver.arn
-  }
-}
-
-# Get Step Function Execution Resolver Data Source
-resource "aws_appsync_datasource" "get_stepfunction_execution_resolver" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "GetStepFunctionExecutionResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.get_stepfunction_execution_resolver.arn
-  }
-}
-
-# Query Knowledge Base Resolver Data Source
-resource "aws_appsync_datasource" "query_knowledge_base_resolver" {
-  for_each         = var.knowledge_base.enabled ? toset(["enabled"]) : toset([])
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "QueryKnowledgeBaseResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.query_knowledge_base_resolver["enabled"].arn
-  }
-}
-
-# Copy to Baseline Resolver Data Source
-resource "aws_appsync_datasource" "copy_to_baseline_resolver" {
-  for_each         = var.evaluation_enabled ? { "enabled" = true } : {}
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "CopyToBaselineResolverDataSource"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.copy_to_baseline_resolver["enabled"].arn
-  }
-}
-
-# =============================================================================
-# APPSYNC DATASOURCES (Lambda-backed)
-# Note: aws_appsync_resolver resources are in resolvers.tf
+# NOTE: The AppSync Lambda datasources previously defined here were removed in
+# the v0.6.4 migration to the API Gateway REST transport. The dispatcher
+# (dispatcher.tf) now invokes these resolver Lambdas directly via the
+# field-function map; the Lambda functions/archives above are unchanged.
 # =============================================================================

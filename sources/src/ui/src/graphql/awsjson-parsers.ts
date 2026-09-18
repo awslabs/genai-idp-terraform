@@ -9,6 +9,7 @@ import type {
   TestRunConfig,
   WeightedOverallScores,
   SplitClassificationMetrics,
+  GradedPacketMetrics,
   FieldMetrics,
   ConfusionMatrix,
   ConfidenceMetrics,
@@ -16,6 +17,7 @@ import type {
   ConfigSettingValues,
   ConfigurationData,
   PricingData,
+  ModelConfigLimitsData,
   StepFunctionStepPayload,
   BedrockModelsQuota,
 } from './awsjson-types';
@@ -87,6 +89,10 @@ export function parseSplitClassificationMetrics(json: unknown): SplitClassificat
   return safeParse<SplitClassificationMetrics>(json, {});
 }
 
+export function parseGradedPacketMetrics(json: unknown): GradedPacketMetrics {
+  return safeParse<GradedPacketMetrics>(json, {});
+}
+
 export function parseFieldMetrics(json: unknown): FieldMetrics {
   return safeParse<FieldMetrics>(json, {});
 }
@@ -113,6 +119,10 @@ export function parseConfigurationData(json: unknown): ConfigurationData | null 
 
 export function parsePricingData(json: unknown): PricingData | null {
   return safeParse<PricingData | null>(json, null);
+}
+
+export function parseModelConfigLimitsData(json: unknown): ModelConfigLimitsData | null {
+  return safeParse<ModelConfigLimitsData | null>(json, null);
 }
 
 export function parseStepFunctionPayload(json: unknown): StepFunctionStepPayload | null {

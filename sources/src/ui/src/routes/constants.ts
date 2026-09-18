@@ -10,12 +10,30 @@ export const DOCUMENTS_KB_QUERY_PATH = `${DOCUMENTS_PATH}/query`;
 export const DOCUMENTS_ANALYTICS_PATH = `${DOCUMENTS_PATH}/agents`;
 export const CONFIGURATION_PATH = `${DOCUMENTS_PATH}/config`;
 export const PRICING_PATH = `${DOCUMENTS_PATH}/pricing`;
+export const MODEL_CONFIG_LIMITS_PATH = `${DOCUMENTS_PATH}/model-limits`;
 export const UPLOAD_DOCUMENT_PATH = `${DOCUMENTS_PATH}/upload`;
 export const DISCOVERY_PATH = `${DOCUMENTS_PATH}/discovery`;
 export const DISCOVERY_JOB_PATH = `${DOCUMENTS_PATH}/discovery/job`;
 export const USER_MANAGEMENT_PATH = `${DOCUMENTS_PATH}/users`;
 export const AGENT_CHAT_PATH = '/agentchat';
+export const WELCOME_PATH = '/welcome';
+/** localStorage key: set when the user dismisses the welcome landing page. */
+export const WELCOME_DISMISSED_KEY = 'idp-welcome-dismissed';
 export const CAPACITY_PLANNING_PATH = `${DOCUMENTS_PATH}/capacity-planning`;
+/** Route pattern base: /test-studio/sets/:testSetId */
+export const TEST_SET_DETAIL_PATH = `${TEST_STUDIO_PATH}/sets`;
+/** Hash-link helper: href for a test set's document browser. */
+export const testSetDetailHref = (testSetId: string): string => `#${TEST_SET_DETAIL_PATH}/${encodeURIComponent(testSetId)}`;
+/**
+ * Hash-link helper: href for one test set document's detail page
+ * (/test-studio/sets/:testSetId/doc/<objectKey>, objectKey may contain slashes).
+ * Optional view preselects the source-document or ground-truth view.
+ */
+export const testSetDocumentHref = (testSetId: string, objectKey: string, view?: 'source' | 'ground-truth'): string =>
+  `#${TEST_SET_DETAIL_PATH}/${encodeURIComponent(testSetId)}/doc/${objectKey
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')}${view ? `?view=${view}` : ''}`;
 export const CUSTOM_MODELS_PATH = `${DOCUMENTS_PATH}/custom-models`;
 
 // --- Feature Platform ---

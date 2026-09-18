@@ -25,10 +25,11 @@ for mod_name in [
 ]:
     sys.modules.setdefault(mod_name, MagicMock())
 
+from pydantic import BaseModel  # noqa: E402
+
 from idp_common.extraction.agentic_idp import (  # noqa: E402
     create_dynamic_extraction_tool_and_patch_tool,
 )
-from pydantic import BaseModel  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Lightweight mock for Strands Agent (only needs .state with get/set)
@@ -80,7 +81,7 @@ class SimpleDoc(BaseModel):
 
 def _get_finalize_tool(model_class):
     """Extract finalize_table_extraction from the factory tuple."""
-    _, _, _, finalize_tool = create_dynamic_extraction_tool_and_patch_tool(model_class)
+    *_, finalize_tool = create_dynamic_extraction_tool_and_patch_tool(model_class)
     return finalize_tool
 
 

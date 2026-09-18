@@ -83,6 +83,7 @@ mock_provider "aws" {
 # Mock the time provider so `time_sleep.wait_for_iam_propagation` does not
 # actually sleep 30s during the test apply.
 mock_provider "time" {}
+mock_provider "archive" {}
 
 variables {
   name_prefix         = "idp-test"

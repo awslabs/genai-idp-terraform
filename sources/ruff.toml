@@ -13,6 +13,10 @@ extend-exclude = [
     "patterns",
     "src",
     "scripts",
+    # Vendored third-party code (AWS Labs pii-anonymizer, Apache-2.0). Kept
+    # byte-for-byte to ease re-sync; not linted against our style. See
+    # feature-platform/pii-anonymizer/hook/vendor/PROVENANCE.md.
+    "feature-platform/pii-anonymizer/hook/vendor",
 ]
 
 # Exclude a variety of commonly ignored directories.
@@ -68,6 +72,9 @@ unfixable = []
 
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.isort]
+known-first-party = ["idp_common", "idp_cli", "idp_sdk", "idp_feature_sdk", "idp_mcp_connector"]
 
 [lint.flake8-tidy-imports.banned-api]
 "idp_sdk._core" = {msg = "This is a private internal module. Use IDPClient from idp_sdk instead."}

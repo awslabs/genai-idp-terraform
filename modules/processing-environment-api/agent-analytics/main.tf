@@ -33,13 +33,46 @@ locals {
   # Module build directory for Lambda archives
   module_build_dir = "${path.module}/.terraform-build"
 
-  # Helper function to generate model permissions for bedrock_model_id
-  # This follows the same pattern as processing-environment-api
+  # Helper to generate model permissions for bedrock_model_id.
+  # Same shape as processing-environment-api/locals.tf and
+  # processors/unified-processor/locals.tf.
+  #
+  # The prefix is matched by regex rather than `startswith` + `substr(id, 3, -1)`:
+  # that hardcoded 3 assumes a two-letter geo, so it silently mangled
+  # `apac.anthropic...` into `c.anthropic...` (a 5-char prefix) and would do worse
+  # to IDP v0.6's `global.` profiles (7 chars), producing a foundation-model ARN
+  # that matches nothing and an AccessDenied at invoke time.
+  model_prefix_re = "^(us|eu|apac|ca|sa|global)\\."
+
+  # var.bedrock_model_id only sets the env var; each agent takes its own model
+  # from the config, so the grant is harvested from there instead.
+  _system_defaults_dir = "${path.module}/../../../sources/lib/idp_common_pkg/idp_common/config/system_defaults"
+  _agent_config_model_ids = try([
+    for _, agent in yamldecode(file("${local._system_defaults_dir}/base-agents.yaml")).agents :
+    agent.model_id
+  ], [])
+
+  # Models authored later in the UI are invisible to Terraform; "*" is the
+  # operator escape hatch, as in unified-processor.
+  bedrock_wildcard_access = contains(var.allowed_bedrock_model_ids, "*")
+  _bedrock_model_ids = distinct([
+    for m in concat(
+      [var.bedrock_model_id],
+      local._agent_config_model_ids,
+      local.bedrock_wildcard_access ? [] : var.allowed_bedrock_model_ids,
+    ) : m if m != null && m != ""
+  ])
+
+  # Only geo-prefixed IDs resolve to an inference profile.
+  _inference_profile_model_ids = [
+    for id in local._bedrock_model_ids :
+    id if !startswith(id, "arn:") && can(regex(local.model_prefix_re, id))
+  ]
+
   bedrock_model_permissions = {
-    # Parse model information
     is_arn               = startswith(var.bedrock_model_id, "arn:")
-    is_inference_profile = !startswith(var.bedrock_model_id, "arn:") && (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac."))
-    base_model_id        = (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac.")) ? substr(var.bedrock_model_id, 3, -1) : var.bedrock_model_id
+    is_inference_profile = !startswith(var.bedrock_model_id, "arn:") && can(regex(local.model_prefix_re, var.bedrock_model_id))
+    base_model_id        = can(regex(local.model_prefix_re, var.bedrock_model_id)) ? replace(var.bedrock_model_id, "/${local.model_prefix_re}/", "") : var.bedrock_model_id
 
     # Foundation model statement (always needed)
     # For inference profiles, we need permissions for the underlying foundation model (without prefix)
@@ -50,27 +83,33 @@ locals {
         "bedrock:InvokeModelWithResponseStream",
         "bedrock:GetFoundationModel"
       ]
-      resources = [
-        # For ARNs that are not inference profiles, use as-is
-        # For inference profiles, create foundation model ARN with base model ID (no prefix)
-        # For regular model IDs, create foundation model ARN as-is
-        startswith(var.bedrock_model_id, "arn:") && !contains(split(":", var.bedrock_model_id), "inference-profile") ?
-        var.bedrock_model_id :
-        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${(startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac.")) ? substr(var.bedrock_model_id, 3, -1) : var.bedrock_model_id}"
-      ]
+      # One ARN per invocable model; the geo prefix is stripped for the
+      # underlying foundation model.
+      resources = local.bedrock_wildcard_access ? [
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+        ] : distinct([
+          for id in local._bedrock_model_ids :
+          startswith(id, "arn:") && !contains(split(":", id), "inference-profile") ?
+          id :
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex(local.model_prefix_re, id)) ? replace(id, "/${local.model_prefix_re}/", "") : id}"
+      ])
     }
 
-    # Inference profile statement (only for inference profiles)
-    inference_profile_statement = (!startswith(var.bedrock_model_id, "arn:") && (startswith(var.bedrock_model_id, "us.") || startswith(var.bedrock_model_id, "eu.") || startswith(var.bedrock_model_id, "apac."))) ? {
+    # One ARN per geo-prefixed model; omitted when none resolves to a profile.
+    inference_profile_statement = local.bedrock_wildcard_access || length(local._inference_profile_model_ids) > 0 ? {
       effect = "Allow"
       actions = [
         "bedrock:GetInferenceProfile",
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream"
       ]
-      resources = [
-        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}"
-      ]
+      resources = local.bedrock_wildcard_access ? [
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
+        ] : distinct([
+          for id in local._inference_profile_model_ids :
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${id}"
+      ])
     } : null
   }
 }
@@ -115,6 +154,10 @@ module "agent_analytics_idp_layer" {
   lambda_local        = var.lambda_local
   lambda_architecture = var.lambda_architecture
   container_runtime   = var.container_runtime
+
+  vpc_id             = var.vpc_id
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 }
 
 # =============================================================================
@@ -124,11 +167,19 @@ module "agent_analytics_idp_layer" {
 # Create a minimal layer with only agent-specific dependencies
 # This is separate from idp_common to keep the layer size manageable
 locals {
+  # Pins aligned with the upstream idp_common `agents` extra
+  # (sources/lib/idp_common_pkg/pyproject.toml). The previous loose lower bounds
+  # (strands-agents>=1.0.0, bedrock-agentcore>=0.1.1) let pip resolve an older
+  # `mcp` transitive dep that lacks `streamablehttp_client`, so the
+  # list_available_agents / agent lambdas failed at import with
+  # "cannot import name 'streamablehttp_client' from 'mcp.client.streamable_http'".
+  # The explicit mcp floor guarantees the Streamable HTTP client is present.
   agent_requirements = {
     agents = join("\n", [
-      "strands-agents>=1.0.0",
-      "strands-agents-tools>=0.2.2",
-      "bedrock-agentcore>=0.1.1",
+      "strands-agents==1.14.0",
+      "strands-agents-tools==0.2.22",
+      "bedrock-agentcore>=1.6.1,<1.9.0",
+      "mcp>=1.9.0",
       "regex>=2024.0.0,<2026.0.0"
     ])
   }
@@ -155,6 +206,10 @@ module "agent_dependencies_layer" {
   lambda_local        = var.lambda_local
   lambda_architecture = var.lambda_architecture
   container_runtime   = var.container_runtime
+
+  vpc_id             = var.vpc_id
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 }
 
 
@@ -213,7 +268,7 @@ resource "random_id" "request_handler_build_id" {
 # Source code archive for request handler
 data "archive_file" "agent_request_handler_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/agent_request_handler"
+  source_dir  = "${path.module}/../../../sources/nested/api-resolvers/src/lambda/agent_request_handler"
   output_path = "${local.module_build_dir}/agent-request-handler.zip_${random_id.request_handler_build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -318,11 +373,13 @@ resource "aws_lambda_function" "agent_processor" {
 
   environment {
     variables = {
-      LOG_LEVEL                        = var.log_level
-      CONFIGURATION_TABLE_NAME         = var.configuration_table_name
-      STRANDS_LOG_LEVEL                = var.log_level
-      AGENT_TABLE                      = aws_dynamodb_table.agent_jobs.name
-      APPSYNC_API_URL                  = var.appsync_api_url
+      LOG_LEVEL                = var.log_level
+      CONFIGURATION_TABLE_NAME = var.configuration_table_name
+      STRANDS_LOG_LEVEL        = var.log_level
+      AGENT_TABLE              = aws_dynamodb_table.agent_jobs.name
+      # APPSYNC_API_URL intentionally empty post-v0.6.4: agent jobs are written
+      # to the AgentTable directly and read by the dispatcher's ddb_direct.
+      APPSYNC_API_URL                  = ""
       ATHENA_DATABASE                  = var.reporting_database_name
       ATHENA_OUTPUT_LOCATION           = "s3://${local.reporting_bucket_name}/athena-results/"
       DOCUMENT_ANALYSIS_AGENT_MODEL_ID = var.bedrock_model_id
@@ -371,7 +428,7 @@ resource "random_id" "list_agents_build_id" {
 # Source code archive for list agents
 data "archive_file" "list_available_agents_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/list_available_agents"
+  source_dir  = "${path.module}/../../../sources/nested/api-resolvers/src/lambda/list_available_agents"
   output_path = "${local.module_build_dir}/list-available-agents.zip_${random_id.list_agents_build_id.hex}"
 
   depends_on = [null_resource.create_module_build_dir]
@@ -431,26 +488,11 @@ resource "aws_cloudwatch_log_group" "list_available_agents_logs" {
 
 
 # =============================================================================
-# AppSync Lambda Permissions
+# NOTE (v0.6.4 REST migration): The AppSync lambda:InvokeFunction permissions
+# for the agent request handler / list-available-agents Lambdas were removed.
+# submitAgentQuery / listAvailableAgents are now invoked by the HTTP API
+# dispatcher (parent field-function map); the dispatcher role grants the invoke.
 # =============================================================================
-
-# Permission for AppSync to invoke Agent Request Handler
-resource "aws_lambda_permission" "appsync_agent_request_handler" {
-  statement_id  = "AllowAppSyncInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.agent_request_handler.function_name
-  principal     = "appsync.amazonaws.com"
-  source_arn    = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
-}
-
-# Permission for AppSync to invoke List Available Agents
-resource "aws_lambda_permission" "appsync_list_available_agents" {
-  statement_id  = "AllowAppSyncInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.list_available_agents.function_name
-  principal     = "appsync.amazonaws.com"
-  source_arn    = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/${var.appsync_api_id}/*"
-}
 
 # =============================================================================
 # Bedrock Agent Configuration

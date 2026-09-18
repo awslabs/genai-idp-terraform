@@ -8,9 +8,9 @@ variable "table_name" {
 }
 
 variable "billing_mode" {
-  description = "Controls how you are charged for read and write throughput and how you manage capacity"
+  description = "Controls how you are charged for read and write throughput and how you manage capacity. Defaults to PAY_PER_REQUEST because document processing is bursty and the provisioned default of 5/5 throttles under a single multi-page document."
   type        = string
-  default     = "PROVISIONED"
+  default     = "PAY_PER_REQUEST"
   validation {
     condition     = contains(["PROVISIONED", "PAY_PER_REQUEST"], var.billing_mode)
     error_message = "Allowed values for billing_mode are \"PROVISIONED\" or \"PAY_PER_REQUEST\"."

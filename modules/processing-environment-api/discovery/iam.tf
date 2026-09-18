@@ -269,30 +269,8 @@ resource "aws_iam_role_policy_attachment" "discovery_processor_policy_attachment
   policy_arn = aws_iam_policy.discovery_processor_policy.arn
 }
 
-# AppSync policy for processor (to update job status)
-resource "aws_iam_policy" "discovery_processor_appsync_policy" {
-  name = "${var.name_prefix}-discovery-processor-appsync-policy-${local.suffix}"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = var.appsync_api_url != null ? [
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = "arn:${data.aws_partition.current.partition}:appsync:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:apis/*"
-      }
-    ] : []
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "discovery_processor_appsync_attachment" {
-  role       = aws_iam_role.discovery_processor_role.name
-  policy_arn = aws_iam_policy.discovery_processor_appsync_policy.arn
-}
+# AppSync GraphQL policy removed in the v0.6.4 REST migration — the discovery
+# processor writes the DiscoveryTable directly (no AppSync mutation publish).
 
 # VPC policy for processor
 resource "aws_iam_policy" "discovery_processor_vpc_policy" {

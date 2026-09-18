@@ -75,6 +75,10 @@ X_AWS_IDP_SOURCE_PAGE_TYPES = "x-aws-idp-source-page-types"
 # ============================================================================
 # Marks a schema as a policy/rule type (for rule validation)
 X_AWS_IDP_POLICY_TYPE = "x-aws-idp-policy-type"
+# Legacy/raw-discovery discriminator. The rules-discovery LLM emits this name and
+# older hand-written configs use it; readers accept it as a fallback so such a
+# class is matched rather than silently ignored. Writers emit POLICY_TYPE.
+X_AWS_IDP_RULE_TYPE = "x-aws-idp-rule-type"
 
 # Note: Policy classes use the same regex fields as document types
 # X_AWS_IDP_DOCUMENT_NAME_REGEX - Pattern to match document name for policy filtering
@@ -121,12 +125,19 @@ X_AWS_IDP_EVALUATION_MATCH_THRESHOLD = "x-aws-idp-evaluation-match-threshold"
 
 X_AWS_IDP_EXAMPLES = "x-aws-idp-examples"
 
+# Optional per-field config for the evaluation comparator, passed through to the
+# underlying Stickler comparator (maps to x-aws-stickler-comparator-config).
+# Currently used by the DATE method to configure DateComparator (e.g. dayfirst,
+# tolerance, range_mode).
+X_AWS_IDP_EVALUATION_METHOD_CONFIG = "x-aws-idp-evaluation-method-config"
+
 # Valid evaluation methods
 EVALUATION_METHOD_EXACT = "EXACT"
 EVALUATION_METHOD_NUMERIC_EXACT = "NUMERIC_EXACT"
 EVALUATION_METHOD_FUZZY = "FUZZY"
 EVALUATION_METHOD_LEVENSHTEIN = "LEVENSHTEIN"
 EVALUATION_METHOD_SEMANTIC = "SEMANTIC"
+EVALUATION_METHOD_DATE = "DATE"
 EVALUATION_METHOD_LLM = "LLM"
 EVALUATION_METHOD_HUNGARIAN = "HUNGARIAN"
 
@@ -137,6 +148,7 @@ VALID_EVALUATION_METHODS = frozenset(
         EVALUATION_METHOD_FUZZY,
         EVALUATION_METHOD_LEVENSHTEIN,
         EVALUATION_METHOD_SEMANTIC,
+        EVALUATION_METHOD_DATE,
         EVALUATION_METHOD_LLM,
         EVALUATION_METHOD_HUNGARIAN,
     ]
@@ -145,6 +157,12 @@ VALID_EVALUATION_METHODS = frozenset(
 # Legacy: Confidence threshold for evaluation (0.0 to 1.0)
 # Note: This is now superseded by X_AWS_IDP_EVALUATION_THRESHOLD
 X_AWS_IDP_CONFIDENCE_THRESHOLD = "x-aws-idp-confidence-threshold"
+
+# Per-class stronger confidence model the assessment self-healing ladder
+# escalates to when rows still truncate/come back unscored after token-aware
+# shrinking and same-model retries. Mirrors X_AWS_IDP_EXTRACTION_ESCALATION_MODEL;
+# overrides the global extraction.confidence.escalation_model for that class.
+X_AWS_IDP_CONFIDENCE_ESCALATION_MODEL = "x-aws-idp-confidence-escalation-model"
 
 # ============================================================================
 # AWS IDP Prompt Extensions

@@ -1,26 +1,20 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for AppSync visibility wiring on the
+# Native `terraform test` for API visibility wiring on the
 # processing-environment-api module.
 #
-# Visibility wiring:
-#   * visibility in {GLOBAL, PRIVATE} reaches the API
-#     (aws_appsync_graphql_api.api.visibility == the input);
-#   * unset -> defaults to GLOBAL;
-#   * any other value -> the variable validation fails, naming the allowed
-#     values (asserted with expect_failures on var.visibility).
-#
-# The API module's `var.visibility` (default "GLOBAL", validated to
-# GLOBAL/PRIVATE) feeds `aws_appsync_graphql_api.api.visibility = var.visibility`
-# directly, so the value is input-derived and a `plan` is sufficient.
+# v0.6.0 removed AppSync, so `var.visibility` now drives `local.is_private_api`
+# (rest-api.tf:24), which selects the REST API's endpoint type:
+#   * unset or GLOBAL -> ["REGIONAL"]
+#   * PRIVATE         -> ["PRIVATE"] + the supplied VPC endpoint id
+#   * anything else   -> variable validation fails
 #
 # Offline harness: the aws provider is mocked; `mock_data` supplies a real
-# partition/region/account so AWS ARN-partition validation passes. Optional
-# features that would pull in extra Lambdas/resources are switched off to keep
-# the plan focused on the AppSync API resource under test. A Cognito
-# authorization config is supplied so the API is wired with a non-API_KEY auth
-# type (per the module's authorization validation).
+# partition/region/account so AWS ARN validation passes. Optional features that
+# would pull in extra Lambdas are switched off to keep the plan focused. A
+# Cognito authorization config is supplied so the API is wired with a
+# non-API_KEY auth type (per the module's authorization validation).
 
 mock_provider "aws" {
   mock_data "aws_partition" {
@@ -31,8 +25,10 @@ mock_provider "aws" {
   }
   mock_data "aws_region" {
     defaults = {
-      id   = "us-east-1"
-      name = "us-east-1"
+      # `region` (provider v6 rename); unmocked -> random value -> invalid ARN.
+      id     = "us-east-1"
+      name   = "us-east-1"
+      region = "us-east-1"
     }
   }
   mock_data "aws_caller_identity" {
@@ -46,6 +42,7 @@ mock_provider "archive" {}
 mock_provider "random" {}
 mock_provider "null" {}
 mock_provider "local" {}
+mock_provider "time" {}
 
 variables {
   input_bucket_arn        = "arn:aws:s3:::idp-test-input"
@@ -74,14 +71,14 @@ variables {
 }
 
 # ---------------------------------------------------------------------------
-# Unset -> default visibility is GLOBAL.
+# Unset -> default visibility is GLOBAL, i.e. a REGIONAL endpoint.
 # ---------------------------------------------------------------------------
 run "default_visibility_is_global" {
   command = plan
 
   assert {
-    condition     = aws_appsync_graphql_api.api.visibility == "GLOBAL"
-    error_message = "Unset visibility must default to GLOBAL on the AppSync API."
+    condition     = one(aws_api_gateway_rest_api.http_api.endpoint_configuration).types == tolist(["REGIONAL"])
+    error_message = "Unset visibility must default to GLOBAL, giving a REGIONAL endpoint."
   }
 }
 
@@ -96,9 +93,10 @@ run "visibility_global_reaches_api" {
   }
 
   assert {
-    condition     = aws_appsync_graphql_api.api.visibility == "GLOBAL"
-    error_message = "visibility = GLOBAL must reach aws_appsync_graphql_api.api.visibility."
+    condition     = one(aws_api_gateway_rest_api.http_api.endpoint_configuration).types == tolist(["REGIONAL"])
+    error_message = "visibility = GLOBAL must give a REGIONAL REST API endpoint."
   }
+
 }
 
 # ---------------------------------------------------------------------------
@@ -108,12 +106,22 @@ run "visibility_private_reaches_api" {
   command = plan
 
   variables {
-    visibility = "PRIVATE"
+    visibility                  = "PRIVATE"
+    api_gateway_vpc_endpoint_id = "vpce-0123456789abcdef0"
   }
 
   assert {
-    condition     = aws_appsync_graphql_api.api.visibility == "PRIVATE"
-    error_message = "visibility = PRIVATE must reach aws_appsync_graphql_api.api.visibility."
+    condition     = one(aws_api_gateway_rest_api.http_api.endpoint_configuration).types == tolist(["PRIVATE"])
+    error_message = "visibility = PRIVATE must give a PRIVATE REST API endpoint."
+  }
+  assert {
+    condition     = one(aws_api_gateway_rest_api.http_api.endpoint_configuration).vpc_endpoint_ids == toset(["vpce-0123456789abcdef0"])
+    error_message = "A PRIVATE API must be bound to the supplied VPC endpoint."
+  }
+  # The policy, not the endpoint type, is what confines invocation.
+  assert {
+    condition     = length(regexall("vpce-0123456789abcdef0", aws_api_gateway_rest_api.http_api.policy)) > 0
+    error_message = "A PRIVATE API must carry a resource policy restricting invocation to its VPC endpoint."
   }
 }
 

@@ -123,23 +123,14 @@ variable "vpc_security_group_ids" {
 # Model configuration (forwarded to the engine)
 # =============================================================================
 
-variable "extraction_model_id" {
-  description = "Optional model ID for information extraction. If not provided, the model from config.yaml will be used."
-  type        = string
-  default     = null
+
+
+variable "enable_rule_validation" {
+  description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
+  type        = bool
+  default     = false
 }
 
-variable "summarization_model_id" {
-  description = "Optional model ID for document summarization. If not provided, summarization is disabled."
-  type        = string
-  default     = null
-}
-
-variable "evaluation_model_id" {
-  description = "Optional model ID for evaluating extraction results. If not provided, the model from config.yaml will be used."
-  type        = string
-  default     = null
-}
 
 variable "ocr_max_workers" {
   description = "Maximum number of concurrent workers for OCR processing"
@@ -200,6 +191,24 @@ variable "evaluation_baseline_bucket_name" {
   default     = ""
 }
 
+variable "reporting_bucket_name" {
+  description = "Name of the reporting bucket the evaluation function forwards accuracy results to. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_name" {
+  description = "Name of the save_reporting_data Lambda the evaluation function invokes to persist accuracy results. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_arn" {
+  description = "ARN of the save_reporting_data Lambda, used to scope the evaluation function's invoke grant."
+  type        = string
+  default     = null
+}
+
 variable "additional_configurations" {
   description = "Extra non-active, editable configuration versions seeded alongside the default (version_name => config object). Shown in the UI version dropdown."
   type        = any
@@ -232,4 +241,16 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "enable_bda_ocr_backend" {
+  description = "Provision the deployment-scoped Bedrock Data Automation OCR project required by the IDP v0.6 `ocr.backend: bda` configuration setting. Off by default: BDA is not available in every region, and an unconditional control-plane create would fail apply there. Forwarded to the unified-processor engine."
+  type        = bool
+  default     = false
+}
+
+variable "allowed_bedrock_model_ids" {
+  description = "Bedrock model IDs every processing step is allowed to invoke, on top of the models resolved from the seeded configs. Set this for models operators will select in the UI later, which Terraform cannot see. Use [\"*\"] to allow any Bedrock model. Empty (default) grants only the resolved models."
+  type        = list(string)
+  default     = []
 }

@@ -81,7 +81,7 @@ resource "aws_kms_key" "encryption_key" {
         Sid    = "Allow CloudWatch Logs"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.id}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -93,7 +93,7 @@ resource "aws_kms_key" "encryption_key" {
         Resource = "*"
         Condition = {
           ArnEquals = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:*"
           }
         }
       }
@@ -307,10 +307,11 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
 
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_scopes                 = ["email", "openid", "profile"]
-  callback_urls                        = ["http://localhost:3000"]
-  logout_urls                          = ["http://localhost:3000"]
-  supported_identity_providers         = ["COGNITO"]
+  # Federated sign-in fails with invalid_scope without "phone".
+  allowed_oauth_scopes         = ["email", "openid", "phone", "profile"]
+  callback_urls                = ["http://localhost:3000"]
+  logout_urls                  = ["http://localhost:3000"]
+  supported_identity_providers = ["COGNITO"]
 
   access_token_validity  = 60
   id_token_validity      = 60
@@ -460,6 +461,10 @@ resource "aws_cognito_user_in_group" "admin_user_in_group" {
   user_pool_id = aws_cognito_user_pool.user_pool.id
   group_name   = local.admin_group_name
   username     = aws_cognito_user.admin_user[0].username
+
+  # With RBAC on, the group is created inside the module, but rbac_group_names is
+  # derived from variables (to avoid a cycle), so nothing else orders us after it.
+  depends_on = [module.genai_idp_accelerator]
 }
 
 # Create and train the SageMaker UDOP model
@@ -499,14 +504,11 @@ module "genai_idp_accelerator" {
     aws.us-east-1 = aws.us-east-1
   }
 
-  # Processor configuration
-  sagemaker_udop_processor = {
+  # Processor configuration (per-stage models come from the config YAML)
+  processor = {
+    type                        = "sagemaker-udop"
     classification_endpoint_arn = aws_sagemaker_endpoint.udop_endpoint.arn
-    extraction_model_id         = var.extraction_model_id
-    summarization = {
-      enabled  = var.summarization_enabled
-      model_id = var.summarization_model_id
-    }
+    # Summarization enablement + model come from the config YAML.
     config                    = local.config
     additional_configurations = local.additional_configurations
   }
@@ -525,12 +527,14 @@ module "genai_idp_accelerator" {
   working_bucket_arn = aws_s3_bucket.working_bucket.arn
   encryption_key_arn = aws_kms_key.encryption_key.arn
 
-  # Evaluation configuration
-  evaluation = var.enable_evaluation ? {
-    enabled             = true
-    model_id            = var.evaluation_model_id
-    baseline_bucket_arn = aws_s3_bucket.evaluation_baseline_bucket[0].arn
-  } : { enabled = false }
+  # Evaluation configuration (model comes from the config YAML)
+  # Evaluation enablement is config-authoritative (config.evaluation.enabled);
+  # this example owns the baseline-bucket infra via var.enable_evaluation.
+  evaluation = {
+    # Static opt-in; the ARN below is computed and cannot gate count/for_each.
+    enabled             = var.enable_evaluation
+    baseline_bucket_arn = var.enable_evaluation ? aws_s3_bucket.evaluation_baseline_bucket[0].arn : null
+  }
 
   # Reporting configuration
   reporting = var.enable_reporting ? {
@@ -546,14 +550,29 @@ module "genai_idp_accelerator" {
   # "Document KB" tool can query ingested documents. chat_with_document is left to
   # the root default (on), which pairs with the KB for retrieval-backed Q&A.
   api = {
-    enabled            = true
-    chat_with_document = var.api.chat_with_document
+    enabled = true
     knowledge_base = {
       enabled            = var.create_knowledge_base
       knowledge_base_arn = try(aws_bedrockagent_knowledge_base.knowledge_base[0].arn, null)
       model_id           = var.knowledge_base_model_id
       embedding_model_id = var.knowledge_base_embedding_model_id
     }
+
+    # Feature flags forwarded from var.api (previously accepted but dropped).
+    agent_analytics             = var.api.agent_analytics
+    discovery                   = var.api.discovery
+    chat_with_document          = var.api.chat_with_document
+    process_changes             = var.api.process_changes
+    enable_agent_companion_chat = var.api.enable_agent_companion_chat
+    enable_test_studio          = var.api.enable_test_studio
+    enable_fcc_dataset          = var.api.enable_fcc_dataset
+    enable_error_analyzer       = var.api.enable_error_analyzer
+    enable_mcp                  = var.api.enable_mcp
+    # v0.4.16 feature flags
+    enable_hitl                     = var.api.enable_hitl
+    enable_capacity_planning        = var.api.enable_capacity_planning
+    enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
+    enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
   }
 
   # Feature flags (DEPRECATED - use api variable instead)

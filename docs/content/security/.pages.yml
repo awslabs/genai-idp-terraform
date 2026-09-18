@@ -2,3 +2,4 @@ title: Security
 nav:
   - index.md
   - aws-best-practices.md
+  - external-idp.md

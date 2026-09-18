@@ -68,9 +68,9 @@ resource "aws_iam_role_policy" "codebuild_trigger_lambda_policy" {
           "logs:GetLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-codebuild-trigger-*",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-codebuild-trigger-*",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
         ]
       },
       {

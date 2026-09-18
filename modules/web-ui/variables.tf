@@ -74,18 +74,44 @@ variable "web_app_bucket_name" {
   default     = null
 }
 
+variable "bucket_name_override" {
+  description = <<-EOT
+    Explicit name for the web app bucket, overriding the module-internal
+    "<prefix>-webapp-<random suffix>" naming. Used by APIGateway
+    hosting, where the API Gateway S3-proxy integration must know the bucket
+    name without depending on this module (which would create a module cycle),
+    so the caller derives the name and passes it here. Null (default) keeps the
+    historical internal naming — CloudFront deployments must leave this null so
+    the existing bucket is not replaced.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "apigw_proxy_role_arn" {
+  description = <<-EOT
+    ARN of the IAM role API Gateway assumes to read the web app bucket when the
+    REST API serves the SPA (hosting = "APIGateway"). Granted s3:GetObject on the
+    bucket objects via a bucket policy. Null (default) creates no policy.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "hosting" {
   description = <<-EOT
     Web UI hosting mode. "CloudFront" (default) creates a CloudFront
-    distribution in front of the web app bucket. "ALB" skips CloudFront and
-    expects an Application Load Balancer (see modules/web-ui-alb) to serve the
-    bucket via an S3 interface VPC endpoint. Mirrors upstream WebUIHosting.
+    distribution in front of the web app bucket. "APIGateway" skips CloudFront
+    and serves the bucket through the REST API as an S3 proxy (VPC-capable
+    private posture): the SPA is built with Vite base "/api/" and the bucket is
+    read by the API Gateway proxy role (apigw_proxy_role_arn). Mirrors upstream
+    WebUIHosting. "ALB" was removed in v0.6.4 (upstream deleted ALB hosting).
   EOT
   type        = string
   default     = "CloudFront"
   validation {
-    condition     = contains(["CloudFront", "ALB"], var.hosting)
-    error_message = "hosting must be CloudFront or ALB."
+    condition     = contains(["CloudFront", "APIGateway"], var.hosting)
+    error_message = "hosting must be CloudFront or APIGateway. \"ALB\" was removed in v0.6.4; see docs/migration-v0.5.16-to-v0.6.4.md."
   }
 }
 
@@ -93,9 +119,10 @@ variable "web_ui_url" {
   description = <<-EOT
     Public URL the browser uses to reach the Web UI. Used for input/output
     bucket CORS allowed-origins and the UI build environment. In CloudFront
-    mode this is derived from the distribution; in ALB mode supply the custom
-    domain URL fronting the ALB (mirrors upstream CustomDomainUrl). When null
-    in ALB mode, CORS falls back to "*".
+    mode this is derived from the distribution; for non-CloudFront hosting
+    supply the custom domain URL fronting the UI (mirrors upstream
+    CustomDomainUrl). When null and CloudFront is not created, CORS falls back
+    to "*".
   EOT
   type        = string
   default     = null
@@ -120,6 +147,44 @@ variable "output_bucket_arn" {
   type        = string
 }
 
+variable "cloudfront_allowed_geos" {
+  description = "ISO 3166-1 alpha-2 country codes allowed to reach the CloudFront distribution. Empty (default) applies no geo restriction; a non-empty list becomes a whitelist, mirroring upstream CloudFrontAllowedGeos."
+  type        = list(string)
+  default     = []
+}
+
+variable "test_set_bucket_name" {
+  description = "Name of the Test Studio test-set bucket. Published to the Web UI as settings.TestSetBucket and given CORS, since the ground-truth editor reads and writes objects in it directly."
+  type        = string
+  default     = null
+}
+
+variable "test_set_bucket_enabled" {
+  description = "Whether the Test Studio test-set bucket exists, gating its CORS. Separate from test_set_bucket_name because that name is computed and unknown when planning from empty state."
+  type        = bool
+  default     = false
+}
+
+variable "working_bucket_arn" {
+  description = "ARN of the S3 bucket for intermediate working files. Optional; when set it receives the same CORS rules as the input and output buckets, because the file viewers can be handed presigned URLs for objects in it."
+  type        = string
+  default     = null
+}
+
+variable "working_bucket_cors_enabled" {
+  description = <<-EOT
+    Plan-time-known override for whether the working bucket exists and should
+    receive CORS rules. Callers typically pass `working_bucket_arn` as a COMPUTED
+    value (a bucket created in the same apply), so `working_bucket_arn != null`
+    is unknown at plan time and breaks a cold `terraform plan`. Set this to a
+    value the caller knows at plan time (e.g. "am I creating the working
+    bucket?"). Null (default) preserves the legacy behaviour of deriving the gate
+    from `working_bucket_arn != null`.
+  EOT
+  type        = bool
+  default     = null
+}
+
 
 variable "encryption_key_arn" {
   description = "ARN of the KMS key for encryption"
@@ -130,8 +195,14 @@ variable "encryption_key_arn" {
 # API Integration
 #
 variable "api_url" {
-  description = "The GraphQL API URL for the processing environment"
+  description = "Base URL of the REST API transport for the processing environment (VITE_API_BASE_URL). The SPA POSTs to <api_url>/op/<field>. Formerly the AppSync GraphQL endpoint (VITE_APPSYNC_GRAPHQL_URL) before the v0.6.4 REST migration; the input name is retained."
   type        = string
+}
+
+variable "stream_url" {
+  description = "Function URL of the chat token-streaming endpoint (VITE_STREAM_URL). Null (default) when chat streaming is disabled; rendered as an empty string in the UI config."
+  type        = string
+  default     = null
 }
 
 #
@@ -253,4 +324,14 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "external_idp" {
+  description = "External IdP details for the sign-in UI. When set, the build receives VITE_COGNITO_DOMAIN / VITE_EXTERNAL_IDP_NAME / VITE_EXTERNAL_IDP_AUTO_LOGIN so the UI renders a federated sign-in entry point. Null renders Cognito-only sign-in."
+  type = object({
+    provider_name  = string
+    cognito_domain = string
+    auto_login     = optional(bool, false)
+  })
+  default = null
 }

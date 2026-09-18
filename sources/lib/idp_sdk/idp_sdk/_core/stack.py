@@ -18,6 +18,8 @@ from typing import Dict, List, Optional
 
 import boto3
 
+from .s3_security import apply_enforce_ssl_only
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +45,7 @@ class StackDeployer:
         wait: bool = False,
         no_rollback: bool = False,
         role_arn: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Dict:
         """
         Deploy CloudFormation stack
@@ -54,6 +57,12 @@ class StackDeployer:
             parameters: Stack parameters
             wait: Whether to wait for stack creation to complete
             no_rollback: If True, disable rollback on failure (DO_NOTHING)
+            role_arn: CloudFormation service role ARN (optional)
+            tags: Stack-level tags applied to the stack and propagated by
+                CloudFormation to all taggable resources (including nested
+                stacks). On UPDATE, CloudFormation replaces the entire tag set
+                with what is passed here; when None, the Tags key is omitted so
+                existing tags are preserved.
 
         Returns:
             Dictionary with deployment result
@@ -161,6 +170,14 @@ class StackDeployer:
         # Add RoleArn if provided
         if role_arn:
             common_params["RoleARN"] = role_arn
+
+        # Add stack-level tags if provided. Note the asymmetry with Parameters:
+        # update_stack replaces the entire tag set with whatever is passed (there
+        # is no per-tag UsePreviousValue), and passing no Tags removes them. So we
+        # only set the Tags key when the caller explicitly provides tags; omitting
+        # it on update preserves the stack's existing tags.
+        if tags:
+            common_params["Tags"] = [{"Key": k, "Value": v} for k, v in tags.items()]
 
         try:
             # Capture deploy start time for filtering stale events in failure analysis
@@ -2147,6 +2164,12 @@ def get_or_create_config_bucket(region: str) -> str:
             bucket_name = bucket["Name"]
             if bucket_name.startswith(bucket_prefix):
                 logger.info(f"Using existing config bucket: {bucket_name}")
+                # Harden a bucket left behind by an older idp-cli that created
+                # it without the policy. This function is the only code that
+                # touches these buckets, so without this the ones most likely
+                # to be unhardened would stay that way indefinitely. Additive,
+                # and non-fatal — reusing the bucket must not break on it.
+                apply_enforce_ssl_only(s3, bucket_name, region, raise_on_error=False)
                 return bucket_name
     except Exception as e:
         logger.warning(f"Error listing buckets: {e}")
@@ -2196,6 +2219,10 @@ def get_or_create_config_bucket(region: str) -> str:
                 ]
             },
         )
+
+        # Deny any non-TLS request (same EnforceSSLOnly statement the
+        # CloudFormation-managed buckets carry).
+        apply_enforce_ssl_only(s3, bucket_name, region)
 
         # Add tags
         s3.put_bucket_tagging(

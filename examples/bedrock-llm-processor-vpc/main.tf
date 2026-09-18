@@ -173,7 +173,8 @@ resource "aws_security_group" "vpc_endpoints" {
 # VPC endpoints for AWS services, via the reusable partition-aware
 # `modules/vpc-endpoints/` building block. Instantiated only when this example
 # creates its own VPC (existing-VPC consumers bring their own endpoints). The
-# `appsync-api` endpoint is required when `api.visibility = "PRIVATE"`.
+# `execute-api` endpoint is required when `api.api_gateway_visibility = "PRIVATE"`
+# (v0.6.4: was `appsync-api` before upstream replaced AppSync with API Gateway).
 module "vpc_endpoints" {
   source = "../../modules/vpc-endpoints"
 
@@ -200,7 +201,7 @@ module "vpc_endpoints" {
     sqs                   = true
     states                = true
     textract              = true
-    appsync-api           = true
+    execute-api           = true
   }
 
   # Gateway endpoints (S3 + DynamoDB) routed through the isolated route tables.
@@ -233,7 +234,7 @@ resource "aws_kms_key" "encryption_key" {
         Sid    = "Allow CloudWatch Logs"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.id}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -245,7 +246,7 @@ resource "aws_kms_key" "encryption_key" {
         Resource = "*"
         Condition = {
           ArnEquals = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       }
@@ -385,8 +386,12 @@ locals {
     enable_omni_ai_dataset          = var.api.enable_omni_ai_dataset
     enable_docplit_poly_seq_dataset = var.api.enable_docplit_poly_seq_dataset
 
-    # AppSync API visibility (GLOBAL or PRIVATE)
-    visibility = var.api.visibility
+    # REST API visibility (GLOBAL or PRIVATE). When PRIVATE, the API is only
+    # reachable through the execute-api interface VPC endpoint provisioned
+    # above, whose id is threaded here so the endpoint configuration and the
+    # aws:SourceVpce resource policy can be built.
+    api_gateway_visibility      = var.api.api_gateway_visibility
+    api_gateway_vpc_endpoint_id = try(module.vpc_endpoints[0].execute_api_endpoint_id, "")
     } : {
     enabled            = false
     agent_analytics    = { enabled = false }
@@ -408,8 +413,10 @@ locals {
     enable_omni_ai_dataset          = false
     enable_docplit_poly_seq_dataset = false
 
-    # AppSync API visibility (GLOBAL or PRIVATE)
-    visibility = "GLOBAL"
+    # REST API visibility (GLOBAL or PRIVATE). Must mirror the true branch's
+    # attribute set — a conditional's branches need identical object types.
+    api_gateway_visibility      = "GLOBAL"
+    api_gateway_vpc_endpoint_id = ""
   }
 }
 
@@ -425,14 +432,10 @@ module "genai_idp_accelerator" {
   # build.ui_local are true). Threaded to the layer, env, api, and web-ui builds.
   build = var.build
 
-  # Processor configuration
-  bedrock_llm_processor = {
-    classification_model_id = var.classification_model_id
-    extraction_model_id     = var.extraction_model_id
-    summarization = {
-      enabled  = var.summarization_enabled
-      model_id = var.summarization_model_id
-    }
+  # Processor configuration (per-stage models come from the config YAML)
+  processor = {
+    type = "bedrock-llm"
+    # Summarization enablement + model come from the config YAML.
     config                    = local.config
     additional_configurations = local.additional_configurations
   }
@@ -447,12 +450,14 @@ module "genai_idp_accelerator" {
   vpc_subnet_ids         = local.vpc_subnet_ids
   vpc_security_group_ids = local.vpc_security_group_ids
 
-  # Evaluation configuration
-  evaluation = var.enable_evaluation ? {
-    enabled             = true
-    model_id            = var.evaluation_model_id != null ? var.evaluation_model_id : "us.anthropic.claude-3-haiku-20240307-v1:0"
-    baseline_bucket_arn = aws_s3_bucket.evaluation_baseline_bucket[0].arn
-  } : { enabled = false }
+  # Evaluation configuration (model comes from the config YAML)
+  # Evaluation enablement is config-authoritative (config.evaluation.enabled);
+  # this example owns the baseline-bucket infra via var.enable_evaluation.
+  evaluation = {
+    # Static opt-in; the ARN below is computed and cannot gate count/for_each.
+    enabled             = var.enable_evaluation
+    baseline_bucket_arn = var.enable_evaluation ? aws_s3_bucket.evaluation_baseline_bucket[0].arn : null
+  }
 
   # Reporting configuration
   reporting = var.enable_reporting ? {
@@ -475,24 +480,13 @@ module "genai_idp_accelerator" {
 
   # Web UI configuration.
   #
-  # ALB hosting (WebUIHosting=ALB): when web_ui_alb_certificate_arn is set, the
-  # Web UI is served by an internal Application Load Balancer + S3 interface VPC
-  # endpoint instead of CloudFront (fits this fully-isolated VPC). Otherwise the
-  # Web UI is disabled.
+  # ALB hosting was removed in v0.6.4 (upstream deleted it in v0.6.0), so this
+  # example uses the default CloudFront hosting and leaves the Web UI opt-in via
+  # enable_web_ui. A VPC-capable private hosting mode ("APIGateway") is wired in
+  # a follow-up commit; see docs/migration-v0.5.16-to-v0.6.4.md.
   web_ui = {
-    enabled = var.web_ui_alb_certificate_arn != null
-    hosting = "ALB"
-    alb = {
-      vpc_id                   = local.vpc_id
-      subnet_ids               = local.vpc_subnet_ids
-      certificate_arn          = var.web_ui_alb_certificate_arn
-      scheme                   = "internal"
-      allowed_cidrs            = [var.vpc_cidr]
-      lambda_security_group_id = local.vpc_security_group_ids[0]
-      # This example creates the Lambda SG in the same apply, so opt in
-      # explicitly (the count can't be derived from the computed SG id).
-      manage_lambda_sg_rules = true
-    }
+    enabled = var.enable_web_ui
+    hosting = "CloudFront"
   }
 
   # General configuration

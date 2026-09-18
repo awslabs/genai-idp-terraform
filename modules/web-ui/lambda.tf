@@ -55,8 +55,8 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
   role  = aws_iam_role.ui_codebuild_trigger_lambda_role[0].id
 
   # The CloudFront invalidation statement is appended via concat() only when a
-  # distribution exists (CloudFront hosting). In ALB mode there is no
-  # distribution, so the statement is omitted entirely rather than emitted with
+  # distribution exists (CloudFront hosting). For non-CloudFront hosting there
+  # is no distribution, so the statement is omitted entirely rather than emitted with
   # an empty Resource list (IAM rejects statements without resources).
   policy = jsonencode({
     Version = "2012-10-17"
@@ -72,9 +72,9 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
           "logs:GetLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-ui-cb-trigger-*",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-ui-cb-trigger-*",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}:*"
         ]
       },
       {
@@ -178,13 +178,18 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       user_pool_id               = var.user_identity.user_pool.user_pool_id
       user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
       identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
-      appsync_url                = var.api_url
+      api_base_url               = var.api_url
+      stream_url                 = var.stream_url != null ? var.stream_url : ""
       cloudfront_domain          = local.cloudfront_domain_name
       knowledge_base_enabled     = var.knowledge_base_enabled
       discovery_bucket_name      = var.discovery_bucket_name
       reporting_bucket_name      = var.reporting_bucket_name
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
       idp_pattern                = var.idp_pattern
+      # Hosting flip changes the Vite base path, which rewrites every asset URL
+      # in the emitted bundle — must retrigger the build.
+      ui_base_path = local.ui_base_path
+      federation   = local.federation_ui_env
     }))
     buildspec_hash   = md5(aws_codebuild_project.ui_build[0].source[0].buildspec)
     source_code_hash = data.archive_file.ui_source.output_base64sha256
@@ -196,13 +201,15 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       user_pool_id               = var.user_identity.user_pool.user_pool_id
       user_pool_client_id        = var.user_identity.user_pool_client.user_pool_client_id
       identity_pool_id           = var.user_identity.identity_pool.identity_pool_id
-      appsync_url                = var.api_url
+      api_base_url               = var.api_url
+      stream_url                 = var.stream_url != null ? var.stream_url : ""
       cloudfront_domain          = local.cloudfront_domain_name
       knowledge_base_enabled     = var.knowledge_base_enabled
       discovery_bucket_name      = var.discovery_bucket_name
       reporting_bucket_name      = var.reporting_bucket_name
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
       idp_pattern                = var.idp_pattern
+      federation                 = local.federation_ui_env
     }))
     # Trigger when CodeBuild project changes
     codebuild_project = aws_codebuild_project.ui_build[0].name

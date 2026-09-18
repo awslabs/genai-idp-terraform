@@ -27,12 +27,15 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_container_runtime"></a> [container\_runtime](#input\_container\_runtime) | Container runtime to use when lambda\_local = true. "auto" probes docker -> podman -> finch. | `string` | `"auto"` | no |
 | <a name="input_force_rebuild"></a> [force\_rebuild](#input\_force\_rebuild) | Force rebuild of lambda layers regardless of requirements changes | `bool` | `false` | no |
-| <a name="input_idp_common_extras"></a> [idp\_common\_extras](#input\_idp\_common\_extras) | List of extra dependencies to include (e.g., ['ocr', 'classification', 'extraction']) | `list(string)` | <pre>[<br/>  "all"<br/>]</pre> | no |
-| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture. Propagates to compatible\_architectures on the layer and to the local/CodeBuild build-host platform. | `string` | `"x86_64"` | no |
+| <a name="input_idp_common_extras"></a> [idp\_common\_extras](#input\_idp\_common\_extras) | List of extra dependencies to include (e.g., ['ocr', 'classification', 'extraction']) | `list(string)` | <pre>[<br>  "all"<br>]</pre> | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture. Propagates to compatible\_architectures on the layer and to the local/CodeBuild build-host platform. | `string` | `"arm64"` | no |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket for storing Lambda layers. If not provided, a new bucket will be created. | `string` | `""` | no |
 | <a name="input_lambda_local"></a> [lambda\_local](#input\_lambda\_local) | When true, build Lambda layers locally using a container runtime instead of via AWS CodeBuild. See root var.build.lambda\_local. | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_layer_prefix"></a> [layer\_prefix](#input\_layer\_prefix) | Prefix for the lambda layers (should be unique per deployment) | `string` | `"idp-common"` | no |
+| <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security groups for the layer-build CodeBuild project. Must allow outbound HTTPS. | `list(string)` | `[]` | no |
+| <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | Subnets for the layer-build CodeBuild project. The build runs `pip install`, so these MUST have egress to the package index. | `list(string)` | `[]` | no |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | VPC to place the layer-build CodeBuild project in, alongside subnet\_ids and security\_group\_ids. Null builds outside a VPC. | `string` | `null` | no |
 
 ## Outputs
 

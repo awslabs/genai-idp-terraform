@@ -16,6 +16,7 @@
 # The archive provider runs for real (zip the engine Lambda sources from the
 # read-only `sources/` snapshot).
 
+mock_provider "archive" {}
 mock_provider "aws" {
   # A real partition string is required: generated mock values fail the AWS
   # provider's ARN partition validation (^aws(-[a-z]+)*$) on policy_arn fields.
@@ -59,33 +60,29 @@ variables {
 run "bedrock_llm_facade_delegates_use_bda_false" {
   command = plan
 
-  # use_bda = false: the engine omits all BDA-branch Lambdas.
+  # v0.6 deploys both branches and routes at runtime on $.document.use_bda, so
+  # the BDA Lambdas exist even on a Bedrock-LLM deployment.
   assert {
-    condition     = output.lambda_functions.bda_invoke == null
-    error_message = "Engine BDA invoke Lambda must be absent on the Bedrock-LLM façade (use_bda = false)."
+    condition     = output.lambda_functions.bda_invoke != null
+    error_message = "Engine BDA invoke Lambda must be deployed: v0.6 routes branches at runtime, not at deploy time."
   }
   assert {
-    condition     = output.lambda_functions.bda_process_results == null
-    error_message = "Engine BDA process-results Lambda must be absent (use_bda = false)."
+    condition     = output.lambda_functions.bda_process_results != null
+    error_message = "Engine BDA process-results Lambda must be deployed (runtime routing)."
   }
   assert {
-    condition     = output.lambda_functions.bda_completion == null
-    error_message = "Engine BDA completion Lambda must be absent (use_bda = false)."
+    condition     = output.lambda_functions.bda_completion != null
+    error_message = "Engine BDA completion Lambda must be deployed (runtime routing)."
   }
 
-  # The pipeline branch is always present regardless of use_bda.
   assert {
     condition     = output.lambda_functions.ocr != null && output.lambda_functions.classification != null && output.lambda_functions.extraction != null
     error_message = "Engine pipeline Lambdas (ocr/classification/extraction) must always be present."
   }
 
-  # classification.model is NOT forced to the LambdaHook seam — contrast with
-  # the SageMaker-UDOP façade which pins classification_model_id = "LambdaHook".
-  # (The engine resolves classification.model to coalesce(classification_model_id,
-  # model_id); the Bedrock-LLM façade leaves both unset, so it falls back to the
-  # engine's default model_id rather than "LambdaHook".)
+  # Classifies through Bedrock, unlike the UDOP façade's SageMaker backend.
   assert {
-    condition     = output.classification_model != "LambdaHook"
-    error_message = "Bedrock-LLM façade must NOT force classification through the LambdaHook bridge."
+    condition     = output.classification_model == "us.amazon.nova-lite-v1:0"
+    error_message = "Bedrock-LLM façade must resolve classification to the configured Bedrock model."
   }
 }

@@ -7,12 +7,25 @@ The **Auto Optimizer** is a fully autonomous AI agentic system that optimizes yo
 
 ## Demo Video
 
+#### Non Technical
+
+**Duration**: ~1.5 minutes
+
+https://github.com/user-attachments/assets/57f70099-0909-4d13-ba8e-7f365b63eaa8
+
+
+#### Technical
+
 **Duration**: ~3.5 minutes
 
-<!-- TODO: Replace with final GitHub assets URL -->
-https://github.com/user-attachments/assets/PLACEHOLDER
+https://github.com/user-attachments/assets/981ae354-bb5d-4613-bf01-ac17675be25b
+
+
 
 ## What it does
+
+![IDP Auto Optimizer Overview Diagram](../../images/IDPAutoOptimizer-Diagram.png)
+
 
 You provide:
 - A labeled dataset (as few as 5 documents)
@@ -40,7 +53,7 @@ Throughout the process, the agent produces:
 
 ## Scientific validation
 
-The Auto Optimizer system is scientifically validated. In controlled experiments it surpassed human expert accuracy on multiple real-world document datasets, and those improvements generalize to unseen documents with no overfitting.
+The Auto Optimizer system is scientifically validated in [this paper submitted to the 2026 Conference on Empirical Methods in Natural Language Processing (EMNLP)](https://arxiv.org/abs/2607.26075). In controlled experiments it surpassed human expert accuracy on multiple real-world document datasets, and those improvements generalize to unseen documents with no overfitting.
 
 ## Availability
 
@@ -61,4 +74,4 @@ Once started, the agent streams its progress live to the UI. You are free to log
 
 ## Getting access
 
-The Auto Optimizer is in private beta. To request access, reach out to your AWS account team and ask them to contact David Kaleko or Bob Strahan at the AWS Generative AI Innovation Center.
+The Auto Optimizer is in private beta. To request access, reach out to your AWS account team and ask them to contact David Kaleko or Bob Strahan at Amazon Web Services.

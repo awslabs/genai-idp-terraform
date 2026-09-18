@@ -1,0 +1,9 @@
+# Lightweight HuggingFace file access (NOT the heavy `datasets` library — we
+# only need hf_hub_download for a single 76 KB parquet file; PDFs are streamed
+# straight from the CDN with urllib).
+huggingface-hub==0.20.0
+
+# pyarrow (for the parquet metadata read in planner.py) is deliberately NOT here:
+# SAM's PythonPipBuilder cannot resolve an arm64 wheel for it. It ships in
+# SharedLayer instead, which every function in this file's CodeUri mounts —
+# see shared/Makefile for the full explanation.

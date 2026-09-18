@@ -20,12 +20,11 @@ output "group_names" {
     the IdP-federation submodule's group-mapping Lambda so federated users land
     in the correct RBAC roles.
   EOT
-  value = {
-    Admin    = aws_cognito_user_group.rbac["Admin"].name
-    Author   = aws_cognito_user_group.rbac["Author"].name
-    Reviewer = aws_cognito_user_group.rbac["Reviewer"].name
-    Viewer   = aws_cognito_user_group.rbac["Viewer"].name
-  }
+  # Must read the local, not aws_cognito_user_group.rbac[*].name: identical
+  # values, but sourcing from the resource makes this depend on the user pool and
+  # closes a cycle once the pool attaches the federation trigger
+  # (pool -> groups -> group_names -> Lambda env -> trigger -> pool).
+  value = local.group_names
 }
 
 output "users_table_name" {
@@ -76,7 +75,7 @@ output "reviewer_filtering_environment" {
     Environment-map fragment for the core/configuration AppSync resolver Lambdas
     so they resolve the `Users` table at runtime. Carries `USERS_TABLE_NAME` —
     the exact env key the shipped document-list and configuration resolvers read
-    (`sources/nested/appsync/src/lambda/{list_documents_gsi_resolver,
+    (`sources/nested/api-resolvers/src/lambda/{list_documents_gsi_resolver,
     list_documents_range_resolver,configuration_resolver}/index.py`) to apply
     Reviewer document filtering and `allowedConfigVersions` scoping server-side.
     Merged into the feature-plugin contract's `environment`.
@@ -127,7 +126,7 @@ output "reviewer_filtering_iam_statements" {
 #
 # `schema_additions = null`: the `@aws_auth(cognito_groups: [...])` directives
 # and the `User`/`UserList` types already ship in the read-only v0.5.12 schema
-# (`sources/nested/appsync/src/api/schema.graphql`), so no SDL injection is
+# (`sources/nested/api-resolvers/src/api/schema.graphql`), so no SDL injection is
 # needed.
 locals {
   # Deterministic AppSync data source name (alphanumeric + underscore only) the
@@ -201,6 +200,10 @@ output "contract" {
         `allowedConfigVersions` scoping server-side.
       * `environment` — `{ USERS_TABLE_NAME }` merged onto the core/config
         resolver Lambdas so they resolve the `Users` table at runtime.
+      * `field_functions` — IDP v0.6.4 REST transport: the field -> Lambda ARN
+        map the dispatcher routes on. Only the canonical `createUser` appears;
+        the dispatcher's FIELD_ALIASES fold updateUser/deleteUser/listUsers/
+        getMyProfile onto it.
       * `schema_additions = null` — the `@aws_auth` directives and `User` types
         already ship in the read-only v0.5.12 schema; no SDL injection needed.
   EOT
@@ -208,6 +211,7 @@ output "contract" {
     enabled          = var.enabled
     resolvers        = local.user_management_resolvers
     data_sources     = { (local.user_management_data_source_name) = aws_lambda_function.user_management.arn }
+    field_functions  = { createUser = aws_lambda_function.user_management.arn }
     iam_statements   = local.reviewer_filtering_iam_statements
     environment      = local.reviewer_filtering_environment
     schema_additions = null

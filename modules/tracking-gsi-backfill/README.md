@@ -11,9 +11,9 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.14.2 |
 
 ## Modules
 
@@ -41,6 +41,7 @@ No modules.
 | <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the base Lambda layer attached to the backfill worker | `string` | `null` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the customer-managed KMS key used to encrypt the tracking table and the worker's log group | `string` | n/a | yes |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the idp\_common Lambda layer attached to the backfill worker | `string` | `null` | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). Must match the architecture the idp\_common layers were built for; mismatches break native deps (e.g. pydantic\_core). | `string` | `"arm64"` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | Log level for the backfill worker Lambda | `string` | `"INFO"` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch log retention period in days for the backfill worker | `number` | `7` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix applied to the names of resources created by this module | `string` | n/a | yes |

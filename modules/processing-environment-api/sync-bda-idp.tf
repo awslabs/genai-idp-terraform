@@ -37,7 +37,10 @@ resource "aws_iam_role_policy" "sync_bda_idp" {
         Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
       },
       {
-        # Bedrock Data Automation blueprint CRUD
+        # Bedrock Data Automation blueprint and project CRUD. The project
+        # actions are needed because the sync path calls
+        # get_or_create_project_for_version, which creates and updates a project
+        # rather than only reading one.
         Effect = "Allow"
         Action = [
           "bedrock:CreateBlueprint",
@@ -45,21 +48,25 @@ resource "aws_iam_role_policy" "sync_bda_idp" {
           "bedrock:DeleteBlueprint",
           "bedrock:GetBlueprint",
           "bedrock:ListBlueprints",
+          "bedrock:CreateDataAutomationProject",
+          "bedrock:UpdateDataAutomationProject",
           "bedrock:GetDataAutomationProject",
           "bedrock:ListDataAutomationProjects"
         ]
         Resource = "*"
       },
       {
-        # Configuration table read
+        # Configuration table read, plus the UpdateItem that
+        # set_bda_project_arn / clear_bda_project_arn use to record the linked
+        # project ARN and sync status against the config version.
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"]
+        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:UpdateItem"]
         Resource = compact([local.configuration_table_arn, "${local.configuration_table_arn}/index/*"])
       },
       {
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -83,7 +90,7 @@ resource "aws_cloudwatch_log_group" "sync_bda_idp" {
 
 data "archive_file" "sync_bda_idp" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/sync_bda_idp_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/sync_bda_idp_resolver"
   output_path = "${path.module}/../../.terraform/archives/sync_bda_idp.zip"
 }
 
@@ -121,40 +128,6 @@ resource "aws_lambda_function" "sync_bda_idp" {
   tags       = var.tags
 }
 
-# =============================================================================
-# AppSync data source + resolver
-# =============================================================================
-
-resource "aws_appsync_datasource" "sync_bda_idp" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "SyncBdaIdpDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.sync_bda_idp.arn }
-}
-
-resource "aws_appsync_resolver" "sync_bda_idp" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "syncBdaIdp"
-  data_source = aws_appsync_datasource.sync_bda_idp.name
-}
-
-resource "aws_iam_policy" "appsync_invoke_sync_bda_idp" {
-  name        = "${local.api_name}-appsync-invoke-sync-bda-idp"
-  description = "Allow AppSync to invoke sync_bda_idp Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.sync_bda_idp.arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "appsync_invoke_sync_bda_idp" {
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_sync_bda_idp.arn
-}
+# AppSync data source/resolver + invoke policy removed in the v0.6.4 REST
+# migration. syncBdaIdp is now routed to this Lambda by the dispatcher
+# (see dispatcher.tf field_function_map); the dispatcher role grants the invoke.

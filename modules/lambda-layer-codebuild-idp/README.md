@@ -14,13 +14,13 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
-| <a name="provider_local"></a> [local](#provider\_local) | 2.9.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | 3.3.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_local"></a> [local](#provider\_local) | 2.9.1 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.3.2 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.9.1 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
-| <a name="provider_time"></a> [time](#provider\_time) | 0.14.0 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.14.2 |
 
 ## Modules
 
@@ -37,9 +37,11 @@ No modules.
 | [aws_iam_role.codebuild_trigger_lambda_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role_policy.codebuild_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy.codebuild_trigger_lambda_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy_attachment.codebuild_vpc_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_lambda_function.codebuild_trigger](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_invocation.trigger_codebuild](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_lambda_layer_version.layers](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_layer_version) | resource |
+| [aws_s3_object.idp_common_source](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [aws_s3_object.layer_zip_local](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [aws_s3_object.requirements_source](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [local_file.requirements_files](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
@@ -54,6 +56,7 @@ No modules.
 | [terraform_data.copy_idp_common_source](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [time_sleep.wait_for_iam_propagation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [archive_file.codebuild_trigger_lambda](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.idp_common_source](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.requirements_source](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
@@ -65,17 +68,20 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_container_runtime"></a> [container\_runtime](#input\_container\_runtime) | Container runtime for local builds (auto\|docker\|podman\|finch). Ignored when lambda\_local = false. | `string` | `"auto"` | no |
 | <a name="input_force_rebuild"></a> [force\_rebuild](#input\_force\_rebuild) | Force rebuild of layers regardless of content changes | `bool` | `false` | no |
-| <a name="input_function_layer_config"></a> [function\_layer\_config](#input\_function\_layer\_config) | Optional configuration for creating function-specific layers.<br/>Map of function names to their required idp\_common extras.<br/>If provided, creates separate optimized layers for each function type.<br/><br/>Example:<br/>{<br/>  "ocr-function" = ["ocr", "docs\_service"]<br/>  "classification-function" = ["classification", "docs\_service"] <br/>  "assessment-function" = ["assessment", "docs\_service"]<br/>  "evaluation-function" = ["evaluation"]<br/>  "basic-function" = ["core"]<br/>}<br/><br/>If not provided, creates a single layer with the extras specified in idp\_common\_extras. | `map(list(string))` | `{}` | no |
-| <a name="input_idp_common_extras"></a> [idp\_common\_extras](#input\_idp\_common\_extras) | List of extras to install for idp\_common package. Available extras:<br/>- core: Base functionality only (minimal dependencies)<br/>- image: Image handling dependencies (Pillow)<br/>- ocr: OCR module dependencies (Pillow, pypdfium2, textractor, numpy, pandas, etc.)<br/>- classification: Classification module dependencies<br/>- extraction: Extraction module dependencies<br/>- assessment: Assessment module dependencies<br/>- evaluation: Evaluation module dependencies (munkres, numpy)<br/>- criteria\_validation: Criteria validation dependencies (s3fs)<br/>- reporting: Reporting module dependencies (pyarrow)<br/>- appsync: AppSync module dependencies (requests)<br/>- docs\_service: Document service factory dependencies (requests for appsync support)<br/>- test: Testing dependencies<br/>- all: All available dependencies<br/><br/>Example function-specific combinations:<br/>- OCR functions: ["ocr", "docs\_service"]<br/>- Classification functions: ["classification", "docs\_service"]<br/>- Assessment functions: ["assessment", "docs\_service"]<br/>- Evaluation functions: ["evaluation"]<br/>- Reporting functions: ["reporting"]<br/>- Basic processing: ["core"] or [] | `list(string)` | <pre>[<br/>  "core"<br/>]</pre> | no |
+| <a name="input_function_layer_config"></a> [function\_layer\_config](#input\_function\_layer\_config) | Optional configuration for creating function-specific layers.<br>Map of function names to their required idp\_common extras.<br>If provided, creates separate optimized layers for each function type.<br><br>Example:<br>{<br>  "ocr-function" = ["ocr", "docs\_service"]<br>  "classification-function" = ["classification", "docs\_service"] <br>  "assessment-function" = ["assessment", "docs\_service"]<br>  "evaluation-function" = ["evaluation"]<br>  "basic-function" = ["core"]<br>}<br><br>If not provided, creates a single layer with the extras specified in idp\_common\_extras. | `map(list(string))` | `{}` | no |
+| <a name="input_idp_common_extras"></a> [idp\_common\_extras](#input\_idp\_common\_extras) | List of extras to install for idp\_common package. Available extras:<br>- core: Base functionality only (minimal dependencies)<br>- image: Image handling dependencies (Pillow)<br>- ocr: OCR module dependencies (Pillow, pypdfium2, textractor, numpy, pandas, etc.)<br>- classification: Classification module dependencies<br>- extraction: Extraction module dependencies<br>- assessment: Assessment module dependencies<br>- evaluation: Evaluation module dependencies (munkres, numpy)<br>- rule\_validation: Rule validation dependencies (renamed from criteria\_validation in IDP v0.5.9)<br>- reporting: Reporting module dependencies (pyarrow)<br>- appsync: HTTP client dependencies (requests) — name retained upstream after the AppSync removal<br>- docs\_service: Document service factory dependencies<br>- agents: Agent dependencies (strands, bedrock-agentcore)<br>- multi\_document\_discovery: Multi-document discovery dependencies<br>- synthesis: Synthesis module dependencies<br>- code\_intel: Code-intelligence dependencies<br>- dev / test: Development and testing dependencies<br>- all: All available dependencies<br><br>The list above mirrors `[project.optional-dependencies]` in<br>`sources/lib/idp_common_pkg/pyproject.toml` for the vendored IDP version.<br>Keep the validation below in sync with it — pip does not fail on an<br>unknown extra, it silently installs nothing, so a stale name here<br>produces a layer that is missing dependencies at runtime.<br><br>Example function-specific combinations:<br>- OCR functions: ["ocr", "docs\_service"]<br>- Classification functions: ["classification", "docs\_service"]<br>- Assessment functions: ["assessment", "docs\_service"]<br>- Evaluation functions: ["evaluation"]<br>- Reporting functions: ["reporting"]<br>- Basic processing: ["core"] or [] | `list(string)` | <pre>[<br>  "core"<br>]</pre> | no |
 | <a name="input_idp_common_source_path"></a> [idp\_common\_source\_path](#input\_idp\_common\_source\_path) | Path to the idp\_common source code directory | `string` | `""` | no |
-| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). Sets compatible\_architectures on every produced aws\_lambda\_layer\_version regardless of build path. | `string` | `"x86_64"` | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). Sets compatible\_architectures on every produced aws\_lambda\_layer\_version regardless of build path. | `string` | `"arm64"` | no |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket for storing Lambda layers. This is required and should be provided by the assets-bucket module. | `string` | n/a | yes |
 | <a name="input_lambda_local"></a> [lambda\_local](#input\_lambda\_local) | When true, build the Lambda layer locally on the deploy host instead of via AWS CodeBuild. See modules/lambda-layer-local-build. | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_layer_prefix"></a> [layer\_prefix](#input\_layer\_prefix) | Prefix for layer names | `string` | n/a | yes |
 | <a name="input_requirements_files"></a> [requirements\_files](#input\_requirements\_files) | Map of requirements files content for different layer types | `map(string)` | n/a | yes |
 | <a name="input_requirements_hash"></a> [requirements\_hash](#input\_requirements\_hash) | Hash of requirements to trigger rebuilds. If empty, will be calculated from requirements\_files. | `string` | `""` | no |
+| <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security groups for the layer-build CodeBuild project. Must allow outbound HTTPS. | `list(string)` | `[]` | no |
+| <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | Subnets for the layer-build CodeBuild project. These builds run `pip install`, so the subnets MUST have egress to the package index (a NAT gateway, or a proxy). Private subnets without egress will fail the build. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | VPC to place the layer-build CodeBuild project in. Requires subnet\_ids and security\_group\_ids. Leave null to build outside a VPC. | `string` | `null` | no |
 
 ## Outputs
 

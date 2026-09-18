@@ -11,7 +11,7 @@
  *
  * Upstream replaced the legacy synchronous `chatWithDocument` Query with an
  * async model (verified against the v0.5.12 snapshot,
- * `sources/nested/appsync/src/api/schema.graphql` + `nested/appsync/template.yaml`):
+ * `sources/nested/api-resolvers/src/api/schema.graphql` + `nested/api-resolvers/template.yaml`):
  *
  *   * `sendChatDocumentMessage` (Mutation) — a lightweight resolver Lambda that
  *     records session ownership, async-invokes the processor on the first user
@@ -47,7 +47,7 @@ locals {
   # template's src/lambda; the lightweight resolver lives under the nested
   # appsync template. Both are zipped read-only from sources/ (no edits).
   processor_src_dir = "${path.module}/../../../sources/src/lambda/chat_with_document_processor"
-  resolver_src_dir  = "${path.module}/../../../sources/nested/appsync/src/lambda/send_chat_document_message_resolver"
+  resolver_src_dir  = "${path.module}/../../../sources/nested/api-resolvers/src/lambda/send_chat_document_message_resolver"
 
   output_bucket_name = element(split(":", var.output_bucket_arn), 5)
 
@@ -96,6 +96,40 @@ locals {
     # `chat:` block rather than the `summarization.*` fallback.
     source = try(local.chat_cfg.model, null) != null || length(keys(local.chat_cfg)) > 0 ? "chat" : "summarization"
   }
+
+  # Bedrock grant follows the config's chat model rather than the account's whole
+  # model space. Models authored later in the UI are invisible to Terraform, so
+  # "*" is the operator escape hatch.
+  model_prefix_re         = "^(us|eu|apac|ca|sa|global)\\."
+  bedrock_wildcard_access = contains(var.allowed_bedrock_model_ids, "*")
+  bedrock_model_ids = distinct([
+    for m in concat(
+      [local.effective_chat_config.model],
+      local.bedrock_wildcard_access ? [] : var.allowed_bedrock_model_ids,
+    ) : m if m != null && m != ""
+  ])
+
+  bedrock_invoke_resources = local.bedrock_wildcard_access ? [
+    "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+    "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
+    ] : distinct(concat(
+      [
+        for id in local.bedrock_model_ids :
+        startswith(id, "arn:") ? id :
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${replace(id, "/${local.model_prefix_re}/", "")}"
+      ],
+      [
+        for id in local.bedrock_model_ids :
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${id}"
+        if !startswith(id, "arn:") && can(regex(local.model_prefix_re, id))
+      ],
+      # Application inference profiles are account-created artifacts keyed by their
+      # own IDs, not by model ID, so they stay wildcarded.
+      [
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+      ],
+  ))
 
   layers = compact([var.base_layer_arn, var.idp_common_layer_arn])
 }
@@ -218,7 +252,7 @@ resource "aws_lambda_function" "chat_processor" {
   handler     = "index.handler"
   runtime     = "python3.12"
   timeout     = 900
-  memory_size = var.processor_memory_size
+  memory_size = 4096
   description = "Long-running Chat-with-Document processor (streams Bedrock tokens via AppSync)"
 
   layers      = local.layers
@@ -361,61 +395,21 @@ resource "aws_lambda_function" "chat_resolver" {
 }
 
 # =============================================================================
-# AppSync data sources (self-contained)
+# Transport (IDP v0.6.4): REST dispatcher, not AppSync
 # =============================================================================
-# This submodule owns its AppSync data sources so it stays fully self-contained.
-# The contract references them by name; the API module's
-# feature-plugin composition (`aws_appsync_resolver.feature`) attaches the
-# `sendChatDocumentMessage` mutation to the Lambda data source and the
-# `onChatDocumentMessageUpdate` subscription to the NONE data source.
-
-# Dedicated AppSync service role that lets AppSync invoke the resolver Lambda.
-resource "aws_iam_role" "appsync_service_role" {
-  name = "${var.name_prefix}-cwd-appsync-${local.suffix}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "appsync.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy" "appsync_service_role" {
-  name = "invoke-chat-resolver"
-  role = aws_iam_role.appsync_service_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.chat_resolver.arn
-    }]
-  })
-}
-
-# Lambda data source fronting the lightweight sendChatDocumentMessage resolver.
-resource "aws_appsync_datasource" "send_chat_document_message" {
-  api_id           = var.appsync_api_id
-  name             = var.data_source_name
-  description      = "Lambda data source for the Chat-with-Document async mutation"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_service_role.arn
-
-  lambda_config {
-    function_arn = aws_lambda_function.chat_resolver.arn
-  }
-}
-
-# NONE (local) data source used by the subscription fan-out resolver. Named
-# per-submodule to avoid collision with other API-wide NONE data sources.
-resource "aws_appsync_datasource" "chat_document_none" {
-  api_id = var.appsync_api_id
-  name   = var.none_data_source_name
-  type   = "NONE"
-}
+# This submodule used to own an AppSync service role plus two data sources: an
+# AWS_LAMBDA source fronting the lightweight `sendChatDocumentMessage` resolver,
+# and a NONE source backing the `onChatDocumentMessageUpdate` subscription
+# fan-out. Upstream deleted AppSync in v0.6.0, so all three are gone.
+#
+# `sendChatDocumentMessage` now routes through the REST dispatcher: the contract
+# publishes it in `field_functions` (see outputs.tf) and the API module merges
+# that into the dispatcher's field-function map. The dispatcher invokes the same
+# resolver Lambda with an AppSync-shaped event, so the Lambda is unchanged and
+# needs no service role — the dispatcher's own role carries the invoke grant.
+#
+# `onChatDocumentMessageUpdate` has NO REST equivalent and is dropped outright.
+# GraphQL subscriptions do not exist on API Gateway REST, and upstream replaced
+# the mutation-to-subscription fan-out with the streaming Lambda Function URL
+# (chat-stream.tf) that the browser SigV4-signs directly, plus polling. Nothing
+# in this module needs to publish subscription events any more.

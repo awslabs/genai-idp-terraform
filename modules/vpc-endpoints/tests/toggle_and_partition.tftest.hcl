@@ -14,11 +14,11 @@
 #     regions are exercised with per-`run` provider overrides.
 #
 # Offline harness: the aws provider is mocked. `for_each` is input-derived and
-# `service_name` is built from `data.aws_region.current.name`, which the mock
+# `service_name` is built from `data.aws_region.current.region`, which the mock
 # returns as a fixed value, so every assertion is known at `command = plan` with
 # no AWS credentials or apply.
 #
-# Region handling: `data.aws_region.current.name` is mocked to a fixed value per
+# Region handling: `data.aws_region.current.region` is mocked to a fixed value per
 # provider. The module uses the default (unaliased) `aws` provider, so each
 # region `run` maps it to an aliased mock via the `providers` block. The
 # default mock (region-agnostic) is used for the toggle runs, which do not
@@ -30,8 +30,10 @@ mock_provider "aws" {
   alias = "use1"
   mock_data "aws_region" {
     defaults = {
-      id   = "us-east-1"
-      name = "us-east-1"
+      # `region` (provider v6 rename); unmocked -> random value, never matches.
+      id     = "us-east-1"
+      name   = "us-east-1"
+      region = "us-east-1"
     }
   }
 }
@@ -40,8 +42,9 @@ mock_provider "aws" {
   alias = "usgov"
   mock_data "aws_region" {
     defaults = {
-      id   = "us-gov-west-1"
-      name = "us-gov-west-1"
+      id     = "us-gov-west-1"
+      name   = "us-gov-west-1"
+      region = "us-gov-west-1"
     }
   }
 }
@@ -115,7 +118,7 @@ run "service_names_us_east_1" {
       ssm         = true
       logs        = true
       bedrock     = true
-      appsync-api = true
+      execute-api = true # replaced appsync-api in v0.6.4
     }
   }
 

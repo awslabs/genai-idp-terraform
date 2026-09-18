@@ -49,7 +49,7 @@ resource "aws_iam_role_policy" "abort_workflow" {
       {
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -73,7 +73,7 @@ resource "aws_cloudwatch_log_group" "abort_workflow" {
 
 data "archive_file" "abort_workflow" {
   type        = "zip"
-  source_dir  = "${path.module}/../../sources/nested/appsync/src/lambda/abort_workflow_resolver"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/abort_workflow_resolver"
   output_path = "${path.module}/../../.terraform/archives/abort_workflow.zip"
 }
 
@@ -110,40 +110,6 @@ resource "aws_lambda_function" "abort_workflow" {
   tags       = var.tags
 }
 
-# =============================================================================
-# AppSync data source + resolver
-# =============================================================================
-
-resource "aws_appsync_datasource" "abort_workflow" {
-  api_id           = aws_appsync_graphql_api.api.id
-  name             = "AbortWorkflowDS"
-  type             = "AWS_LAMBDA"
-  service_role_arn = aws_iam_role.appsync_lambda_role.arn
-  lambda_config { function_arn = aws_lambda_function.abort_workflow.arn }
-}
-
-resource "aws_appsync_resolver" "abort_workflow" {
-  api_id      = aws_appsync_graphql_api.api.id
-  type        = "Mutation"
-  field       = "abortWorkflow"
-  data_source = aws_appsync_datasource.abort_workflow.name
-}
-
-resource "aws_iam_policy" "appsync_invoke_abort_workflow" {
-  name        = "${local.api_name}-appsync-invoke-abort-workflow"
-  description = "Allow AppSync to invoke abort_workflow Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.abort_workflow.arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "appsync_invoke_abort_workflow" {
-  role       = aws_iam_role.appsync_lambda_role.name
-  policy_arn = aws_iam_policy.appsync_invoke_abort_workflow.arn
-}
+# AppSync data source/resolver + invoke policy removed in the v0.6.4 REST
+# migration. abortWorkflow is now routed to this Lambda by the dispatcher
+# (see dispatcher.tf field_function_map); the dispatcher role grants the invoke.

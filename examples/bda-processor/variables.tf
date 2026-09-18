@@ -68,7 +68,6 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
-      processor_memory_size    = optional(number, 4096)
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -143,29 +142,17 @@ variable "web_ui" {
 # Summarization is now configured within the processor configuration object
 
 # BDA Processor Configuration (flat variables for example)
-variable "summarization_enabled" {
-  description = "Enable document summarization for BDA processor"
-  type        = bool
-  default     = true
-}
+# Summarization enablement comes from the config YAML (summarization.enabled).
 
-variable "summarization_model_id" {
-  description = "Model ID for document summarization (BDA processor). If null, uses the default from YAML configuration."
-  type        = string
-  default     = null
-}
+# Rule-validation enablement comes from the config YAML (rule_validation.enabled).
+
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
 
 # Evaluation Configuration
 variable "enable_evaluation" {
   description = "Enable evaluation functionality (simplified flag)"
   type        = bool
   default     = false
-}
-
-variable "evaluation_model_id" {
-  description = "Model ID for evaluation processing"
-  type        = string
-  default     = "anthropic.claude-3-sonnet-20240229-v1:0"
 }
 
 # Reporting Configuration
@@ -319,4 +306,15 @@ variable "seed_managed_configs" {
   description = "Seed the managed baseline configuration versions (RVL-CDIP docsplit, fake-w2, ocr-benchmark, realkie-fcc) as non-active reference rows. Set true to include them."
   type        = bool
   default     = false
+}
+
+variable "deployer_role_arn" {
+  description = "IAM role ARN granted data access on the OpenSearch Serverless collection. Must be a role ARN, not a session ARN: AOSS matches any session of a role, so a session ARN pins the policy to one operator. Defaults to deriving the role from the caller, which drops any path on the role."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.deployer_role_arn == "" || !can(regex(":assumed-role/", var.deployer_role_arn))
+    error_message = "deployer_role_arn must be an IAM role ARN (arn:<partition>:iam::<account>:role/<name>), not an STS assumed-role session ARN."
+  }
 }

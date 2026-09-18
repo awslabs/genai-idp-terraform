@@ -21,6 +21,18 @@ variable "configuration" {
   type        = any
 }
 
+variable "pricing" {
+  description = "Pricing catalogue stored under the 'DefaultPricing' key, in the shape of upstream's config_library/pricing.yaml ({ pricing = [...] }). Null skips seeding, which leaves the UI Pricing page and any cost figures empty."
+  type        = any
+  default     = null
+}
+
+variable "model_config_limits" {
+  description = "Per-model token limits stored under the 'DefaultModelConfigLimits' key, in the shape of upstream's config_library/model_config_limits.yaml ({ model_limits = [...] }). Order is significant: matching is first-match-wins. Null skips seeding, which leaves the UI Model Limits page empty (the Lambdas then fall back to the on-disk YAML)."
+  type        = any
+  default     = null
+}
+
 variable "additional_configurations" {
   description = "Extra non-active, editable configuration versions seeded as Config#<name> rows (version_name => config object), Managed=false so they stay editable in the UI. A top-level `bda_project_arn` key on an entry is lifted out of the config body to link that version to a BDA project (never seeded as config data)."
   type        = any

@@ -69,11 +69,19 @@ resource "aws_lambda_invocation" "seed_default" {
     configuration_hash = sha256(jsonencode(var.configuration))
     # Re-seed when the linked project ARN changes (unset -> "none").
     bda_project_arn = coalesce(var.default_bda_project_arn, "none")
-    # Re-invoke when the seeder Lambda source itself changes — this is
-    # how we propagate seeder fixes to existing deployments without
-    # forcing the operator to taint the resource.
+    # Propagate seeder fixes without a manual taint. Safe now that the seeder
+    # preserves operator-edited rows: a source-only change re-invokes but skips
+    # diverged config.
     seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
   }
+
+  # Break-glass to reassert Terraform's config over an operator-edited
+  # Config#default (e.g. to adopt new model defaults on a previously edited
+  # deployment) — a documented one-off, deliberately not a module input:
+  #   1. aws dynamodb delete-item --table-name <configuration-table> \
+  #        --key '{"Configuration": {"S": "TerraformSeed#default"}}'
+  #   2. terraform apply -replace='<module path>.aws_lambda_invocation.seed_default'
+  # With the marker gone the seeder adopts the row once and re-stamps it.
 
   depends_on = [
     aws_lambda_function.configuration_seeder,
@@ -93,6 +101,54 @@ resource "aws_lambda_invocation" "seed_schema" {
   triggers = {
     schema_hash        = sha256(jsonencode(var.schema))
     seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}
+
+# Seed DefaultPricing, which the UI Pricing page and the cost figures on
+# reporting reads both resolve through. Only the defaults are written; the
+# operator's CustomPricing deltas are left untouched.
+resource "aws_lambda_invocation" "seed_default_pricing" {
+  count = var.pricing != null ? 1 : 0
+
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key   = "DefaultPricing"
+    Value = var.pricing
+  })
+
+  triggers = {
+    pricing_hash       = sha256(jsonencode(var.pricing))
+    seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}
+
+# Seed DefaultModelConfigLimits, which the UI Model Limits page reads. Without it
+# the page is empty while the Lambdas silently fall back to the on-disk YAML.
+# CustomModelConfigLimits holds the operator's edits and is never written here.
+resource "aws_lambda_invocation" "seed_default_model_config_limits" {
+  count = var.model_config_limits != null ? 1 : 0
+
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key   = "DefaultModelConfigLimits"
+    Value = var.model_config_limits
+  })
+
+  triggers = {
+    model_config_limits_hash = sha256(jsonencode(var.model_config_limits))
+    seeder_source_hash       = data.archive_file.lambda_zip.output_base64sha256
   }
 
   depends_on = [

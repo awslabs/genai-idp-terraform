@@ -37,8 +37,8 @@ resource "aws_iam_policy" "queue_sender_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}:*"
         ]
       },
       {
@@ -91,6 +91,16 @@ resource "aws_iam_policy" "queue_sender_policy" {
           local.tracking_table.table_arn,
           "${local.tracking_table.table_arn}/index/*"
         ]
+      },
+      {
+        # Scan is needed by ConfigurationManager.resolve_active_version().
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Effect   = "Allow"
+        Resource = local.configuration_table.table_arn
       }
     ]
   })
@@ -191,8 +201,8 @@ resource "aws_iam_policy" "workflow_tracker_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}:*"
         ]
       },
       {
@@ -211,8 +221,11 @@ resource "aws_iam_policy" "workflow_tracker_policy" {
         Resource = local.concurrency_table.table_arn
       },
       {
+        # PutObject on the output bucket: the tracker writes a per-run manifest
+        # under <key>/runs/<timestamp>-<id>/manifest.json.
         Action = [
-          "s3:GetObject"
+          "s3:GetObject",
+          "s3:PutObject"
         ]
         Effect = "Allow"
         Resource = [
@@ -220,6 +233,42 @@ resource "aws_iam_policy" "workflow_tracker_policy" {
           "${var.output_bucket_arn}/*",
           var.working_bucket_arn,
           "${var.working_bucket_arn}/*"
+        ]
+      },
+      {
+        # REDACTED_SUPERSEDED cleanup (IDP v0.6 preprocessing halt path): when a
+        # preprocessing hook produces a redacted copy that is processed as its own
+        # document, the original must be removed rather than left behind. The
+        # tracker is the last writer for the execution, so it owns the delete —
+        # doing it mid-execution would race with the tracker re-creating the row.
+        #
+        # idp_common.delete_documents.delete_single_document deletes the input
+        # object outright, then purges ALL object versions and delete markers under
+        # the output prefix (the output bucket is versioning-enabled and document
+        # version history pins prior runs' bytes as noncurrent versions, so a
+        # versionless delete would only add delete markers and leak them).
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Effect = "Allow"
+        Resource = [
+          var.input_bucket_arn,
+          "${var.input_bucket_arn}/*"
+        ]
+      },
+      {
+        Action = [
+          "s3:ListBucket",
+          "s3:ListBucketVersions",
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion"
+        ]
+        Effect = "Allow"
+        Resource = [
+          var.output_bucket_arn,
+          "${var.output_bucket_arn}/*"
         ]
       },
       {
@@ -295,31 +344,12 @@ resource "aws_iam_role_policy_attachment" "workflow_tracker_kms_attachment" {
   policy_arn = aws_iam_policy.workflow_tracker_kms_policy["enabled"].arn
 }
 
-# Add AppSync permissions if API is provided
-resource "aws_iam_policy" "workflow_tracker_appsync_policy" {
-  count       = var.api != null ? 1 : 0
-  name        = "idp-workflow-tracker-appsync-policy-${random_string.suffix.result}"
-  description = "AppSync policy for WorkflowTracker Lambda Function"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Effect   = "Allow"
-        Resource = "${var.api.api_arn}/types/Mutation/*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "workflow_tracker_appsync_attachment" {
-  count      = var.api != null ? 1 : 0
-  role       = aws_iam_role.workflow_tracker_role.name
-  policy_arn = aws_iam_policy.workflow_tracker_appsync_policy[0].arn
-}
+# The former `workflow_tracker_appsync_policy` (appsync:GraphQL on
+# "${var.api.api_arn}/types/Mutation/*") is deliberately gone. IDP v0.6 removed
+# AppSync, so `var.api.api_arn` is now an API Gateway ARN and the grant referred to
+# a resource that cannot exist; the tracker writes document state straight to
+# DynamoDB. Both addresses are destroyed by a normal plan — the module still
+# exists, so no `removed {}` block is needed (see STATE-MIGRATION-AUDIT.md).
 
 # IAM Role for LookupFunction Lambda Function
 resource "aws_iam_role" "lookup_function_role" {
@@ -357,8 +387,8 @@ resource "aws_iam_policy" "lookup_function_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}:*"
         ]
       },
       {
@@ -368,6 +398,20 @@ resource "aws_iam_policy" "lookup_function_policy" {
         ]
         Effect   = "Allow"
         Resource = local.tracking_table.table_arn
+      },
+      {
+        # The lookup reads WorkflowExecutionArn off the tracking item and builds
+        # the UI's processingDetail from the execution and its history. Without
+        # these the calls fail into a caught exception and the field is silently
+        # dropped. Scoped to executions in this account and region: the
+        # processors, and therefore the state machine ARN, are created after this
+        # module.
+        Action = [
+          "states:DescribeExecution",
+          "states:GetExecutionHistory"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:execution:*"
       }
     ]
   })
@@ -442,8 +486,8 @@ resource "aws_iam_policy" "update_configuration_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}:*"
         ]
       },
       {

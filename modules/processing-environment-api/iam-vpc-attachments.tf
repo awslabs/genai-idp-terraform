@@ -50,6 +50,12 @@ resource "aws_iam_role_policy_attachment" "chat_session_resolvers_vpc" {
   policy_arn = local.lambda_vpc_access_arn
 }
 
+resource "aws_iam_role_policy_attachment" "chat_stream_processor_vpc" {
+  count      = local.chat_stream_enabled && var.vpc_config != null ? 1 : 0
+  role       = aws_iam_role.chat_stream_processor[0].name
+  policy_arn = local.lambda_vpc_access_arn
+}
+
 resource "aws_iam_role_policy_attachment" "capacity_planning_vpc" {
   count      = var.enable_capacity_planning && var.vpc_config != null ? 1 : 0
   role       = aws_iam_role.capacity_planning[0].name

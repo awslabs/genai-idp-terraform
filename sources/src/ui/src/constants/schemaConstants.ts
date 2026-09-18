@@ -98,6 +98,8 @@ export const EXTRACTION_MODEL_OVERRIDE_OPTIONS = [
   { label: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', value: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0' },
   { label: 'us.anthropic.claude-sonnet-4-6', value: 'us.anthropic.claude-sonnet-4-6' },
   { label: 'us.anthropic.claude-sonnet-4-6:1m', value: 'us.anthropic.claude-sonnet-4-6:1m' },
+  { label: 'us.anthropic.claude-sonnet-5', value: 'us.anthropic.claude-sonnet-5' },
+  { label: 'us.anthropic.claude-sonnet-5:1m', value: 'us.anthropic.claude-sonnet-5:1m' },
   { label: 'us.anthropic.claude-opus-4-5-20251101-v1:0', value: 'us.anthropic.claude-opus-4-5-20251101-v1:0' },
   { label: 'us.anthropic.claude-opus-4-6-v1', value: 'us.anthropic.claude-opus-4-6-v1' },
   { label: 'us.anthropic.claude-opus-4-6-v1:1m', value: 'us.anthropic.claude-opus-4-6-v1:1m' },
@@ -105,9 +107,14 @@ export const EXTRACTION_MODEL_OVERRIDE_OPTIONS = [
   { label: 'us.anthropic.claude-opus-4-7:1m', value: 'us.anthropic.claude-opus-4-7:1m' },
   { label: 'us.anthropic.claude-opus-4-8', value: 'us.anthropic.claude-opus-4-8' },
   { label: 'us.anthropic.claude-opus-4-8:1m', value: 'us.anthropic.claude-opus-4-8:1m' },
+  { label: 'us.anthropic.claude-opus-5', value: 'us.anthropic.claude-opus-5' },
+  { label: 'us.anthropic.claude-opus-5:1m', value: 'us.anthropic.claude-opus-5:1m' },
   // OpenAI GPT-5.x (bedrock-mantle Responses API) - US regions only
   { label: 'openai.gpt-5.4', value: 'openai.gpt-5.4' },
   { label: 'openai.gpt-5.5', value: 'openai.gpt-5.5' },
+  { label: 'openai.gpt-5.6-sol', value: 'openai.gpt-5.6-sol' },
+  { label: 'openai.gpt-5.6-terra', value: 'openai.gpt-5.6-terra' },
+  { label: 'openai.gpt-5.6-luna', value: 'openai.gpt-5.6-luna' },
   { label: 'eu.amazon.nova-lite-v1:0', value: 'eu.amazon.nova-lite-v1:0' },
   { label: 'eu.amazon.nova-pro-v1:0', value: 'eu.amazon.nova-pro-v1:0' },
   { label: 'eu.amazon.nova-2-lite-v1:0', value: 'eu.amazon.nova-2-lite-v1:0' },
@@ -115,6 +122,8 @@ export const EXTRACTION_MODEL_OVERRIDE_OPTIONS = [
   { label: 'eu.anthropic.claude-sonnet-4-5-20250929-v1:0', value: 'eu.anthropic.claude-sonnet-4-5-20250929-v1:0' },
   { label: 'eu.anthropic.claude-sonnet-4-6', value: 'eu.anthropic.claude-sonnet-4-6' },
   { label: 'eu.anthropic.claude-sonnet-4-6:1m', value: 'eu.anthropic.claude-sonnet-4-6:1m' },
+  { label: 'eu.anthropic.claude-sonnet-5', value: 'eu.anthropic.claude-sonnet-5' },
+  { label: 'eu.anthropic.claude-sonnet-5:1m', value: 'eu.anthropic.claude-sonnet-5:1m' },
   { label: 'eu.anthropic.claude-opus-4-5-20251101-v1:0', value: 'eu.anthropic.claude-opus-4-5-20251101-v1:0' },
   { label: 'eu.anthropic.claude-opus-4-6-v1', value: 'eu.anthropic.claude-opus-4-6-v1' },
   { label: 'eu.anthropic.claude-opus-4-6-v1:1m', value: 'eu.anthropic.claude-opus-4-6-v1:1m' },
@@ -122,6 +131,8 @@ export const EXTRACTION_MODEL_OVERRIDE_OPTIONS = [
   { label: 'eu.anthropic.claude-opus-4-7:1m', value: 'eu.anthropic.claude-opus-4-7:1m' },
   { label: 'eu.anthropic.claude-opus-4-8', value: 'eu.anthropic.claude-opus-4-8' },
   { label: 'eu.anthropic.claude-opus-4-8:1m', value: 'eu.anthropic.claude-opus-4-8:1m' },
+  { label: 'eu.anthropic.claude-opus-5', value: 'eu.anthropic.claude-opus-5' },
+  { label: 'eu.anthropic.claude-opus-5:1m', value: 'eu.anthropic.claude-opus-5:1m' },
   { label: 'global.amazon.nova-2-lite-v1:0', value: 'global.amazon.nova-2-lite-v1:0' },
   {
     label: 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
@@ -133,6 +144,8 @@ export const EXTRACTION_MODEL_OVERRIDE_OPTIONS = [
   },
   { label: 'global.anthropic.claude-sonnet-4-6', value: 'global.anthropic.claude-sonnet-4-6' },
   { label: 'global.anthropic.claude-sonnet-4-6:1m', value: 'global.anthropic.claude-sonnet-4-6:1m' },
+  { label: 'global.anthropic.claude-sonnet-5', value: 'global.anthropic.claude-sonnet-5' },
+  { label: 'global.anthropic.claude-sonnet-5:1m', value: 'global.anthropic.claude-sonnet-5:1m' },
   {
     label: 'global.anthropic.claude-opus-4-5-20251101-v1:0',
     value: 'global.anthropic.claude-opus-4-5-20251101-v1:0',
@@ -143,6 +156,8 @@ export const EXTRACTION_MODEL_OVERRIDE_OPTIONS = [
   { label: 'global.anthropic.claude-opus-4-7:1m', value: 'global.anthropic.claude-opus-4-7:1m' },
   { label: 'global.anthropic.claude-opus-4-8', value: 'global.anthropic.claude-opus-4-8' },
   { label: 'global.anthropic.claude-opus-4-8:1m', value: 'global.anthropic.claude-opus-4-8:1m' },
+  { label: 'global.anthropic.claude-opus-5', value: 'global.anthropic.claude-opus-5' },
+  { label: 'global.anthropic.claude-opus-5:1m', value: 'global.anthropic.claude-opus-5:1m' },
 ];
 
 // Per-class extraction prompt overrides (override extraction.system_prompt /
@@ -213,6 +228,7 @@ export const EVALUATION_METHOD_NUMERIC_EXACT = 'NUMERIC_EXACT';
 export const EVALUATION_METHOD_FUZZY = 'FUZZY';
 export const EVALUATION_METHOD_LEVENSHTEIN = 'LEVENSHTEIN';
 export const EVALUATION_METHOD_SEMANTIC = 'SEMANTIC';
+export const EVALUATION_METHOD_DATE = 'DATE';
 export const EVALUATION_METHOD_LLM = 'LLM';
 export const EVALUATION_METHOD_HUNGARIAN = 'HUNGARIAN';
 
@@ -222,6 +238,7 @@ export const VALID_EVALUATION_METHODS = [
   EVALUATION_METHOD_FUZZY,
   EVALUATION_METHOD_LEVENSHTEIN,
   EVALUATION_METHOD_SEMANTIC,
+  EVALUATION_METHOD_DATE,
   EVALUATION_METHOD_LLM,
   EVALUATION_METHOD_HUNGARIAN,
 ];
@@ -257,6 +274,12 @@ export const EVALUATION_METHOD_OPTIONS = [
     value: EVALUATION_METHOD_SEMANTIC,
     description: 'Embedding-based meaning comparison',
     validFor: [TYPE_STRING, TYPE_OBJECT],
+  },
+  {
+    label: 'Date',
+    value: EVALUATION_METHOD_DATE,
+    description: 'Format-insensitive date matching (e.g. 01/05/2024 = 2024-01-05)',
+    validFor: [TYPE_STRING],
   },
   {
     label: 'LLM',

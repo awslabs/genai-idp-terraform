@@ -13,10 +13,10 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
-| <a name="provider_local"></a> [local](#provider\_local) | 2.9.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | 3.3.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_local"></a> [local](#provider\_local) | 2.9.1 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.3.2 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.9.1 |
 
 ## Modules
 
@@ -41,7 +41,7 @@ No modules.
 | <a name="input_container_runtime"></a> [container\_runtime](#input\_container\_runtime) | Container runtime selector. Informational here; the docker daemon is invoked by terraform-aws-modules/lambda via local-exec respecting the host's docker CLI / DOCKER\_HOST. Kept on the signature for future use. | `string` | `"auto"` | no |
 | <a name="input_docker_host"></a> [docker\_host](#input\_docker\_host) | DOCKER\_HOST value to export when invoking terraform-aws-modules/lambda's build script. Empty string keeps the platform default (the docker CLI's own default socket). Non-empty values are passed through verbatim (e.g. unix:///path/to/podman.sock). | `string` | `""` | no |
 | <a name="input_force_rebuild"></a> [force\_rebuild](#input\_force\_rebuild) | Force rebuild of layers regardless of input changes. | `bool` | `false` | no |
-| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture. Drives both the SAM build image tag (latest-x86\_64 vs latest-arm64) and compatible\_architectures on the produced aws\_lambda\_layer\_version. | `string` | `"x86_64"` | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture. Drives both the SAM build image tag (latest-x86\_64 vs latest-arm64) and compatible\_architectures on the produced aws\_lambda\_layer\_version. | `string` | `"arm64"` | no |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket the produced layer zips are uploaded to. Same bucket the CodeBuild path uses, so consumers see no S3-bucket difference between modes. | `string` | n/a | yes |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | Kept for signature parity with lambda-layer-codebuild. Not used here (no Lambda functions are created). | `string` | `"Active"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource naming and lambda layers (mirrors lambda-layer-codebuild). | `string` | n/a | yes |

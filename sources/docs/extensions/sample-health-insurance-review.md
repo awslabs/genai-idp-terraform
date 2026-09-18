@@ -78,16 +78,22 @@ It exercises the full host contract:
 
 ## Installing
 
-Claims Review is bundled with the accelerator and listed in the catalog, so it
-appears under **Extensions** in the nav once the Feature Platform is enabled
-(the default). Install it from its feature page with one click.
+Claims Review is bundled with the accelerator and listed in the catalog, but —
+as a reference sample — it sets `showInNav: false`, so it has no nav entry of
+its own until installed. Open **Extensions → Browse catalog** in the nav,
+select **Sample: Health Insurance Review**, and install it from its feature
+page with one click. Once installed it gets its own entry in the
+**Extensions** nav.
 
 After installing:
 
 1. Open **Configuration**, find the `sample-health-insurance-review-v<version>` version, and
    **activate** it.
-2. Upload a prior-auth packet from `samples/rule-validation/` (e.g.
-   `Prior-Auth-12345678.pdf`) to the input bucket.
+2. Upload the sample prior-auth packet
+   `samples/rule-validation/medicare_respiratory_pa_packet.pdf` to the input
+   bucket. (Its content — a Medicare respiratory prior-auth request — matches
+   the NCCI policy rules the bundled preset ships with, so rules evaluate to
+   real Pass/Fail results.)
 3. When processing finishes, the claim appears in the **Claims Dashboard** with
    its status and per-rule breakdown.
 4. In the **Rules Discovery** tab, upload

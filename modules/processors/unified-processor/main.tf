@@ -70,7 +70,7 @@ locals {
 
   # Build directory and instance ID for Lambda functions
   module_build_dir   = "${path.module}/build"
-  module_instance_id = "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.id}"
+  module_instance_id = "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.region}"
 
   # Common tags
   common_tags = merge(var.tags, {
@@ -88,6 +88,12 @@ module "processor_configuration" {
 
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
+
+  # Upstream's catalogues, which its own template loads into the configuration
+  # table at deploy time. Read straight from the vendored copies so a version bump
+  # picks them up with the rest of the snapshot.
+  pricing             = yamldecode(file("${path.module}/../../../sources/config_library/pricing.yaml"))
+  model_config_limits = yamldecode(file("${path.module}/../../../sources/config_library/model_config_limits.yaml"))
 
   # Extra non-active config versions seeded alongside the default.
   additional_configurations = var.additional_configurations
@@ -116,22 +122,20 @@ module "processor_configuration" {
 locals {
   base_config = var.config
 
-  # Apply model overrides. base_config may be sparse, so try() tolerates
-  # missing sections rather than failing at plan time.
+  # Per-stage Bedrock model IDs are NOT assigned from Terraform: the seeded YAML
+  # configuration (config / additional_configurations / config library / system
+  # defaults) is the single source of truth for model selection. Terraform only
+  # applies NON-model extraction overrides here (section_splitting_strategy,
+  # agentic), which have no config-authored equivalent surfaced as a variable.
+  # base_config may be sparse, so try() tolerates missing sections.
   config_with_overrides = merge(
     local.base_config,
-    # Override classification model: per-step var → model_id default
-    {
-      classification = merge(
-        try(local.base_config.classification, {}),
-        { model = coalesce(var.classification_model_id, var.model_id) }
-      )
-    },
-    # Override extraction: model, section_splitting_strategy, agentic extraction, review_agent_model
-    {
+    # Extraction is the only section that still carries Terraform-driven
+    # (non-model) overrides. The block is emitted only when at least one applies,
+    # so a config that sets neither is passed through untouched.
+    (var.section_splitting_strategy != "disabled" || var.enable_agentic_extraction) ? {
       extraction = merge(
         try(local.base_config.extraction, {}),
-        { model = coalesce(var.extraction_model_id, var.model_id) },
         var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
         var.enable_agentic_extraction ? {
           agentic = merge(
@@ -143,36 +147,6 @@ locals {
             }
           )
         } : {}
-      )
-    },
-    # Override summarization model: per-step var → model_id default
-    {
-      summarization = merge(
-        try(local.base_config.summarization, {}),
-        { model = coalesce(var.summarization_model_id, var.model_id) }
-      )
-    },
-    # Only override evaluation model if provided (evaluation uses a different config path)
-    var.evaluation_model_id != null ? {
-      evaluation = merge(
-        try(local.base_config.evaluation, {}),
-        {
-          llm_method = merge(
-            try(local.base_config.evaluation.llm_method, {}),
-            {
-              model = var.evaluation_model_id
-            }
-          )
-        }
-      )
-    } : {},
-    # Only override assessment model if provided
-    var.assessment_model_id != null ? {
-      assessment = merge(
-        try(local.base_config.assessment, {}),
-        {
-          model = var.assessment_model_id
-        }
       )
     } : {}
   )
@@ -200,6 +174,9 @@ locals {
         "Lambda.AWSLambdaException",
         "Lambda.SdkClientException",
         "Lambda.TooManyRequestsException",
+        # Raised while a just-published layer's CodeArtifact grant is still
+        # settling, so a cold start after deploy would fail the whole document.
+        "Lambda.CodeArtifactUserPendingException",
         "ServiceQuotaExceededException",
         "ThrottlingException",
         "ProvisionedThroughputExceededException",
@@ -212,14 +189,31 @@ locals {
     }
   ]
 
-  # The state after process-results/HITL depends on whether summarization is enabled
-  post_hitl_next = local.summ_enabled ? "SummarizationStep" : (local.eval_enabled ? "EvaluationStep" : "WorkflowComplete")
+  # The state after process-results/HITL depends on whether summarization is
+  # enabled. When neither summarization nor evaluation runs, the document still
+  # has to reach the shared postprocessing tail, and at this point it lives at
+  # `$.Result.document` rather than at `$` — hence the wrap state.
+  #
+  # When evaluation runs WITHOUT summarization we route through
+  # NormalizeForEvaluation: EvaluationStep passes `"document.$" = "$"`, which is
+  # only the document when arriving from summarization (SummarizationStep sets
+  # OutputPath = "$.Result.document"). Arriving straight from CheckHITLRequired,
+  # `$` is the full envelope, so the evaluation Lambda would receive the
+  # envelope as its document. The normalizer makes both inbound edges agree.
+  post_hitl_next = local.summ_enabled ? "SummarizationStep" : (
+    local.eval_enabled ? "NormalizeForEvaluation" : "TailWrapResultDocument"
+  )
 
   # The state after summarization depends on whether evaluation is enabled
-  post_summ_next = local.eval_enabled ? "EvaluationStep" : "WorkflowComplete"
+  post_summ_next = local.eval_enabled ? "EvaluationStep" : "TailWrapSummarizedDocument"
 
-  # CheckHITLRequired default (HITL not triggered), same as post_hitl_next
-  check_hitl_default = local.post_hitl_next
+  # Rule validation is wired into the workflow only when enabled; see rv_states.
+  rv_enabled = var.enable_rule_validation
+
+  # Where the HITL join goes: the RV entry Choice when enabled, else the
+  # pre-existing summarization/eval/tail target (so the disabled path is unchanged).
+  rv_entry           = local.rv_enabled ? "CheckRuleValidationEnabled" : local.post_hitl_next
+  check_hitl_default = local.rv_entry
 
   # HITL is async (v0.4.16): process_results marks the doc HITL_IN_PROGRESS and
   # the workflow continues without waiting; reviewers complete via AppSync.
@@ -227,7 +221,7 @@ locals {
     MarkHITLPending = {
       Type    = "Pass"
       Comment = "Document marked for async HITL review, workflow continues without waiting"
-      Next    = local.post_hitl_next
+      Next    = local.rv_entry
     }
   } : {}
 
@@ -263,7 +257,7 @@ locals {
       }
       ResultPath = null
       Retry = [{
-        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
         IntervalSeconds = 2
         MaxAttempts     = 3
         BackoffRate     = 2
@@ -277,6 +271,8 @@ locals {
     }
   }]...)
 
+  # The evaluation Lambda returns {"document": ...}, and ResultPath "$" makes
+  # that the whole state payload — already the shape PostprocessingHook reads.
   eval_states = local.eval_enabled ? {
     EvaluationStep = {
       Type     = "Task"
@@ -287,9 +283,349 @@ locals {
       }
       ResultPath = "$"
       Retry      = local.standard_retry
-      Next       = "WorkflowComplete"
+      Next       = "PostprocessingHook"
     }
   } : {}
+
+  # Rule-validation sub-flow, ported from the upstream unified ASL so the
+  # Lambdas in lambda_rule_validation.tf actually run. Gated on
+  # var.enable_rule_validation (empty map when off => zero-diff plan). Per-doc
+  # gate is $.Result.rule_validation_enabled, already set by process_results.
+  #
+  # Divergence from upstream: upstream feeds SummarizationStep from
+  # $.RuleValidationOrchestrationResult.document; this port's tail reads
+  # $.Result.document. So internal result paths match upstream, but the final
+  # Pass copies the document back to $.Result.document -> local.post_hitl_next.
+  # Only that copy-back touches $.Result, so $.Result.hitl_triggered is safe.
+  # merge([for ...]...) rather than a ternary: the states are heterogeneously
+  # shaped, so a ternary against an empty object fails type unification (same
+  # pattern as summ_states / bda_states).
+  rv_states = merge([for _ in(local.rv_enabled ? [1] : []) : {
+    # Run RV only when the resolved config asked for it.
+    CheckRuleValidationEnabled = {
+      Type = "Choice"
+      Choices = [
+        {
+          Variable      = "$.Result.rule_validation_enabled"
+          BooleanEquals = true
+          Next          = "PolicyClassificationStep"
+        }
+      ]
+      Default = "SetEmptyRuleValidationResult"
+    }
+
+    # Which policy classes apply. Whole-state input (Lambda reads $.Result.document).
+    PolicyClassificationStep = {
+      Type       = "Task"
+      Resource   = aws_lambda_function.rule_validation_policy_classification_function[0].arn
+      ResultPath = "$.PolicyClassificationResult"
+      Retry      = local.standard_retry
+      Next       = "CheckPolicyMatch"
+    }
+
+    # No applicable policy => skip the Map + orchestration.
+    CheckPolicyMatch = {
+      Type = "Choice"
+      Choices = [
+        {
+          Variable      = "$.PolicyClassificationResult.skip_rule_validation"
+          BooleanEquals = true
+          Next          = "SetSkippedRuleValidationResult"
+        }
+      ]
+      Default = "ProcessRuleValidationSections"
+    }
+
+    # Skipped: carry the classified document forward.
+    SetSkippedRuleValidationResult = {
+      Type = "Pass"
+      Parameters = {
+        "document.$" = "$.PolicyClassificationResult.document"
+      }
+      ResultPath = "$.RuleValidationOrchestrationResult"
+      Next       = "PostRuleValidationHook"
+    }
+
+    # Disabled for this doc: carry the process-results document forward.
+    SetEmptyRuleValidationResult = {
+      Type = "Pass"
+      Parameters = {
+        "document.$" = "$.Result.document"
+      }
+      ResultPath = "$.RuleValidationOrchestrationResult"
+      Next       = "PostRuleValidationHook"
+    }
+
+    # Validate each section in parallel (worker reads document + section_id).
+    ProcessRuleValidationSections = {
+      Type      = "Map"
+      ItemsPath = "$.PolicyClassificationResult.document.sections"
+      ItemSelector = {
+        "execution_arn.$" = "$$.Execution.Id"
+        "document.$"      = "$.PolicyClassificationResult.document"
+        "section_id.$"    = "$$.Map.Item.Value"
+      }
+      MaxConcurrency = 10
+      Iterator = {
+        StartAt = "RuleValidationStep"
+        States = {
+          RuleValidationStep = {
+            Type     = "Task"
+            Resource = aws_lambda_function.rule_validation_function[0].arn
+            Retry    = local.standard_retry
+            Next     = "RuleValidationSectionComplete"
+          }
+          RuleValidationSectionComplete = {
+            Type = "Pass"
+            End  = true
+          }
+        }
+      }
+      ResultPath = "$.RuleValidationResults"
+      Next       = "RuleValidationOrchestration"
+    }
+
+    # Consolidate per-section results into one verdict set on the document.
+    RuleValidationOrchestration = {
+      Type       = "Task"
+      Resource   = aws_lambda_function.rule_validation_orchestration_function[0].arn
+      ResultPath = "$.RuleValidationOrchestrationResult"
+      Retry      = local.standard_retry
+      Next       = "PostRuleValidationHook"
+    }
+
+    # Sixth hook point. Fail-open like the other five (Catch continues flow).
+    PostRuleValidationHook = {
+      Type     = "Task"
+      Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+      Parameters = {
+        FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+        Payload = {
+          "hookPoint"      = "postRuleValidation"
+          "executionArn.$" = "$$.Execution.Id"
+          "document.$"     = "$.RuleValidationOrchestrationResult.document"
+        }
+      }
+      ResultPath = "$.HookResults.postRuleValidation"
+      Retry = [{
+        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
+        IntervalSeconds = 2
+        MaxAttempts     = 3
+        BackoffRate     = 2
+      }]
+      # On failure there's no Payload; use the error-path Apply instead.
+      Catch = [{
+        ErrorEquals = ["States.ALL"]
+        ResultPath  = "$.HookResults.postRuleValidation.error"
+        Next        = "ApplyPostRuleValidationHookDocumentOnError"
+      }]
+      Next = "ApplyPostRuleValidationHookDocument"
+    }
+
+    # Hook ran: copy the (possibly modified) document from its Payload back to
+    # $.Result.document, where the summarization/eval/tail states read it.
+    ApplyPostRuleValidationHookDocument = {
+      Type       = "Pass"
+      InputPath  = "$.HookResults.postRuleValidation.Payload.document"
+      ResultPath = "$.Result.document"
+      Next       = local.post_hitl_next
+    }
+
+    # Hook failed: fall back to the orchestrated (un-hooked) document.
+    ApplyPostRuleValidationHookDocumentOnError = {
+      Type       = "Pass"
+      InputPath  = "$.RuleValidationOrchestrationResult.document"
+      ResultPath = "$.Result.document"
+      Next       = local.post_hitl_next
+    }
+  }]...)
+
+  # ---------------------------------------------------------------------------
+  # IDP v0.6 flat hook points: `preprocessing` and `postprocessing`.
+  #
+  # Unlike the six per-step `<step>.postHook` lists, these are single generic
+  # hooks configured as standalone top-level config sections. Both are ALWAYS
+  # rendered and are inert until a config version populates the section: the
+  # dispatcher returns the inbound document verbatim after one config read.
+  # Mirrors sources/patterns/unified/statemachine/workflow.asl.json.
+  # ---------------------------------------------------------------------------
+  hook_retry = [{
+    ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
+    IntervalSeconds = 2
+    MaxAttempts     = 3
+    BackoffRate     = 2
+  }]
+
+  # merge([for ...]) rather than a ternary: these states are heterogeneously
+  # shaped (Task/Pass/Choice/Fail), so a ternary against an empty object fails
+  # type unification.
+  preprocessing_states = merge([for _ in [1] : {
+    # Runs FIRST, before the BDA/pipeline routing decision, so it fires in both
+    # processing modes and even when OCR is disabled. A hook may return
+    # halt=true to short-circuit this execution (e.g. it spawned a redacted copy
+    # that will be processed as its own document).
+    #
+    # A dispatcher/hook error is deliberately NOT caught to normal routing: a
+    # failed preprocessing hook must STOP the execution rather than fall through
+    # to processing the un-preprocessed original, which for PII redaction would
+    # leak the original.
+    PreprocessingHook = {
+      Type     = "Task"
+      Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+      Parameters = {
+        FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+        Payload = {
+          "hookPoint"      = "preprocessing"
+          "executionArn.$" = "$$.Execution.Id"
+          "document.$"     = "$.document"
+        }
+      }
+      ResultPath = "$.HookResults.preprocessing"
+      Retry      = local.hook_retry
+      Catch = [{
+        ErrorEquals = ["States.ALL"]
+        ResultPath  = "$.HookResults.preprocessing.error"
+        Next        = "PreprocessingHookFailed"
+      }]
+      Next = "ApplyPreprocessingHookDocument"
+    }
+
+    # Copy the (possibly hook-modified) document the dispatcher returned into
+    # $.document, which routing and OCR read. The dispatcher ALWAYS returns a
+    # document — the inbound one verbatim when no hook modified it — so this is
+    # a no-op copy in the common case.
+    ApplyPreprocessingHookDocument = {
+      Type       = "Pass"
+      InputPath  = "$.HookResults.preprocessing.Payload.document"
+      ResultPath = "$.document"
+      Next       = "CheckPreprocessingHalt"
+    }
+
+    PreprocessingHookFailed = {
+      Type  = "Fail"
+      Error = "PreprocessingHookFailed"
+      Cause = "A preprocessing hook failed (e.g. a PII-redaction hook with onError:fail). The execution is stopped rather than continuing to process the un-preprocessed original."
+    }
+
+    # The dispatcher always returns a top-level halt flag, so this is safe even
+    # with no hook registered (halt=false).
+    CheckPreprocessingHalt = {
+      Type = "Choice"
+      Choices = [{
+        Variable      = "$.HookResults.preprocessing.Payload.halt"
+        BooleanEquals = true
+        Next          = "MarkSupersededByRedacted"
+      }]
+      Default = "RouteByProcessingMode"
+    }
+
+    # Terminal path for a document intentionally not processed further because a
+    # preprocessing hook produced a redacted copy. REDACTED_SUPERSEDED is set on
+    # the compressed WRAPPER; the workflow tracker preserves it rather than
+    # forcing COMPLETED, and deletes the superseded original.
+    MarkSupersededByRedacted = {
+      Type = "Pass"
+      Parameters = {
+        "document.$" = "$.document"
+      }
+      ResultPath = "$"
+      Next       = "SetSupersededStatus"
+    }
+
+    SetSupersededStatus = {
+      Type       = "Pass"
+      Result     = "REDACTED_SUPERSEDED"
+      ResultPath = "$.document.status"
+      Next       = "WorkflowComplete"
+    }
+  }]...)
+
+  # Shared tail. Every path that used to end at WorkflowComplete now funnels
+  # through PostprocessingHook, so it fires in both processing modes. Each
+  # inbound edge reaches it with the document in a different place, so the
+  # per-edge Pass states below normalize to upstream's `{ document: ... }`
+  # envelope first.
+  #
+  # Unlike PreprocessingHook, a dispatcher/hook error IS caught to the normal
+  # terminal state: by this point every expensive step has succeeded and the
+  # output objects are written, so a delivery-integration error must not discard
+  # a good document. A hook that needs to gate sets onError:fail, which surfaces
+  # as a failed execution.
+  postprocessing_states = merge(
+    merge([for _ in [1] : {
+      PostprocessingHook = {
+        Type     = "Task"
+        Resource = "arn:${data.aws_partition.current.partition}:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = aws_lambda_function.pipeline_hooks_dispatcher.arn
+          Payload = {
+            "hookPoint"      = "postprocessing"
+            "executionArn.$" = "$$.Execution.Id"
+            "document.$"     = "$.document"
+          }
+        }
+        ResultPath = "$.HookResults.postprocessing"
+        Retry      = local.hook_retry
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = null
+          Next        = "WorkflowComplete"
+        }]
+        Next = "ApplyPostprocessingHookDocument"
+      }
+
+      # Rebuild $ as { document: <possibly hook-modified document> }, which
+      # becomes the workflow's final output. Parameters + ResultPath "$" rather
+      # than InputPath is deliberate: it unwraps the dispatcher result AND drops
+      # the temporary $.HookResults key, keeping the output small (Step
+      # Functions' 256KB limit) and in the shape the workflow tracker reads.
+      ApplyPostprocessingHookDocument = {
+        Type = "Pass"
+        Parameters = {
+          "document.$" = "$.HookResults.postprocessing.Payload.document"
+        }
+        ResultPath = "$"
+        Next       = "WorkflowComplete"
+      }
+    }]...),
+
+    # Neither summarization nor evaluation ran: the processed document is at
+    # $.Result.document (the raw envelope is still $).
+    !local.summ_enabled && !local.eval_enabled ? {
+      TailWrapResultDocument = {
+        Type = "Pass"
+        Parameters = {
+          "document.$" = "$.Result.document"
+        }
+        ResultPath = "$"
+        Next       = "PostprocessingHook"
+      }
+    } : {},
+
+    # Summarization ran but evaluation did not: SummarizationStep's OutputPath
+    # already reduced $ to the bare document.
+    local.summ_enabled && !local.eval_enabled ? {
+      TailWrapSummarizedDocument = {
+        Type = "Pass"
+        Parameters = {
+          "document.$" = "$"
+        }
+        ResultPath = "$"
+        Next       = "PostprocessingHook"
+      }
+    } : {},
+
+    # Evaluation runs without summarization: reduce the envelope to the bare
+    # document so EvaluationStep's `"document.$" = "$"` means the same thing on
+    # both of its inbound edges.
+    local.eval_enabled && !local.summ_enabled ? {
+      NormalizeForEvaluation = {
+        Type      = "Pass"
+        InputPath = "$.Result.document"
+        Next      = "EvaluationStep"
+      }
+    } : {}
+  )
 
   # Both branches always render. merge([for ...]) rather than a ternary: the BDA
   # states are heterogeneously shaped (Choice/Task/Fail), so a ternary against an
@@ -425,6 +761,7 @@ locals {
               "Lambda.AWSLambdaException",
               "Lambda.SdkClientException",
               "Lambda.TooManyRequestsException",
+              "Lambda.CodeArtifactUserPendingException",
               "ServiceQuotaExceededException",
               "ThrottlingException",
               "ProvisionedThroughputExceededException",
@@ -454,7 +791,7 @@ locals {
         }
         ResultPath = "$.HookResults.postOcr"
         Retry = [{
-          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
           IntervalSeconds = 2
           MaxAttempts     = 3
           BackoffRate     = 2
@@ -494,7 +831,7 @@ locals {
         }
         ResultPath = "$.HookResults.postClassification"
         Retry = [{
-          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
           IntervalSeconds = 2
           MaxAttempts     = 3
           BackoffRate     = 2
@@ -540,7 +877,7 @@ locals {
               }
               ResultPath = "$.HookResults.postExtraction"
               Retry = [{
-                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
                 IntervalSeconds = 2
                 MaxAttempts     = 3
                 BackoffRate     = 2
@@ -578,7 +915,7 @@ locals {
               }
               ResultPath = "$.HookResults.postAssessment"
               Retry = [{
-                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
                 IntervalSeconds = 2
                 MaxAttempts     = 3
                 BackoffRate     = 2
@@ -639,8 +976,28 @@ locals {
     local.hitl_states,
     local.summ_states,
     local.eval_states,
-    local.bda_states
+    local.rv_states,
+    local.bda_states,
+    local.preprocessing_states,
+    local.postprocessing_states
   )
+
+  # Every state name referenced as a transition target by a top-level state
+  # (Next, Choice.Next, Choices[*].Next, Catch[*].Next, Default). Exposed as an
+  # output so `terraform test` can prove the graph is closed — no state points at
+  # a name that the current summarization/evaluation/HITL combination did not
+  # render. Step Functions only reports that at CreateStateMachine time, which is
+  # far too late. Derived purely from literal names, so it is known at plan.
+  sfn_transition_targets = distinct(compact(concat(
+    [for name, state in local.sfn_states : try(state.Next, "")],
+    [for name, state in local.sfn_states : try(state.Default, "")],
+    flatten([for name, state in local.sfn_states : [
+      for choice in try(state.Choices, []) : try(choice.Next, "")
+    ]]),
+    flatten([for name, state in local.sfn_states : [
+      for catcher in try(state.Catch, []) : try(catcher.Next, "")
+    ]]),
+  )))
 }
 
 # Wait for the Step Functions IAM role + policy to propagate before
@@ -663,8 +1020,12 @@ resource "aws_sfn_state_machine" "document_processing" {
   name     = "${local.name_prefix}-document-processing"
   role_arn = aws_iam_role.state_machine.arn
 
+  # StartAt is PreprocessingHook, not RouteByProcessingMode: the v0.6
+  # preprocessing extension point runs before the BDA/pipeline routing decision
+  # so it fires in both modes. It is inert until a config version populates the
+  # `preprocessing` section.
   definition = jsonencode({
-    StartAt = "RouteByProcessingMode"
+    StartAt = "PreprocessingHook"
     States  = local.sfn_states
   })
 

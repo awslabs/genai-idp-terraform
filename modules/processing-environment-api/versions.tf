@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 terraform {
-  required_version = ">= 1.0.0"
+  # 1.1 for `moved` blocks (version-check.tf).
+  required_version = ">= 1.1.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -23,6 +24,10 @@ terraform {
     local = {
       source  = "hashicorp/local"
       version = ">= 2.0.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = ">= 0.9.0"
     }
   }
 }

@@ -36,8 +36,10 @@ mock_provider "aws" {
   }
   mock_data "aws_region" {
     defaults = {
-      id   = "us-east-1"
-      name = "us-east-1"
+      # `region` (provider v6 rename); unmocked -> random value -> invalid ARN.
+      id     = "us-east-1"
+      name   = "us-east-1"
+      region = "us-east-1"
     }
   }
   mock_data "aws_caller_identity" {
@@ -73,12 +75,10 @@ mock_provider "aws" {
       arn = "arn:aws:lambda:us-east-1:123456789012:function:mock-fn"
     }
   }
-  mock_resource "aws_appsync_graphql_api" {
+  # Stage access_log_settings.destination_arn is ARN-validated.
+  mock_resource "aws_cloudwatch_log_group" {
     defaults = {
-      uris = {
-        GRAPHQL  = "https://mock.appsync-api.us-east-1.amazonaws.com/graphql"
-        REALTIME = "wss://mock.appsync-realtime-api.us-east-1.amazonaws.com/graphql"
-      }
+      arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/idp-test:*"
     }
   }
 }
@@ -87,8 +87,12 @@ mock_provider "archive" {}
 mock_provider "random" {}
 mock_provider "null" {}
 mock_provider "local" {}
+mock_provider "time" {}
 
 variables {
+  # Default name + suffix overflows the 64-char IAM role limit on apply.
+  name = "idp-w2"
+
   input_bucket_arn        = "arn:aws:s3:::idp-test-input"
   output_bucket_arn       = "arn:aws:s3:::idp-test-output"
   tracking_table_arn      = "arn:aws:dynamodb:us-east-1:123456789012:table/idp-test-tracking"
@@ -209,14 +213,13 @@ run "test_studio_on_w2_on_present_mirrors_fcc" {
     error_message = "W2 deployer must reuse the shared test_studio_lambdas execution role."
   }
 
-  # --- Mirrors FCC: W2 is NOT AppSync-invoked ---
-  # The shipped W2 deployer (like FCC) is a CloudFormation custom-resource-style
-  # deployer, not an AppSync resolver, so it must have no AppSync data source.
-  # Assert there is no `w2_dataset_deployer` AppSync data source in the config.
-  # (The invoke policy holds exactly the six Test Studio resolver Lambdas; a
-  # dataset-deployer entry would make it seven.)
+  # Mirrors FCC: a deployer, not a resolver, so no API field may route to it.
+  # AppSync's invoke policy is gone; the dispatcher's field map is the successor.
   assert {
-    condition     = length(jsondecode(aws_iam_policy.appsync_invoke_test_studio_policy[0].policy).Statement[0].Resource) == 6
-    error_message = "AppSync invoke policy must list exactly the six Test Studio resolver Lambdas (no dataset-deployer entry — mirrors FCC: no AppSync invocation)."
+    condition = length([
+      for field in keys(jsondecode(aws_ssm_parameter.http_api_field_function_map.value)) :
+      field if length(regexall("(?i)w2|dataset", field)) > 0
+    ]) == 0
+    error_message = "No API field may route to the W2 dataset deployer: it is a deployer, not a resolver."
   }
 }

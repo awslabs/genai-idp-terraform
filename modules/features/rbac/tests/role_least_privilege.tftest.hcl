@@ -25,6 +25,8 @@
 # attributes, which fails that validation on apply, so the IAM role's `arn` is
 # overridden with a valid ARN. (The policy under test is unaffected — it is
 # `jsonencode`d from the Users-table/log-group ARNs and the user-pool ARN.)
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_resource "aws_iam_role" {
     defaults = {

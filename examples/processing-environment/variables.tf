@@ -66,12 +66,6 @@ variable "enable_evaluation" {
   default     = false
 }
 
-variable "evaluation_model_id" {
-  description = "The Bedrock model ID to use for evaluation (when evaluation is enabled)"
-  type        = string
-  default     = "anthropic.claude-3-haiku-20240307-v1:0"
-}
-
 # Reporting Configuration
 variable "enable_reporting" {
   description = "Enable analytics and reporting environment"

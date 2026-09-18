@@ -97,9 +97,9 @@ output "api" {
   value       = local.api_config.enabled ? module.genai_idp_accelerator.api : null
 }
 
-output "api_graphql_url" {
-  description = "GraphQL API URL (when API is enabled)"
-  value       = local.api_config.enabled ? module.genai_idp_accelerator.api.graphql_url : null
+output "api_base_url" {
+  description = "API REST transport base URL (when API is enabled)"
+  value       = local.api_config.enabled ? module.genai_idp_accelerator.api.api_base_url : null
 }
 
 output "api_id" {

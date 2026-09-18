@@ -16,7 +16,7 @@
  * Pattern-specific (BDA-only) concern handled here:
  *   * The Bedrock Data Automation Project ARN that the BDA branch invokes. In
  *     this Terraform wrapper the project is **consumer-supplied** through the
- *     required `var.data_automation_project_arn` (root: `var.bda_processor.project_arn`)
+ *     required `var.data_automation_project_arn` (root: `var.processor.project_arn`)
  *     rather than synthesized from config classes. This is a deliberate
  *     divergence from the CDK `BdaProcessor`, which builds Blueprints + a
  *     `DataAutomationProject` at synth time (CDK uses a CFN custom resource that
@@ -51,10 +51,13 @@ locals {
   # "data-automation-project/<id>".
   project_id = element(split("/", data.aws_arn.data_automation_project.resource), 1)
 
-  # Summarization is enabled when the consumer overrides the model OR the
-  # supplied document config carries a summarization section. Mirrors the
-  # former monolith's behaviour without reading any deleted pattern-1 config.
-  is_summarization_enabled = var.summarization_model_id != null || try(var.config.summarization.model, null) != null
+  # Summarization enablement is config-authoritative: config value, falling back
+  # to the upstream system default (base-summarization.yaml => true) that the
+  # seeder merges in when the config file omits the section. A plain
+  # try(..., false) would wrongly disable summarization for the sparse example
+  # configs. Mirrors the model resolution in unified-processor/locals.tf.
+  _default_summarization_enabled = try(yamldecode(file("${path.module}/../../../sources/lib/idp_common_pkg/idp_common/config/system_defaults/base-summarization.yaml")).summarization.enabled, false)
+  is_summarization_enabled       = try(var.config.summarization.enabled, local._default_summarization_enabled)
 
   # Evaluation is enabled when a baseline bucket name is supplied by the root.
   evaluation_enabled = var.evaluation_baseline_bucket_name != ""
@@ -77,10 +80,15 @@ locals {
 module "engine" {
   source = "../unified-processor"
 
+  allowed_bedrock_model_ids = var.allowed_bedrock_model_ids
+
   name = var.name
 
   # Lambda architecture (must match the idp_common layer build architecture).
   lambda_architecture = var.lambda_architecture
+
+  # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
+  enable_bda_ocr_backend = var.enable_bda_ocr_backend
 
   # API wiring
   enable_api      = var.enable_api
@@ -114,15 +122,19 @@ module "engine" {
   vpc_subnet_ids         = var.vpc_subnet_ids
   vpc_security_group_ids = var.vpc_security_group_ids
 
+  # Rule validation
+  enable_rule_validation = var.enable_rule_validation
+
   # Summarization
   is_summarization_enabled = local.is_summarization_enabled
-  summarization_model_id   = var.summarization_model_id
   summarization_guardrail  = var.summarization_guardrail
 
   # Evaluation
   evaluation_enabled             = local.evaluation_enabled
-  evaluation_model_id            = var.evaluation_model_id
   evaluation_baseline_bucket_arn = local.evaluation_baseline_bucket_arn
+  reporting_bucket_name          = var.reporting_bucket_name
+  save_reporting_function_name   = var.save_reporting_function_name
+  save_reporting_function_arn    = var.save_reporting_function_arn
 
   # Document processing configuration
   config                     = local.config_with_bda

@@ -86,3 +86,44 @@ output "configuration_table_arn" {
   description = "ARN of the DynamoDB table that stores configuration versions (incl. BdaProjectArn)"
   value       = module.genai_idp_accelerator.processing_environment.configuration_table_arn
 }
+
+# ----------------------------------------------------------------------------
+# E2E test surface
+#
+# A single object the ported end-to-end test harness reads via
+# `terraform output -json e2e_stack`. It maps this deployment's resources to the
+# friendly names the upstream idp_sdk integration tests expect, so those tests
+# can target the Terraform stack instead of a CloudFormation stack. Test-only;
+# does not affect the deployed infrastructure.
+# ----------------------------------------------------------------------------
+output "e2e_stack" {
+  description = "Resource handles for the end-to-end test harness (see tests/e2e)."
+  value = {
+    region              = var.region
+    name_prefix         = module.genai_idp_accelerator.name_prefix
+    input_bucket        = aws_s3_bucket.input_bucket.id
+    output_bucket       = aws_s3_bucket.output_bucket.id
+    working_bucket      = aws_s3_bucket.working_bucket.id
+    state_machine_arn   = module.genai_idp_accelerator.processor.state_machine_arn
+    configuration_table = element(split("/", module.genai_idp_accelerator.processing_environment.configuration_table_arn), 1)
+    documents_table     = element(split("/", module.genai_idp_accelerator.processing_environment.tracking_table_arn), 1)
+    document_queue_arn  = module.genai_idp_accelerator.processing_environment.document_queue_arn
+    api_base_url        = try(module.genai_idp_accelerator.api.api_base_url, null)
+    user_pool_id        = try(module.genai_idp_accelerator.user_identity.user_pool_id, null)
+    user_pool_client_id = try(module.genai_idp_accelerator.user_identity.user_pool_client_id, null)
+    web_ui_url          = var.web_ui.enabled ? module.genai_idp_accelerator.web_ui.url : null
+    knowledge_base_id   = local.knowledge_base_enabled ? aws_bedrockagent_knowledge_base.knowledge_base[0].id : null
+    # Config version that routes to the BDA branch, and the project it is linked
+    # to. An EMPTY bda_project_arn means the version is seeded unlinked, so
+    # queue_processor clears use_bda and the document silently degrades to the
+    # Bedrock-LLM branch — the UI suite skips its BDA spec on that rather than
+    # passing a test that proves nothing.
+    bda_config_version = var.bda_version_name
+    bda_project_arn    = local.effective_bda_project_arn
+    # Non-empty only when discovery is enabled; this is exactly the value that
+    # feeds the Web UI's DiscoveryBucket setting (empty -> the UI shows
+    # "Discovery bucket not configured"). The e2e suite asserts it is populated
+    # when create_discovery = true.
+    discovery_bucket = try(module.genai_idp_accelerator.api.discovery_bucket_name, null)
+  }
+}
