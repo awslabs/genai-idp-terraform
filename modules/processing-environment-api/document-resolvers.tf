@@ -37,7 +37,7 @@
 locals {
   document_resolver_src = "${path.module}/../../sources/nested/api-resolvers/src/lambda"
 
-  users_table_arn_prefix = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}"
+  users_table_arn_prefix = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}"
 
   # GetItem/Query on the RBAC Users table + its GSIs, only when RBAC is on.
   document_resolver_users_statements = var.users_table_name != "" ? [{

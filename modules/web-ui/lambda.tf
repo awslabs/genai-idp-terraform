@@ -72,9 +72,9 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
           "logs:GetLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-ui-cb-trigger-*",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.name_prefix}-ui-cb-trigger-*",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-ui-build-${random_string.suffix.result}:*"
         ]
       },
       {
@@ -189,6 +189,7 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       # Hosting flip changes the Vite base path, which rewrites every asset URL
       # in the emitted bundle — must retrigger the build.
       ui_base_path = local.ui_base_path
+      federation   = local.federation_ui_env
     }))
     buildspec_hash   = md5(aws_codebuild_project.ui_build[0].source[0].buildspec)
     source_code_hash = data.archive_file.ui_source.output_base64sha256
@@ -208,6 +209,7 @@ resource "aws_lambda_invocation" "trigger_ui_codebuild" {
       reporting_bucket_name      = var.reporting_bucket_name
       evaluation_baseline_bucket = var.evaluation_baseline_bucket_name
       idp_pattern                = var.idp_pattern
+      federation                 = local.federation_ui_env
     }))
     # Trigger when CodeBuild project changes
     codebuild_project = aws_codebuild_project.ui_build[0].name

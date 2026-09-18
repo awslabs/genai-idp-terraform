@@ -9,6 +9,27 @@ locals {
   # no-op merge, so public deployments keep the global regional S3 endpoint.
   s3_endpoint_url_env = var.s3_endpoint_url != null ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {}
 
+  # Least-privilege resource scope for the getStepFunctionExecution resolver's
+  # states:DescribeExecution / states:GetExecutionHistory grant.
+  #
+  # Upstream (SAM) scopes this to `execution:${StackName}-*:*`. The Terraform
+  # port previously granted `Resource = "*"`, which let the resolver describe
+  # ANY Step Functions execution in the account — the account-wide reach behind
+  # the reported IDOR. We restore least privilege by scoping to this
+  # deployment's own document-processing executions.
+  #
+  # A state machine ARN (…:stateMachine:<name>) becomes an execution ARN scope
+  # (…:execution:<name>:*). When the processor (and thus the ARN) is not wired
+  # in, fall back to an account/region-scoped prefix wildcard rather than "*",
+  # so the grant is never account-wide.
+  #
+  # `var.name` defaults to null, and interpolating null into a string template is
+  # a hard error, so the fallback prefix is guarded. With neither the ARN nor a
+  # name available the scope stays partition/region/account bound — still never
+  # the bare "*" this local exists to eliminate.
+  stepfunction_execution_name_prefix = var.name != null ? "${var.name}-*" : "*"
+  stepfunction_execution_resource    = var.state_machine_arn != null ? "${replace(var.state_machine_arn, ":stateMachine:", ":execution:")}:*" : "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:execution:${local.stepfunction_execution_name_prefix}:*"
+
   # Helper function to generate model permissions for knowledge base model_id
   # This follows the same pattern as bedrock-llm-processor
   knowledge_base_model_permissions = var.knowledge_base.enabled && var.knowledge_base.model_id != null ? {
@@ -51,4 +72,9 @@ locals {
       ]
     } : null
   } : null
+}
+
+locals {
+  # CodeBuild needs vpc_id, which the Lambda vpc_config does not require.
+  codebuild_has_network = try(var.vpc_config.vpc_id, null) != null && length(try(var.vpc_config.subnet_ids, [])) > 0 && length(try(var.vpc_config.security_group_ids, [])) > 0
 }

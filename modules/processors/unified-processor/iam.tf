@@ -104,7 +104,7 @@ locals {
   ])
   hook_function_arns = [
     for name in local.hook_function_names :
-    "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${name}"
+    "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${name}"
   ]
 
   # Per-step Lambda roles that may invoke a LambdaHook at runtime; summarization
@@ -808,8 +808,8 @@ resource "aws_iam_role_policy" "assessment_lambda" {
             "logs:PutLogEvents"
           ]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment.function_name}",
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment.function_name}:*"
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment.function_name}",
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.assessment.function_name}:*"
           ]
         },
         {
@@ -1038,7 +1038,7 @@ resource "aws_iam_role_policy" "evaluation_lambda" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -1081,7 +1081,14 @@ resource "aws_iam_role_policy" "evaluation_lambda" {
         Resource  = "*"
         Condition = { StringEquals = { "cloudwatch:namespace" = local.metric_namespace } }
       }
-    ]
+      ],
+      local.evaluation_reporting_enabled && var.save_reporting_function_arn != null ? [
+        {
+          Effect   = "Allow"
+          Action   = ["lambda:InvokeFunction"]
+          Resource = var.save_reporting_function_arn
+        }
+    ] : [])
   })
 }
 

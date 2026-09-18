@@ -31,7 +31,7 @@ data "aws_caller_identity" "current" {}
 
 locals {
   # GovCloud guard: AgentCore not available in us-gov-* regions.
-  enable_mcp_effective = var.enabled && !startswith(data.aws_region.current.id, "us-gov-")
+  enable_mcp_effective = var.enabled && !startswith(data.aws_region.current.region, "us-gov-")
 
   # Plan-time-known "a user pool will exist" test. Prefer the caller's
   # config-derived flag; fall back to inspecting the ID for callers that have not
@@ -281,7 +281,7 @@ resource "aws_iam_role_policy" "agentcore_gateway_manager" {
           "kms:GenerateDataKey*",
           "kms:DescribeKey"
         ]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })
@@ -310,7 +310,7 @@ resource "aws_iam_role" "agentcore_gateway_execution" {
           "aws:SourceAccount" = data.aws_caller_identity.current.account_id
         }
         ArnLike = {
-          "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+          "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock-agentcore:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
         }
       }
     }]
@@ -491,14 +491,17 @@ resource "aws_cloudformation_stack" "agentcore_gateway" {
       AgentCoreGateway = {
         Type = "Custom::AgentCoreGateway"
         Properties = {
-          ServiceToken     = aws_lambda_function.agentcore_gateway_manager[0].arn
-          StackName        = local.api_name
-          Region           = data.aws_region.current.id
-          LambdaArn        = aws_lambda_function.agentcore_mcp_handler[0].arn
-          UserPoolId       = var.user_pool_id
-          ClientId         = aws_cognito_user_pool_client.mcp_client[0].id
-          ClientSecret     = aws_cognito_user_pool_client.mcp_client[0].client_secret
-          ExecutionRoleArn = aws_iam_role.agentcore_gateway_execution[0].arn
+          ServiceToken = aws_lambda_function.agentcore_gateway_manager[0].arn
+          StackName    = local.api_name
+          Region       = data.aws_region.current.region
+          LambdaArn    = aws_lambda_function.agentcore_mcp_handler[0].arn
+          UserPoolId   = var.user_pool_id
+          ClientId     = aws_cognito_user_pool_client.mcp_client[0].id
+          ClientSecret = aws_cognito_user_pool_client.mcp_client[0].client_secret
+          # The gateway's JWT authorizer only accepts clients passed here, so
+          # without the connector the client_credentials path is rejected.
+          ConnectorClientId = try(aws_cognito_user_pool_client.mcp_connector[0].id, null)
+          ExecutionRoleArn  = aws_iam_role.agentcore_gateway_execution[0].arn
           # Force replacement when the manager Lambda code changes so the custom
           # resource re-runs against the latest logic.
           SourceCodeHash = data.archive_file.agentcore_gateway_manager[0].output_base64sha256
@@ -559,10 +562,10 @@ resource "aws_cognito_user_pool_client" "mcp_client" {
   # be wired to the CloudFront distribution domain by the caller. When unset, we
   # fall back to a Cognito-hosted UI placeholder so apply still succeeds.
   callback_urls = length(var.mcp_callback_urls) > 0 ? var.mcp_callback_urls : [
-    "https://${var.user_pool_id}.auth.${data.aws_region.current.id}.amazoncognito.com/oauth2/idpresponse",
+    "https://${var.user_pool_id}.auth.${data.aws_region.current.region}.amazoncognito.com/oauth2/idpresponse",
   ]
   logout_urls = length(var.mcp_callback_urls) > 0 ? var.mcp_callback_urls : [
-    "https://${var.user_pool_id}.auth.${data.aws_region.current.id}.amazoncognito.com/oauth2/idpresponse",
+    "https://${var.user_pool_id}.auth.${data.aws_region.current.region}.amazoncognito.com/oauth2/idpresponse",
   ]
 }
 

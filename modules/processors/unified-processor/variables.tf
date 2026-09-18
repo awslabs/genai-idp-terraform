@@ -207,12 +207,6 @@ variable "classification_sagemaker_endpoint_arn" {
   default     = null
 }
 
-variable "model_id" {
-  description = "Default Bedrock model ID for all processing steps. Supports global./ us. prefixes and :flex/:priority/:standard suffixes. (v0.4.12+)"
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
-
 variable "bedrock_hub_role_arn" {
   description = "Optional ARN of a centralized 'hub' account role that owns Bedrock access (BedrockHubRoleArn, v0.5.12). When non-empty, the Bedrock-calling processing Lambdas are granted sts:AssumeRole scoped to exactly this ARN and receive BEDROCK_ASSUME_ROLE_ARN in their environment so they assume it for Bedrock calls. When empty (default), processors use same-account Bedrock access unchanged (fully additive)."
   type        = string
@@ -223,12 +217,6 @@ variable "bedrock_assume_role_external_id" {
   description = "Optional ExternalId passed to sts:AssumeRole when assuming var.bedrock_hub_role_arn (rendered as BEDROCK_ASSUME_ROLE_EXTERNAL_ID). Only used when bedrock_hub_role_arn is set. Common requirement for cross-account trust policies."
   type        = string
   default     = ""
-}
-
-variable "classification_model_id" {
-  description = "Optional model ID for document classification. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "classification_max_workers" {
@@ -255,12 +243,6 @@ variable "classification_guardrail" {
     guardrail_arn = string
   })
   default = null
-}
-
-variable "extraction_model_id" {
-  description = "Optional model ID for information extraction. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "extraction_guardrail" {
@@ -290,22 +272,10 @@ variable "evaluation_baseline_bucket_arn" {
   default     = null
 }
 
-variable "evaluation_model_id" {
-  description = "Optional model ID for evaluating extraction results. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
-}
-
 variable "is_summarization_enabled" {
   description = "Controls whether document summarization is enabled"
   type        = bool
   default     = false
-}
-
-variable "summarization_model_id" {
-  description = "Optional model ID for document summarization. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "summarization_guardrail" {
@@ -327,6 +297,12 @@ variable "config" {
   description = "Optional configuration values to override defaults from config.yaml"
   type        = any
   default     = null
+}
+
+variable "allowed_bedrock_model_ids" {
+  description = "Bedrock model IDs every processing step is allowed to invoke, on top of the models resolved from the seeded configs. Set this for models operators will select in the UI later, which Terraform cannot see. Use [\"*\"] to allow any Bedrock model. Empty (default) grants only the resolved models."
+  type        = list(string)
+  default     = []
 }
 
 variable "additional_configurations" {
@@ -387,12 +363,6 @@ variable "enable_bda_ocr_backend" {
   default     = false
 }
 
-variable "assessment_model_id" {
-  description = "The Bedrock model ID to use for assessment (when assessment is enabled)"
-  type        = string
-  default     = null
-}
-
 variable "assessment_guardrail" {
   description = "Optional Bedrock guardrail configuration for assessment model interactions"
   type = object({
@@ -451,4 +421,22 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "reporting_bucket_name" {
+  description = "Name of the reporting bucket the evaluation function forwards accuracy results to. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_name" {
+  description = "Name of the save_reporting_data Lambda the evaluation function invokes to persist accuracy results. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_arn" {
+  description = "ARN of the save_reporting_data Lambda, used to scope the evaluation function's invoke grant."
+  type        = string
+  default     = null
 }

@@ -181,3 +181,13 @@ variable "lambda_architecture" {
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
 }
+
+variable "allowed_bedrock_model_ids" {
+  description = <<-EOT
+    Extra Bedrock model IDs the chat Lambdas may invoke, for chat models set in
+    the config after apply. Mirrors `processor.allowed_bedrock_model_ids`; use
+    `["*"]` to grant the account's whole model space.
+  EOT
+  type        = list(string)
+  default     = []
+}

@@ -45,6 +45,12 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "discovery_allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery upload bucket. Set to the deployed web-UI origin (e.g. [\"https://xxxx.cloudfront.net\"]) to close Wiz S3-036. Empty falls back to [\"*\"]."
+  type        = list(string)
+  default     = []
+}
+
 # --------------------------------------------------------------------------
 # Dual-mode routing configuration
 # --------------------------------------------------------------------------
@@ -91,10 +97,12 @@ variable "config_file_path" {
   default     = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 }
 
-variable "enable_rule_validation" {
-  description = "Wire the rule-validation (compliance QA) stage into the workflow. Requires a config whose active version sets rule_validation.enabled=true with non-empty policy_classes for the stage to run at runtime."
-  type        = bool
-  default     = false
+# Rule-validation enablement comes from the config YAML (rule_validation.enabled).
+
+variable "allowed_bedrock_model_ids" {
+  description = "Bedrock model IDs every processing step may invoke, on top of the models resolved from the seeded configs. Set this for models operators will pick in the UI later, which Terraform cannot see. Use [\"*\"] to allow any Bedrock model."
+  type        = list(string)
+  default     = []
 }
 
 variable "additional_config_files" {
@@ -103,36 +111,10 @@ variable "additional_config_files" {
   default     = {}
 }
 
-# Model Configuration (Bedrock-LLM branch)
-variable "classification_model_id" {
-  description = "Model ID for document classification (Bedrock-LLM branch)"
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
-
-variable "extraction_model_id" {
-  description = "Model ID for information extraction (Bedrock-LLM branch)"
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
-
-variable "assessment_model_id" {
-  description = "Model ID for extraction-confidence assessment (Bedrock-LLM branch). Set so the seeded config's assessment.model and the assessment role's Bedrock grant agree; without it the assessment Lambda falls back to a hardcoded default the IAM allowlist does not cover."
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
-
-variable "summarization_enabled" {
-  description = "Enable document summarization for the Bedrock-LLM branch"
-  type        = bool
-  default     = false
-}
-
-variable "summarization_model_id" {
-  description = "Model ID for document summarization"
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
+# Model Configuration
+#
+# Per-stage model IDs are set in the YAML configuration (var.config_file_path),
+# not here. allowed_bedrock_model_ids remains the operator escape hatch.
 
 # --------------------------------------------------------------------------
 # Optional Knowledge Base backend & chat-with-document
@@ -258,8 +240,42 @@ variable "enable_mcp" {
   default     = false
 }
 
-variable "enable_test_studio" {
-  description = "Enable the Test Studio feature (Web UI Test Sets / Test Execution tabs): test-runner, test-set, and test-results resolvers plus their dispatcher fields."
+variable "enable_evaluation" {
+  description = "Enable accuracy evaluation of extraction results against baseline documents. When true the example provisions a baseline bucket and wires the evaluation function, which produces the accuracy metrics that Test Studio reports on."
   type        = bool
   default     = false
+}
+
+variable "enable_test_studio" {
+  description = "Enable the Test Studio feature (Web UI Test Sets / Test Execution tabs): test-runner, test-set, and test-results resolvers plus their dispatcher fields. Accuracy metrics require enable_evaluation = true."
+  type        = bool
+  default     = false
+}
+
+variable "enable_finetuning" {
+  description = "Enable the fine-tuning / Custom Models subsystem (Bedrock model customization from Test Studio test sets). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
+variable "federation_pool_wiring" {
+  description = "Second-apply wiring that attaches external IdP federation to the Cognito pool this example creates. The pool lives outside the module while the federation resources are created inside it, so referencing them directly would close a dependency cycle. Apply once with idp_federation.enabled, read the module's federation_group_mapping_function_arn and federation_supported_identity_providers outputs, set them here, then apply again. See docs/content/security/external-idp.md."
+  type = object({
+    supported_identity_providers      = optional(list(string), [])
+    pre_token_generation_function_arn = optional(string)
+    enable_idp_groups_attribute       = optional(bool, false)
+    hosted_ui_domain_prefix           = optional(string)
+  })
+  default = {}
+}
+
+variable "deployer_role_arn" {
+  description = "IAM role ARN granted data access on the OpenSearch Serverless collection. Must be a role ARN, not a session ARN: AOSS matches any session of a role, so a session ARN pins the policy to one operator. Defaults to deriving the role from the caller, which drops any path on the role."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.deployer_role_arn == "" || !can(regex(":assumed-role/", var.deployer_role_arn))
+    error_message = "deployer_role_arn must be an IAM role ARN (arn:<partition>:iam::<account>:role/<name>), not an STS assumed-role session ARN."
+  }
 }

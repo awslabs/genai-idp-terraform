@@ -28,6 +28,18 @@ variable "configuration_table_arn" {
   type        = string
 }
 
+variable "configuration_table_name" {
+  description = "Name of the DynamoDB configuration table (read by the discovery processor)"
+  type        = string
+  default     = null
+}
+
+variable "allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery bucket (the web-UI / CloudFront app origin). Empty list falls back to [\"*\"] for backward compatibility (Wiz S3-036)."
+  type        = list(string)
+  default     = []
+}
+
 variable "appsync_api_url" {
   description = "URL of the AppSync GraphQL API for status updates"
   type        = string

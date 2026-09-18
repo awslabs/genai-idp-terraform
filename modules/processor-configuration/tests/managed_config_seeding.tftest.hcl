@@ -30,6 +30,7 @@
 # `aws_lambda_invocation` resources are NOT executed at plan time, so their
 # `input` (a configured argument, not a computed result) is fully resolvable.
 
+mock_provider "archive" {}
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
     defaults = {

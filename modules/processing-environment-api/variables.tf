@@ -188,6 +188,21 @@ variable "tracking_table_arn" {
   default     = null
 }
 
+variable "tracking_table_available" {
+  description = <<-EOT
+    Plan-time-known override for whether the tracking table exists, used to gate
+    resources that would otherwise key their count/for_each off
+    `tracking_table_arn`. Callers pass `tracking_table_arn` as a COMPUTED value
+    (a resource attribute created in the same apply), so `tracking_table_arn !=
+    null` is unknown at plan time and breaks a cold `terraform plan`. Set this to
+    a value the caller knows at plan time (e.g. "am I creating the tracking
+    table?"). Null (default) preserves the legacy behaviour of deriving the gate
+    from `tracking_table_arn != null`.
+  EOT
+  type        = bool
+  default     = null
+}
+
 variable "configuration_table_arn" {
   description = "ARN of the DynamoDB table for storing configuration settings"
   type        = string
@@ -275,10 +290,11 @@ variable "log_retention_days" {
 }
 
 variable "vpc_config" {
-  description = "VPC configuration for Lambda functions"
+  description = "VPC configuration for Lambda functions. Supply vpc_id to also place the CodeBuild projects in the VPC; those builds run `pip install`, so the subnets MUST have egress to the package index."
   type = object({
     subnet_ids         = list(string)
     security_group_ids = list(string)
+    vpc_id             = optional(string)
   })
   default = null
 }
@@ -303,10 +319,11 @@ variable "lambda_tracing_mode" {
 variable "agent_analytics" {
   description = "Agent analytics configuration"
   type = object({
-    enabled                 = bool
-    model_id                = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-    reporting_database_name = optional(string)
-    reporting_bucket_arn    = optional(string)
+    enabled                   = bool
+    model_id                  = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    reporting_database_name   = optional(string)
+    reporting_bucket_arn      = optional(string)
+    allowed_bedrock_model_ids = optional(list(string), [])
   })
   default = { enabled = false }
 }
@@ -317,6 +334,12 @@ variable "discovery" {
     enabled = bool
   })
   default = { enabled = false }
+}
+
+variable "discovery_allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery upload bucket (the web-UI / CloudFront app origin). Empty falls back to [\"*\"] (Wiz S3-036)."
+  type        = list(string)
+  default     = []
 }
 
 variable "chat_with_document" {
@@ -364,6 +387,12 @@ variable "data_retention_in_days" {
 
 variable "idp_common_layer_arn" {
   description = "ARN of the IDP Common Lambda layer (required for Edit Sections feature)"
+  type        = string
+  default     = null
+}
+
+variable "evaluation_layer_arn" {
+  description = "ARN of the evaluation Lambda layer (idp_common with the evaluation extra). Required when evaluation_enabled is true: the Test Studio aggregation function carries it as its only layer."
   type        = string
   default     = null
 }
@@ -444,12 +473,18 @@ variable "enable_w2_dataset" {
   default     = false
 }
 
+variable "enable_finetuning" {
+  description = "Enable fine-tuning / Custom Models subsystem (Bedrock model customization from Test Studio test sets). Requires enable_test_studio = true."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # VERSION-CHECK FEATURE VARIABLES (v0.5.11)
 # =============================================================================
 
 variable "public_artifacts_bucket" {
-  description = "Name of the (optionally public / cross-account) S3 bucket the version_check_resolver Lambda lists for `<prefix>/idp-main_<version>.yaml` templates. When empty (default), the version-check Lambda, AppSync data source, and resolver are not created (default-off)."
+  description = "Name of the (optionally public / cross-account) S3 bucket the version_check_resolver Lambda lists for `<prefix>/idp-main_<version>.yaml` templates. When empty (default) the Lambda is still created and routed (matching upstream), but gets no S3 grant and reports `checkEnabled: false`, so the UI simply shows no update banner."
   type        = string
   default     = ""
 }

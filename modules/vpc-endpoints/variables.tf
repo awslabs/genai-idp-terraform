@@ -64,6 +64,22 @@ variable "enabled_interface_endpoints" {
     lambda      = true
     events      = true
     textract    = true
+
+    # Added for the services a private deployment actually reaches but had no
+    # endpoint for. Every name below was checked against
+    # describe-vpc-endpoint-services, since an unknown suffix fails the apply.
+    #
+    # sagemaker is split: .api for control plane calls, .runtime for invoking an
+    # endpoint (the UDOP classifier). ecr.api plus ecr.dkr are both needed to
+    # pull a container image; one alone is not enough.
+    bedrock-agentcore   = true
+    "sagemaker.api"     = true
+    "sagemaker.runtime" = true
+    glue                = true
+    athena              = true
+    "ecr.api"           = true
+    "ecr.dkr"           = true
+    xray                = true
   }
 }
 

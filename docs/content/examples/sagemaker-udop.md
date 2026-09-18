@@ -76,7 +76,7 @@ aws s3 ls s3://$RESULTS_BUCKET/
 
 ### **Integration Ready**
 
-- REST API for document management
+- GraphQL API for document management
 - Web UI for monitoring and results
 - Event-driven processing pipeline
 - Configurable model parameters
@@ -93,7 +93,7 @@ graph TB
     F --> G[Results Processing]
     G --> H[S3 Results Bucket]
     H --> I[DynamoDB Tracking]
-    I --> J[REST API]
+    I --> J[GraphQL API]
     J --> K[Web UI]
     
     L[CloudWatch] --> D
@@ -168,7 +168,7 @@ Important outputs include:
 - `input_bucket_name`: Where to upload documents for processing
 - `results_bucket_name`: Where processed results are stored
 - `model_performance_dashboard`: CloudWatch dashboard for monitoring
-- `api`: API Gateway REST API details (object) including `api_base_url` (if enabled)
+- `api_endpoint`: GraphQL API endpoint (if enabled)
 
 ## Monitoring and Troubleshooting
 

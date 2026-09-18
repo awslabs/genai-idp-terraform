@@ -164,7 +164,15 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
 
   environment {
     variables = {
-      INPUT_BUCKET = local.input_bucket_name
+      LOG_LEVEL = var.log_level
+      # create_document_service() runs at import time and is always
+      # DynamoDB-backed, so a missing table name fails the whole function on
+      # cold start rather than at the point of use.
+      TRACKING_TABLE         = local.tracking_table_name != null ? local.tracking_table_name : ""
+      INPUT_BUCKET           = local.input_bucket_name
+      OUTPUT_BUCKET          = local.output_bucket_name
+      QUEUE_URL              = var.document_queue_url != null ? var.document_queue_url : ""
+      DATA_RETENTION_IN_DAYS = tostring(var.data_retention_in_days)
     }
   }
 
@@ -186,6 +194,7 @@ resource "aws_lambda_function" "reprocess_document_resolver" {
     aws_iam_role_policy_attachment.reprocess_document_resolver_logs_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_s3_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_kms_attachment,
+    aws_iam_role_policy_attachment.reprocess_document_resolver_sqs_attachment,
     aws_iam_role_policy_attachment.reprocess_document_resolver_vpc_attachment
   ]
 }
@@ -225,6 +234,9 @@ resource "aws_lambda_function" "get_file_contents_resolver" {
       INPUT_BUCKET   = local.input_bucket_name
       OUTPUT_BUCKET  = local.output_bucket_name
       WORKING_BUCKET = local.working_bucket_name != null ? local.working_bucket_name : ""
+      # Named buckets form the resolver's allow-list, so the Test Studio
+      # ground-truth editor cannot get a presigned URL without this.
+      TEST_SET_BUCKET = var.enable_test_studio ? aws_s3_bucket.test_sets[0].id : ""
     }
   }
 
@@ -389,7 +401,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
     variables = {
       KB_ID                    = local.knowledge_base_id != null ? local.knowledge_base_id : ""
       KB_ACCOUNT_ID            = data.aws_caller_identity.current.account_id
-      KB_REGION                = data.aws_region.current.id
+      KB_REGION                = data.aws_region.current.region
       MODEL_ID                 = local.knowledge_base_model_id != null ? local.knowledge_base_model_id : ""
       LOG_LEVEL                = var.log_level
       GUARDRAIL_ID_AND_VERSION = var.knowledge_base.guardrail_id_and_version != null ? var.knowledge_base.guardrail_id_and_version : ""

@@ -85,7 +85,7 @@ resource "aws_iam_role_policy" "bda_ocr_project" {
             "bedrock:UpdateDataAutomationProject",
             "bedrock:DeleteDataAutomationProject",
           ]
-          Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:data-automation-project/*"
+          Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:data-automation-project/*"
         },
         # ListDataAutomationProjects is a collection operation with no
         # resource-level scoping; the manager uses it to find the project by name.
@@ -219,8 +219,8 @@ resource "aws_iam_role_policy" "ocr_lambda_bda_ocr" {
       Effect = "Allow"
       Action = ["bedrock:InvokeDataAutomation"]
       Resource = [
-        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:data-automation-project/*",
-        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:data-automation-profile/*.data-automation-v1",
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:data-automation-project/*",
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:data-automation-profile/*.data-automation-v1",
         "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:data-automation-profile/*.data-automation-v1",
       ]
     }]

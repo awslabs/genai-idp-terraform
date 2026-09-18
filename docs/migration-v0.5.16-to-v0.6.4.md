@@ -30,7 +30,8 @@ terraform version   # must report >= 1.7.0
 | AppSync GraphQL transport replaced by API Gateway REST | TODO |
 | `api.visibility` renamed to `api.api_gateway_visibility` | documented below |
 | `EnableHeadless` renamed to `EnableJobsApi` upstream | no action — see below |
-| Step models are config/system-default authoritative (not `var.model_id`) | **action may be required — see below** |
+| Step models come from the config only (all `*_model_id` + `model_id` removed) | **action may be required — see below** |
+| Feature enablement comes from the config (summarization/evaluation/rule_validation/hitl/ocr.backend toggles removed) | **action may be required — see below** |
 | Seeder preserves operator-edited configuration | documented below |
 | Configuration / feature-parity changes | TODO |
 
@@ -477,59 +478,97 @@ make reviewable.
 
 ---
 
-## Configuration ownership: model authority and operator-edit preservation
+## Configuration ownership: model authority, feature enablement, and operator-edit preservation
 
-Two related behaviour changes ship together. Both are about the Terraform layer
-no longer owning configuration it should not own.
+These behaviour changes ship together. All are about the Terraform layer no
+longer owning configuration it should not own — the governing seam is that the
+**config owns pipeline behaviour** (models, per-stage enablement, backends) while
+**Terraform owns infrastructure the config cannot express** (bucket ARNs, VPC
+wiring, API topology).
 
-### 1. Step models come from the config, not `var.model_id`
+### 1. Step models come from the config only (no Terraform model inputs)
 
-**What changed.** The engine used to force-write `classification.model`,
-`extraction.model`, and `summarization.model` into the seeded configuration from
-`coalesce(per_step_var, var.model_id)`. Because `var.model_id` defaults to
-`us.amazon.nova-2-lite-v1:0`, a deployment that set no model variables ran
-`nova-2-lite` for every step and silently ignored the models the config library
-and the upstream system defaults declare. Terraform now writes those keys only
-when you set the corresponding per-step variable; otherwise resolution is:
+**What changed.** Terraform no longer assigns per-stage Bedrock model IDs at
+all. The per-step `*_model_id` inputs (`classification_model_id`,
+`extraction_model_id`, `assessment_model_id`, `summarization.model_id`,
+`evaluation.model_id`) and the global `model_id` backstop are **removed**. Each
+stage's model comes from the YAML configuration; a stage the config omits falls
+back to the upstream system default. Resolution is now simply:
 
 ```
-per-step variable  →  config YAML model  →  upstream system default  →  var.model_id
+config YAML model  →  upstream system default
 ```
 
-The per-step Bedrock IAM grant is derived from the *same* resolution, so it can
-no longer disagree with the model the runtime invokes.
+The per-stage Bedrock IAM grant is derived from the *same* config content (union
+across every seeded config — default, additional versions, and managed
+baselines), so it can no longer disagree with the model the runtime invokes.
+`allowed_bedrock_model_ids` (including `"*"`) remains as the operator escape
+hatch for models added post-deploy in the UI.
 
-**Who is affected.** Any deployment that did **not** set a per-step model
-variable. With the shipped example configs (which declare no step model), the
-models change to the v0.6 system defaults:
+**Who is affected.** Any deployment that previously set a per-step model
+variable or relied on the `model_id` backstop. With the shipped example configs
+(which name their models, or inherit the v0.6 system defaults), the effective
+models are:
 
-| Step | Before (forced) | After (system default) |
-| --- | --- | --- |
-| classification | `us.amazon.nova-2-lite-v1:0` | `us.amazon.nova-2-lite-v1:0` |
-| extraction | `us.amazon.nova-2-lite-v1:0` | `us.anthropic.claude-sonnet-5` |
-| summarization | `us.amazon.nova-2-lite-v1:0` | `us.anthropic.claude-sonnet-5:1m` |
-| assessment (confidence) | `us.amazon.nova-2-lite-v1:0` | `us.amazon.nova-lite-v1:0` |
+| Step | System default (when the config omits the key) |
+| --- | --- |
+| classification | `us.amazon.nova-2-lite-v1:0` |
+| extraction | `us.anthropic.claude-sonnet-5` |
+| summarization | `us.anthropic.claude-sonnet-5:1m` |
+| assessment (confidence) | `us.amazon.nova-lite-v1:0` |
 
-**This changes inference results and cost.** `claude-sonnet-5` is materially more
-capable and more expensive than `nova-2-lite`. Review the cost implications
-before upgrading a production deployment.
+**To choose a specific model**, set it in the configuration (not in tfvars):
 
-**To keep the prior behaviour**, pin the models explicitly. On the root
-processor object (e.g. `bedrock_llm_processor`):
-
-```hcl
-bedrock_llm_processor = {
-  classification_model_id = "us.amazon.nova-2-lite-v1:0"
-  extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
-  # summarization only if you enable it
-  # ...
-}
+```yaml
+classification: { model: us.amazon.nova-2-lite-v1:0 }
+extraction:
+  model: us.amazon.nova-pro-v1:0
+  confidence: { model: us.amazon.nova-lite-v1:0, escalation_model: us.anthropic.claude-sonnet-5:1m }
+summarization: { model: us.anthropic.claude-sonnet-5:1m }
+evaluation: { llm_method: { model: us.amazon.nova-2-lite-v1:0 } }
 ```
 
 **A YAML typo now fails at plan.** Because a config model ID flows into an IAM
 ARN, `terraform plan` validates each resolved model ID's shape and fails naming
 the step and value, rather than deferring the problem to an `AccessDenied` at
 invoke time.
+
+### 1b. Feature enablement comes from the config, not Terraform toggles
+
+**What changed.** Whether the processing pipeline provisions summarization,
+evaluation, rule validation, the HITL branch, and the BDA-as-OCR backend is now
+derived at plan time from the configuration, not from duplicate Terraform
+toggles. Removed inputs and their config replacements:
+
+| Removed Terraform input | Now set in the config |
+| --- | --- |
+| `processor.summarization.enabled` | `summarization.enabled` |
+| `evaluation.enabled` | `evaluation.enabled` |
+| `processor.enable_rule_validation` | `rule_validation.enabled` |
+| `processor.enable_hitl` (pipeline HITL branch) | `hitl.enabled` |
+| `processor.enable_bda_ocr_backend` | `ocr.backend: bda` |
+
+`var.evaluation.baseline_bucket_arn` stays a Terraform input — it is the
+infrastructure the config cannot express — and a `check` block now requires it
+whenever the config enables evaluation. The API-side chat-with-document and
+discovery features remain Terraform-controlled (they are API-topology decisions;
+`discovery` has no config `enabled` key).
+
+**Why.** This closes a drift class: previously a config could enable
+summarization while the Terraform toggle defaulted off, so the summarization
+Lambda, role, and `bedrock:InvokeModel` grant were never built even though the
+runtime believed summarization was on.
+
+**Limitation (important).** Because these flags gate *resource creation*, they
+are read at **plan time** from the config file your deployment loads. Toggling a
+feature's `enabled` at runtime in the Web UI / DynamoDB does **not** create or
+destroy its Terraform-managed resources — run `terraform apply` against the
+updated config file to reshape the deployment. (This is the deliberate IaC
+posture; an always-deploy/gate-at-runtime model was considered and rejected to
+avoid deployment drift.)
+
+**To keep prior behaviour**, ensure your configuration's sections carry the
+`enabled` values you want; the example configs already do.
 
 ### 2. The seeder preserves configuration edited in the Web UI
 

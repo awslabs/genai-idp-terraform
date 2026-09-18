@@ -332,3 +332,15 @@ modules.xml
 
 ### Sagemaker UDOP Example
 */**/check_training_status.py
+
+### E2E acceptance suite (tests/e2e)
+# Local virtualenv, CI stack-output artifact, and JUnit reports.
+.venv-e2e/
+e2e_stack.json
+e2e-report.xml
+e2e-slow-report.xml
+### Recorded video — never committed, not even to the private mirror.
+# Backstop for tests/ui/{demo,test-results}/. Negate per-path if a doc ever needs one.
+*.webm
+*.mp4
+*.mov

@@ -21,10 +21,8 @@ locals {
   # tables below is conditional on var.enable_agent_companion_chat.
   chat_stream_enabled = var.enable_agent_companion_chat || try(var.chat_with_document.enabled, false)
 
-  # Source package + build staging (mirrors agent_chat_processor's build dirs).
-  chat_stream_src       = "${path.module}/../../sources/src/lambda/chat_stream_processor"
-  chat_stream_build_dir = "${path.module}/../../.terraform/tmp/chat_stream_processor_build"
-  chat_stream_zip       = "${path.module}/../../.terraform/archives/chat_stream_processor.zip"
+  # Source package dir (the five first-party files the zip carries).
+  chat_stream_src = "${path.module}/../../sources/src/lambda/chat_stream_processor"
 
   # Deterministic input hash over the first-party files the package carries
   # (deps come from the layer, not the zip). Drives the build trigger, the
@@ -41,10 +39,11 @@ locals {
   # Bucket for the package zip (same assets bucket used for Lambda layers).
   # Bucket name from the ARN, matching lambda-layer-codebuild/local-build.
   chat_stream_bucket_name = var.lambda_layers_bucket_arn != null ? split(":::", var.lambda_layers_bucket_arn)[1] : ""
-  chat_stream_s3_key      = "chat-stream-package/chat_stream_${random_string.suffix.result}.zip"
+  chat_stream_s3_key      = "chat-stream-package/chat_stream_${substr(local.chat_stream_package_hash, 0, 16)}.zip"
 
   # LWA layer: use the supplied ARN or construct the upstream default.
-  chat_stream_lwa_layer_arn = var.lambda_web_adapter_layer_arn != "" ? var.lambda_web_adapter_layer_arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:753240598075:layer:LambdaAdapterLayerX86:25"
+  chat_stream_lwa_layer_name = var.lambda_architecture == "arm64" ? "LambdaAdapterLayerArm64" : "LambdaAdapterLayerX86"
+  chat_stream_lwa_layer_arn  = var.lambda_web_adapter_layer_arn != "" ? var.lambda_web_adapter_layer_arn : "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:753240598075:layer:${local.chat_stream_lwa_layer_name}:25"
 
   # ConfigurationBucket (reuse the configuration_resolver expression) + its ARN.
   chat_stream_config_bucket_name = local.configuration_table_name != null ? "${local.api_name}-config" : ""
@@ -85,41 +84,56 @@ module "chat_stream_deps_layer" {
   requirements_files = {
     chat_stream = file("${path.module}/../../sources/src/lambda/chat_stream_processor/requirements.txt")
   }
+
+  vpc_id             = try(var.vpc_config.vpc_id, null)
+  subnet_ids         = try(var.vpc_config.subnet_ids, [])
+  security_group_ids = try(var.vpc_config.security_group_ids, [])
 }
 
 # =============================================================================
-# Function package staging (mirror the Makefile's non-pip part) + S3 upload
+# Function package (plan-time zip) + S3 upload
 # =============================================================================
-resource "null_resource" "build_chat_stream_package" {
-  count = local.chat_stream_enabled ? 1 : 0
+# Built at plan/refresh time via data.archive_file so the zip always exists
+# before aws_s3_object reads it (no provisioner, re-run-safe). The five
+# first-party files are placed FLAT at the zip root: the two vendored/*.py are
+# imported as top-level modules by run.sh (LAMBDA_TASK_ROOT on PYTHONPATH), so
+# they must not sit under vendored/. Deps (fastapi/uvicorn/boto3) come from the
+# co-built deps layer, not this zip.
+data "archive_file" "chat_stream_package" {
+  count       = local.chat_stream_enabled ? 1 : 0
+  type        = "zip"
+  output_path = "${path.module}/../../.terraform/archives/chat_stream_processor.zip"
 
-  triggers = {
-    package_hash = local.chat_stream_package_hash
+  source {
+    content  = file("${local.chat_stream_src}/app.py")
+    filename = "app.py"
   }
-
-  provisioner "local-exec" {
-    command = "${path.module}/scripts/build-chat-stream-package.sh"
-
-    environment = {
-      SRC_DIR   = local.chat_stream_src
-      BUILD_DIR = local.chat_stream_build_dir
-      ZIP_OUT   = local.chat_stream_zip
-    }
+  source {
+    content  = file("${local.chat_stream_src}/sse.py")
+    filename = "sse.py"
+  }
+  source {
+    content  = file("${local.chat_stream_src}/run.sh")
+    filename = "run.sh"
+  }
+  source {
+    content  = file("${local.chat_stream_src}/vendored/chat_with_document_processor.py")
+    filename = "chat_with_document_processor.py"
+  }
+  source {
+    content  = file("${local.chat_stream_src}/vendored/agent_chat_processor.py")
+    filename = "agent_chat_processor.py"
   }
 }
 
-# Upload the staged zip to the assets bucket. Etag is tied to the input hash
-# (not the zip bytes) so plan converges before the file is produced, matching
-# modules/lambda-layer-local-build's aws_s3_object idiom.
+# Upload the plan-time zip to the assets bucket.
 resource "aws_s3_object" "chat_stream_package" {
   count = local.chat_stream_enabled ? 1 : 0
 
-  bucket = local.chat_stream_bucket_name
-  key    = local.chat_stream_s3_key
-  source = local.chat_stream_zip
-  etag   = local.chat_stream_package_hash
-
-  depends_on = [null_resource.build_chat_stream_package]
+  bucket      = local.chat_stream_bucket_name
+  key         = local.chat_stream_s3_key
+  source      = data.archive_file.chat_stream_package[0].output_path
+  source_hash = data.archive_file.chat_stream_package[0].output_md5
 }
 
 # =============================================================================
@@ -187,8 +201,8 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           ]
           Resource = [
             "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
-            "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
-            "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+            "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+            "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
           ]
         },
         {
@@ -233,12 +247,12 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           # tables, scoped to this stack's naming (mirrors upstream).
           Effect   = "Allow"
           Action   = ["ssm:GetParameter"]
-          Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${local.api_name}/feature-platform/installed-features-table"
+          Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/${local.api_name}/feature-platform/installed-features-table"
         },
         {
           Effect   = "Allow"
           Action   = ["dynamodb:Scan", "dynamodb:GetItem"]
-          Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${local.api_name}-FeaturePlatformStack-*"
+          Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${local.api_name}-FeaturePlatformStack-*"
         },
         {
           # Full KMS set (mirrors upstream): the processor reads AND writes the
@@ -254,8 +268,8 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           Effect = "Allow"
           Action = ["lambda:InvokeFunction"]
           Resource = compact([
-            "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${local.api_name}*",
-            try(var.lookup_function_name, "") != "" ? "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:${var.lookup_function_name}" : "",
+            "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.api_name}*",
+            try(var.lookup_function_name, "") != "" ? "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${var.lookup_function_name}" : "",
           ])
         },
         {
@@ -264,9 +278,9 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           Effect = "Allow"
           Action = ["logs:DescribeLogGroups", "logs:DescribeLogStreams", "logs:FilterLogEvents", "logs:GetLogEvents"]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.api_name}*",
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vendedlogs/states/*",
-            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/${local.api_name}*",
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.api_name}*",
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vendedlogs/states/*",
+            "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/${local.api_name}*",
           ]
         },
         {
@@ -275,7 +289,7 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           # processor modules and not known to this module); read-only.
           Effect   = "Allow"
           Action   = ["states:DescribeExecution", "states:GetExecutionHistory"]
-          Resource = "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:execution:*"
+          Resource = "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:execution:*"
         },
         {
           # Error Analyzer agent reads X-Ray traces (read-only, resource-less).
@@ -287,7 +301,7 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           # Feature-hook dispatch (idp:feature-id tag condition, mirrors upstream).
           Effect   = "Allow"
           Action   = ["sqs:SendMessage"]
-          Resource = "arn:${data.aws_partition.current.partition}:sqs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+          Resource = "arn:${data.aws_partition.current.partition}:sqs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
           Condition = {
             StringLike = { "aws:ResourceTag/idp:feature-id" = "*" }
           }
@@ -379,7 +393,7 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
         {
           Effect   = "Allow"
           Action   = ["ssm:GetParameter"]
-          Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter${var.settings_parameter_name}"
+          Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter${var.settings_parameter_name}"
         }
       ] : [],
       # Analytics agent (in companion chat) queries the reporting tables via
@@ -389,17 +403,17 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           Effect = "Allow"
           Action = ["athena:StartQueryExecution", "athena:GetQueryExecution", "athena:GetQueryResults", "athena:StopQueryExecution"]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
-            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:datacatalog/*",
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:datacatalog/*",
           ]
         },
         {
           Effect = "Allow"
           Action = ["glue:GetTable", "glue:GetTables", "glue:GetDatabase", "glue:GetDatabases", "glue:GetPartitions"]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:catalog",
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:database/${var.agent_analytics.reporting_database_name}",
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.agent_analytics.reporting_database_name}/*",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:database/${var.agent_analytics.reporting_database_name}",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.agent_analytics.reporting_database_name}/*",
           ]
         }
       ] : [],
@@ -409,8 +423,8 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
           Effect = "Allow"
           Action = ["dynamodb:Query", "dynamodb:GetItem"]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}",
-            "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}/index/*",
+            "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}",
+            "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}/index/*",
           ]
         }
       ] : []
@@ -496,7 +510,7 @@ resource "aws_lambda_function" "chat_stream_processor" {
       # Agent-chat processor env (mirrors AgentChatProcessorFunction).
       LOOKUP_FUNCTION_NAME        = var.lookup_function_name != null ? var.lookup_function_name : ""
       STRANDS_LOG_LEVEL           = var.log_level
-      BEDROCK_REGION              = data.aws_region.current.id
+      BEDROCK_REGION              = data.aws_region.current.region
       CHAT_MESSAGES_TABLE         = local.chat_stream_messages_table_name
       CHAT_SESSIONS_TABLE         = local.chat_stream_sessions_table_name
       ID_HELPER_CHAT_MEMORY_TABLE = local.chat_stream_memory_table_name

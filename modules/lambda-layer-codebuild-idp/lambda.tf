@@ -9,7 +9,14 @@ resource "null_resource" "create_lambda_build_dir" {
   count = local.use_local_build ? 0 : 1
 
   provisioner "local-exec" {
-    command = "mkdir -p ${local.module_build_dir}"
+    # The path is supplied through `environment` and expanded double-quoted, so
+    # the shell never parses its contents. This also makes build directories
+    # whose path contains a space work correctly.
+    command = "mkdir -p \"$BUILD_DIR\""
+
+    environment = {
+      BUILD_DIR = local.module_build_dir
+    }
   }
 
   triggers = {
@@ -65,9 +72,13 @@ resource "aws_iam_role_policy" "codebuild_trigger_lambda_policy" {
           "logs:GetLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.layer_prefix}-codebuild-trigger-*",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
+          # Must match aws_cloudwatch_log_group.codebuild_trigger_lambda_logs
+          # below ("-cb-trigger-"); a mismatch here silently costs the function
+          # its logs, which is the only diagnostic when a build fails to start.
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.layer_prefix}-cb-trigger-*",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.layer_prefix}-cb-trigger-*:*",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
         ]
       },
       {
@@ -133,26 +144,33 @@ resource "aws_lambda_invocation" "trigger_codebuild" {
     requirements_hash = var.requirements_hash != "" ? var.requirements_hash : md5(jsonencode({
       for k, v in var.requirements_files : k => v
     }))
-    idp_common_extras     = var.idp_common_extras
-    force_rebuild         = var.force_rebuild
-    buildspec_hash        = md5(aws_codebuild_project.lambda_layers_build[0].source[0].buildspec)
-    idp_common_files_hash = local.idp_common_files_hash
+    idp_common_extras      = var.idp_common_extras
+    force_rebuild          = var.force_rebuild
+    buildspec_hash         = md5(aws_codebuild_project.lambda_layers_build[0].source[0].buildspec)
+    idp_common_files_hash  = local.idp_common_files_hash
+    idp_common_source_hash = local.idp_common_source_hash
   })
 
   triggers = {
     requirements_hash = var.requirements_hash != "" ? var.requirements_hash : md5(jsonencode({
       for k, v in var.requirements_files : k => v
     }))
-    force_rebuild         = var.force_rebuild ? timestamp() : "static"
-    buildspec_hash        = md5(aws_codebuild_project.lambda_layers_build[0].source[0].buildspec)
-    idp_common_extras     = join(",", var.idp_common_extras)
-    idp_common_files_hash = local.idp_common_files_hash
+    force_rebuild          = var.force_rebuild ? timestamp() : "static"
+    buildspec_hash         = md5(aws_codebuild_project.lambda_layers_build[0].source[0].buildspec)
+    idp_common_extras      = join(",", var.idp_common_extras)
+    idp_common_files_hash  = local.idp_common_files_hash
+    idp_common_source_hash = local.idp_common_source_hash
+    # A failed invocation is recorded in state, and the layer precondition reads
+    # that result, so without this the only way past a transient build failure
+    # would be an unrelated hash change.
+    trigger_code_hash = data.archive_file.codebuild_trigger_lambda.output_base64sha256
   }
 
   depends_on = [
     aws_codebuild_project.lambda_layers_build,
     aws_iam_role_policy.codebuild_policy,
     aws_s3_object.requirements_source,
+    aws_s3_object.idp_common_source,
     time_sleep.wait_for_iam_propagation
   ]
 }

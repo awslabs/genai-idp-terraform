@@ -101,7 +101,7 @@ resource "aws_iam_role_policy" "pipeline_hooks_dispatcher" {
         {
           Effect   = "Allow"
           Action   = "lambda:InvokeFunction"
-          Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:*"
+          Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:*"
           Condition = {
             StringLike = { "aws:ResourceTag/idp:feature-id" = "*" }
           }
@@ -109,7 +109,7 @@ resource "aws_iam_role_policy" "pipeline_hooks_dispatcher" {
         {
           Effect   = "Allow"
           Action   = "lambda:InvokeFunction"
-          Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:GENAIIDP-*"
+          Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:GENAIIDP-*"
         }
       ],
       var.encryption_key_arn != null ? [{

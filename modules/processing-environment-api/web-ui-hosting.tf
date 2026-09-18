@@ -117,7 +117,7 @@ resource "aws_api_gateway_integration" "web_ui_root" {
   type                    = "AWS"
   integration_http_method = "GET"
   credentials             = aws_iam_role.web_ui_proxy[0].arn
-  uri                     = "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.id}:s3:path/${var.web_ui_bucket_name}/index.html"
+  uri                     = "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.region}:s3:path/${var.web_ui_bucket_name}/index.html"
   passthrough_behavior    = "WHEN_NO_MATCH"
 }
 
@@ -227,7 +227,7 @@ resource "aws_api_gateway_integration" "web_ui_proxy" {
   type                    = "AWS"
   integration_http_method = "GET"
   credentials             = aws_iam_role.web_ui_proxy[0].arn
-  uri                     = "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.id}:s3:path/${var.web_ui_bucket_name}/{proxy}"
+  uri                     = "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.region}:s3:path/${var.web_ui_bucket_name}/{proxy}"
   passthrough_behavior    = "WHEN_NO_MATCH"
 
   request_parameters = {

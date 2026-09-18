@@ -60,6 +60,11 @@ locals {
       getSampleDocumentUrl     = aws_lambda_function.document_resolver["get_sample_document_resolver"].arn
       abortWorkflow            = aws_lambda_function.abort_workflow.arn
       syncBdaIdp               = aws_lambda_function.sync_bda_idp.arn
+
+      # Unconditional, like upstream. The resolver self-reports
+      # `checkEnabled: false` when no artifacts bucket is configured, so gating
+      # this entry only produced a 404 on every page load.
+      getLatestPublishedVersion = aws_lambda_function.version_check_resolver.arn
     },
     var.knowledge_base.enabled ? {
       queryKnowledgeBase = aws_lambda_function.query_knowledge_base_resolver["enabled"].arn
@@ -83,9 +88,7 @@ locals {
       compareTestRuns       = aws_lambda_function.test_results_resolver[0].arn
       deleteTests           = aws_lambda_function.delete_tests[0].arn
     } : {},
-    local.version_check_enabled ? {
-      getLatestPublishedVersion = aws_lambda_function.version_check_resolver[0].arn
-    } : {},
+
     var.agent_analytics.enabled ? {
       submitAgentQuery    = module.agent_analytics[0].agent_request_handler_function_arn
       listAvailableAgents = module.agent_analytics[0].list_available_agents_function_arn
@@ -108,6 +111,11 @@ locals {
       getAgentChatMessages   = aws_lambda_function.get_agent_chat_messages_resolver[0].arn
       deleteChatSession      = aws_lambda_function.delete_agent_chat_session_resolver[0].arn
       updateChatSessionTitle = aws_lambda_function.create_chat_session_resolver[0].arn
+    } : {},
+    var.enable_finetuning ? {
+      # Canonical fine-tuning key; FIELD_ALIASES folds
+      # listFinetuningJobs/getFinetuningJob/deleteFinetuningJob onto it.
+      createFinetuningJob = aws_lambda_function.finetuning_jobs_resolver[0].arn
     } : {},
   )
 
@@ -219,17 +227,16 @@ resource "aws_iam_role_policy_attachment" "http_api_dispatcher_xray" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# IAM eventual-consistency guard (project convention — see terraform-conventions
-# steering). The dispatcher does not synchronously validate its role at create
-# time the way CodeBuild/Step Functions do, but its invoke/DDB grants must
-# propagate before first invocation; the guard keeps behaviour consistent with
-# the other Lambda-provisioning modules in this repo.
+# IAM eventual-consistency guard. Keyed on the policy's CONTENT: the old trigger
+# used the policy's `id`, which never changes, so adding an invoke target got no
+# wait and the new resolver failed with AccessDeniedException. Narrows the window
+# rather than closing it; a first grant was seen taking over a minute.
 resource "time_sleep" "wait_for_iam_propagation" {
-  create_duration = "30s"
+  create_duration = "60s"
 
   triggers = {
     dispatcher_role_arn = aws_iam_role.http_api_dispatcher.arn
-    dispatcher_policy   = aws_iam_role_policy.http_api_dispatcher.id
+    dispatcher_policy   = sha256(aws_iam_role_policy.http_api_dispatcher.policy)
   }
 }
 
@@ -271,6 +278,11 @@ resource "aws_lambda_function" "http_api_dispatcher" {
       DISCOVERY_TABLE_NAME     = local.dispatcher_discovery_table_name
       AGENT_TABLE_NAME         = local.dispatcher_agent_table_name
       FIELD_FUNCTION_MAP_PARAM = aws_ssm_parameter.http_api_field_function_map.name
+
+      # Unread. Changes when the map changes, so the function is updated and its
+      # containers replaced — the map is read from SSM only at cold start, so
+      # otherwise warm containers keep routing the old one.
+      FIELD_FUNCTION_MAP_HASH = sha256(jsonencode(local.field_function_map))
     }
   }
 

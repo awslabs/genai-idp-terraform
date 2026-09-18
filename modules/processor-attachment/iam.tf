@@ -62,12 +62,14 @@ resource "aws_iam_policy" "queue_processor_policy" {
         ]
         Resource = var.processor.state_machine_arn
       },
-      # DynamoDB permissions for configuration table (read config for routing)
+      # DynamoDB permissions for configuration table (read config for routing).
+      # Scan is needed by ConfigurationManager.resolve_active_version().
       {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
-          "dynamodb:Query"
+          "dynamodb:Query",
+          "dynamodb:Scan"
         ]
         Resource = var.configuration_table_arn
       },
@@ -158,8 +160,8 @@ resource "aws_iam_policy" "queue_processor_kms_policy" {
         Condition = {
           StringEquals = {
             "kms:ViaService" = [
-              "sqs.${data.aws_region.current.id}.amazonaws.com",
-              "dynamodb.${data.aws_region.current.id}.amazonaws.com"
+              "sqs.${data.aws_region.current.region}.amazonaws.com",
+              "dynamodb.${data.aws_region.current.region}.amazonaws.com"
             ]
           }
         }

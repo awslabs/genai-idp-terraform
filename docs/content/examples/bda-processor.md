@@ -89,11 +89,8 @@ evaluation_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 # Reporting Feature
 enable_reporting = false
 
-# Rule Validation Feature (compliance checking). To enable, set the flag AND
-# point config_file_path at a config that has rule_validation enabled, e.g.
-# config_file_path = "../../sources/config_library/unified/rule-validation/config.yaml"
-enable_rule_validation = false
-config_file_path       = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+# API Configuration
+enable_api = true
 
 # Web UI Configuration
 web_ui = {
@@ -123,7 +120,7 @@ log_retention_days = 30
 data_tracking_retention_days = 1095  # 3 years
 
 # Custom configuration file
-config_file_path = "../../sources/config_library/unified/lending-package-sample/config.yaml"
+config_file_path = "../../sources/config_library/pattern-1/lending-package-sample/config.yaml"
 
 # Enable all features
 summarization_enabled  = true
@@ -171,7 +168,7 @@ tags = {
 
 ### **Integration Ready**
 
-- REST API for status tracking
+- GraphQL API for status tracking
 - Web UI for document management
 - S3 integration for document storage
 - DynamoDB for metadata tracking
@@ -187,7 +184,7 @@ graph TB
     F[DynamoDB Tracking] --> C
     G[Web UI] --> B
     G --> E
-    H[REST API] --> F
+    H[GraphQL API] --> F
 ```
 
 ## Usage Workflow
@@ -212,15 +209,12 @@ The BDA processor automatically:
 ### 3. Monitor Progress
 
 ```bash
-# The deployment exposes an API Gateway REST API. Its base URL is published on
-# the `api` output object as `api_base_url`:
-terraform output -json api | jq -r '.api_base_url'
+# Check processing status
+GRAPHQL_URL=$(terraform output -raw processing_environment | jq -r '.api.graphql_url')
+curl -X POST $GRAPHQL_URL \
+  -H "Content-Type: application/json" \
+  -d '{"query": "query { listDocuments { id status } }"}'
 ```
-
-Programmatic clients call the REST API under this base URL (the Web UI POSTs to
-`${api_base_url}/op/<field>`). Calls are authenticated with the Cognito
-authorizer, so obtain a token first rather than calling the endpoint anonymously.
-Most users track processing status through the Web UI.
 
 ### 4. Retrieve Results
 

@@ -1,0 +1,10 @@
+# Seeded as a non-active configuration version. Its models must reach the
+# processing roles' Bedrock grants, otherwise activating it from the UI fails
+# with AccessDenied on InvokeModel.
+classification:
+  model: us.amazon.nova-premier-v1:0
+
+extraction:
+  model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+  confidence:
+    model: us.anthropic.claude-haiku-4-5-20251001-v1:0

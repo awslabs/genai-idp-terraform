@@ -20,12 +20,11 @@ output "group_names" {
     the IdP-federation submodule's group-mapping Lambda so federated users land
     in the correct RBAC roles.
   EOT
-  value = {
-    Admin    = aws_cognito_user_group.rbac["Admin"].name
-    Author   = aws_cognito_user_group.rbac["Author"].name
-    Reviewer = aws_cognito_user_group.rbac["Reviewer"].name
-    Viewer   = aws_cognito_user_group.rbac["Viewer"].name
-  }
+  # Must read the local, not aws_cognito_user_group.rbac[*].name: identical
+  # values, but sourcing from the resource makes this depend on the user pool and
+  # closes a cycle once the pool attaches the federation trigger
+  # (pool -> groups -> group_names -> Lambda env -> trigger -> pool).
+  value = local.group_names
 }
 
 output "users_table_name" {

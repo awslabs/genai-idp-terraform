@@ -10,7 +10,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
 | <a name="provider_docker"></a> [docker](#provider\_docker) | 3.9.0 |
 
 ## Modules
@@ -33,7 +33,7 @@ No modules.
 | <a name="input_dockerfile_path"></a> [dockerfile\_path](#input\_dockerfile\_path) | Path to the Dockerfile relative to source\_path. Defaults to "Dockerfile". | `string` | `"Dockerfile"` | no |
 | <a name="input_ecr_repository_url"></a> [ecr\_repository\_url](#input\_ecr\_repository\_url) | ECR repository URL (without tag) that the built image will be pushed to. | `string` | n/a | yes |
 | <a name="input_image_tag"></a> [image\_tag](#input\_image\_tag) | Tag to push under. Default "latest" matches the CodeBuild path; consumers reference the image by sha256 digest regardless of tag so :latest is safe. | `string` | `"latest"` | no |
-| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture; drives the docker --platform value. | `string` | `"x86_64"` | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture; drives the docker --platform value. | `string` | `"arm64"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Human-readable identifier for the image (used in tags and resource names). Typically the processor name. | `string` | n/a | yes |
 | <a name="input_source_path"></a> [source\_path](#input\_source\_path) | Absolute path to the directory containing the Dockerfile and build context. Hashes of all files under this path drive image rebuild detection. | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied (where applicable -- docker provider resources don't accept tags). | `map(string)` | `{}` | no |

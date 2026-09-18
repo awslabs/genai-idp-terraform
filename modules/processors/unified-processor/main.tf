@@ -70,7 +70,7 @@ locals {
 
   # Build directory and instance ID for Lambda functions
   module_build_dir   = "${path.module}/build"
-  module_instance_id = "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.id}"
+  module_instance_id = "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.region}"
 
   # Common tags
   common_tags = merge(var.tags, {
@@ -88,6 +88,12 @@ module "processor_configuration" {
 
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
+
+  # Upstream's catalogues, which its own template loads into the configuration
+  # table at deploy time. Read straight from the vendored copies so a version bump
+  # picks them up with the rest of the snapshot.
+  pricing             = yamldecode(file("${path.module}/../../../sources/config_library/pricing.yaml"))
+  model_config_limits = yamldecode(file("${path.module}/../../../sources/config_library/model_config_limits.yaml"))
 
   # Extra non-active config versions seeded alongside the default.
   additional_configurations = var.additional_configurations
@@ -116,24 +122,20 @@ module "processor_configuration" {
 locals {
   base_config = var.config
 
-  # Apply model overrides. base_config may be sparse, so try() tolerates
-  # missing sections rather than failing at plan time.
+  # Per-stage Bedrock model IDs are NOT assigned from Terraform: the seeded YAML
+  # configuration (config / additional_configurations / config library / system
+  # defaults) is the single source of truth for model selection. Terraform only
+  # applies NON-model extraction overrides here (section_splitting_strategy,
+  # agentic), which have no config-authored equivalent surfaced as a variable.
+  # base_config may be sparse, so try() tolerates missing sections.
   config_with_overrides = merge(
     local.base_config,
-    # Model keys are YAML-authoritative: written ONLY when the per-step variable
-    # is set, so the config library / system defaults are otherwise respected.
-    var.classification_model_id != null ? {
-      classification = merge(
-        try(local.base_config.classification, {}),
-        { model = var.classification_model_id }
-      )
-    } : {},
-    # Extraction: model override conditional; the non-model overrides
-    # (section_splitting_strategy, agentic) still apply unconditionally.
-    {
+    # Extraction is the only section that still carries Terraform-driven
+    # (non-model) overrides. The block is emitted only when at least one applies,
+    # so a config that sets neither is passed through untouched.
+    (var.section_splitting_strategy != "disabled" || var.enable_agentic_extraction) ? {
       extraction = merge(
         try(local.base_config.extraction, {}),
-        var.extraction_model_id != null ? { model = var.extraction_model_id } : {},
         var.section_splitting_strategy != "disabled" ? { section_splitting_strategy = var.section_splitting_strategy } : {},
         var.enable_agentic_extraction ? {
           agentic = merge(
@@ -145,37 +147,6 @@ locals {
             }
           )
         } : {}
-      )
-    },
-    # Summarization: written only when the variable is set AND the step is
-    # enabled, so a disabled step gets no summarization.model key.
-    var.summarization_model_id != null && var.is_summarization_enabled ? {
-      summarization = merge(
-        try(local.base_config.summarization, {}),
-        { model = var.summarization_model_id }
-      )
-    } : {},
-    # Only override evaluation model if provided (evaluation uses a different config path)
-    var.evaluation_model_id != null ? {
-      evaluation = merge(
-        try(local.base_config.evaluation, {}),
-        {
-          llm_method = merge(
-            try(local.base_config.evaluation.llm_method, {}),
-            {
-              model = var.evaluation_model_id
-            }
-          )
-        }
-      )
-    } : {},
-    # Only override assessment model if provided
-    var.assessment_model_id != null ? {
-      assessment = merge(
-        try(local.base_config.assessment, {}),
-        {
-          model = var.assessment_model_id
-        }
       )
     } : {}
   )
@@ -203,6 +174,9 @@ locals {
         "Lambda.AWSLambdaException",
         "Lambda.SdkClientException",
         "Lambda.TooManyRequestsException",
+        # Raised while a just-published layer's CodeArtifact grant is still
+        # settling, so a cold start after deploy would fail the whole document.
+        "Lambda.CodeArtifactUserPendingException",
         "ServiceQuotaExceededException",
         "ThrottlingException",
         "ProvisionedThroughputExceededException",
@@ -283,7 +257,7 @@ locals {
       }
       ResultPath = null
       Retry = [{
-        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
         IntervalSeconds = 2
         MaxAttempts     = 3
         BackoffRate     = 2
@@ -434,7 +408,7 @@ locals {
       }
       ResultPath = "$.HookResults.postRuleValidation"
       Retry = [{
-        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+        ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
         IntervalSeconds = 2
         MaxAttempts     = 3
         BackoffRate     = 2
@@ -476,7 +450,7 @@ locals {
   # Mirrors sources/patterns/unified/statemachine/workflow.asl.json.
   # ---------------------------------------------------------------------------
   hook_retry = [{
-    ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+    ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
     IntervalSeconds = 2
     MaxAttempts     = 3
     BackoffRate     = 2
@@ -787,6 +761,7 @@ locals {
               "Lambda.AWSLambdaException",
               "Lambda.SdkClientException",
               "Lambda.TooManyRequestsException",
+              "Lambda.CodeArtifactUserPendingException",
               "ServiceQuotaExceededException",
               "ThrottlingException",
               "ProvisionedThroughputExceededException",
@@ -816,7 +791,7 @@ locals {
         }
         ResultPath = "$.HookResults.postOcr"
         Retry = [{
-          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
           IntervalSeconds = 2
           MaxAttempts     = 3
           BackoffRate     = 2
@@ -856,7 +831,7 @@ locals {
         }
         ResultPath = "$.HookResults.postClassification"
         Retry = [{
-          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
           IntervalSeconds = 2
           MaxAttempts     = 3
           BackoffRate     = 2
@@ -902,7 +877,7 @@ locals {
               }
               ResultPath = "$.HookResults.postExtraction"
               Retry = [{
-                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
                 IntervalSeconds = 2
                 MaxAttempts     = 3
                 BackoffRate     = 2
@@ -940,7 +915,7 @@ locals {
               }
               ResultPath = "$.HookResults.postAssessment"
               Retry = [{
-                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "Lambda.CodeArtifactUserPendingException"]
                 IntervalSeconds = 2
                 MaxAttempts     = 3
                 BackoffRate     = 2

@@ -117,9 +117,10 @@ resource "aws_s3_bucket_cors_configuration" "discovery_bucket_cors" {
       "x-amz-security-token"
     ]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = [
-      "*" # Will be restricted by bucket policy and IAM
-    ]
+    # Restrict to the configured app origin(s) (Wiz S3-036). Falls back to "*"
+    # only when no origin is supplied, preserving prior behavior; deployers set
+    # allowed_cors_origins to the CloudFront/app origin to close the finding.
+    allowed_origins = length(var.allowed_cors_origins) > 0 ? var.allowed_cors_origins : ["*"]
     expose_headers = [
       "ETag",
       "x-amz-server-side-encryption"
@@ -343,6 +344,7 @@ resource "aws_lambda_function" "discovery_processor" {
       LOG_LEVEL                = var.log_level
       BEDROCK_LOG_LEVEL        = var.log_level
       DISCOVERY_TRACKING_TABLE = aws_dynamodb_table.discovery_tracking.name
+      CONFIGURATION_TABLE_NAME = var.configuration_table_name != null ? var.configuration_table_name : ""
       # APPSYNC_API_URL intentionally empty post-v0.6.4: the processor writes
       # the DiscoveryTable directly; the UI polls it via the dispatcher's
       # ddb_direct instead of AppSync subscriptions.

@@ -114,6 +114,33 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "working_bucket" {
   }
 }
 
+# Block all public access on the document buckets (Wiz S3-046 public read,
+# S3-047 public write). These buckets are only accessed by the IDP pipeline and
+# the UI via presigned URLs / IAM — they must never be public.
+resource "aws_s3_bucket_public_access_block" "input_bucket" {
+  bucket                  = aws_s3_bucket.input_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_public_access_block" "output_bucket" {
+  bucket                  = aws_s3_bucket.output_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_public_access_block" "working_bucket" {
+  bucket                  = aws_s3_bucket.working_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # Create evaluation baseline bucket (conditional)
 resource "aws_s3_bucket" "evaluation_baseline_bucket" {
   count         = var.enable_evaluation ? 1 : 0

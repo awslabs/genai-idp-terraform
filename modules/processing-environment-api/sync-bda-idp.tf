@@ -37,7 +37,10 @@ resource "aws_iam_role_policy" "sync_bda_idp" {
         Resource = "arn:${data.aws_partition.current.partition}:logs:*:*:*"
       },
       {
-        # Bedrock Data Automation blueprint CRUD
+        # Bedrock Data Automation blueprint and project CRUD. The project
+        # actions are needed because the sync path calls
+        # get_or_create_project_for_version, which creates and updates a project
+        # rather than only reading one.
         Effect = "Allow"
         Action = [
           "bedrock:CreateBlueprint",
@@ -45,21 +48,25 @@ resource "aws_iam_role_policy" "sync_bda_idp" {
           "bedrock:DeleteBlueprint",
           "bedrock:GetBlueprint",
           "bedrock:ListBlueprints",
+          "bedrock:CreateDataAutomationProject",
+          "bedrock:UpdateDataAutomationProject",
           "bedrock:GetDataAutomationProject",
           "bedrock:ListDataAutomationProjects"
         ]
         Resource = "*"
       },
       {
-        # Configuration table read
+        # Configuration table read, plus the UpdateItem that
+        # set_bda_project_arn / clear_bda_project_arn use to record the linked
+        # project ARN and sync status against the config version.
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"]
+        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:UpdateItem"]
         Resource = compact([local.configuration_table_arn, "${local.configuration_table_arn}/index/*"])
       },
       {
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+        Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
     ]
   })

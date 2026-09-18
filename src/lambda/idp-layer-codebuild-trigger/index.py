@@ -17,12 +17,78 @@ import json
 import os
 import time
 import boto3
+from botocore.exceptions import ClientError
 from typing import Dict, Any, List
 import logging
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# On a first apply the CodeBuild project, its service role, and this function's
+# role are all seconds old, so StartBuild can fail on IAM that has not finished
+# propagating. Retrying costs a few seconds; not retrying fails the whole layer
+# and, because the invocation result is recorded in state, blocks every later
+# apply until a trigger changes.
+_RETRYABLE_START_BUILD_ERRORS = frozenset(
+    {
+        "AccessDeniedException",
+        "InvalidInputException",
+        "ThrottlingException",
+        "TooManyRequestsException",
+    }
+)
+
+def start_build_with_retry(
+    codebuild: Any,
+    project_name: str,
+    idp_common_extras: List[str],
+    requirements_hash: str,
+    force_rebuild: bool,
+    attempts: int = 6,
+    delay_seconds: int = 10,
+) -> Dict[str, Any]:
+    """Start the build, retrying transient authorization/throttling failures."""
+    overrides = [
+        {
+            'name': 'IDP_COMMON_EXTRAS',
+            'value': ','.join(idp_common_extras),
+            'type': 'PLAINTEXT'
+        },
+        {
+            'name': 'REQUIREMENTS_HASH',
+            'value': requirements_hash,
+            'type': 'PLAINTEXT'
+        },
+        {
+            'name': 'FORCE_REBUILD',
+            'value': str(force_rebuild).lower(),
+            'type': 'PLAINTEXT'
+        }
+    ]
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return codebuild.start_build(
+                projectName=project_name,
+                environmentVariablesOverride=overrides,
+            )
+        except ClientError as error:
+            code = error.response.get('Error', {}).get('Code', '')
+            if code not in _RETRYABLE_START_BUILD_ERRORS or attempt == attempts:
+                raise
+            logger.warning(
+                "StartBuild attempt %s/%s for %s failed with %s; retrying in %ss",
+                attempt,
+                attempts,
+                project_name,
+                code,
+                delay_seconds,
+            )
+            time.sleep(delay_seconds)
+
+    raise RuntimeError(f"StartBuild for {project_name} exhausted {attempts} attempts")
+
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -57,25 +123,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.info(f"Force rebuild: {force_rebuild}")
         
         # Start the CodeBuild project
-        response = codebuild.start_build(
-            projectName=project_name,
-            environmentVariablesOverride=[
-                {
-                    'name': 'IDP_COMMON_EXTRAS',
-                    'value': ','.join(idp_common_extras),
-                    'type': 'PLAINTEXT'
-                },
-                {
-                    'name': 'REQUIREMENTS_HASH',
-                    'value': requirements_hash,
-                    'type': 'PLAINTEXT'
-                },
-                {
-                    'name': 'FORCE_REBUILD',
-                    'value': str(force_rebuild).lower(),
-                    'type': 'PLAINTEXT'
-                }
-            ]
+        response = start_build_with_retry(
+            codebuild,
+            project_name,
+            idp_common_extras,
+            requirements_hash,
+            force_rebuild,
         )
         
         build_id = response['build']['id']

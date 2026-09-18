@@ -159,6 +159,23 @@ variable "group_mapping" {
   EOT
   type        = map(string)
   default     = {}
+
+  # The Lambda matches on the canonical role, so any other value is silently
+  # ignored and the user signs in with no group at all.
+  validation {
+    condition = length([
+      for role in values(var.group_mapping) :
+      role if !contains(["Admin", "Author", "Reviewer", "Viewer"], role)
+    ]) == 0
+    error_message = "group_mapping values must each be one of Admin, Author, Reviewer or Viewer (the canonical RBAC roles), not the deployment's renamed Cognito group names."
+  }
+
+  # Upstream carries one parameter per role, so a second external group mapped to
+  # the same role has nowhere to go and would be dropped silently.
+  validation {
+    condition     = length(values(var.group_mapping)) == length(distinct(values(var.group_mapping)))
+    error_message = "group_mapping must map at most one external IdP group to each role: the trigger reads a single group name per role, so additional groups would be discarded."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -183,9 +200,10 @@ variable "user_pool_client_id" {
 variable "rbac_group_names" {
   description = <<-EOT
     Map of the four IDP RBAC role names (`Admin`/`Author`/`Reviewer`/`Viewer`)
-    to the concrete Cognito group names provisioned by the RBAC submodule. The
-    group-mapping Lambda targets these so federated users land in the same
-    groups RBAC creates.
+    to the concrete Cognito group names provisioned by the RBAC submodule.
+    Checked for reachability only: the vendored trigger adds users to the
+    literal names `Admin`/`Author`/`Reviewer`/`Viewer`, so a renamed group is
+    unreachable and fails the plan when group mapping is on.
   EOT
   type        = map(string)
   default = {

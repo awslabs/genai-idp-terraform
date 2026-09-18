@@ -37,8 +37,8 @@ resource "aws_iam_policy" "queue_sender_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.queue_sender_function_name}:*"
         ]
       },
       {
@@ -91,6 +91,16 @@ resource "aws_iam_policy" "queue_sender_policy" {
           local.tracking_table.table_arn,
           "${local.tracking_table.table_arn}/index/*"
         ]
+      },
+      {
+        # Scan is needed by ConfigurationManager.resolve_active_version().
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Effect   = "Allow"
+        Resource = local.configuration_table.table_arn
       }
     ]
   })
@@ -191,8 +201,8 @@ resource "aws_iam_policy" "workflow_tracker_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.workflow_tracker_function_name}:*"
         ]
       },
       {
@@ -211,8 +221,11 @@ resource "aws_iam_policy" "workflow_tracker_policy" {
         Resource = local.concurrency_table.table_arn
       },
       {
+        # PutObject on the output bucket: the tracker writes a per-run manifest
+        # under <key>/runs/<timestamp>-<id>/manifest.json.
         Action = [
-          "s3:GetObject"
+          "s3:GetObject",
+          "s3:PutObject"
         ]
         Effect = "Allow"
         Resource = [
@@ -374,8 +387,8 @@ resource "aws_iam_policy" "lookup_function_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lookup_function_name}:*"
         ]
       },
       {
@@ -385,6 +398,20 @@ resource "aws_iam_policy" "lookup_function_policy" {
         ]
         Effect   = "Allow"
         Resource = local.tracking_table.table_arn
+      },
+      {
+        # The lookup reads WorkflowExecutionArn off the tracking item and builds
+        # the UI's processingDetail from the execution and its history. Without
+        # these the calls fail into a caught exception and the field is silently
+        # dropped. Scoped to executions in this account and region: the
+        # processors, and therefore the state machine ARN, are created after this
+        # module.
+        Action = [
+          "states:DescribeExecution",
+          "states:GetExecutionHistory"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:execution:*"
       }
     ]
   })
@@ -459,8 +486,8 @@ resource "aws_iam_policy" "update_configuration_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.update_configuration_function_name}:*"
         ]
       },
       {
