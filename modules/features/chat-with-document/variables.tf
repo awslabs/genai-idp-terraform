@@ -191,3 +191,19 @@ variable "allowed_bedrock_model_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "processor_memory_size" {
+  description = <<-EOT
+    Memory (MB) for the long-running Chat-with-Document processor Lambda. Defaults
+    to 4096 (upstream value, sized for large-context chat models). Lower it for
+    accounts whose Lambda per-function memory service quota is below 4096 MB
+    (some sandbox accounts cap at 3008 MB), or raise it up to the account limit.
+  EOT
+  type        = number
+  default     = 4096
+
+  validation {
+    condition     = var.processor_memory_size >= 128 && var.processor_memory_size <= 10240
+    error_message = "processor_memory_size must be between 128 and 10240 MB (and within the account's Lambda memory service quota)."
+  }
+}

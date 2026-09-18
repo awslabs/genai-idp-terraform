@@ -63,6 +63,7 @@ No modules.
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch log retention period in days for the chat Lambdas. | `number` | `7` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource names created by this submodule. | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the output S3 bucket the chat processor reads document artifacts from. | `string` | n/a | yes |
+| <a name="input_processor_memory_size"></a> [processor\_memory\_size](#input\_processor\_memory\_size) | Memory (MB) for the long-running Chat-with-Document processor Lambda. Defaults<br>to 4096 (upstream value, sized for large-context chat models). Lower it for<br>accounts whose Lambda per-function memory service quota is below 4096 MB<br>(some sandbox accounts cap at 3008 MB), or raise it up to the account limit. | `number` | `4096` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to resources. | `map(string)` | `{}` | no |
 | <a name="input_tracking_table_arn"></a> [tracking\_table\_arn](#input\_tracking\_table\_arn) | ARN of the DynamoDB tracking table the chat processor reads document metadata from. | `string` | n/a | yes |
 | <a name="input_tracking_table_name"></a> [tracking\_table\_name](#input\_tracking\_table\_name) | Name of the DynamoDB tracking table (env wiring for the chat processor). | `string` | n/a | yes |

@@ -106,7 +106,8 @@ module "engine" {
   save_reporting_function_arn    = var.save_reporting_function_arn
 
   # Rule validation
-  enable_rule_validation = var.enable_rule_validation
+  enable_rule_validation      = var.enable_rule_validation
+  rule_validation_memory_size = var.rule_validation_memory_size
 
   # Summarization enablement is config-authoritative: config value, falling back
   # to the upstream system default (base-summarization.yaml => true) the seeder
