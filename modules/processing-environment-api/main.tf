@@ -31,8 +31,8 @@ locals {
   # For each resource, prioritize the ARN variable if provided, otherwise use the object variable
 
   # S3 Buckets
-  input_bucket_name  = element(split(":", var.input_bucket_arn), 5)
-  output_bucket_name = element(split(":", var.output_bucket_arn), 5)
+  input_bucket_name  = var.input_bucket_arn != null ? element(split(":", var.input_bucket_arn), 5) : null
+  output_bucket_name = var.output_bucket_arn != null ? element(split(":", var.output_bucket_arn), 5) : null
 
   input_bucket_arn  = var.input_bucket_arn
   output_bucket_arn = var.output_bucket_arn
