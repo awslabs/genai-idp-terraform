@@ -72,12 +72,6 @@ variable "enable_evaluation" {
   default     = false
 }
 
-variable "evaluation_model_id" {
-  description = "Model ID for evaluation processing"
-  type        = string
-  default     = null
-}
-
 # Reporting Configuration
 variable "enable_reporting" {
   description = "Enable reporting functionality (simplified flag)"
@@ -86,35 +80,11 @@ variable "enable_reporting" {
 }
 
 # Model Configuration
-variable "classification_model_id" {
-  description = "Model ID for document classification (Bedrock LLM processor only)"
-  type        = string
-  default     = null
-}
+#
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
+# Summarization enablement comes from the config YAML (summarization.enabled).
 
-variable "extraction_model_id" {
-  description = "Model ID for information extraction (Bedrock LLM processor only)"
-  type        = string
-  default     = null
-}
-
-variable "summarization_enabled" {
-  description = "Enable document summarization for Bedrock LLM processor"
-  type        = bool
-  default     = true
-}
-
-variable "enable_rule_validation" {
-  description = "Enable rule validation Lambda functions for compliance assessment (v0.4.13+)"
-  type        = bool
-  default     = false
-}
-
-variable "summarization_model_id" {
-  description = "Model ID for document summarization"
-  type        = string
-  default     = null
-}
+# Rule-validation enablement comes from the config YAML (rule_validation.enabled).
 
 
 

@@ -26,8 +26,9 @@ output "user_identity" {
 output "api" {
   description = "API resources (if enabled)"
   value = local.api_enabled ? {
-    api_id       = module.processing_environment_api[0].api_id
-    api_base_url = module.processing_environment_api[0].api_base_url
+    api_id                = module.processing_environment_api[0].api_id
+    api_base_url          = module.processing_environment_api[0].api_base_url
+    discovery_bucket_name = module.processing_environment_api[0].discovery_bucket_name
   } : null
 }
 
@@ -108,4 +109,17 @@ output "processing_environment" {
 output "rbac_group_names" {
   description = "Resolved RBAC Cognito group names keyed by role, or null when RBAC is disabled."
   value       = local.feature_enable.rbac ? module.rbac[0].group_names : null
+}
+
+# Wiring a bring-your-own pool by reference would close a dependency cycle, so
+# these feed a second apply. See docs/content/security/external-idp.md.
+
+output "federation_group_mapping_function_arn" {
+  description = "ARN of the external-IdP group-mapping Lambda, to attach as your user pool's PreTokenGeneration (V2_0) trigger when you supply your own pool. Null when federation or group mapping is disabled."
+  value       = local.federation_group_mapping_function_arn
+}
+
+output "federation_supported_identity_providers" {
+  description = "Identity-provider names to append to your user pool client's supported_identity_providers, alongside COGNITO, when you supply your own pool. Empty when federation is disabled."
+  value       = local.federation_supported_identity_providers
 }

@@ -184,7 +184,7 @@ resource "aws_iam_policy" "agent_processor_policy" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
+        Resource = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.configuration_table_name}"
       },
       # Foundation model permissions (always needed)
       {
@@ -232,8 +232,8 @@ resource "aws_iam_policy" "agent_processor_policy" {
             "athena:ListTableMetadata"
           ]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
-            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:datacatalog/*"
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
+            "arn:${data.aws_partition.current.partition}:athena:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:datacatalog/*"
           ]
         },
         {
@@ -246,9 +246,9 @@ resource "aws_iam_policy" "agent_processor_policy" {
             "glue:GetPartitions"
           ]
           Resource = [
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:catalog",
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:database/${var.reporting_database_name}",
-            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:table/${var.reporting_database_name}/*"
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:database/${var.reporting_database_name}",
+            "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.reporting_database_name}/*"
           ]
         },
         {

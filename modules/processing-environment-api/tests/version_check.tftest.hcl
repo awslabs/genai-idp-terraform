@@ -1,24 +1,17 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native `terraform test` for the version-check sub-feature on the
-# processing-environment-api module.
+# Native `terraform test` for the version-check sub-feature.
 #
-# Version check is input-gated and least-privilege:
-#   * bucket unset (public_artifacts_bucket = "") -> 0 version_check Lambda,
-#     AppSync data source, and resolver (default-off, no plan diff);
-#   * bucket set -> the Lambda, data source, and resolver are all present, the
-#     Lambda env `PUBLIC_ARTIFACTS_BUCKET` equals the input, and the resolver
-#     role's S3 statement is scoped to exactly that bucket (its arn + `/*`),
-#     never a `*` wildcard (asserted via `jsondecode` on the inline policy).
+# The resolver is created UNCONDITIONALLY, matching upstream, which gives its
+# VersionCheckResolverFunction no Condition. Only the S3 read grant and the
+# PUBLIC_ARTIFACTS_BUCKET env are gated on the bucket input. Gating the Lambda
+# itself left `getLatestPublishedVersion` unmapped, so the dispatcher answered 404
+# on every page load; the resolver already reports `checkEnabled: false` itself
+# when the bucket is unset.
 #
-# Gating is input-derived (`local.version_check_enabled = var.public_artifacts_bucket
-# != ""`), so the count assertions and the env assertion are known at `plan`.
-# The S3-scoping assertion `jsondecode`s `aws_iam_role_policy.version_check_resolver`,
-# whose JSON embeds the (computed) log-group ARN; that string is only fully known
-# after apply, so the scoping run uses `command = apply` with a mocked IAM-role
-# ARN — mirroring the RBAC `role_least_privilege` test — while the S3 statement's
-# own resources are derived from the bucket input + partition and are exact.
+# The S3-scoping runs use `command = apply`: the inline policy JSON embeds the
+# computed log-group ARN, which is only known after apply.
 
 mock_provider "aws" {
   mock_data "aws_partition" {
@@ -29,8 +22,11 @@ mock_provider "aws" {
   }
   mock_data "aws_region" {
     defaults = {
-      id   = "us-east-1"
-      name = "us-east-1"
+      # `region` is what the derived ARNs read (provider v6 rename); an unmocked
+      # attribute gets a random value and fails ARN-shape validation.
+      region = "us-east-1"
+      id     = "us-east-1"
+      name   = "us-east-1"
     }
   }
   mock_data "aws_caller_identity" {
@@ -39,13 +35,9 @@ mock_provider "aws" {
     }
   }
 
-  # On apply the mock provider returns random short strings for computed
-  # attributes, which fail the AWS provider's ARN-shape validation on the many
-  # cross-resource references in this module (AppSync data-source function ARNs,
-  # IAM policy-attachment ARNs, the AppSync API `uris` output). Override the
-  # computed attributes the apply-mode scoping run touches with well-formed
-  # values. None of these affect the policy under test — it is `jsonencode`d from
-  # the bucket input, the partition, and the log-group ARN.
+  # On apply the mock provider returns random strings for computed attributes,
+  # which fail the provider's ARN-shape validation on cross-resource references.
+  # None of these affect the policy under test.
   mock_resource "aws_iam_role" {
     defaults = {
       arn = "arn:aws:iam::123456789012:role/idp-test-version-check"
@@ -61,12 +53,9 @@ mock_provider "aws" {
       arn = "arn:aws:iam::123456789012:policy/idp-test-policy"
     }
   }
-  mock_resource "aws_appsync_graphql_api" {
+  mock_resource "aws_cloudwatch_log_group" {
     defaults = {
-      uris = {
-        GRAPHQL  = "https://example.appsync-api.us-east-1.amazonaws.com/graphql"
-        REALTIME = "wss://example.appsync-realtime-api.us-east-1.amazonaws.com/graphql"
-      }
+      arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/idp-test:*"
     }
   }
 }
@@ -75,8 +64,14 @@ mock_provider "archive" {}
 mock_provider "random" {}
 mock_provider "null" {}
 mock_provider "local" {}
+mock_provider "time" {}
 
 variables {
+  # Short, and fixed rather than suffixed: the default
+  # "ProcessingEnvironmentApi-<suffix>" pushes derived IAM role names past the
+  # 64-char limit, which fails every apply-mode run.
+  name = "idp-vc"
+
   input_bucket_arn        = "arn:aws:s3:::idp-test-input"
   output_bucket_arn       = "arn:aws:s3:::idp-test-output"
   tracking_table_arn      = "arn:aws:dynamodb:us-east-1:123456789012:table/idp-test-tracking"
@@ -93,8 +88,6 @@ variables {
     }
   }
 
-  # Keep the plan focused on the version-check resources: switch off the optional
-  # feature subsystems that would otherwise instantiate extra Lambdas.
   enable_agent_companion_chat = false
   enable_hitl                 = false
   enable_test_studio          = false
@@ -102,41 +95,31 @@ variables {
   enable_edit_sections        = false
 }
 
-# ---------------------------------------------------------------------------
-# Bucket unset -> the version-check feature is inert: 0 Lambda / DS / resolver
-# (default-off).
-# ---------------------------------------------------------------------------
-run "version_check_disabled_when_bucket_unset" {
-  command = plan
-
-  # public_artifacts_bucket defaults to "" — leave it unset.
+# Bucket unset: the resolver still exists and is still routed, but carries no
+# bucket env. This is the regression guard for the 404 — a `count` here is what
+# removed the field from the dispatcher map.
+run "resolver_exists_and_is_routed_when_bucket_unset" {
+  # apply, not plan: the function/role names derive from a computed suffix.
+  command = apply
 
   assert {
-    condition     = length(aws_lambda_function.version_check_resolver) == 0
-    error_message = "With public_artifacts_bucket unset, no version_check_resolver Lambda may be created."
+    condition     = aws_lambda_function.version_check_resolver.function_name != ""
+    error_message = "The version-check resolver must be created even when public_artifacts_bucket is unset, or getLatestPublishedVersion is unmapped and the dispatcher 404s."
   }
 
   assert {
-    condition     = length(aws_appsync_datasource.version_check) == 0
-    error_message = "With public_artifacts_bucket unset, no version_check AppSync data source may be created."
+    condition     = aws_iam_role.version_check_resolver.name != ""
+    error_message = "The version-check execution role must be created unconditionally alongside the Lambda."
   }
 
   assert {
-    condition     = length(aws_appsync_resolver.get_latest_published_version) == 0
-    error_message = "With public_artifacts_bucket unset, no getLatestPublishedVersion resolver may be created."
-  }
-
-  assert {
-    condition     = length(aws_iam_role.version_check_resolver) == 0
-    error_message = "With public_artifacts_bucket unset, no version-check execution role may be created."
+    condition     = !contains(keys(aws_lambda_function.version_check_resolver.environment[0].variables), "PUBLIC_ARTIFACTS_BUCKET")
+    error_message = "With no bucket configured the Lambda must not receive PUBLIC_ARTIFACTS_BUCKET; it reports checkEnabled=false from its absence."
   }
 }
 
-# ---------------------------------------------------------------------------
-# Bucket set -> all three resources present and the env carries the bucket input.
-# Input-derived, so `plan` is sufficient here.
-# ---------------------------------------------------------------------------
-run "version_check_enabled_when_bucket_set" {
+# Bucket set: the env threads the input under the key the shipped resolver reads.
+run "bucket_input_threads_into_the_env" {
   command = plan
 
   variables {
@@ -144,75 +127,52 @@ run "version_check_enabled_when_bucket_set" {
   }
 
   assert {
-    condition     = length(aws_lambda_function.version_check_resolver) == 1
-    error_message = "With public_artifacts_bucket set, the version_check_resolver Lambda must be created."
-  }
-
-  assert {
-    condition     = length(aws_appsync_datasource.version_check) == 1
-    error_message = "With public_artifacts_bucket set, the version_check AppSync data source must be created."
-  }
-
-  assert {
-    condition     = length(aws_appsync_resolver.get_latest_published_version) == 1
-    error_message = "With public_artifacts_bucket set, the getLatestPublishedVersion resolver must be created."
-  }
-
-  # The resolver must bind the Query.getLatestPublishedVersion field (no SDL
-  # injection — the field already ships in the read-only schema).
-  assert {
-    condition = (aws_appsync_resolver.get_latest_published_version[0].type == "Query" &&
-    aws_appsync_resolver.get_latest_published_version[0].field == "getLatestPublishedVersion")
-    error_message = "The resolver must bind the Query.getLatestPublishedVersion field."
-  }
-
-  # The Lambda env must thread the bucket input under the exact key the shipped
-  # resolver reads.
-  assert {
-    condition     = aws_lambda_function.version_check_resolver[0].environment[0].variables["PUBLIC_ARTIFACTS_BUCKET"] == "my-public-idp-artifacts"
+    condition     = aws_lambda_function.version_check_resolver.environment[0].variables["PUBLIC_ARTIFACTS_BUCKET"] == "my-public-idp-artifacts"
     error_message = "The Lambda env PUBLIC_ARTIFACTS_BUCKET must equal the public_artifacts_bucket input."
   }
 }
 
-# ---------------------------------------------------------------------------
-# Bucket set -> the execution role's S3 statement is least-privilege: scoped to
-# exactly the bucket arn + `/*`, never a `*` wildcard. The inline
-# policy JSON embeds the computed log-group ARN, so this run uses `apply` to
-# materialize it for `jsondecode`.
-# ---------------------------------------------------------------------------
-run "version_check_role_is_least_privilege" {
+# Bucket unset: no S3 grant at all. Interpolating an empty bucket name would
+# otherwise produce the invalid ARN `arn:aws:s3:::`.
+run "no_s3_grant_when_bucket_unset" {
+  command = apply
+
+  assert {
+    condition = length([
+      for s in jsondecode(aws_iam_role_policy.version_check_resolver.policy).Statement :
+      s if contains(s.Action, "s3:GetObject")
+    ]) == 0
+    error_message = "With no bucket configured the role must carry no S3 statement."
+  }
+}
+
+# Bucket set: the S3 statement is scoped to exactly that bucket, never a wildcard.
+run "s3_grant_is_least_privilege_when_bucket_set" {
   command = apply
 
   variables {
     public_artifacts_bucket = "my-public-idp-artifacts"
   }
 
-  # No statement in the policy may use a bare "*" resource. Resource is a list on
-  # every statement; a list compared to the string "*" is unequal, so this
-  # catches a wildcard on any statement.
   assert {
     condition = alltrue([
-      for s in jsondecode(aws_iam_role_policy.version_check_resolver[0].policy).Statement :
+      for s in jsondecode(aws_iam_role_policy.version_check_resolver.policy).Statement :
       s.Resource != "*"
     ])
     error_message = "No version-check policy statement may use a wildcard ('*') resource."
   }
 
-  # No individual resource entry across any statement may be a bare "*".
   assert {
     condition = alltrue(flatten([
-      for s in jsondecode(aws_iam_role_policy.version_check_resolver[0].policy).Statement :
+      for s in jsondecode(aws_iam_role_policy.version_check_resolver.policy).Statement :
       [for r in s.Resource : r != "*"]
     ]))
     error_message = "No version-check policy resource entry may be a wildcard ('*')."
   }
 
-  # The S3 statement (the one carrying s3:GetObject) must be scoped to exactly
-  # the public artifacts bucket arn and its objects (arn + '/*') — and nothing
-  # broader.
   assert {
     condition = alltrue([
-      for s in jsondecode(aws_iam_role_policy.version_check_resolver[0].policy).Statement :
+      for s in jsondecode(aws_iam_role_policy.version_check_resolver.policy).Statement :
       toset(s.Resource) == toset([
         "arn:aws:s3:::my-public-idp-artifacts",
         "arn:aws:s3:::my-public-idp-artifacts/*",
@@ -221,11 +181,10 @@ run "version_check_role_is_least_privilege" {
     error_message = "The S3 statement must be scoped to exactly the public artifacts bucket arn + '/*'."
   }
 
-  # Exactly one S3 statement exists, confirming the assertion above is not
-  # vacuously true.
+  # Confirms the assertion above is not vacuously true.
   assert {
     condition = length([
-      for s in jsondecode(aws_iam_role_policy.version_check_resolver[0].policy).Statement :
+      for s in jsondecode(aws_iam_role_policy.version_check_resolver.policy).Statement :
       s if contains(s.Action, "s3:GetObject")
     ]) == 1
     error_message = "There must be exactly one S3 (s3:GetObject) statement in the version-check role policy."

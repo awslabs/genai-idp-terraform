@@ -44,6 +44,31 @@ locals {
   # that matches nothing and an AccessDenied at invoke time.
   model_prefix_re = "^(us|eu|apac|ca|sa|global)\\."
 
+  # var.bedrock_model_id only sets the env var; each agent takes its own model
+  # from the config, so the grant is harvested from there instead.
+  _system_defaults_dir = "${path.module}/../../../sources/lib/idp_common_pkg/idp_common/config/system_defaults"
+  _agent_config_model_ids = try([
+    for _, agent in yamldecode(file("${local._system_defaults_dir}/base-agents.yaml")).agents :
+    agent.model_id
+  ], [])
+
+  # Models authored later in the UI are invisible to Terraform; "*" is the
+  # operator escape hatch, as in unified-processor.
+  bedrock_wildcard_access = contains(var.allowed_bedrock_model_ids, "*")
+  _bedrock_model_ids = distinct([
+    for m in concat(
+      [var.bedrock_model_id],
+      local._agent_config_model_ids,
+      local.bedrock_wildcard_access ? [] : var.allowed_bedrock_model_ids,
+    ) : m if m != null && m != ""
+  ])
+
+  # Only geo-prefixed IDs resolve to an inference profile.
+  _inference_profile_model_ids = [
+    for id in local._bedrock_model_ids :
+    id if !startswith(id, "arn:") && can(regex(local.model_prefix_re, id))
+  ]
+
   bedrock_model_permissions = {
     is_arn               = startswith(var.bedrock_model_id, "arn:")
     is_inference_profile = !startswith(var.bedrock_model_id, "arn:") && can(regex(local.model_prefix_re, var.bedrock_model_id))
@@ -58,27 +83,33 @@ locals {
         "bedrock:InvokeModelWithResponseStream",
         "bedrock:GetFoundationModel"
       ]
-      resources = [
-        # For ARNs that are not inference profiles, use as-is
-        # For inference profiles, create foundation model ARN with base model ID (no prefix)
-        # For regular model IDs, create foundation model ARN as-is
-        startswith(var.bedrock_model_id, "arn:") && !contains(split(":", var.bedrock_model_id), "inference-profile") ?
-        var.bedrock_model_id :
-        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex(local.model_prefix_re, var.bedrock_model_id)) ? replace(var.bedrock_model_id, "/${local.model_prefix_re}/", "") : var.bedrock_model_id}"
-      ]
+      # One ARN per invocable model; the geo prefix is stripped for the
+      # underlying foundation model.
+      resources = local.bedrock_wildcard_access ? [
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*"
+        ] : distinct([
+          for id in local._bedrock_model_ids :
+          startswith(id, "arn:") && !contains(split(":", id), "inference-profile") ?
+          id :
+          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${can(regex(local.model_prefix_re, id)) ? replace(id, "/${local.model_prefix_re}/", "") : id}"
+      ])
     }
 
-    # Inference profile statement (only for inference profiles)
-    inference_profile_statement = (!startswith(var.bedrock_model_id, "arn:") && can(regex(local.model_prefix_re, var.bedrock_model_id))) ? {
+    # One ARN per geo-prefixed model; omitted when none resolves to a profile.
+    inference_profile_statement = local.bedrock_wildcard_access || length(local._inference_profile_model_ids) > 0 ? {
       effect = "Allow"
       actions = [
         "bedrock:GetInferenceProfile",
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream"
       ]
-      resources = [
-        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}"
-      ]
+      resources = local.bedrock_wildcard_access ? [
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
+        ] : distinct([
+          for id in local._inference_profile_model_ids :
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${id}"
+      ])
     } : null
   }
 }
@@ -123,6 +154,10 @@ module "agent_analytics_idp_layer" {
   lambda_local        = var.lambda_local
   lambda_architecture = var.lambda_architecture
   container_runtime   = var.container_runtime
+
+  vpc_id             = var.vpc_id
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 }
 
 # =============================================================================
@@ -132,11 +167,19 @@ module "agent_analytics_idp_layer" {
 # Create a minimal layer with only agent-specific dependencies
 # This is separate from idp_common to keep the layer size manageable
 locals {
+  # Pins aligned with the upstream idp_common `agents` extra
+  # (sources/lib/idp_common_pkg/pyproject.toml). The previous loose lower bounds
+  # (strands-agents>=1.0.0, bedrock-agentcore>=0.1.1) let pip resolve an older
+  # `mcp` transitive dep that lacks `streamablehttp_client`, so the
+  # list_available_agents / agent lambdas failed at import with
+  # "cannot import name 'streamablehttp_client' from 'mcp.client.streamable_http'".
+  # The explicit mcp floor guarantees the Streamable HTTP client is present.
   agent_requirements = {
     agents = join("\n", [
-      "strands-agents>=1.0.0",
-      "strands-agents-tools>=0.2.2",
-      "bedrock-agentcore>=0.1.1",
+      "strands-agents==1.14.0",
+      "strands-agents-tools==0.2.22",
+      "bedrock-agentcore>=1.6.1,<1.9.0",
+      "mcp>=1.9.0",
       "regex>=2024.0.0,<2026.0.0"
     ])
   }
@@ -163,6 +206,10 @@ module "agent_dependencies_layer" {
   lambda_local        = var.lambda_local
   lambda_architecture = var.lambda_architecture
   container_runtime   = var.container_runtime
+
+  vpc_id             = var.vpc_id
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 }
 
 

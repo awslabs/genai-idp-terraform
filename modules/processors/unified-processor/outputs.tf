@@ -141,18 +141,17 @@ output "model_permission_debug" {
   value = {
     partition  = data.aws_partition.current.partition
     account_id = data.aws_caller_identity.current.account_id
+    wildcard   = local.bedrock_wildcard_access
     models = {
-      for model_name, model_config in local.bedrock_model_permissions : model_name => model_config != null ? {
-        type          = model_config.is_cross_region ? "cross_region_inference_profile" : "foundation_model"
-        is_arn        = model_config.is_arn
-        base_model_id = model_config.base_model_id
+      for step, perms in local.bedrock_model_permissions : step => perms != null ? {
+        model_ids = local.bedrock_step_model_id_sets[step]
         foundation_permissions = {
-          actions   = model_config.foundation_statement.actions
-          resources = model_config.foundation_statement.resources
+          actions   = perms.foundation_statement.actions
+          resources = perms.foundation_statement.resources
         }
-        inference_profile_permissions = model_config.inference_profile_statement != null ? {
-          actions   = model_config.inference_profile_statement.actions
-          resources = model_config.inference_profile_statement.resources
+        inference_profile_permissions = perms.inference_profile_statement != null ? {
+          actions   = perms.inference_profile_statement.actions
+          resources = perms.inference_profile_statement.resources
         } : null
       } : null
     }

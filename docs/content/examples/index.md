@@ -113,7 +113,7 @@ Core infrastructure setup without specific processors - perfect for building cus
 
 - Core processing infrastructure
 - DynamoDB tables for tracking
-- REST API for management
+- GraphQL API for management
 - Foundation for custom processors
 
 **Use cases**:
@@ -131,7 +131,7 @@ Standalone API deployment for document processing management and monitoring.
 
 **What it includes**:
 
-- REST API endpoints
+- GraphQL API endpoints
 - Document status tracking
 - User authentication integration
 - API documentation

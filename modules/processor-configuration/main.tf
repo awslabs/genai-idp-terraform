@@ -109,6 +109,54 @@ resource "aws_lambda_invocation" "seed_schema" {
   ]
 }
 
+# Seed DefaultPricing, which the UI Pricing page and the cost figures on
+# reporting reads both resolve through. Only the defaults are written; the
+# operator's CustomPricing deltas are left untouched.
+resource "aws_lambda_invocation" "seed_default_pricing" {
+  count = var.pricing != null ? 1 : 0
+
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key   = "DefaultPricing"
+    Value = var.pricing
+  })
+
+  triggers = {
+    pricing_hash       = sha256(jsonencode(var.pricing))
+    seeder_source_hash = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}
+
+# Seed DefaultModelConfigLimits, which the UI Model Limits page reads. Without it
+# the page is empty while the Lambdas silently fall back to the on-disk YAML.
+# CustomModelConfigLimits holds the operator's edits and is never written here.
+resource "aws_lambda_invocation" "seed_default_model_config_limits" {
+  count = var.model_config_limits != null ? 1 : 0
+
+  function_name = aws_lambda_function.configuration_seeder.function_name
+
+  input = jsonencode({
+    Key   = "DefaultModelConfigLimits"
+    Value = var.model_config_limits
+  })
+
+  triggers = {
+    model_config_limits_hash = sha256(jsonencode(var.model_config_limits))
+    seeder_source_hash       = data.archive_file.lambda_zip.output_base64sha256
+  }
+
+  depends_on = [
+    aws_lambda_function.configuration_seeder,
+    aws_iam_role_policy_attachment.kms_access
+  ]
+}
+
 # ----------------------------------------------------------------------------
 # Managed baseline configurations
 #

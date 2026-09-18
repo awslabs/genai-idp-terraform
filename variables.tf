@@ -200,6 +200,46 @@ variable "data_tracking_retention_days" {
   default     = 365
 }
 
+variable "core_table_capacity" {
+  description = <<-EOT
+    Billing mode and provisioned capacity for the three core DynamoDB tables
+    (tracking, configuration, concurrency). Each table's settings are optional
+    and default to on-demand (PAY_PER_REQUEST), so leaving this unset is a no-op.
+    Set billing_mode = "PROVISIONED" with tuned read_capacity / write_capacity
+    for cost-predictable, steady high-volume workloads; read/write capacity is
+    ignored under PAY_PER_REQUEST. Applies only to tables this deployment creates
+    (inert for a table supplied via processing-environment's *_table_arn inputs).
+  EOT
+  type = object({
+    tracking = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+    configuration = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+    concurrency = optional(object({
+      billing_mode   = optional(string, "PAY_PER_REQUEST")
+      read_capacity  = optional(number, 5)
+      write_capacity = optional(number, 5)
+    }), {})
+  })
+  default = {}
+  validation {
+    condition = alltrue([
+      for mode in [
+        var.core_table_capacity.tracking.billing_mode,
+        var.core_table_capacity.configuration.billing_mode,
+        var.core_table_capacity.concurrency.billing_mode,
+      ] : contains(["PROVISIONED", "PAY_PER_REQUEST"], mode)
+    ])
+    error_message = "billing_mode for each core table must be \"PROVISIONED\" or \"PAY_PER_REQUEST\"."
+  }
+}
+
 #
 # Custom Configuration
 #
@@ -227,24 +267,31 @@ variable "processor" {
     classification_max_workers  = optional(number, 20)
 
     # bedrock-llm
-    classification_model_id      = optional(string, null)
-    extraction_model_id          = optional(string, null)
-    assessment_model_id          = optional(string, null)
+    # Per-stage model IDs come from the YAML configuration (config /
+    # additional_configurations), NOT from Terraform. allowed_bedrock_model_ids
+    # is the operator escape hatch for models added post-deploy in the UI that
+    # Terraform cannot observe (["*"] = wildcard grant); it is not a model
+    # assignment.
+    allowed_bedrock_model_ids    = optional(list(string), [])
     max_pages_for_classification = optional(string, "ALL")
-    enable_hitl                  = optional(bool, false)
+    # Processor-pipeline HITL enablement is config-authoritative
+    # (config.hitl.enabled), derived at plan time (see local.hitl_enabled). The
+    # API-side HITL feature remains var.api.enable_hitl.
 
     # shared
-    # Rule validation runs after extraction on any processor type; requires a
-    # `rule_validation` block with policy_classes in `config` to run at runtime.
-    enable_rule_validation = optional(bool, false)
-    summarization = optional(object({
-      enabled  = optional(bool, true)
-      model_id = optional(string, null)
-    }), { enabled = true, model_id = null })
+    # Rule-validation enablement is config-authoritative
+    # (config.rule_validation.enabled), derived at plan time (see
+    # local.rule_validation_enabled). No rule-validation toggle here.
+    # Summarization is fully config-authoritative: both the model
+    # (summarization.model) and enablement (summarization.enabled) live in the
+    # YAML configuration, derived at plan time (see local.summarization_enabled).
+    # No summarization toggle on the processor object.
     config                    = any
     additional_configurations = optional(any, {})
     bda_project_arn           = optional(string, null)
-    enable_bda_ocr_backend    = optional(bool, false)
+    # The BDA-as-OCR backend is config-authoritative (config.ocr.backend =
+    # "bda"), derived at plan time (see local.bda_ocr_backend_enabled). No
+    # separate toggle here.
   })
 
   validation {
@@ -269,20 +316,23 @@ variable "processor" {
 # Evaluation Configuration
 #
 variable "evaluation" {
-  description = "Configuration for document processing evaluation against baseline"
+  description = <<-EOT
+    Infrastructure inputs for document-processing evaluation against a baseline.
+    Whether evaluation runs is config-authoritative (config.evaluation.enabled);
+    this object carries only the infrastructure the config cannot express — the
+    baseline S3 bucket ARN. It is required whenever the config enables evaluation
+    (enforced by a check block, since a variable validation cannot see the
+    config). The evaluation model is set in the config
+    (evaluation.llm_method.model).
+  EOT
   type = object({
-    enabled             = optional(bool, false)
-    model_id            = optional(string, null)
     baseline_bucket_arn = optional(string)
-  })
-  default = {
-    enabled = false
-  }
 
-  validation {
-    condition     = var.evaluation.enabled == false || var.evaluation.baseline_bucket_arn != null
-    error_message = "When evaluation.enabled is true, baseline_bucket_arn is required."
-  }
+    # Static opt-in so enablement can gate count/for_each. Set it to the same
+    # flag that decides whether the caller creates the bucket.
+    enabled = optional(bool)
+  })
+  default = {}
 }
 
 #
@@ -354,6 +404,8 @@ variable "web_ui" {
     enable_signup              = optional(string, "")
     display_name               = optional(string, null)
     console_title              = optional(string, "IDP Accelerator Console")
+    # Country codes allowed to reach CloudFront; empty means no restriction.
+    allowed_geos = optional(list(string), [])
 
     # Hosting mode, mirroring upstream WebUIHosting.
     #
@@ -431,6 +483,10 @@ variable "api" {
     agent_analytics = optional(object({
       enabled  = optional(bool, false)
       model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+      # Escape hatch for agent models set in the config after apply, which
+      # Terraform cannot see. Mirrors processor.allowed_bedrock_model_ids;
+      # ["*"] grants the account's whole model space.
+      allowed_bedrock_model_ids = optional(list(string), [])
     }), { enabled = false })
 
     # Discovery (Document discovery and classification workflow)
@@ -443,6 +499,9 @@ variable "api" {
     chat_with_document = optional(object({
       enabled                  = optional(bool, true)
       guardrail_id_and_version = optional(string, null)
+      # Escape hatch for chat models set in the config after apply; ["*"] grants
+      # the account's whole model space.
+      allowed_bedrock_model_ids = optional(list(string), [])
     }), { enabled = true })
 
     # Process Changes (Document editing and reprocessing)
@@ -463,6 +522,7 @@ variable "api" {
     enable_test_studio          = optional(bool, false)
     enable_fcc_dataset          = optional(bool, false)
     enable_w2_dataset           = optional(bool, false)
+    enable_finetuning           = optional(bool, false)
     enable_error_analyzer       = optional(bool, false)
     enable_mcp                  = optional(bool, false)
 
@@ -575,8 +635,9 @@ variable "tracking" {
 variable "agent_analytics" {
   description = "DEPRECATED: Use api.agent_analytics instead. Configuration for agent analytics functionality"
   type = object({
-    enabled  = optional(bool, false)
-    model_id = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    enabled                   = optional(bool, false)
+    model_id                  = optional(string, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    allowed_bedrock_model_ids = optional(list(string), [])
   })
   default = null
 }
@@ -589,11 +650,18 @@ variable "discovery" {
   default = null
 }
 
+variable "discovery_allowed_cors_origins" {
+  description = "Allowed CORS origins for the discovery upload bucket (set to the web-UI / CloudFront app origin, e.g. [\"https://xxxx.cloudfront.net\"]). Empty list falls back to [\"*\"] (Wiz S3-036)."
+  type        = list(string)
+  default     = []
+}
+
 variable "chat_with_document" {
   description = "DEPRECATED: Use api.chat_with_document instead. Configuration for chat with document functionality"
   type = object({
-    enabled                  = optional(bool, false)
-    guardrail_id_and_version = optional(string, null)
+    enabled                   = optional(bool, false)
+    guardrail_id_and_version  = optional(string, null)
+    allowed_bedrock_model_ids = optional(list(string), [])
   })
   default = null
 }
@@ -744,6 +812,19 @@ variable "idp_federation" {
     attribute_mapping      = optional(map(string), {})
     group_attribute_name   = optional(string, "")
     group_mapping          = optional(map(string), {})
+
+    # Send users straight to the external IdP instead of showing the hosted UI's
+    # provider chooser. Mirrors upstream ExternalIdPAutoLogin.
+    auto_login = optional(bool, false)
+
+    # Globally unique Cognito hosted UI domain prefix. Defaults to a sanitized
+    # name prefix. Only used when the pool is created by modules/user-identity.
+    hosted_ui_domain_prefix = optional(string)
+
+    # Hosted UI FQDN of a pool you created yourself (e.g.
+    # "my-prefix.auth.us-east-1.amazoncognito.com"). Required for a
+    # bring-your-own pool so the sign-in page knows where to redirect.
+    hosted_ui_domain = optional(string, "")
   })
   default = {
     enabled = false

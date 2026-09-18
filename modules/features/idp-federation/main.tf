@@ -152,6 +152,18 @@ resource "aws_cognito_identity_provider" "external" {
 
   provider_details  = local.provider_details
   attribute_mapping = local.attribute_mapping
+
+  lifecycle {
+    # Cognito resolves these from the issuer's discovery document and writes them
+    # back into provider_details, so every plan would diff an unchanged provider.
+    ignore_changes = [
+      provider_details["attributes_url"],
+      provider_details["attributes_url_add_attributes"],
+      provider_details["authorize_url"],
+      provider_details["jwks_uri"],
+      provider_details["token_url"],
+    ]
+  }
 }
 
 # =============================================================================
@@ -200,18 +212,25 @@ locals {
   # Derived user-pool ARN, mirroring the upstream
   # `!Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPool}"`.
   # Avoids adding a separate user_pool_arn input — the id is sufficient.
-  user_pool_arn = "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:userpool/${var.user_pool_id}"
+  user_pool_arn = "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:userpool/${var.user_pool_id}"
 
-  # The four env keys read by index.py. Each is the external IdP group name that
-  # maps to the corresponding hardcoded Cognito role; these are wired from the
-  # RBAC group names so federated users land in the same groups the RBAC
-  # submodule provisions.
+  # index.py reads each of these as an EXTERNAL IdP group name and matches it
+  # against the user's claim, then adds the user to the hardcoded role group of
+  # the same name (upstream `ExternalIdPAdminGroupName`: "The group name in your
+  # external IdP that should map to the Cognito Admin role", e.g. IDP-Admins).
+  # So the value must come from var.group_mapping, not from rbac_group_names.
+  # Upstream carries one parameter per role, so one external group per role.
+  external_group_for_role = {
+    for role in ["Admin", "Author", "Reviewer", "Viewer"] :
+    role => join("", [for ext, r in var.group_mapping : ext if r == role])
+  }
+
   group_mapping_env = {
     LOG_LEVEL           = var.log_level
-    ADMIN_GROUP_NAME    = lookup(var.rbac_group_names, "Admin", "Admin")
-    AUTHOR_GROUP_NAME   = lookup(var.rbac_group_names, "Author", "Author")
-    REVIEWER_GROUP_NAME = lookup(var.rbac_group_names, "Reviewer", "Reviewer")
-    VIEWER_GROUP_NAME   = lookup(var.rbac_group_names, "Viewer", "Viewer")
+    ADMIN_GROUP_NAME    = local.external_group_for_role["Admin"]
+    AUTHOR_GROUP_NAME   = local.external_group_for_role["Author"]
+    REVIEWER_GROUP_NAME = local.external_group_for_role["Reviewer"]
+    VIEWER_GROUP_NAME   = local.external_group_for_role["Viewer"]
   }
 
   # ---------------------------------------------------------------------------
@@ -315,10 +334,13 @@ resource "aws_iam_role_policy" "group_mapping_cognito" {
 resource "time_sleep" "wait_for_iam_propagation" {
   count = local.enable_group_mapping ? 1 : 0
 
+  # Must NOT wait on group_mapping_cognito: that policy references the pool ARN
+  # and the pool attaches this function as its trigger, so including it closes a
+  # cycle (pool -> policy -> wait -> function -> pool). CreateFunction validates
+  # the role's trust policy, not its inline permissions.
   depends_on = [
     aws_iam_role.group_mapping,
     aws_iam_role_policy.group_mapping_logging,
-    aws_iam_role_policy.group_mapping_cognito,
   ]
 
   create_duration = "30s"
@@ -347,6 +369,25 @@ resource "aws_lambda_function" "group_mapping" {
     aws_cloudwatch_log_group.group_mapping,
     time_sleep.wait_for_iam_propagation,
   ]
+
+  lifecycle {
+    # No external group names means GROUP_MAPPING is empty, so every federated
+    # user matches nothing and signs in with no role.
+    precondition {
+      condition     = length(var.group_mapping) > 0
+      error_message = "group_mapping must name at least one external IdP group when group_attribute_name is set, otherwise no federated user can be placed in a role group."
+    }
+
+    # index.py adds users to the literal groups Admin/Author/Reviewer/Viewer.
+    # Renaming them in RBAC puts them beyond the mapping's reach: the Lambda
+    # syncs into a group that does not exist and the user gets no role.
+    precondition {
+      condition = length([
+        for role, name in var.rbac_group_names : role if name != role
+      ]) == 0
+      error_message = "Group mapping requires the RBAC group names to stay Admin/Author/Reviewer/Viewer: the vendored trigger adds users to those literal names, so renamed groups are unreachable. Rename them back or leave group_attribute_name empty."
+    }
+  }
 
   tags = var.tags
 }

@@ -553,6 +553,35 @@ def _put_schema(table, schema: Dict[str, Any]) -> Dict[str, Any]:
     return table.put_item(Item=item)
 
 
+def _put_default_pricing(table, pricing: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Write the ``DefaultPricing`` item.
+
+    ConfigurationRecord.from_dynamodb_item strips the metadata attributes and
+    validates whatever remains into PricingConfig, so the payload's own keys sit
+    at the top level of the item rather than nested. Only DefaultPricing is
+    seeded: CustomPricing holds the operator's deltas from the UI editor and must
+    never be overwritten by a deploy.
+    """
+    item = {"Configuration": "DefaultPricing"}
+    item.update(_stringify_values(pricing))
+    return table.put_item(Item=item)
+
+
+def _put_default_model_config_limits(table, limits: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Write the ``DefaultModelConfigLimits`` item.
+
+    Top-level shape as DefaultPricing; ModelConfigLimitsConfig forbids extras, so
+    the payload must carry only ``model_limits``. That list is first-match-wins,
+    so order is load-bearing and _stringify_values preserves it. Only the Default
+    row is written: CustomModelConfigLimits fully replaces it when present.
+    """
+    item = {"Configuration": "DefaultModelConfigLimits"}
+    item.update(_stringify_values(limits))
+    return table.put_item(Item=item)
+
+
 def _delete_legacy_default_if_present(table) -> Optional[Dict[str, Any]]:
     """
     Remove the v0.4.8 legacy ``Default`` item if it exists.
@@ -587,6 +616,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
       ``Configuration = "Default"`` item for fresh-deploy recovery.
     * ``{"Key": "Schema", "Value": {...schema dict...}}`` — writes
       ``Configuration = "Schema"``.
+    * ``{"Key": "DefaultPricing", "Value": {...pricing dict...}}`` — writes
+      ``Configuration = "DefaultPricing"``, which the UI Pricing page reads.
+    * ``{"Key": "DefaultModelConfigLimits", "Value": {"model_limits": [...]}}`` —
+      writes ``Configuration = "DefaultModelConfigLimits"``, which the UI Model
+      Limits page reads.
 
     Optional fields on a Default invocation:
 
@@ -604,8 +638,17 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         value = event["Value"]
         table_name = os.environ["TABLE_NAME"]
 
-        if key not in {"Default", "Schema"}:
-            raise ValueError(f"Invalid Key: {key!r}. Must be 'Default' or 'Schema'.")
+        accepted_keys = {
+            "Default",
+            "Schema",
+            "DefaultPricing",
+            "DefaultModelConfigLimits",
+        }
+        if key not in accepted_keys:
+            raise ValueError(
+                f"Invalid Key: {key!r}. Must be one of "
+                f"{', '.join(sorted(accepted_keys))}."
+            )
 
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(table_name)
@@ -616,6 +659,44 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "statusCode": 200,
                 "body": json.dumps(
                     {"message": "Stored Schema", "key": "Schema", "response": response},
+                    default=str,
+                ),
+            }
+
+        if key == "DefaultPricing":
+            if not isinstance(value, dict):
+                raise ValueError(
+                    "DefaultPricing Value must be a dictionary; got "
+                    f"{type(value).__name__}."
+                )
+            response = _put_default_pricing(table, value)
+            return {
+                "statusCode": 200,
+                "body": json.dumps(
+                    {
+                        "message": "Stored DefaultPricing",
+                        "key": "DefaultPricing",
+                        "response": response,
+                    },
+                    default=str,
+                ),
+            }
+
+        if key == "DefaultModelConfigLimits":
+            if not isinstance(value, dict):
+                raise ValueError(
+                    "DefaultModelConfigLimits Value must be a dictionary; got "
+                    f"{type(value).__name__}."
+                )
+            response = _put_default_model_config_limits(table, value)
+            return {
+                "statusCode": 200,
+                "body": json.dumps(
+                    {
+                        "message": "Stored DefaultModelConfigLimits",
+                        "key": "DefaultModelConfigLimits",
+                        "response": response,
+                    },
                     default=str,
                 ),
             }

@@ -181,7 +181,7 @@ resource "aws_iam_role_policy" "lambda" {
         {
           Effect   = "Allow"
           Action   = ["cloudformation:DescribeStacks"]
-          Resource = "arn:${data.aws_partition.current.partition}:cloudformation:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:stack/${var.main_stack_name}-feature-*/*"
+          Resource = "arn:${data.aws_partition.current.partition}:cloudformation:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:stack/${var.main_stack_name}-feature-*/*"
         },
         # Read the feature catalog (catalog.json) from the configuration bucket.
         {

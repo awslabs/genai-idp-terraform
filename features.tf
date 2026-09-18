@@ -89,8 +89,9 @@ module "chat_with_document" {
   base_layer_arn       = module.processing_environment.base_layer_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
-  config                   = local.chat_with_document_processor_config
-  guardrail_id_and_version = local.chat_with_document_config.guardrail_id_and_version
+  config                    = local.chat_with_document_processor_config
+  guardrail_id_and_version  = local.chat_with_document_config.guardrail_id_and_version
+  allowed_bedrock_model_ids = local.chat_with_document_config.allowed_bedrock_model_ids
 
   encryption_key_arn  = var.encryption_key_arn
   data_retention_days = var.data_tracking_retention_days
@@ -167,7 +168,9 @@ module "idp_federation" {
   user_pool_id        = local.user_pool_id
   user_pool_client_id = local.user_pool_client_id
 
-  # Map external groups onto RBAC's resolved names when RBAC is on, else the fallback.
+  # Reachability check only: the trigger adds users to the literal role names, so
+  # the module fails the plan if RBAC renamed them. External group names come
+  # from idp_federation.group_mapping.
   rbac_group_names = local.feature_enable.rbac ? module.rbac[0].group_names : local.rbac_group_names_fallback
 
   base_layer_arn       = module.processing_environment.base_layer_arn
@@ -181,6 +184,23 @@ module "idp_federation" {
 }
 
 locals {
+  # Consumed by modules/user-identity when it owns the pool. For a
+  # bring-your-own pool these are surfaced as root outputs for a second apply
+  # instead. See docs/content/security/external-idp.md.
+  federation_supported_identity_providers = (
+    local.feature_enable.federation ? module.idp_federation[0].supported_identity_providers_contribution : []
+  )
+
+  # Created by modules/user-identity when it owns the pool, else operator-supplied.
+  federation_hosted_ui_domain = (
+    try(var.idp_federation.hosted_ui_domain, "") != "" ? var.idp_federation.hosted_ui_domain :
+    (length(module.user_identity) > 0 ? coalesce(module.user_identity[0].hosted_ui_domain, "") : "")
+  )
+
+  federation_group_mapping_function_arn = (
+    local.feature_enable.federation ? module.idp_federation[0].group_mapping_function_arn : null
+  )
+
   # Fallback group names when RBAC is off. The federation module expects
   # capitalized keys; var.rbac.group_names uses lowercase, so remap here.
   rbac_group_names_fallback = {

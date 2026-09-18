@@ -15,10 +15,7 @@ vpc_cidr = "10.0.0.0/16"
 # }
 
 # ── Optional overrides (defaults shown; uncomment to change) ────────────────
-# classification_model_id = "us.amazon.nova-pro-v1:0"
-# extraction_model_id     = "us.amazon.nova-pro-v1:0"
-# summarization_enabled   = true
-# enable_rule_validation  = true
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
 # config_file_path        = "../../sources/config_library/unified/rule-validation/config.yaml"
 # tags = { Environment = "dev" }
 

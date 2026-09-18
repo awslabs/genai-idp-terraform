@@ -5,6 +5,9 @@
 # Core dependencies
 boto3>=1.37.29
 
+# Imported at module load by the discovery processor.
+aws-requests-auth>=0.4.3
+
 # Additional dependencies based on extras
 %{ for extra in extras }
 %{ if extra == "image" || extra == "all" }

@@ -147,6 +147,44 @@ variable "output_bucket_arn" {
   type        = string
 }
 
+variable "cloudfront_allowed_geos" {
+  description = "ISO 3166-1 alpha-2 country codes allowed to reach the CloudFront distribution. Empty (default) applies no geo restriction; a non-empty list becomes a whitelist, mirroring upstream CloudFrontAllowedGeos."
+  type        = list(string)
+  default     = []
+}
+
+variable "test_set_bucket_name" {
+  description = "Name of the Test Studio test-set bucket. Published to the Web UI as settings.TestSetBucket and given CORS, since the ground-truth editor reads and writes objects in it directly."
+  type        = string
+  default     = null
+}
+
+variable "test_set_bucket_enabled" {
+  description = "Whether the Test Studio test-set bucket exists, gating its CORS. Separate from test_set_bucket_name because that name is computed and unknown when planning from empty state."
+  type        = bool
+  default     = false
+}
+
+variable "working_bucket_arn" {
+  description = "ARN of the S3 bucket for intermediate working files. Optional; when set it receives the same CORS rules as the input and output buckets, because the file viewers can be handed presigned URLs for objects in it."
+  type        = string
+  default     = null
+}
+
+variable "working_bucket_cors_enabled" {
+  description = <<-EOT
+    Plan-time-known override for whether the working bucket exists and should
+    receive CORS rules. Callers typically pass `working_bucket_arn` as a COMPUTED
+    value (a bucket created in the same apply), so `working_bucket_arn != null`
+    is unknown at plan time and breaks a cold `terraform plan`. Set this to a
+    value the caller knows at plan time (e.g. "am I creating the working
+    bucket?"). Null (default) preserves the legacy behaviour of deriving the gate
+    from `working_bucket_arn != null`.
+  EOT
+  type        = bool
+  default     = null
+}
+
 
 variable "encryption_key_arn" {
   description = "ARN of the KMS key for encryption"
@@ -286,4 +324,14 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "external_idp" {
+  description = "External IdP details for the sign-in UI. When set, the build receives VITE_COGNITO_DOMAIN / VITE_EXTERNAL_IDP_NAME / VITE_EXTERNAL_IDP_AUTO_LOGIN so the UI renders a federated sign-in entry point. Null renders Cognito-only sign-in."
+  type = object({
+    provider_name  = string
+    cognito_domain = string
+    auto_login     = optional(bool, false)
+  })
+  default = null
 }

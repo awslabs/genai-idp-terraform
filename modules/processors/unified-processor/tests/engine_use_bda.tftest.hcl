@@ -26,6 +26,8 @@
 # The mocked AWS provider must return a valid partition/region/account for the
 # many `arn:${data.aws_partition.current.partition}:...` interpolations, or the
 # AWS provider's ARN validation rejects the random mock values at plan time.
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_data "aws_partition" {
     defaults = {

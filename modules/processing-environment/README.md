@@ -12,10 +12,10 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.52.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | 3.3.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.3.2 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.9.1 |
 
 ## Modules
 
@@ -46,7 +46,6 @@
 | [aws_iam_policy.save_reporting_data_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.update_configuration_kms_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.update_configuration_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
-| [aws_iam_policy.workflow_tracker_appsync_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.workflow_tracker_kms_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.workflow_tracker_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_role.lookup_function_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -70,7 +69,6 @@
 | [aws_iam_role_policy_attachment.update_configuration_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.update_configuration_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.update_configuration_vpc_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
-| [aws_iam_role_policy_attachment.workflow_tracker_appsync_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.workflow_tracker_kms_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.workflow_tracker_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.workflow_tracker_vpc_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
@@ -102,11 +100,12 @@
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_agents_layer_arn"></a> [agents\_layer\_arn](#input\_agents\_layer\_arn) | ARN of the shared agents Lambda layer (idp\_common with agents extras, v0.4.11+) | `string` | `null` | no |
-| <a name="input_api"></a> [api](#input\_api) | Optional GraphQL API that is used to track processing status and results of documents | <pre>object({<br/>    api_id           = string<br/>    api_name         = optional(string)<br/>    api_arn          = string<br/>    graphql_url      = string<br/>    realtime_url     = optional(string)<br/>    api_key          = optional(string)<br/>    lambda_functions = optional(any)<br/>  })</pre> | `null` | no |
+| <a name="input_api"></a> [api](#input\_api) | Optional GraphQL API that is used to track processing status and results of documents | <pre>object({<br>    api_id           = string<br>    api_name         = optional(string)<br>    api_arn          = string<br>    graphql_url      = string<br>    realtime_url     = optional(string)<br>    api_key          = optional(string)<br>    lambda_functions = optional(any)<br>  })</pre> | `null` | no |
 | <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the shared base Lambda layer (idp\_common with docs\_service extras, v0.4.11+) | `string` | `null` | no |
 | <a name="input_concurrency_table_arn"></a> [concurrency\_table\_arn](#input\_concurrency\_table\_arn) | ARN of the table that manages concurrency limits for document processing | `string` | `null` | no |
 | <a name="input_configuration_table_arn"></a> [configuration\_table\_arn](#input\_configuration\_table\_arn) | ARN of the optional DynamoDB table for storing configuration settings | `string` | `null` | no |
 | <a name="input_container_runtime"></a> [container\_runtime](#input\_container\_runtime) | Container runtime for local builds (auto\|docker\|podman\|finch). | `string` | `"auto"` | no |
+| <a name="input_core_table_capacity"></a> [core\_table\_capacity](#input\_core\_table\_capacity) | Billing mode and provisioned capacity for the core DynamoDB tables this<br>module creates (tracking, configuration, concurrency). Each table's settings<br>are optional and default to on-demand (PAY\_PER\_REQUEST); read\_capacity /<br>write\_capacity apply only under PROVISIONED billing (the table modules null<br>them out otherwise). Inert for any table supplied via its *\_table\_arn input<br>(that table is not created). | <pre>object({<br>    tracking = optional(object({<br>      billing_mode   = optional(string, "PAY_PER_REQUEST")<br>      read_capacity  = optional(number, 5)<br>      write_capacity = optional(number, 5)<br>    }), {})<br>    configuration = optional(object({<br>      billing_mode   = optional(string, "PAY_PER_REQUEST")<br>      read_capacity  = optional(number, 5)<br>      write_capacity = optional(number, 5)<br>    }), {})<br>    concurrency = optional(object({<br>      billing_mode   = optional(string, "PAY_PER_REQUEST")<br>      read_capacity  = optional(number, 5)<br>      write_capacity = optional(number, 5)<br>    }), {})<br>  })</pre> | `{}` | no |
 | <a name="input_custom_post_processor_arn"></a> [custom\_post\_processor\_arn](#input\_custom\_post\_processor\_arn) | ARN of a custom Lambda function to invoke after document processing completes. Used by the post\_processing\_decompressor. | `string` | `null` | no |
 | <a name="input_data_tracking_retention_days"></a> [data\_tracking\_retention\_days](#input\_data\_tracking\_retention\_days) | The retention period for document tracking data in days | `number` | `365` | no |
 | <a name="input_enable_encryption"></a> [enable\_encryption](#input\_enable\_encryption) | Whether encryption is enabled. Use this instead of checking encryption\_key\_arn != null to avoid unknown value issues in for\_each/count. | `bool` | `false` | no |
@@ -114,7 +113,7 @@
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key used for encrypting resources in the document processing workflow | `string` | `null` | no |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP common Lambda layer to use for functions that require idp\_common | `string` | n/a | yes |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket where source documents to be processed are stored | `string` | n/a | yes |
-| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture for layers/functions owned by this module. | `string` | `"x86_64"` | no |
+| <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture for layers/functions owned by this module. | `string` | `"arm64"` | no |
 | <a name="input_lambda_layers_bucket_arn"></a> [lambda\_layers\_bucket\_arn](#input\_lambda\_layers\_bucket\_arn) | ARN of the S3 bucket for storing Lambda layers. If not provided, a new bucket will be created. | `string` | `""` | no |
 | <a name="input_lambda_local"></a> [lambda\_local](#input\_lambda\_local) | When true, build Lambda layers locally using a container runtime instead of via AWS CodeBuild. See root var.build.lambda\_local. | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
@@ -128,6 +127,7 @@
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | List of subnet IDs for Lambda functions to run in | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | A map of tags to add to all resources | `map(string)` | `{}` | no |
 | <a name="input_tracking_table_arn"></a> [tracking\_table\_arn](#input\_tracking\_table\_arn) | ARN of the optional document tracking table | `string` | `null` | no |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | VPC to place the layer-build CodeBuild project in, alongside subnet\_ids and security\_group\_ids. Null builds outside a VPC. | `string` | `null` | no |
 | <a name="input_working_bucket_arn"></a> [working\_bucket\_arn](#input\_working\_bucket\_arn) | ARN of the S3 bucket used for temporary storage during document processing | `string` | n/a | yes |
 
 ## Outputs

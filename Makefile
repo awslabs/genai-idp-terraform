@@ -1,7 +1,7 @@
 # Makefile for GenAI IDP Accelerator Terraform
 # Based on AWS IA Terraform standards
 
-.PHONY: help install-tools fmt check-sources validate lint security docs test clean all
+.PHONY: help install-tools fmt check-sources validate lint security docs unit-test test clean all
 
 # Default target
 help: ## Show this help message
@@ -139,18 +139,68 @@ security: ## Run TFSec security scan
 
 # Generate documentation
 docs: ## Generate Terraform documentation
+	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found. Run 'make install-tools' or see https://terraform-docs.io"; exit 1; }
 	@echo "Generating Terraform documentation for modules..."
-	@for dir in modules/*/; do \
+	@# Render to a temp file and move it into place only on success: redirecting
+	@# straight into README.md truncates it before terraform-docs runs, so any
+	@# failure leaves the file empty. The cd stays (terraform-docs only reports
+	@# resolved provider versions when run inside the initialized module dir) but
+	@# runs in a subshell, so a failure cannot leak the working directory into the
+	@# next iteration. The second glob picks up nested modules
+	@# (modules/processors/*), which the single-level glob never reached.
+	@set -e; for dir in modules/*/ modules/*/*/; do \
 		if [ -f "$$dir/main.tf" ]; then \
 			echo "Generating docs for $$dir"; \
-			cd "$$dir" && terraform-docs markdown table . > README.md && cd - > /dev/null; \
+			tmp=$$(mktemp); \
+			( cd "$$dir" && terraform-docs markdown table . ) > "$$tmp"; \
+			mv "$$tmp" "$$dir/README.md"; \
 		fi; \
 	done
 	@echo "✅ Documentation generated"
 
+# Native `terraform test` suites. Module dirs are derived from the test files
+# themselves, so nested modules (modules/features/*, modules/processors/*) are
+# covered too -- unlike validate/lint, which only walk modules/*/.
+#
+# One `terraform test` process PER TEST FILE, not per module. `terraform test`
+# holds every run in a file for the life of the process, and each run here is a
+# full `command = plan` of the module, so a module with many runs in one file
+# grew past the shared CI runner's container memory limit and was OOM-killed
+# (exit 137). A process per file releases that memory at each file boundary.
+# `init` still runs once per module, so this costs no extra provider downloads.
+unit-test: ## Run every module's native `terraform test` suite (one process per test file)
+	@echo "Running terraform test suites..."
+	@failed=""; \
+	for dir in $$(find modules -name '*.tftest.hcl' -not -path '*/.terraform/*' | sed 's|/tests/.*||' | sort -u); do \
+		echo "--- $$dir"; \
+		if ! (cd "$$dir" && terraform init -backend=false -input=false > /dev/null); then \
+			failed="$$failed $$dir(init)"; \
+			continue; \
+		fi; \
+		for tf in $$(cd "$$dir" && find tests -name '*.tftest.hcl' -not -path '*/.terraform/*' | sort); do \
+			echo "    $$tf"; \
+			if ! (cd "$$dir" && terraform test -filter="$$tf"); then \
+				failed="$$failed $$dir/$$tf"; \
+			fi; \
+		done; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo "❌ terraform test failed in:$$failed"; \
+		exit 1; \
+	fi; \
+	echo "✅ All terraform test suites passed"
+
 # Run all tests
-test: fmt validate lint security ## Run all validation tests
+test: fmt validate lint security unit-test ## Run all validation tests
 	@echo "✅ All tests passed!"
+
+# End-to-end tests against a live, pre-deployed Terraform stack. Opt-in (needs
+# AWS creds + a deployed stack). Point at the deployment with IDP_TF_DIR and
+# IDP_TF_WORKSPACE. See tests/e2e/README.md.
+IDP_TF_DIR ?= $(CURDIR)/examples/unified-processor
+test-e2e: ## Run end-to-end tests against a deployed stack (requires AWS + IDP_TF_DIR/IDP_TF_WORKSPACE)
+	@echo "Running E2E tests against $(IDP_TF_DIR) (workspace: $${IDP_TF_WORKSPACE:-current})..."
+	IDP_TF_DIR="$(IDP_TF_DIR)" python3 -m pytest tests/e2e -m e2e -p no:cacheprovider
 
 # Clean temporary files
 clean: ## Clean temporary files and directories
@@ -179,7 +229,7 @@ clean-soft-force: ## Force clean untracked files while preserving important patt
 	@echo "✅ Soft cleanup completed"
 
 # Run all checks (CI equivalent)
-all: fmt validate lint security docs ## Run all checks (equivalent to CI pipeline)
+all: fmt validate lint security unit-test docs ## Run all checks (equivalent to CI pipeline)
 	@echo "🎉 All quality checks passed! Ready for merge."
 
 # Check specific module

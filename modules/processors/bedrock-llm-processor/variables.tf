@@ -184,18 +184,6 @@ variable "lambda_hook_summarization" {
   }
 }
 
-variable "model_id" {
-  description = "Default Bedrock model ID for all processing steps. Supports global./ us. prefixes and :flex/:priority/:standard suffixes. (v0.4.12+)"
-  type        = string
-  default     = "us.amazon.nova-2-lite-v1:0"
-}
-
-variable "classification_model_id" {
-  description = "Optional model ID for document classification. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
-}
-
 variable "classification_max_workers" {
   description = "The maximum number of concurrent workers for document classification"
   type        = number
@@ -220,12 +208,6 @@ variable "classification_guardrail" {
     guardrail_arn = string
   })
   default = null
-}
-
-variable "extraction_model_id" {
-  description = "Optional model ID for information extraction. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "extraction_guardrail" {
@@ -255,8 +237,20 @@ variable "evaluation_baseline_bucket_arn" {
   default     = null
 }
 
-variable "evaluation_model_id" {
-  description = "Optional model ID for evaluating extraction results. Overrides model_id for this step. If not provided, model_id is used."
+variable "reporting_bucket_name" {
+  description = "Name of the reporting bucket the evaluation function forwards accuracy results to. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_name" {
+  description = "Name of the save_reporting_data Lambda the evaluation function invokes to persist accuracy results. Leave null to disable the evaluation reporting fan-out."
+  type        = string
+  default     = null
+}
+
+variable "save_reporting_function_arn" {
+  description = "ARN of the save_reporting_data Lambda, used to scope the evaluation function's invoke grant."
   type        = string
   default     = null
 }
@@ -265,12 +259,6 @@ variable "is_summarization_enabled" {
   description = "Controls whether document summarization is enabled"
   type        = bool
   default     = false
-}
-
-variable "summarization_model_id" {
-  description = "Optional model ID for document summarization. Overrides model_id for this step. If not provided, model_id is used."
-  type        = string
-  default     = null
 }
 
 variable "summarization_guardrail" {
@@ -300,12 +288,6 @@ variable "enable_hitl" {
   description = "Whether to enable Human-in-the-Loop (HITL) functionality for document review"
   type        = bool
   default     = false
-}
-
-variable "assessment_model_id" {
-  description = "The Bedrock model ID to use for assessment (when assessment is enabled)"
-  type        = string
-  default     = null
 }
 
 variable "assessment_guardrail" {
@@ -390,4 +372,10 @@ variable "enable_bda_ocr_backend" {
   description = "Provision the deployment-scoped Bedrock Data Automation OCR project required by the IDP v0.6 `ocr.backend: bda` configuration setting. Off by default: BDA is not available in every region, and an unconditional control-plane create would fail apply there. Forwarded to the unified-processor engine."
   type        = bool
   default     = false
+}
+
+variable "allowed_bedrock_model_ids" {
+  description = "Bedrock model IDs every processing step is allowed to invoke, on top of the models resolved from the seeded configs. Set this for models operators will select in the UI later, which Terraform cannot see. Use [\"*\"] to allow any Bedrock model. Empty (default) grants only the resolved models."
+  type        = list(string)
+  default     = []
 }

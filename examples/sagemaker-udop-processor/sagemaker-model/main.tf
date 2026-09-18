@@ -141,7 +141,7 @@ resource "null_resource" "push_generate_demo_data" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      aws ecr get-login-password --region ${data.aws_region.current.id} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com
+      aws ecr get-login-password --region ${data.aws_region.current.region} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.region}.amazonaws.com
       docker push ${docker_image.generate_demo_data.name}
     EOT
   }
@@ -156,7 +156,7 @@ resource "null_resource" "push_sagemaker_train" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      aws ecr get-login-password --region ${data.aws_region.current.id} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com
+      aws ecr get-login-password --region ${data.aws_region.current.region} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.region}.amazonaws.com
       docker push ${docker_image.sagemaker_train.name}
     EOT
   }
@@ -216,7 +216,7 @@ resource "aws_iam_role_policy" "sagemaker_execution_policy" {
         Action = [
           "logs:DescribeLogStreams"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/sagemaker/TrainingJobs:log-stream:*"
+        Resource = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/sagemaker/TrainingJobs:log-stream:*"
       },
       {
         Effect = "Allow"
@@ -224,7 +224,7 @@ resource "aws_iam_role_policy" "sagemaker_execution_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/${var.kms_key_id}"
+        Resource = "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${var.kms_key_id}"
       }
     ]
   })
@@ -287,7 +287,7 @@ module "generate_demo_data_lambda" {
         "kms:Decrypt",
         "kms:GenerateDataKey"
       ]
-      resources = ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/${var.kms_key_id}"]
+      resources = ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${var.kms_key_id}"]
     }
   }
 
@@ -365,7 +365,7 @@ module "sagemaker_train_lambda" {
         "logs:GetLogEvents"
       ]
       resources = [
-        "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/sagemaker/TrainingJobs:log-stream:*"
+        "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/sagemaker/TrainingJobs:log-stream:*"
       ]
     }
     kms_access = {
@@ -374,7 +374,7 @@ module "sagemaker_train_lambda" {
         "kms:Decrypt",
         "kms:GenerateDataKey"
       ]
-      resources = ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/${var.kms_key_id}"]
+      resources = ["arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${var.kms_key_id}"]
     }
   }
 
@@ -490,7 +490,7 @@ resource "local_file" "training_status_checker" {
   filename = "${path.module}/check_training_status.py"
   content = templatefile("${path.module}/training_status_checker.py.tpl", {
     function_name = module.sagemaker_train_is_complete_lambda.lambda_function_name
-    region        = data.aws_region.current.id
+    region        = data.aws_region.current.region
   })
 }
 
@@ -528,7 +528,7 @@ locals {
 resource "local_file" "s3_model_checker" {
   filename = "${path.module}/check_s3_model.py"
   content = templatefile("${path.module}/s3_model_checker.py.tpl", {
-    region = data.aws_region.current.id
+    region = data.aws_region.current.region
   })
 }
 

@@ -33,8 +33,17 @@ locals {
   # Validate required variables when using existing infrastructure
 
   # Extract bucket names from ARNs (format: arn:${data.aws_partition.current.partition}:s3:::bucket-name)
-  input_bucket_name  = element(split(":", var.input_bucket_arn), 5)
-  output_bucket_name = element(split(":", var.output_bucket_arn), 5)
+  input_bucket_name   = element(split(":", var.input_bucket_arn), 5)
+  output_bucket_name  = element(split(":", var.output_bucket_arn), 5)
+  working_bucket_name = var.working_bucket_arn != null ? element(split(":", var.working_bucket_arn), 5) : null
+
+  # Deterministic flag for whether the working bucket exists (and so should get
+  # CORS rules). Prefer the caller-supplied plan-time-known override; fall back
+  # to deriving from the (possibly computed) ARN so existing callers behave
+  # unchanged. Gating count on this instead of `working_bucket_name != null`
+  # keeps a cold `terraform plan` valid when the ARN is a resource attribute
+  # created in the same apply.
+  working_bucket_cors_enabled = var.working_bucket_cors_enabled != null ? var.working_bucket_cors_enabled : var.working_bucket_arn != null
 
   # Extract table name from ARN (format: arn:${data.aws_partition.current.partition}:dynamodb:region:account:table/table-name)
 
@@ -98,12 +107,24 @@ locals {
   })
 
   # Web UI settings as a structured object
+  # Always emits all three keys, empty when off, mirroring upstream.
+  federation_ui_env = var.external_idp == null ? {
+    VITE_COGNITO_DOMAIN          = ""
+    VITE_EXTERNAL_IDP_NAME       = ""
+    VITE_EXTERNAL_IDP_AUTO_LOGIN = ""
+    } : {
+    VITE_COGNITO_DOMAIN          = var.external_idp.cognito_domain
+    VITE_EXTERNAL_IDP_NAME       = var.external_idp.provider_name
+    VITE_EXTERNAL_IDP_AUTO_LOGIN = var.external_idp.auto_login ? "true" : "false"
+  }
+
   web_ui_settings = {
     InputBucket                    = local.input_bucket_name
     OutputBucket                   = local.output_bucket_name
     DiscoveryBucket                = var.discovery_bucket_name
     ReportingBucket                = var.reporting_bucket_name
     EvaluationBaselineBucket       = var.evaluation_baseline_bucket_name
+    TestSetBucket                  = var.test_set_bucket_name
     IDPPattern                     = var.idp_pattern
     ShouldUseDocumentKnowledgeBase = var.knowledge_base_enabled ? "true" : "false"
     Version                        = var.idp_version
@@ -410,7 +431,7 @@ resource "aws_cloudfront_distribution" "web_distribution" {
   count = local.create_cloudfront ? 1 : 0
 
   origin {
-    domain_name = "${local.web_app_bucket.bucket_name}.s3.${data.aws_region.current.id}.amazonaws.com"
+    domain_name = "${local.web_app_bucket.bucket_name}.s3.${data.aws_region.current.region}.amazonaws.com"
     origin_id   = "S3-${local.web_app_bucket.bucket_name}"
 
     origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
@@ -422,11 +443,13 @@ resource "aws_cloudfront_distribution" "web_distribution" {
   price_class         = "PriceClass_All" # Default to global distribution
   web_acl_id          = var.enable_waf ? aws_wafv2_web_acl.cloudfront_waf[0].arn : null
 
-  # Geo restriction configuration (always required)
+  # Geo restriction is a required block, so an empty allow-list is expressed as
+  # restriction_type "none" rather than an empty whitelist, which CloudFront
+  # would reject.
   restrictions {
     geo_restriction {
-      restriction_type = "none" # Default to no geo restrictions
-      locations        = []
+      restriction_type = length(var.cloudfront_allowed_geos) > 0 ? "whitelist" : "none"
+      locations        = var.cloudfront_allowed_geos
     }
   }
 
@@ -522,7 +545,11 @@ resource "aws_cloudfront_response_headers_policy" "security_headers" {
   }
 }
 
-# Add CORS rules to input and output buckets for web UI access
+# Add CORS rules to input and output buckets for web UI access.
+# GET/HEAD are required as well as the upload methods: the viewers fetch object
+# bytes straight from S3 through a presigned GET (getFilePresignedUrl) instead of
+# proxying them through the resolver, so without GET the browser blocks the
+# request and the UI reports "Failed to load content".
 resource "aws_s3_bucket_cors_configuration" "input_bucket_cors" {
   bucket = local.input_bucket_name
 
@@ -534,7 +561,7 @@ resource "aws_s3_bucket_cors_configuration" "input_bucket_cors" {
       "Authorization",
       "x-amz-security-token"
     ]
-    allowed_methods = ["PUT", "POST"]
+    allowed_methods = ["GET", "HEAD", "PUT", "POST"]
     allowed_origins = local.cors_allowed_origins
     expose_headers  = ["ETag", "x-amz-server-side-encryption"]
     max_age_seconds = 3000
@@ -552,7 +579,52 @@ resource "aws_s3_bucket_cors_configuration" "output_bucket_cors" {
       "Authorization",
       "x-amz-security-token"
     ]
-    allowed_methods = ["PUT", "POST"]
+    allowed_methods = ["GET", "HEAD", "PUT", "POST"]
+    allowed_origins = local.cors_allowed_origins
+    expose_headers  = ["ETag", "x-amz-server-side-encryption"]
+    max_age_seconds = 3000
+  }
+}
+
+# The working bucket is in get_file_contents_resolver's presigned-URL
+# allow-list alongside input and output, so a viewer handed a working-bucket URI
+# hits the same CORS wall without this.
+# The Test Studio ground-truth editor reads baseline result.json through a
+# presigned GET and saves it back through a presigned POST, both straight from
+# the browser, so this bucket needs the upload methods as well as GET.
+resource "aws_s3_bucket_cors_configuration" "test_set_bucket_cors" {
+  # Static flag, not the name: the name is computed and unknown at plan time.
+  count  = var.test_set_bucket_enabled ? 1 : 0
+  bucket = var.test_set_bucket_name
+
+  cors_rule {
+    allowed_headers = [
+      "Content-Type",
+      "x-amz-content-sha256",
+      "x-amz-date",
+      "Authorization",
+      "x-amz-security-token"
+    ]
+    allowed_methods = ["GET", "HEAD", "PUT", "POST"]
+    allowed_origins = local.cors_allowed_origins
+    expose_headers  = ["ETag", "x-amz-server-side-encryption"]
+    max_age_seconds = 3000
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "working_bucket_cors" {
+  count  = local.working_bucket_cors_enabled ? 1 : 0
+  bucket = local.working_bucket_name
+
+  cors_rule {
+    allowed_headers = [
+      "Content-Type",
+      "x-amz-content-sha256",
+      "x-amz-date",
+      "Authorization",
+      "x-amz-security-token"
+    ]
+    allowed_methods = ["GET", "HEAD"]
     allowed_origins = local.cors_allowed_origins
     expose_headers  = ["ETag", "x-amz-server-side-encryption"]
     max_age_seconds = 3000
@@ -595,11 +667,11 @@ data "archive_file" "ui_source" {
 
 # S3 deployment for React app source code (CodeBuild path only)
 resource "aws_s3_object" "react_app_source" {
-  count  = var.ui_local ? 0 : 1
-  bucket = local.web_app_bucket.bucket_name
-  key    = "code/ui-source.zip"
-  source = data.archive_file.ui_source.output_path
-  etag   = data.archive_file.ui_source.output_base64sha256
+  count       = var.ui_local ? 0 : 1
+  bucket      = local.web_app_bucket.bucket_name
+  key         = "code/ui-source.zip"
+  source      = data.archive_file.ui_source.output_path
+  source_hash = data.archive_file.ui_source.output_base64sha256
 
   tags = local.common_tags
 }
@@ -649,7 +721,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "AWS_DEFAULT_REGION"
-      value = data.aws_region.current.id
+      value = data.aws_region.current.region
     }
 
     environment_variable {
@@ -704,7 +776,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "VITE_AWS_REGION"
-      value = data.aws_region.current.id
+      value = data.aws_region.current.region
     }
 
     environment_variable {
@@ -722,6 +794,14 @@ resource "aws_codebuild_project" "ui_build" {
     environment_variable {
       name  = "VITE_UI_BASE_PATH"
       value = local.ui_base_path
+    }
+
+    dynamic "environment_variable" {
+      for_each = local.federation_ui_env
+      content {
+        name  = environment_variable.key
+        value = environment_variable.value
+      }
     }
   }
 
@@ -798,8 +878,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "logs:PutLogEvents"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-webui-build",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-webui-build:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-webui-build",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-webui-build:*"
         ]
       },
       {
@@ -828,7 +908,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Resource = var.encryption_key_arn
         Condition = {
           StringEquals = {
-            "kms:ViaService" = "logs.${data.aws_region.current.id}.amazonaws.com"
+            "kms:ViaService" = "logs.${data.aws_region.current.region}.amazonaws.com"
           }
         }
       }

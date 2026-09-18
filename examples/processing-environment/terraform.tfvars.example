@@ -19,9 +19,6 @@ data_tracking_retention_days = 365
 enable_evaluation = false
 enable_reporting  = false
 
-# Evaluation Model (when enabled)
-evaluation_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-
 # IDP Common Layer configuration
 # List of extra dependencies to include in the layer
 idp_common_layer_extras = ["appsync", "evaluation"]

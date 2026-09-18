@@ -16,6 +16,8 @@
 locals {
   use_local_build = var.lambda_local
 
+  has_network_environment = var.vpc_id != null && length(var.subnet_ids) > 0 && length(var.security_group_ids) > 0
+
   module_build_dir   = "${path.root}/.terraform/tmp/lambda-layer-codebuild-idp/${var.layer_prefix}"
   module_instance_id = substr(md5("${var.layer_prefix}-static"), 0, 8)
 
@@ -26,6 +28,12 @@ locals {
     for f in fileset("${var.idp_common_source_path}/idp_common", "**/*.py") :
     filemd5("${var.idp_common_source_path}/idp_common/${f}")
   ])) : ""
+
+  build_idp_common_object = !var.lambda_local && var.idp_common_source_path != ""
+
+  # Hash of the actual packaged tree; supersedes idp_common_files_hash (*.py only)
+  # for CodeBuild rebuild detection.
+  idp_common_source_hash = local.build_idp_common_object ? data.archive_file.idp_common_source[0].output_base64sha256 : ""
 
   # Architecture-aware SAM image (local-build path only).
   sam_image_arch  = var.lambda_architecture == "arm64" ? "arm64" : "x86_64"
@@ -83,75 +91,22 @@ resource "terraform_data" "copy_idp_common_source" {
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/setup.py") : "",
     local.idp_common_files_hash,
     filemd5("${path.module}/main.tf"),
+    # The staging logic lives in the script below, so its content must be part
+    # of the trigger set -- fingerprinting main.tf alone would let edits to the
+    # rsync mirror go unnoticed and leave a stale staged tree.
+    filemd5("${path.module}/scripts/stage-idp-common.sh"),
   ]
 
   provisioner "local-exec" {
-    command = <<-EOT
-      set -e
+    # The source and destination paths are supplied through `environment` and
+    # expanded double-quoted inside the script, so the shell never parses their
+    # contents. This also makes paths containing a space work correctly.
+    command = "${path.module}/scripts/stage-idp-common.sh"
 
-      DEST="${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
-
-      mkdir -p "$DEST"
-
-      if [ ! -d "${var.idp_common_source_path}" ]; then
-        echo "ERROR: idp_common_source_path not found: ${var.idp_common_source_path}" >&2
-        exit 1
-      fi
-
-      rsync -a --delete \
-        --exclude='__pycache__/' \
-        --exclude='*.py[cod]' \
-        --exclude='*$py.class' \
-        --exclude='*.so' \
-        --exclude='.pytest_cache/' \
-        --exclude='.mypy_cache/' \
-        --exclude='.ruff_cache/' \
-        --exclude='.tox/' \
-        --exclude='.venv/' \
-        --exclude='venv/' \
-        --exclude='env/' \
-        --exclude='ENV/' \
-        --exclude='build/' \
-        --exclude='dist/' \
-        --exclude='develop-eggs/' \
-        --exclude='downloads/' \
-        --exclude='eggs/' \
-        --exclude='.eggs/' \
-        --exclude='sdist/' \
-        --exclude='wheels/' \
-        --exclude='var/' \
-        --exclude='parts/' \
-        --exclude='*.egg-info/' \
-        --exclude='*.egg' \
-        --exclude='.installed.cfg' \
-        --exclude='tests/' \
-        --exclude='.coverage' \
-        --exclude='coverage.xml' \
-        --exclude='coverage/' \
-        --exclude='coverage_html/' \
-        --exclude='htmlcov/' \
-        --exclude='nosetests.xml' \
-        --exclude='test-results.xml' \
-        --exclude='test-reports/' \
-        --exclude='uv.lock' \
-        --exclude='poetry.lock' \
-        --exclude='.git/' \
-        --exclude='.gitignore' \
-        --exclude='.gitattributes' \
-        --exclude='.idea/' \
-        --exclude='.vscode/' \
-        --exclude='*.swp' \
-        --exclude='*.swo' \
-        --exclude='.DS_Store' \
-        --exclude='Thumbs.db' \
-        --exclude='node_modules/' \
-        --exclude='clean_build.sh' \
-        --exclude='verify_stickler.py' \
-        "${var.idp_common_source_path}/" "$DEST/"
-
-      echo "Staged idp_common source at $DEST:"
-      du -sh "$DEST" || true
-    EOT
+    environment = {
+      IDP_COMMON_SOURCE_PATH = var.idp_common_source_path
+      STAGING_DEST           = "${local.module_build_dir}/requirements/idp-common/idp_common_pkg"
+    }
   }
 }
 
@@ -159,27 +114,67 @@ resource "terraform_data" "copy_idp_common_source" {
 # CodeBuild path (lambda_local = false)
 # ----------------------------------------------------------------------------
 
+# The CodeBuild input is built from configuration and the source tree directly,
+# never from the provisioner-staged directory: a fresh CI container has no
+# staging dir, so zipping it uploaded an input missing idp_common_pkg while a
+# layer version was still published from the previous artifact.
 data "archive_file" "requirements_source" {
-  type        = "zip"
-  source_dir  = "${local.module_build_dir}/requirements"
-  output_path = "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip"
+  type             = "zip"
+  output_path      = "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip"
+  output_file_mode = "0666"
 
-  depends_on = [
-    local_file.requirements_files,
-    terraform_data.copy_idp_common_source
-  ]
+  dynamic "source" {
+    for_each = local.non_empty_requirements
+    content {
+      content  = source.value
+      filename = "${source.key}/requirements.txt"
+    }
+  }
 }
 
 resource "aws_s3_object" "requirements_source" {
   count = local.use_local_build ? 0 : 1
 
-  bucket = local.lambda_layers_bucket_name
-  key    = "source/${var.layer_prefix}/requirements_source.zip"
-  source = data.archive_file.requirements_source.output_path
+  bucket      = local.lambda_layers_bucket_name
+  key         = "source/${var.layer_prefix}/requirements_source.zip"
+  source      = data.archive_file.requirements_source.output_path
+  source_hash = data.archive_file.requirements_source.output_base64sha256
+}
 
-  etag = md5(jsonencode({
-    for k, v in var.requirements_files : k => v
-  }))
+# source_dir covers every shipped file, not just *.py, so the bundled default
+# configs and prompt templates are change-detected too.
+data "archive_file" "idp_common_source" {
+  count = local.build_idp_common_object ? 1 : 0
+
+  type             = "zip"
+  source_dir       = var.idp_common_source_path
+  output_path      = "${local.module_build_dir}/idp_common_source_${random_id.build_id.hex}.zip"
+  output_file_mode = "0666"
+
+  excludes = [
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/*.pyo",
+    "**/*.egg-info/**",
+    "**/.pytest_cache/**",
+    "**/.mypy_cache/**",
+    "**/.ruff_cache/**",
+    "**/.venv/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/tests/**",
+    "**/.coverage",
+    "**/uv.lock",
+  ]
+}
+
+resource "aws_s3_object" "idp_common_source" {
+  count = local.build_idp_common_object ? 1 : 0
+
+  bucket      = local.lambda_layers_bucket_name
+  key         = "source/${var.layer_prefix}/idp_common_pkg.zip"
+  source      = data.archive_file.idp_common_source[0].output_path
+  source_hash = data.archive_file.idp_common_source[0].output_base64sha256
 }
 
 resource "aws_iam_role" "codebuild_role" {
@@ -220,8 +215,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "logs:DescribeLogStreams"
         ]
         Resource = [
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}",
-          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}",
+          "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}:*"
         ]
       },
       {
@@ -270,11 +265,19 @@ resource "null_resource" "test_iam_permissions" {
   depends_on = [time_sleep.wait_for_iam_propagation]
 
   provisioner "local-exec" {
+    # The role name embeds var.layer_prefix, so the ARN is an input-derived
+    # value. It is supplied through `environment` and expanded double-quoted for
+    # the same reason as the paths elsewhere in this module: nothing derived from
+    # an input is parsed by the shell.
     command = <<-EOT
       echo "Testing IAM role propagation for IDP CodeBuild..."
       sleep 10
-      echo "IAM role should be ready: ${aws_iam_role.codebuild_role[0].arn}"
+      echo "IAM role should be ready: $ROLE_ARN"
     EOT
+
+    environment = {
+      ROLE_ARN = aws_iam_role.codebuild_role[0].arn
+    }
   }
 
   triggers = {
@@ -297,6 +300,15 @@ resource "aws_codebuild_project" "lambda_layers_build" {
     aws_iam_role_policy.codebuild_policy,
     aws_cloudwatch_log_group.codebuild_log_group
   ]
+
+  dynamic "vpc_config" {
+    for_each = local.has_network_environment ? [1] : []
+    content {
+      vpc_id             = var.vpc_id
+      subnets            = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
 
   artifacts {
     type                   = "S3"
@@ -327,6 +339,16 @@ resource "aws_codebuild_project" "lambda_layers_build" {
     environment_variable {
       name  = "IDP_COMMON_EXTRAS"
       value = join(",", var.idp_common_extras)
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "ASSETS_BUCKET"
+      value = local.lambda_layers_bucket_name
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "IDP_COMMON_KEY"
+      value = local.build_idp_common_object ? aws_s3_object.idp_common_source[0].key : ""
       type  = "PLAINTEXT"
     }
   }
@@ -361,6 +383,18 @@ phases:
         yum install -y gcc gcc-c++ python3-devel zlib-devel libjpeg-devel libpng-devel
 
         RUNTIME_PROVIDED_PACKAGES="boto3 botocore s3transfer awscli urllib3 jmespath python_dateutil dateutil"
+
+        # idp_common_pkg arrives as its own object rather than inside the source
+        # zip, so the input never depends on a staged directory.
+        if [ -n "$IDP_COMMON_KEY" ]; then
+          echo "Fetching idp_common_pkg from s3://$ASSETS_BUCKET/$IDP_COMMON_KEY"
+          aws s3 cp "s3://$ASSETS_BUCKET/$IDP_COMMON_KEY" /tmp/idp_common_pkg.zip
+          rm -rf ./idp-common/idp_common_pkg
+          mkdir -p ./idp-common/idp_common_pkg
+          unzip -q /tmp/idp_common_pkg.zip -d ./idp-common/idp_common_pkg
+          test -f ./idp-common/idp_common_pkg/pyproject.toml || {
+            echo "ERROR: fetched idp_common_pkg is missing pyproject.toml"; exit 1; }
+        fi
 
         for req_file in $(find . -name "requirements.txt"); do
           LAYER_NAME=$(basename $(dirname $req_file))
@@ -414,7 +448,15 @@ phases:
               -exec rm -rf {} + 2>/dev/null || true
           done
 
-          find "/tmp/$LAYER_NAME/python" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+          KEEP_DIST_INFO="mcp strands_agents strands_agents_tools bedrock_agentcore"
+          find "/tmp/$LAYER_NAME/python" -maxdepth 1 -type d -name "*.dist-info" -print0 2>/dev/null \
+            | while IFS= read -r -d '' di; do
+                base=$(basename "$di"); keep=0
+                for k in $KEEP_DIST_INFO; do
+                  case "$base" in "$${k}-"*|"$${k//_/-}-"*) keep=1;; esac
+                done
+                if [ "$keep" -eq 0 ]; then rm -rf "$di"; else echo "keeping metadata: $base"; fi
+              done
           find "/tmp/$LAYER_NAME/python" -type d -name "*.egg-info"  -exec rm -rf {} + 2>/dev/null || true
           find "/tmp/$LAYER_NAME/python" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find "/tmp/$LAYER_NAME/python" -type d -name "build"       -exec rm -rf {} + 2>/dev/null || true
@@ -457,11 +499,18 @@ resource "null_resource" "cleanup_after_build" {
   }
 
   provisioner "local-exec" {
+    # The path is supplied through `environment` and expanded double-quoted, so
+    # the shell never parses its contents and this deletion cannot be redirected
+    # to another target.
     command = <<EOF
       echo "Cleaning up temporary files after build..."
-      rm -f "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip" 2>/dev/null || true
+      rm -f "$ZIP_PATH" 2>/dev/null || true
       echo "Cleanup completed"
     EOF
+
+    environment = {
+      ZIP_PATH = "${local.module_build_dir}/requirements_source_${random_id.build_id.hex}.zip"
+    }
   }
 }
 
@@ -511,7 +560,7 @@ resource "aws_s3_object" "layer_zip_local" {
   key    = "layers/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}/${each.key}.zip"
   source = "${local.module_build_dir}/requirements/${each.key}/layer.zip"
 
-  etag = md5(each.value)
+  source_hash = md5(each.value)
 
   depends_on = [null_resource.build_local]
 }
@@ -531,12 +580,19 @@ resource "aws_lambda_layer_version" "layers" {
   compatible_architectures = [var.lambda_architecture]
 
   # Hash mixes inputs that change the produced zip across modes:
-  source_code_hash = md5("${each.value}-${join(",", var.idp_common_extras)}-${local.idp_common_files_hash}-${var.lambda_architecture}-${local.use_local_build ? "local" : md5(try(aws_codebuild_project.lambda_layers_build[0].source[0].buildspec, ""))}")
+  source_code_hash = md5("${each.value}-${join(",", var.idp_common_extras)}-${local.idp_common_files_hash}-${local.idp_common_source_hash}-${var.lambda_architecture}-${local.use_local_build ? "local" : md5(try(aws_codebuild_project.lambda_layers_build[0].source[0].buildspec, ""))}")
 
   depends_on = [
     aws_lambda_invocation.trigger_codebuild,
     aws_s3_object.layer_zip_local,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = local.use_local_build || local.build_success == true
+      error_message = "CodeBuild layer build for ${var.layer_prefix} did not succeed; refusing to publish a layer version from the previous artifact. Check the CodeBuild logs."
+    }
+  }
 }
 
 # Background cleanup of old build artifacts.
@@ -544,11 +600,18 @@ resource "null_resource" "cleanup_build_artifacts" {
   depends_on = [random_id.build_id]
 
   provisioner "local-exec" {
+    # The path is supplied through `environment` and expanded double-quoted, so
+    # the shell never parses its contents and this deletion cannot be redirected
+    # to another target.
     command = <<EOT
       echo "Cleaning up old build artifacts..."
-      find "${local.module_build_dir}" -name "*.zip" -mtime +1 -delete 2>/dev/null || true
+      find "$BUILD_DIR" -name "*.zip" -mtime +1 -delete 2>/dev/null || true
       echo "Build artifact cleanup completed"
     EOT
+
+    environment = {
+      BUILD_DIR = local.module_build_dir
+    }
   }
 
   triggers = {
@@ -560,6 +623,11 @@ resource "null_resource" "cleanup_on_destroy" {
   depends_on = [aws_lambda_layer_version.layers]
 
   provisioner "local-exec" {
+    # Interpolates only `path.root`, which is not an input, and keeps the base
+    # directory spelled out rather than reusing local.module_build_dir on
+    # purpose: a destroy-time provisioner may reference only `self` and `path.*`,
+    # so a `local.*` or `var.*` reference here fails with "Invalid reference from
+    # destroy provisioner". Leave the literal in place.
     when    = destroy
     command = <<EOT
       echo "Cleaning up all temporary files..."
@@ -571,4 +639,11 @@ resource "null_resource" "cleanup_on_destroy" {
   triggers = {
     build_id = random_id.build_id.hex
   }
+}
+
+# Grants the ENI management CodeBuild needs to attach to the VPC.
+resource "aws_iam_role_policy_attachment" "codebuild_vpc_access" {
+  count      = !local.use_local_build && local.has_network_environment ? 1 : 0
+  role       = aws_iam_role.codebuild_role[0].name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSCodeBuildVPCAccessExecutionRole"
 }

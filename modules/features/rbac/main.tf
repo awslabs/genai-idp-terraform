@@ -147,7 +147,7 @@ locals {
   # Scope Cognito admin actions to exactly the supplied user pool. When the ARN
   # is not provided, construct it from the pool id so the policy is always
   # scoped to this pool and never broader.
-  user_pool_arn = var.user_pool_arn != null ? var.user_pool_arn : "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:userpool/${var.user_pool_id}"
+  user_pool_arn = var.user_pool_arn != null ? var.user_pool_arn : "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:userpool/${var.user_pool_id}"
 }
 
 # -----------------------------------------------------------------------------

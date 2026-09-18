@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 
 import boto3
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -135,6 +136,18 @@ def extend_visibility_for_outage(receipt_handle: str) -> None:
         logger.warning(f"Failed to extend visibility for OPEN-state message: {e}")
 
 
+def _deterministic_execution_name(input_key: str) -> str:
+    """
+    Stable execution name for a document, so duplicate triggers collide on it
+    instead of starting a second racing execution.
+
+    Hashed because names cap at 80 chars and disallow "/". Keyed on input_key to
+    match the tracking table's `doc#{input_key}`.
+    """
+    digest = hashlib.sha256(input_key.encode("utf-8")).hexdigest()
+    return f"doc-{digest}"
+
+
 def start_workflow(document: Document) -> Dict[str, Any]:
     """
     Start Step Functions workflow
@@ -241,10 +254,13 @@ def start_workflow(document: Document) -> Dict[str, Any]:
     }
 
     logger.info(f"Starting workflow for document (size: {len(json.dumps(event, default=str))} chars)")
-    
+
+    execution_name = _deterministic_execution_name(document.input_key)
+
     try:
         execution = sfn.start_execution(
             stateMachineArn=state_machine_arn,
+            name=execution_name,
             input=json.dumps(event)
         )
         
@@ -254,6 +270,16 @@ def start_workflow(document: Document) -> Dict[str, Any]:
         
         logger.info(f"Workflow started: {execution.get('executionArn', '')}")
         return execution
+    except sfn.exceptions.ExecutionAlreadyExists:
+        # Duplicate trigger: a workflow for this document already started (names are
+        # reserved 90 days, terminal or not), so a second one would race it.
+        # `alreadyStarted` tells the caller no new execution exists.
+        logger.warning(
+            f"Execution {execution_name} already exists for {document.input_key}; "
+            f"duplicate trigger, skipping this start_execution call."
+        )
+        document.workflow_execution_arn = document.workflow_execution_arn or ''
+        return {"executionArn": document.workflow_execution_arn, "alreadyStarted": True}
     except Exception as e:
         logger.error(f"Error starting workflow: {str(e)}")
         # Ensure we have a default workflow_execution_arn to avoid None errors
@@ -317,7 +343,18 @@ def process_message(record: Dict[str, Any]) -> Tuple[bool, str]:
         try:
             # Start workflow with the document
             execution = start_workflow(document)
-            
+
+            if execution.get('alreadyStarted'):
+                # No new execution, so workflow_tracker never fires to release the slot
+                # we just took. Skip the status write too: our copy says RUNNING, which
+                # would clobber the owning execution's COMPLETED.
+                update_counter(increment=False)
+                logger.info(
+                    f"Duplicate trigger for {object_key} deduplicated; released the "
+                    f"concurrency slot and left the tracking status untouched"
+                )
+                return True, message_id
+
             # Update document status in document service
             updated_doc = document_service.update_document(document)
             logger.info(f"Document updated: {updated_doc}")

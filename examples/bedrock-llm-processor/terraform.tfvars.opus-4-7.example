@@ -24,13 +24,16 @@ log_retention_days = 7
 data_tracking_retention_days = 365
 
 # Model Configuration — Claude Opus 4.7 (top-tier model at the v0.5.12 target)
-classification_model_id = "us.anthropic.claude-opus-4-7"
-extraction_model_id     = "us.anthropic.claude-opus-4-7:1m"
-summarization_model_id  = "us.anthropic.claude-opus-4-7:1m"
-evaluation_model_id     = "us.anthropic.claude-opus-4-7"
+#
+# Per-stage model IDs are now set in the YAML configuration, not in tfvars.
+# To run this example on Opus 4.7, point config_file_path at a config whose
+# stages set, e.g.:
+#   classification.model:      us.anthropic.claude-opus-4-7
+#   extraction.model:          us.anthropic.claude-opus-4-7:1m
+#   summarization.model:       us.anthropic.claude-opus-4-7:1m
+#   evaluation.llm_method.model: us.anthropic.claude-opus-4-7
 
 # Feature Toggles
-summarization_enabled = true
 enable_evaluation     = false
 enable_reporting      = false
 

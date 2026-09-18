@@ -150,3 +150,20 @@ variable "container_runtime" {
     error_message = "container_runtime must be one of: auto, docker, podman, finch."
   }
 }
+
+variable "vpc_id" {
+  description = "VPC to place the agent-deps layer-build CodeBuild project in, alongside vpc_subnet_ids and vpc_security_group_ids. Null builds outside a VPC."
+  type        = string
+  default     = null
+}
+
+variable "allowed_bedrock_model_ids" {
+  description = <<-EOT
+    Extra Bedrock model IDs the analytics agents are allowed to invoke, for agent
+    models set in the config after apply (which Terraform cannot see). Mirrors
+    `processor.allowed_bedrock_model_ids`. Use `["*"]` to grant the account's
+    whole model space.
+  EOT
+  type        = list(string)
+  default     = []
+}

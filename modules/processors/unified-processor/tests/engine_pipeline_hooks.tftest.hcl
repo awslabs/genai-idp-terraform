@@ -24,6 +24,8 @@
 # therefore known at plan (the full `definition` string is not: it interpolates
 # computed Lambda ARNs).
 
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   mock_data "aws_partition" {
     defaults = {

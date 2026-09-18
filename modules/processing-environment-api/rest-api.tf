@@ -93,7 +93,7 @@ resource "aws_api_gateway_authorizer" "cognito" {
   rest_api_id     = aws_api_gateway_rest_api.http_api.id
   type            = "COGNITO_USER_POOLS"
   identity_source = "method.request.header.Authorization"
-  provider_arns   = ["arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:userpool/${local.cognito_user_pool_id}"]
+  provider_arns   = ["arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:userpool/${local.cognito_user_pool_id}"]
 }
 
 # /op and /op/{field}
@@ -128,7 +128,7 @@ resource "aws_api_gateway_integration" "op_post" {
   http_method             = aws_api_gateway_method.op_post.http_method
   type                    = "AWS_PROXY"
   integration_http_method = "POST"
-  uri                     = "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.id}:lambda:path/2015-03-31/functions/${aws_lambda_function.http_api_dispatcher.arn}/invocations"
+  uri                     = "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.region}:lambda:path/2015-03-31/functions/${aws_lambda_function.http_api_dispatcher.arn}/invocations"
 }
 
 # Unauthenticated CORS preflight. MOCK integration answering 200 with CORS +
@@ -412,7 +412,7 @@ resource "aws_lambda_permission" "http_api_dispatcher" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.http_api_dispatcher.function_name
   principal     = "apigateway.${data.aws_partition.current.dns_suffix}"
-  source_arn    = "arn:${data.aws_partition.current.partition}:execute-api:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:${aws_api_gateway_rest_api.http_api.id}/*/POST/op/*"
+  source_arn    = "arn:${data.aws_partition.current.partition}:execute-api:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:${aws_api_gateway_rest_api.http_api.id}/*/POST/op/*"
 }
 
 # =============================================================================

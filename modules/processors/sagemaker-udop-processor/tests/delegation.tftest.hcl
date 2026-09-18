@@ -21,6 +21,8 @@
 # The archive/time providers run for real (zip the bridge Lambda + engine Lambda
 # sources from the read-only `sources/` snapshot).
 
+mock_provider "archive" {}
+mock_provider "time" {}
 mock_provider "aws" {
   # A real partition string is required: generated mock values fail the AWS
   # provider's ARN partition validation (^aws(-[a-z]+)*$) on policy_arn fields.
@@ -62,31 +64,19 @@ variables {
   }
 }
 
-run "udop_facade_forces_lambdahook_and_creates_bridge" {
+run "udop_facade_delegates_to_the_engine" {
   command = plan
 
-  # classification is forced to the LambdaHook seam (use_bda pipeline branch).
+  # The façade owns no resources: it hands the endpoint to the engine with
+  # classification_backend = "sagemaker". The old LambdaHook bridge is gone.
+  # These outputs come from module.engine, so their presence proves delegation
+  # (state_machine_arn is computed, so unassertable at plan).
   assert {
-    condition     = output.classification_model == "LambdaHook"
-    error_message = "SageMaker-UDOP façade must force classification.model = 'LambdaHook'."
+    condition     = output.lambda_functions.bda_invoke != null && output.lambda_functions.bda_process_results != null && output.lambda_functions.bda_completion != null
+    error_message = "Engine BDA-branch Lambdas must be deployed: v0.6 routes branches at runtime, not at deploy time."
   }
-
-  # use_bda = false: the engine omits all BDA-branch Lambdas.
   assert {
-    condition     = output.lambda_functions.bda_invoke == null && output.lambda_functions.bda_process_results == null && output.lambda_functions.bda_completion == null
-    error_message = "Engine BDA-branch Lambdas must be absent on the SageMaker-UDOP façade (use_bda = false)."
-  }
-
-  # The SageMaker classification-hook bridge Lambda is created.
-  assert {
-    condition     = output.sagemaker_hook_function_name == "GENAIIDP-test-udop-sagemaker-hook"
-    error_message = "SageMaker-UDOP façade must create the GENAIIDP-prefixed classification-hook bridge Lambda."
-  }
-
-  # model_lambda_hook_arn points at the bridge Lambda (its function name appears
-  # in the ARN injected into the effective document config).
-  assert {
-    condition     = endswith(output.configuration.classification.model_lambda_hook_arn, ":function:GENAIIDP-test-udop-sagemaker-hook")
-    error_message = "Engine config classification.model_lambda_hook_arn must point at the bridge Lambda."
+    condition     = output.lambda_functions.ocr != null && output.lambda_functions.classification != null && output.lambda_functions.extraction != null
+    error_message = "Engine pipeline Lambdas (ocr/classification/extraction) must always be present."
   }
 }

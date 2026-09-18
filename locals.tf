@@ -109,6 +109,62 @@ locals {
 locals {
   processor_type = var.processor.type
 
+  # Feature enablement is config-authoritative: derived at plan time to match
+  # exactly what the seeder Lambda computes at apply time, which is the operator
+  # config file DEEP-MERGED OVER the upstream system defaults. The example config
+  # files are sparse (they omit whole sections), so a plain
+  # try(config.<section>.enabled, false) would resolve false for a section the
+  # config omits even though the seeder's merge enables it from the system
+  # default — the exact drift that left the summarization Lambda unbuilt while
+  # the runtime config had summarization.enabled=true. Resolution therefore
+  # mirrors the model resolution in unified-processor/locals.tf:
+  #   config file value  ->  system-default value
+  # reading the same sources/.../system_defaults/base-*.yaml the seeder merges.
+  # path.module (not path.root): the root module is consumed as a child module
+  # (e.g. source = "../.." from an example), so path.root is the EXAMPLE dir,
+  # where sources/ does not exist. path.module is this repo-root module dir,
+  # which contains the vendored sources/ tree.
+  _system_defaults_dir = "${path.module}/sources/lib/idp_common_pkg/idp_common/config/system_defaults"
+
+  _default_summarization_enabled   = try(yamldecode(file("${local._system_defaults_dir}/base-summarization.yaml")).summarization.enabled, false)
+  _default_evaluation_enabled      = try(yamldecode(file("${local._system_defaults_dir}/base-evaluation.yaml")).evaluation.enabled, false)
+  _default_rule_validation_enabled = try(yamldecode(file("${local._system_defaults_dir}/base-rule-validation.yaml")).rule_validation.enabled, false)
+  _default_hitl_enabled            = try(yamldecode(file("${local._system_defaults_dir}/base-confidence.yaml")).hitl.enabled, false)
+  _default_ocr_backend             = try(yamldecode(file("${local._system_defaults_dir}/base-ocr.yaml")).ocr.backend, "textract")
+
+  summarization_enabled = try(var.processor.config.summarization.enabled, local._default_summarization_enabled)
+
+  # Evaluation is the one flag with a hard infrastructure dependency the config
+  # cannot express: the baseline S3 bucket. Evaluation runs only when the config
+  # enables it (behaviour, config-authoritative) AND a baseline bucket ARN is
+  # supplied (infrastructure, Terraform-owned). The upstream system default
+  # enables evaluation, so most merged configs report enabled=true; without this
+  # infra AND-gate that would force every deployment to provision a baseline
+  # bucket. This matches observed runtime behaviour: a deployment whose config
+  # enables evaluation but supplies no baseline bucket simply does not run
+  # evaluation (it cannot score against a baseline that does not exist).
+  # Gates count/for_each, so it must be plan-time known: baseline_bucket_arn is
+  # computed and unknown on a fresh deploy. ARN fallback for older callers.
+  _config_evaluation_enabled = try(var.processor.config.evaluation.enabled, local._default_evaluation_enabled)
+  evaluation_enabled = local._config_evaluation_enabled && (
+    var.evaluation.enabled != null ? var.evaluation.enabled : var.evaluation.baseline_bucket_arn != null
+  )
+
+  rule_validation_enabled = try(var.processor.config.rule_validation.enabled, local._default_rule_validation_enabled)
+
+  # Processor-pipeline HITL enablement (config.hitl.enabled). NOTE: this is the
+  # PROCESSOR pipeline's HITL branch (Step Functions states), distinct from the
+  # API-side HITL feature gated by var.api.enable_hitl.
+  hitl_enabled = try(var.processor.config.hitl.enabled, local._default_hitl_enabled)
+
+  # BDA-as-OCR backend is config-authoritative: it is provisioned iff the config
+  # selects ocr.backend = "bda". Deriving from the config (instead of a separate
+  # bool) means a config that selects the BDA OCR backend always gets its
+  # per-stack BDA project, and one that does not never pays for it. Region
+  # availability of Bedrock Data Automation remains the operator's
+  # responsibility, exactly as with the previous explicit toggle.
+  bda_ocr_backend_enabled = try(var.processor.config.ocr.backend, local._default_ocr_backend) == "bda"
+
   # All processor façades share one unified engine and one idp-common layer, so
   # the layer carries the same extras for every processor type. `ocr` brings
   # pypdfium2, required by the OCR step on all paths.
@@ -151,10 +207,10 @@ locals {
 
   # Optional bucket names
   logging_bucket_name             = var.web_ui.logging_enabled ? element(split(":", var.web_ui.logging_bucket_arn), 5) : null
-  evaluation_baseline_bucket_name = var.evaluation.enabled ? element(split(":", var.evaluation.baseline_bucket_arn), 5) : null
+  evaluation_baseline_bucket_name = local.evaluation_enabled ? element(split(":", var.evaluation.baseline_bucket_arn), 5) : null
   reporting_bucket_name           = var.reporting.enabled && var.reporting.bucket_arn != null ? try(regex("arn:(aws|aws-us-gov):s3:::([^/]+)", var.reporting.bucket_arn)[1], "") : ""
   web_ui_reporting_bucket_name    = local.reporting_bucket_name
-  web_ui_evaluation_bucket_name   = var.evaluation.enabled && var.evaluation.baseline_bucket_arn != null ? try(regex("arn:(aws|aws-us-gov):s3:::([^/]+)", var.evaluation.baseline_bucket_arn)[1], "") : ""
+  web_ui_evaluation_bucket_name   = local.evaluation_enabled && var.evaluation.baseline_bucket_arn != null ? try(regex("arn:(aws|aws-us-gov):s3:::([^/]+)", var.evaluation.baseline_bucket_arn)[1], "") : ""
 
   # Presigned-URL-via-VPCE (v0.5.16). When opted in AND a VPC-endpoint DNS name
   # is supplied, presigner Lambdas point at the S3 interface endpoint using the
@@ -326,7 +382,7 @@ locals {
   ] : []
 
   # Evaluation statements (conditional)
-  evaluation_statements = var.evaluation.enabled ? [
+  evaluation_statements = local.evaluation_enabled ? [
     {
       Effect = "Allow"
       Action = [

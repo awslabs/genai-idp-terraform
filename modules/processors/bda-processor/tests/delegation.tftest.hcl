@@ -17,6 +17,7 @@
 # The archive/time providers run for real (zip the engine Lambda sources from
 # the read-only `sources/` snapshot).
 
+mock_provider "archive" {}
 mock_provider "aws" {
   # A real partition string is required: generated mock values fail the AWS
   # provider's ARN partition validation (^aws(-[a-z]+)*$) on policy_arn fields.

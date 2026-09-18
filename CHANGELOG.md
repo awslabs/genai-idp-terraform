@@ -62,9 +62,81 @@ the migration steps behind every breaking change below.
   `terraform apply -replace=...seed_default`) to reassert Terraform's config.
   This is also the supported path for adopting the model-authority defaults above
   on a deployment whose config row was already edited.
+- **Per-stage Bedrock model IDs are no longer set from Terraform — the YAML
+  configuration is the single source of truth.** The removed inputs are, on the
+  `processor` object: `classification_model_id`, `extraction_model_id`,
+  `assessment_model_id`, and nested `summarization.model_id`; on the `evaluation`
+  object: `model_id`; and on the processor modules: the per-stage `*_model_id`
+  variables plus the `model_id` global backstop. Set each stage's model in the
+  configuration instead (`classification.model`, `extraction.model`,
+  `extraction.confidence.model` / `.escalation_model`, `summarization.model`,
+  `evaluation.llm_method.model`); a stage the config omits falls back to the
+  upstream system default. `allowed_bedrock_model_ids` (including `"*"`) is
+  retained as the operator escape hatch for models added post-deploy in the UI.
+  This is an input-surface change only: no resource addresses change, so no
+  `moved {}` blocks and no state migration are required, and a plan shows no
+  resource churn. The least-privilege `bedrock:InvokeModel` grant is now derived
+  from the union of models across every seeded config (the active default, all
+  `additional_configurations`, and — newly — the managed baselines seeded when
+  `seed_managed_configs = true`, closing a latent activate-a-baseline
+  `AccessDenied` gap). **Supersedes** the earlier `assessment_model_id` plumbing
+  added under this same release line (the DEFECT-3 fix in *Fixed* below): that
+  variable is now removed and the assessment model is read from the config's
+  `extraction.confidence.model`. See
+  [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md).
+- **Processing-pipeline feature enablement is now config-authoritative.**
+  Whether summarization, evaluation, rule validation, the HITL pipeline branch,
+  and the BDA-as-OCR backend are provisioned is derived at plan time from the
+  YAML configuration, not from duplicate Terraform toggles. Removed from the
+  root `processor` object: `summarization` (the `enabled` sub-field),
+  `enable_rule_validation`, `enable_hitl`, and `enable_bda_ocr_backend`; and the
+  `evaluation` object loses `enabled` (keeping only `baseline_bucket_arn`, the
+  infrastructure the config cannot express — now required via a `check` block
+  whenever the config enables evaluation). Set these in the configuration
+  instead: `summarization.enabled`, `evaluation.enabled`,
+  `rule_validation.enabled`, `hitl.enabled`, and `ocr.backend: bda`. This
+  eliminates a drift class (a config that enabled summarization while the
+  Terraform toggle defaulted off silently skipped building the summarization
+  Lambda, role, and `bedrock:InvokeModel` grant). **Limitation:** because these
+  flags gate resource creation, they are read at plan time from the config file;
+  toggling a feature's `enabled` at runtime in the Web UI / DynamoDB does **not**
+  create or destroy its resources — a `terraform apply` against the updated
+  config file is required. The API-side chat-with-document and discovery
+  features remain Terraform-controlled (they are API-topology decisions, and
+  `discovery` has no config `enabled` key). See
+  [docs/migration-v0.5.16-to-v0.6.4.md](docs/migration-v0.5.16-to-v0.6.4.md).
+- **Federation group mapping now requires `idp_federation.group_mapping`.** The
+  group-mapping trigger's `*_GROUP_NAME` environment values were wired from the
+  RBAC Cognito group names, but the vendored handler reads them as *external IdP*
+  group names and matches them against the user's claim (upstream
+  `ExternalIdPAdminGroupName`: "The group name in your external IdP that should
+  map to the Cognito Admin role"). Federated users therefore landed in no role
+  group unless the IdP's groups happened to be named `Admin`/`Author`/
+  `Reviewer`/`Viewer`. The values now come from `group_mapping`, which becomes
+  required whenever `group_attribute_name` is set: name your IdP's groups as the
+  keys and one of the four canonical roles as each value. Two plan-time guards
+  replace the silent failure — an empty `group_mapping` and RBAC group names
+  renamed away from the four literals (which the handler hardcodes) both fail the
+  plan. Deployments with `group_attribute_name` unset are unaffected.
 
 ### Added
 
+- **Core DynamoDB table capacity/billing is now configurable end-to-end.** A new
+  optional `core_table_capacity` object variable (with per-table `tracking` /
+  `configuration` / `concurrency` sub-objects, each carrying `billing_mode`,
+  `read_capacity`, and `write_capacity`) is passed through
+  `processing-environment` to the three core table modules, closing the gap where
+  the tables' own capacity knobs were unreachable from any calling module
+  (upstream [#195](https://github.com/awslabs/genai-idp-terraform/issues/195) /
+  [#196](https://github.com/awslabs/genai-idp-terraform/pull/196)). Purely
+  additive: every field defaults to the current on-demand (`PAY_PER_REQUEST`)
+  behavior, so an unset (or omitted) `core_table_capacity` is a zero-diff plan.
+  Set a table to `billing_mode = "PROVISIONED"` with tuned capacity for
+  cost-predictable steady workloads; `read_capacity` / `write_capacity` are
+  ignored under `PAY_PER_REQUEST`, and all settings are inert for a table
+  supplied via `processing-environment`'s `*_table_arn` inputs. Switching an
+  existing table's billing mode is an in-place update (DynamoDB permits moving to
+  on-demand only once per 24-hour window), not a replacement.
 - **Rule validation wired into the workflow.** The rule-validation stage now
   runs as real Step Functions states in the unified-processor engine, mirroring
   the upstream ASL: `CheckRuleValidationEnabled`, policy classification,
@@ -116,6 +188,13 @@ the migration steps behind every breaking change below.
 
 ### Changed
 
+- `make test` and `make all` now run the native `terraform test` suites via a new
+  `make unit-test` target, and the CI pipeline gains a blocking `unit-test` job.
+  Nothing ran these suites before, so they had rotted: 7 runs across 4 modules
+  were failing and 5 more never executed at all. All 56 now pass. The target
+  discovers modules from their test files, so nested ones under
+  `modules/features/` and `modules/processors/` are covered — `validate` and
+  `lint` only walk `modules/*/` and still skip them.
 - Private networking requires the `execute-api` interface VPC endpoint instead of
   `appsync-api`; `modules/vpc-endpoints` renames its `appsync_api_endpoint_id`
   output to `execute_api_endpoint_id`.
@@ -128,9 +207,31 @@ the migration steps behind every breaking change below.
   and is rejected. This matters because pip does not fail on an unknown extra — it
   installs nothing for it — so a stale name produced a layer silently missing
   dependencies at runtime.
+- The tracking, configuration, and concurrency tables now default to
+  `PAY_PER_REQUEST` instead of `PROVISIONED` at 5 read / 5 write units. Document
+  processing writes per page and per section, so a single multi-page document
+  could exhaust that capacity and throttle. DynamoDB changes billing mode in
+  place, so this is not a replacement and no data is affected, but note that a
+  table can only switch to on-demand once in any 24-hour window. Set
+  `billing_mode = "PROVISIONED"` explicitly to keep the old behaviour.
 
 ### Fixed
 
+- **Config-authoritative feature enablement resolves against the system
+  defaults.** The plan-time enablement derivation (summarization, evaluation,
+  rule validation, HITL, `ocr.backend`) resolves each flag as *config file value
+  → upstream system default*, reading the same
+  `sources/.../system_defaults/base-*.yaml` the seeder Lambda merges at apply
+  time. The shipped config files are sparse (they omit whole sections), so a
+  derivation that defaulted to `false`/off when the section was absent would
+  disagree with the merged runtime config — the drift that left the
+  summarization Lambda, role, and `bedrock:InvokeModel` grant unbuilt even though
+  the merged config enabled summarization. The root module reads those defaults
+  via `path.module` (not `path.root`, which resolves to the calling example
+  directory where `sources/` does not exist and would silently fall back to
+  off). Evaluation additionally AND-gates on `var.evaluation.baseline_bucket_arn`
+  being supplied, since the system default enables it but it needs a baseline
+  bucket the config cannot express.
 - **BDA (pattern-1) deployments no longer seed an unmerged configuration.**
   Upstream v0.6.4's `system_defaults/pattern-1.yaml` inherits
   `base-assessment.yaml`, a file that release deleted, and the merge raises
@@ -190,6 +291,31 @@ the migration steps behind every breaking change below.
   contains([...], var.api.visibility)`; Terraform does not short-circuit `||`
   when the right side's `contains(list, null)` throws, so `terraform validate` /
   `plan` failed for every example. Rewritten as a null-guarding ternary.
+- **The OpenSearch Serverless data access policy no longer pins itself to one
+  operator.** The examples' policy listed `data.aws_caller_identity.current.arn`,
+  which for an assumed role is a per-session ARN
+  (`.../assumed-role/<role>/<session>`). Whoever applied last owned the
+  collection, and the next person got
+  `403 ... authorization_exception` on `opensearch_index`. It could not self-heal:
+  the index is read before the policy update applies, so the run that would fix
+  the policy dies first. AOSS matches any session of a role, so the policy now
+  names the role. `deployer_role_arn` sets it explicitly (CI passes
+  `AWS_CREDS_TARGET_ROLE`); otherwise it is derived from the caller, and a
+  validation rejects a session ARN. NOTE: an existing collection needs one
+  targeted apply to migrate, run by a principal already in the policy:
+  `terraform apply -target='aws_opensearchserverless_access_policy.knowledge_base_data_policy[0]'`.
+
+- **Bedrock grants now name the model ID as invoked, not as configured.**
+  `idp_common` rewrites the ID before the call: a trailing `:1m` becomes the
+  `context-1m` beta header and a `:flex`/`:priority` tail becomes the service
+  tier. The allowlist used the raw config value, so a `:1m` model produced
+  `inference-profile/<id>:1m`, an ARN that matches nothing, and every invoke
+  failed with `AccessDeniedException`. Latent until the YAML became
+  authoritative, because `base-summarization.yaml` ships
+  `us.anthropic.claude-sonnet-5:1m`; the assessment escalation grant had been
+  dead the same way, visible only on low-confidence escalation. A tier tail is
+  only stripped from the third segment on, matching `parse_model_id`, so
+  `nova-2-lite-v1:0` and `claude-sonnet-5:flex` are unaffected.
 
 ### Not applicable
 

@@ -97,6 +97,40 @@ locals {
     source = try(local.chat_cfg.model, null) != null || length(keys(local.chat_cfg)) > 0 ? "chat" : "summarization"
   }
 
+  # Bedrock grant follows the config's chat model rather than the account's whole
+  # model space. Models authored later in the UI are invisible to Terraform, so
+  # "*" is the operator escape hatch.
+  model_prefix_re         = "^(us|eu|apac|ca|sa|global)\\."
+  bedrock_wildcard_access = contains(var.allowed_bedrock_model_ids, "*")
+  bedrock_model_ids = distinct([
+    for m in concat(
+      [local.effective_chat_config.model],
+      local.bedrock_wildcard_access ? [] : var.allowed_bedrock_model_ids,
+    ) : m if m != null && m != ""
+  ])
+
+  bedrock_invoke_resources = local.bedrock_wildcard_access ? [
+    "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+    "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
+    ] : distinct(concat(
+      [
+        for id in local.bedrock_model_ids :
+        startswith(id, "arn:") ? id :
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${replace(id, "/${local.model_prefix_re}/", "")}"
+      ],
+      [
+        for id in local.bedrock_model_ids :
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${id}"
+        if !startswith(id, "arn:") && can(regex(local.model_prefix_re, id))
+      ],
+      # Application inference profiles are account-created artifacts keyed by their
+      # own IDs, not by model ID, so they stay wildcarded.
+      [
+        "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*"
+      ],
+  ))
+
   layers = compact([var.base_layer_arn, var.idp_common_layer_arn])
 }
 

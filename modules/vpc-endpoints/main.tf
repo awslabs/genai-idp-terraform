@@ -25,7 +25,7 @@ resource "aws_vpc_endpoint" "interface" {
   for_each = local.enabled_interface_endpoints
 
   vpc_id              = var.vpc_id
-  service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.${each.value}"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = var.subnet_ids
   security_group_ids  = var.security_group_ids
@@ -41,7 +41,7 @@ resource "aws_vpc_endpoint" "s3_gateway" {
   count = var.enable_s3_gateway ? 1 : 0
 
   vpc_id            = var.vpc_id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = var.route_table_ids
 
@@ -54,7 +54,7 @@ resource "aws_vpc_endpoint" "dynamodb_gateway" {
   count = var.enable_dynamodb_gateway ? 1 : 0
 
   vpc_id            = var.vpc_id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.dynamodb"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = var.route_table_ids
 

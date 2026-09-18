@@ -45,6 +45,13 @@ locals {
   tracking_table_arn  = var.tracking_table_arn
   tracking_table_name = var.tracking_table_arn != null ? element(split("/", var.tracking_table_arn), 1) : null
 
+  # Deterministic flag for tracking table existence. Prefer the caller-supplied
+  # plan-time-known override; fall back to deriving from the (possibly computed)
+  # ARN so existing callers behave unchanged. Gating count/for_each on this
+  # instead of `tracking_table_arn != null` keeps a cold `terraform plan` valid
+  # when the ARN is a resource attribute created in the same apply.
+  tracking_table_exists = var.tracking_table_available != null ? var.tracking_table_available : var.tracking_table_arn != null
+
   configuration_table_arn  = var.configuration_table_arn
   configuration_table_name = var.configuration_table_arn != null ? element(split("/", var.configuration_table_arn), 1) : null
 
@@ -61,7 +68,7 @@ locals {
   # a syntactically-valid placeholder key ARN so the policy is well-formed (and
   # grants nothing usable, since the key does not exist). Mirrors the inline
   # guard already used by the appsync_dynamodb_policy KMS statement.
-  kms_policy_resource_arn = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
+  kms_policy_resource_arn = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
 
   # Knowledge Base - Extract ID from ARN
   knowledge_base_arn = var.knowledge_base.knowledge_base_arn
@@ -107,10 +114,12 @@ module "discovery" {
 
   lambda_architecture = var.lambda_architecture
 
-  name_prefix             = "discovery-${random_string.suffix.result}"
-  input_bucket_arn        = local.input_bucket_arn
-  configuration_table_arn = local.configuration_table_arn
-  idp_common_layer_arn    = var.idp_common_layer_arn
+  name_prefix              = "discovery-${random_string.suffix.result}"
+  allowed_cors_origins     = var.discovery_allowed_cors_origins
+  input_bucket_arn         = local.input_bucket_arn
+  configuration_table_arn  = local.configuration_table_arn
+  configuration_table_name = local.configuration_table_name
+  idp_common_layer_arn     = var.idp_common_layer_arn
 
   # Configuration
   log_level                      = var.log_level
@@ -199,17 +208,19 @@ module "agent_analytics" {
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
 
   # Configuration
-  bedrock_model_id    = var.agent_analytics.model_id
-  log_level           = var.log_level
-  log_retention_days  = var.log_retention_days
-  data_retention_days = var.data_retention_in_days
-  encryption_key_arn  = local.encryption_key_arn
-  enable_encryption   = var.enable_encryption
-  lambda_tracing_mode = var.lambda_tracing_mode
+  bedrock_model_id          = var.agent_analytics.model_id
+  allowed_bedrock_model_ids = var.agent_analytics.allowed_bedrock_model_ids
+  log_level                 = var.log_level
+  log_retention_days        = var.log_retention_days
+  data_retention_days       = var.data_retention_in_days
+  encryption_key_arn        = local.encryption_key_arn
+  enable_encryption         = var.enable_encryption
+  lambda_tracing_mode       = var.lambda_tracing_mode
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_config != null ? var.vpc_config.subnet_ids : []
   vpc_security_group_ids = var.vpc_config != null ? var.vpc_config.security_group_ids : []
+  vpc_id                 = try(var.vpc_config.vpc_id, null)
 
   # Build strategy (see root var.build)
   lambda_local        = var.lambda_local

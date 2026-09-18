@@ -110,6 +110,9 @@ module "configuration_table" {
   table_name                     = "idp-configuration-table-${random_string.suffix.result}"
   kms_key_arn                    = local.key != null ? local.key.key_arn : null
   point_in_time_recovery_enabled = true
+  billing_mode                   = var.core_table_capacity.configuration.billing_mode
+  read_capacity                  = var.core_table_capacity.configuration.read_capacity
+  write_capacity                 = var.core_table_capacity.configuration.write_capacity
 
   tags = var.tags
 
@@ -123,6 +126,9 @@ module "tracking_table" {
   table_name                     = "idp-tracking-table-${random_string.suffix.result}"
   kms_key_arn                    = local.key != null ? local.key.key_arn : null
   point_in_time_recovery_enabled = true
+  billing_mode                   = var.core_table_capacity.tracking.billing_mode
+  read_capacity                  = var.core_table_capacity.tracking.read_capacity
+  write_capacity                 = var.core_table_capacity.tracking.write_capacity
 
   tags = var.tags
 
@@ -136,6 +142,9 @@ module "concurrency_table" {
   table_name                     = "idp-concurrency-table-${random_string.suffix.result}"
   kms_key_arn                    = local.key != null ? local.key.key_arn : null
   point_in_time_recovery_enabled = true
+  billing_mode                   = var.core_table_capacity.concurrency.billing_mode
+  read_capacity                  = var.core_table_capacity.concurrency.read_capacity
+  write_capacity                 = var.core_table_capacity.concurrency.write_capacity
 
   tags = var.tags
 

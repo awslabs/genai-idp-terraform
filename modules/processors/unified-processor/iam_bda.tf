@@ -218,7 +218,7 @@ resource "aws_iam_role_policy" "bda_process_results_lambda" {
             "ssm:GetParameter",
             "ssm:GetParametersByPath"
           ]
-          Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/*"
+          Resource = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/*"
         },
         {
           # Resolve BDA project/blueprint metadata while shaping results.

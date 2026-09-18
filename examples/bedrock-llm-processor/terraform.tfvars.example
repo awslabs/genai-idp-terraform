@@ -6,12 +6,9 @@ prefix      = "genai-idp"
 admin_email = "admin@example.com" # creates the initial Web UI admin user
 
 # ── Optional overrides (defaults shown; uncomment to change) ────────────────
-# classification_model_id = "us.amazon.nova-2-lite-v1:0"
-# extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
-# summarization_enabled   = true
+# Per-stage model IDs are set in the config YAML (config_file_path), not here.
 # enable_evaluation       = false
 # enable_reporting        = false
-# enable_rule_validation  = false
 # web_ui = { enabled = true }       # set enabled = false to skip CloudFront/UI
 # config_file_path        = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 # additional_config_files = { invoices = "../config-catalog/invoices.yaml" }

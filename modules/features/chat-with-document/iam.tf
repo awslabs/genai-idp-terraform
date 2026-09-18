@@ -57,11 +57,7 @@ locals {
           "bedrock:InvokeModelWithResponseStream",
           "bedrock:GetInferenceProfile",
         ]
-        Resource = [
-          "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
-        ]
+        Resource = local.bedrock_invoke_resources
       },
       {
         Sid = "BedrockMantle"
@@ -112,7 +108,7 @@ locals {
         Sid      = "Guardrail"
         Effect   = "Allow"
         Action   = "bedrock:ApplyGuardrail"
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
       }
     ] : [],
   )

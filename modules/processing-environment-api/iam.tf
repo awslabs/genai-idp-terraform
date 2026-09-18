@@ -240,7 +240,7 @@ resource "aws_iam_policy" "copy_to_baseline_resolver_self_invoke_policy" {
       {
         Action   = "lambda:InvokeFunction"
         Effect   = "Allow"
-        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:function:CopyToBaselineResolver-${random_string.suffix.result}"
+        Resource = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:CopyToBaselineResolver-${random_string.suffix.result}"
       }
     ]
   })
@@ -519,7 +519,11 @@ resource "aws_iam_policy" "get_file_contents_resolver_s3_policy" {
           local.output_bucket_arn,
           local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null,
           local.working_bucket_arn,
-          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null
+          local.working_bucket_arn != null ? "${local.working_bucket_arn}/*" : null,
+          # The Test Studio ground-truth editor reads baseline result.json from
+          # the test-set bucket through a presigned URL issued here.
+          var.enable_test_studio ? aws_s3_bucket.test_sets[0].arn : null,
+          var.enable_test_studio ? "${aws_s3_bucket.test_sets[0].arn}/*" : null
         ])
       }
     ]
@@ -624,10 +628,13 @@ resource "aws_iam_policy" "get_stepfunction_execution_resolver_logs_policy" {
   })
 }
 resource "aws_iam_policy" "get_stepfunction_execution_resolver_stepfunctions_policy" {
-  #checkov:skip=CKV_AWS_355:Step Functions execution ARNs are dynamic and cannot be pre-scoped
   name        = "GetStepFunctionExecutionResolverStepFunctionsPolicy-${random_string.suffix.result}"
   description = "Policy for Get Step Function Execution Resolver Lambda to access Step Functions"
 
+  # Scoped to this deployment's own document-processing executions (see
+  # local.stepfunction_execution_resource) rather than "*", matching the
+  # upstream SAM policy's execution-ARN scoping and closing the account-wide
+  # read behind the reported getStepFunctionExecution IDOR.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -637,7 +644,7 @@ resource "aws_iam_policy" "get_stepfunction_execution_resolver_stepfunctions_pol
           "states:GetExecutionHistory"
         ]
         Effect   = "Allow"
-        Resource = "*"
+        Resource = local.stepfunction_execution_resource
       }
     ]
   })
@@ -757,7 +764,7 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.id}::foundation-model/${var.knowledge_base.model_id}"
+          "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}::foundation-model/${var.knowledge_base.model_id}"
         ]
       }] : []
     )
@@ -881,8 +888,63 @@ resource "aws_iam_policy" "reprocess_document_resolver_s3_policy" {
           local.input_bucket_arn,
           local.input_bucket_arn != null ? "${local.input_bucket_arn}/*" : null
         ])
+      },
+      # Reprocessing clears the document's previous results before re-queueing
+      # it, so it lists and deletes under the output prefix as well.
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = compact([
+          local.output_bucket_arn,
+          local.output_bucket_arn != null ? "${local.output_bucket_arn}/*" : null
+        ])
       }
     ]
+  })
+}
+
+resource "aws_iam_policy" "reprocess_document_resolver_dynamodb_policy" {
+  count       = local.tracking_table_exists ? 1 : 0
+  name        = "ReprocessDocumentResolverDynamoDBPolicy-${random_string.suffix.result}"
+  description = "Policy for Reprocess Document Resolver Lambda to update document tracking records"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query"
+        ]
+        Effect = "Allow"
+        Resource = [
+          local.tracking_table_arn,
+          "${local.tracking_table_arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
+resource "aws_iam_policy" "reprocess_document_resolver_sqs_policy" {
+  name        = "ReprocessDocumentResolverSQSPolicy-${random_string.suffix.result}"
+  description = "Policy for Reprocess Document Resolver Lambda to re-queue documents"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = var.document_queue_arn != null ? [
+      {
+        Action   = ["sqs:SendMessage"]
+        Effect   = "Allow"
+        Resource = var.document_queue_arn
+      }
+    ] : []
   })
 }
 resource "aws_iam_policy" "reprocess_document_resolver_kms_policy" {
@@ -933,6 +995,15 @@ resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_logs_atta
 resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_s3_attachment" {
   role       = aws_iam_role.reprocess_document_resolver_role.name
   policy_arn = aws_iam_policy.reprocess_document_resolver_s3_policy.arn
+}
+resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_sqs_attachment" {
+  role       = aws_iam_role.reprocess_document_resolver_role.name
+  policy_arn = aws_iam_policy.reprocess_document_resolver_sqs_policy.arn
+}
+resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_dynamodb_attachment" {
+  count      = local.tracking_table_exists ? 1 : 0
+  role       = aws_iam_role.reprocess_document_resolver_role.name
+  policy_arn = aws_iam_policy.reprocess_document_resolver_dynamodb_policy[0].arn
 }
 resource "aws_iam_role_policy_attachment" "reprocess_document_resolver_kms_attachment" {
   for_each   = toset(["enabled"])

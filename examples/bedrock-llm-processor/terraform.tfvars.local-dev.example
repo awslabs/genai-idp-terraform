@@ -45,14 +45,10 @@ log_retention_days = 7
 # Data Retention
 data_tracking_retention_days = 365
 
-# Model Configuration
-classification_model_id = "us.amazon.nova-2-lite-v1:0"
-extraction_model_id     = "us.amazon.nova-2-lite-v1:0"
-summarization_model_id  = "us.amazon.nova-2-lite-v1:0"
-evaluation_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
+# Model Configuration — per-stage model IDs are set in the config YAML
+# (config_file_path), not here.
 
 # Feature Toggles
-summarization_enabled = true
 enable_evaluation     = false
 enable_reporting      = false
 

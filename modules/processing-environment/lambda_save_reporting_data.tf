@@ -156,6 +156,17 @@ resource "aws_iam_policy" "save_reporting_data_policy" {
         ]
       },
       {
+        # The function is handed CONFIGURATION_TABLE_NAME and reads the merged
+        # configuration; Scan is needed by resolve_active_version().
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Effect   = "Allow"
+        Resource = local.configuration_table.table_arn
+      },
+      {
         Action = [
           "cloudwatch:PutMetricData"
         ]

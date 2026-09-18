@@ -11,6 +11,13 @@ variable "layer_prefix" {
   description = "Prefix for the lambda layers (should be unique per deployment)"
   type        = string
   default     = "idp-common"
+
+  # Mirrors the validation on the same input in ../lambda-layer-codebuild-idp,
+  # so an invalid value is reported against the variable the caller actually set.
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_-]*$", var.layer_prefix)) && length(var.layer_prefix) <= 50
+    error_message = "Variable layer_prefix must be 1-50 characters of letters, digits, hyphens, or underscores, and must begin with a letter or digit."
+  }
 }
 
 variable "idp_common_extras" {
@@ -65,4 +72,22 @@ variable "container_runtime" {
     condition     = contains(["auto", "docker", "podman", "finch"], var.container_runtime)
     error_message = "container_runtime must be one of: auto, docker, podman, finch."
   }
+}
+
+variable "vpc_id" {
+  description = "VPC to place the layer-build CodeBuild project in, alongside subnet_ids and security_group_ids. Null builds outside a VPC."
+  type        = string
+  default     = null
+}
+
+variable "subnet_ids" {
+  description = "Subnets for the layer-build CodeBuild project. The build runs `pip install`, so these MUST have egress to the package index."
+  type        = list(string)
+  default     = []
+}
+
+variable "security_group_ids" {
+  description = "Security groups for the layer-build CodeBuild project. Must allow outbound HTTPS."
+  type        = list(string)
+  default     = []
 }

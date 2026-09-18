@@ -21,7 +21,7 @@ output "api_arn" {
 # ${api_base_url}/op/<field>.
 output "api_base_url" {
   description = "Base URL of the REST API transport (stage 'api')."
-  value       = "https://${aws_api_gateway_rest_api.http_api.id}.execute-api.${data.aws_region.current.id}.${data.aws_partition.current.dns_suffix}/api"
+  value       = "https://${aws_api_gateway_rest_api.http_api.id}.execute-api.${data.aws_region.current.region}.${data.aws_partition.current.dns_suffix}/api"
 }
 
 # IAM role API Gateway assumes to read the web-app bucket when serving the SPA
@@ -140,3 +140,15 @@ output "agent_table_name" {
 # MCP outputs (gateway endpoint, OAuth client, etc.) from
 # `module.mcp_integration` directly; they are no longer surfaced by the API
 # module.
+
+# Test Studio test-set bucket. Surfaced so the root can publish it to the Web UI
+# settings (the UI reads settings.TestSetBucket) and give the bucket CORS.
+output "test_set_bucket_name" {
+  description = "Name of the Test Studio test-set bucket (null when Test Studio is disabled)"
+  value       = var.enable_test_studio ? aws_s3_bucket.test_sets[0].id : null
+}
+
+output "test_set_bucket_arn" {
+  description = "ARN of the Test Studio test-set bucket (null when Test Studio is disabled)"
+  value       = var.enable_test_studio ? aws_s3_bucket.test_sets[0].arn : null
+}

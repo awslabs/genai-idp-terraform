@@ -49,6 +49,18 @@ check "agent_analytics_requires_reporting" {
   }
 }
 
+# Validation: Chat-with-Document is only reachable through the API. It
+# contributes `sendChatDocumentMessage` to the dispatcher's field-function map,
+# so with the API off its Lambdas and tables are built but nothing can route to
+# them.
+#tfsec:ignore:*
+check "chat_with_document_requires_api" {
+  assert {
+    condition     = !local.feature_enable.chat_with_document || local.api_enabled
+    error_message = "When Chat-with-Document is enabled (api.chat_with_document.enabled or the deprecated chat_with_document.enabled), the API must also be enabled (api.enabled / enable_api). Its sendChatDocumentMessage field is served by the API dispatcher, so with the API off the feature is unreachable."
+  }
+}
+
 # Deprecation notice: `api.visibility` was renamed to
 # `api.api_gateway_visibility` in v0.6.4, when upstream replaced AppSync with
 # the API Gateway REST transport (AppSyncVisibility -> ApiGatewayVisibility).
@@ -72,6 +84,18 @@ check "enable_encryption_requires_key" {
   assert {
     condition     = !var.enable_encryption || var.encryption_key_arn != null
     error_message = "When enable_encryption is true, encryption_key_arn must be set to a non-null KMS key ARN."
+  }
+}
+
+# Advisory: the configuration enables evaluation but no baseline bucket ARN was
+# supplied, so evaluation will NOT run (local.evaluation_enabled AND-gates on the
+# bucket). This is a soft check (warning, not error) because "evaluation enabled
+# in config, no baseline wired" is a valid state the runtime tolerates — it just
+# means no scoring happens. Supply var.evaluation.baseline_bucket_arn to activate.
+check "evaluation_enabled_without_baseline_bucket" {
+  assert {
+    condition     = !local._config_evaluation_enabled || var.evaluation.baseline_bucket_arn != null
+    error_message = "The configuration enables evaluation (config.evaluation.enabled = true) but var.evaluation.baseline_bucket_arn is not set, so evaluation will not run. Supply the baseline S3 bucket ARN to activate evaluation, or disable it in the config."
   }
 }
 
@@ -181,6 +205,10 @@ module "idp_common_layer" {
   lambda_local        = var.build.lambda_local
   lambda_architecture = var.build.lambda_architecture
   container_runtime   = var.build.container_runtime
+
+  vpc_id             = try(var.private_network.vpc_id, null)
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 }
 
 # Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
@@ -235,7 +263,7 @@ module "idp_agents_layer" {
 # Evaluation layer: evaluation + docs_service extras for the per-processor
 # evaluation Lambda (munkres + numpy). Built only when evaluation is enabled.
 module "idp_evaluation_layer" {
-  count  = var.evaluation.enabled ? 1 : 0
+  count  = local.evaluation_enabled ? 1 : 0
   source = "./modules/idp-common-layer"
 
   layer_prefix             = "${local.name_prefix}-evaluation-layer"
@@ -267,6 +295,13 @@ module "user_identity" {
   additional_callback_urls = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
   additional_logout_urls   = var.web_ui.custom_domain_url != null ? [var.web_ui.custom_domain_url] : []
 
+  # All no-ops when federation is off.
+  additional_identity_providers     = local.federation_supported_identity_providers
+  enable_idp_groups_attribute       = local.feature_enable.federation
+  pre_token_generation_function_arn = local.federation_group_mapping_function_arn
+  create_hosted_ui_domain           = local.feature_enable.federation
+  hosted_ui_domain_prefix           = try(var.idp_federation.hosted_ui_domain_prefix, null)
+
   tags = var.tags
 }
 
@@ -291,6 +326,10 @@ module "processing_environment" {
   input_bucket_arn   = var.input_bucket_arn
   output_bucket_arn  = var.output_bucket_arn
   working_bucket_arn = var.working_bucket_arn
+
+  # Reporting ingest: creates save_reporting_data and wires workflow_tracker
+  enable_reporting     = var.reporting.enabled
+  reporting_bucket_arn = var.reporting.bucket_arn
 
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
@@ -318,9 +357,13 @@ module "processing_environment" {
   log_retention_days           = var.log_retention_days
   data_tracking_retention_days = var.data_tracking_retention_days
 
+  # Core table capacity / billing (see variables.tf; defaults preserve on-demand)
+  core_table_capacity = var.core_table_capacity
+
   # VPC configuration
   subnet_ids         = var.vpc_subnet_ids
   security_group_ids = var.vpc_security_group_ids
+  vpc_id             = try(var.private_network.vpc_id, null)
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -377,14 +420,21 @@ module "processing_environment_api" {
   tracking_table_arn      = module.processing_environment.tracking_table_arn
   configuration_table_arn = module.processing_environment.configuration_table_arn
 
+  # processing_environment is always instantiated, so the tracking table always
+  # exists. Pass this plan-time-known flag so the api module's tracking-table
+  # gates don't key their count off the COMPUTED tracking_table_arn (which is
+  # unknown at plan time and breaks a cold `terraform plan`).
+  tracking_table_available = true
+
   # S3 bucket ARNs
   input_bucket_arn   = var.input_bucket_arn
   output_bucket_arn  = var.output_bucket_arn
   working_bucket_arn = var.working_bucket_arn
 
   # Optional: Evaluation baseline bucket
-  evaluation_enabled             = var.evaluation.enabled
-  evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
+  evaluation_enabled             = local.evaluation_enabled
+  evaluation_baseline_bucket_arn = local.evaluation_enabled ? var.evaluation.baseline_bucket_arn : null
+  evaluation_layer_arn           = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # Knowledge Base configuration
   knowledge_base = local.knowledge_base_config
@@ -396,23 +446,34 @@ module "processing_environment_api" {
   vpc_config = length(var.vpc_subnet_ids) > 0 ? {
     subnet_ids         = var.vpc_subnet_ids
     security_group_ids = var.vpc_security_group_ids
+    vpc_id             = try(var.private_network.vpc_id, null)
   } : null
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
 
   # Agent Analytics configuration
+  # Both branches need the same attribute set, or Terraform cannot unify them.
   agent_analytics = local.agent_analytics_config.enabled && var.reporting.enabled ? {
-    enabled                 = true
-    model_id                = local.agent_analytics_config.model_id
-    reporting_database_name = var.reporting.database_name
-    reporting_bucket_arn    = var.reporting.bucket_arn
-  } : { enabled = false }
+    enabled                   = true
+    model_id                  = local.agent_analytics_config.model_id
+    reporting_database_name   = var.reporting.database_name
+    reporting_bucket_arn      = var.reporting.bucket_arn
+    allowed_bedrock_model_ids = local.agent_analytics_config.allowed_bedrock_model_ids
+    } : {
+    enabled                   = false
+    model_id                  = local.agent_analytics_config.model_id
+    reporting_database_name   = null
+    reporting_bucket_arn      = null
+    allowed_bedrock_model_ids = []
+  }
 
   # Discovery configuration
   discovery = local.discovery_config.enabled ? {
     enabled = true
   } : { enabled = false }
+  # Restrict discovery upload bucket CORS to the app origin(s) (Wiz S3-036).
+  discovery_allowed_cors_origins = var.discovery_allowed_cors_origins
 
   # Chat with Document configuration
   chat_with_document = local.chat_with_document_config.enabled ? {
@@ -422,14 +483,16 @@ module "processing_environment_api" {
 
   # Process Changes configuration (Edit Sections feature)
   enable_edit_sections = local.process_changes_config.enabled
-  document_queue_url   = local.process_changes_config.enabled ? module.processing_environment.document_queue_url : null
-  document_queue_arn   = local.process_changes_config.enabled ? module.processing_environment.document_queue_arn : null
+  # Unconditional: the reprocess resolver also re-queues through this queue.
+  document_queue_url = module.processing_environment.document_queue_url
+  document_queue_arn = module.processing_environment.document_queue_arn
 
   # v0.4.8 feature flags
   enable_agent_companion_chat = try(var.api.enable_agent_companion_chat, false)
   enable_test_studio          = try(var.api.enable_test_studio, false)
   enable_fcc_dataset          = try(var.api.enable_fcc_dataset, false)
   enable_w2_dataset           = try(var.api.enable_w2_dataset, false)
+  enable_finetuning           = try(var.api.enable_finetuning, false)
   enable_error_analyzer       = try(var.api.enable_error_analyzer, false)
 
   # version-check resolver (v0.5.11). Default-off: empty public_artifacts_bucket
@@ -467,6 +530,11 @@ module "processing_environment_api" {
 
   # Lookup function (used by Agent Chat Processor)
   lookup_function_name = module.processing_environment.lookup_function_name
+
+  # Step Functions state machine ARN. Used to scope the getStepFunctionExecution
+  # resolver's states:DescribeExecution / states:GetExecutionHistory grant to
+  # this deployment's own executions (least privilege) instead of "*".
+  state_machine_arn = try(local.processor_config.state_machine_arn, null)
 
   # Lambda layers
   base_layer_arn           = module.processing_environment.base_layer_arn
@@ -513,13 +581,14 @@ module "processing_environment_api" {
 
 # BDA Processor
 module "bda_processor" {
-  source = "./modules/processors/bda-processor"
-  count  = var.processor.type == "bda" ? 1 : 0
+  allowed_bedrock_model_ids = var.processor.allowed_bedrock_model_ids
+  source                    = "./modules/processors/bda-processor"
+  count                     = var.processor.type == "bda" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
 
   # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
-  enable_bda_ocr_backend = var.processor.enable_bda_ocr_backend
+  enable_bda_ocr_backend = local.bda_ocr_backend_enabled
 
   name = "${local.name_prefix}-processor"
 
@@ -557,15 +626,14 @@ module "bda_processor" {
   # BDA-specific configurations
   data_automation_project_arn = var.processor.project_arn
 
-  # Optional: Evaluation configuration
-  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  # Optional: Evaluation configuration (model comes from the YAML config)
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
-
-  # Optional: Summarization configuration (BDA only)
-  summarization_model_id = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
+  reporting_bucket_name           = local.reporting_bucket_name
+  save_reporting_function_name    = module.processing_environment.save_reporting_data_function_name
+  save_reporting_function_arn     = module.processing_environment.save_reporting_data_function_arn
 
   # Rule validation
-  enable_rule_validation = var.processor.enable_rule_validation
+  enable_rule_validation = local.rule_validation_enabled
 
   # Optional: Document processing configuration
   config = var.processor.config
@@ -583,13 +651,14 @@ module "bda_processor" {
 
 # Bedrock LLM Processor
 module "bedrock_llm_processor" {
-  source = "./modules/processors/bedrock-llm-processor"
-  count  = var.processor.type == "bedrock-llm" ? 1 : 0
+  allowed_bedrock_model_ids = var.processor.allowed_bedrock_model_ids
+  source                    = "./modules/processors/bedrock-llm-processor"
+  count                     = var.processor.type == "bedrock-llm" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
 
   # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
-  enable_bda_ocr_backend = var.processor.enable_bda_ocr_backend
+  enable_bda_ocr_backend = local.bda_ocr_backend_enabled
 
   name = "${local.name_prefix}-processor"
 
@@ -616,24 +685,22 @@ module "bedrock_llm_processor" {
   enable_encryption    = var.enable_encryption
   idp_common_layer_arn = module.idp_common_layer.layer_arn
   base_layer_arn       = module.processing_environment.base_layer_arn
-  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  evaluation_layer_arn = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
   vpc_security_group_ids = var.vpc_security_group_ids
 
-  # Model configurations - pass model IDs directly for optional override
-  # The processor will use config.yaml by default and override with these if provided
-  classification_model_id      = var.processor.classification_model_id
-  extraction_model_id          = var.processor.extraction_model_id
-  assessment_model_id          = var.processor.assessment_model_id
-  evaluation_model_id          = var.evaluation.enabled ? var.evaluation.model_id : null
+  # Per-stage models come from the YAML configuration, not Terraform.
   max_pages_for_classification = var.processor.max_pages_for_classification
 
   # Evaluation: per-pattern Lambda built from sources/patterns/pattern-2, the
   # only evaluation surface, matching upstream.
-  evaluation_enabled             = var.evaluation.enabled
-  evaluation_baseline_bucket_arn = var.evaluation.enabled ? var.evaluation.baseline_bucket_arn : null
+  evaluation_enabled             = local.evaluation_enabled
+  evaluation_baseline_bucket_arn = local.evaluation_enabled ? var.evaluation.baseline_bucket_arn : null
+  reporting_bucket_name          = local.reporting_bucket_name
+  save_reporting_function_name   = module.processing_environment.save_reporting_data_function_name
+  save_reporting_function_arn    = module.processing_environment.save_reporting_data_function_arn
 
   # Optional: Document processing configuration
   config = var.processor.config
@@ -646,13 +713,11 @@ module "bedrock_llm_processor" {
   # relink the default)
   bda_project_arn = var.processor.bda_project_arn
 
-  # Feature flags
-  is_summarization_enabled = var.processor.summarization.enabled
-  enable_hitl              = var.processor.enable_hitl
-  enable_rule_validation   = var.processor.enable_rule_validation
-
-  # Optional: Summarization model configuration
-  summarization_model_id = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
+  # Feature flags. Summarization enablement is config-authoritative (derived
+  # from var.processor.config at plan time); see local.summarization_enabled.
+  is_summarization_enabled = local.summarization_enabled
+  enable_hitl              = local.hitl_enabled
+  enable_rule_validation   = local.rule_validation_enabled
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
@@ -662,13 +727,14 @@ module "bedrock_llm_processor" {
 
 # SageMaker UDOP Processor
 module "sagemaker_udop_processor" {
-  source = "./modules/processors/sagemaker-udop-processor"
-  count  = var.processor.type == "sagemaker-udop" ? 1 : 0
+  allowed_bedrock_model_ids = var.processor.allowed_bedrock_model_ids
+  source                    = "./modules/processors/sagemaker-udop-processor"
+  count                     = var.processor.type == "sagemaker-udop" ? 1 : 0
 
   lambda_architecture = var.build.lambda_architecture
 
   # IDP v0.6 `ocr.backend: bda` support (deployment-scoped BDA OCR project).
-  enable_bda_ocr_backend = var.processor.enable_bda_ocr_backend
+  enable_bda_ocr_backend = local.bda_ocr_backend_enabled
 
   name = "${local.name_prefix}-processor"
 
@@ -694,7 +760,7 @@ module "sagemaker_udop_processor" {
   encryption_key_arn   = var.encryption_key_arn
   idp_common_layer_arn = module.idp_common_layer.layer_arn
   base_layer_arn       = module.processing_environment.base_layer_arn
-  evaluation_layer_arn = var.evaluation.enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  evaluation_layer_arn = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -707,14 +773,14 @@ module "sagemaker_udop_processor" {
   ocr_max_workers            = var.processor.ocr_max_workers
   classification_max_workers = var.processor.classification_max_workers
 
-  # Optional: Model configurations
-  extraction_model_id             = var.processor.extraction_model_id
-  summarization_model_id          = var.processor.summarization.enabled ? var.processor.summarization.model_id : null
-  evaluation_model_id             = var.evaluation.enabled ? var.evaluation.model_id : null
+  # Per-stage models come from the YAML configuration, not Terraform.
   evaluation_baseline_bucket_name = local.web_ui_evaluation_bucket_name
+  reporting_bucket_name           = local.reporting_bucket_name
+  save_reporting_function_name    = module.processing_environment.save_reporting_data_function_name
+  save_reporting_function_arn     = module.processing_environment.save_reporting_data_function_arn
 
   # Rule validation
-  enable_rule_validation = var.processor.enable_rule_validation
+  enable_rule_validation = local.rule_validation_enabled
 
   # Optional: Document processing configuration
   config = var.processor.config
@@ -769,6 +835,13 @@ module "web_ui" {
     }
   }
 
+  # Federated sign-in entry point for the UI. Null when federation is off.
+  external_idp = local.feature_enable.federation ? {
+    provider_name  = try(var.idp_federation.provider_name, "ExternalIdP")
+    cognito_domain = local.federation_hosted_ui_domain
+    auto_login     = try(var.idp_federation.auto_login, false)
+  } : null
+
   # API configuration (if enabled)
   api_url = local.api_enabled ? module.processing_environment_api[0].api_base_url : null
 
@@ -777,14 +850,26 @@ module "web_ui" {
   stream_url = local.api_enabled ? module.processing_environment_api[0].chat_stream_function_url : null
 
   # S3 bucket ARNs
-  input_bucket_arn  = var.input_bucket_arn
-  output_bucket_arn = var.output_bucket_arn
+  input_bucket_arn   = var.input_bucket_arn
+  output_bucket_arn  = var.output_bucket_arn
+  working_bucket_arn = var.working_bucket_arn
+
+  # working_bucket_arn is a required root input, so the working bucket always
+  # exists here. Pass this plan-time-known flag so the web-ui CORS resource
+  # doesn't gate its count off the COMPUTED working_bucket_arn (unknown at plan
+  # time, which breaks a cold `terraform plan`).
+  working_bucket_cors_enabled = true
 
   # Optional: Logging bucket for CloudFront and S3 access logs
   logging_bucket = var.web_ui.logging_enabled ? {
     bucket_name = local.logging_bucket_name
     bucket_arn  = var.web_ui.logging_bucket_arn
   } : null
+
+  # Test Studio bucket, for settings.TestSetBucket + its CORS. Separate flag as
+  # with working_bucket_cors_enabled above: the name is computed.
+  test_set_bucket_name    = local.api_enabled ? module.processing_environment_api[0].test_set_bucket_name : null
+  test_set_bucket_enabled = local.api_enabled && try(var.api.enable_test_studio, false)
 
   # Reporting bucket name (extracted from ARN)
   reporting_bucket_name = local.web_ui_reporting_bucket_name
@@ -805,6 +890,7 @@ module "web_ui" {
   create_infrastructure             = var.web_ui.create_infrastructure
   web_app_bucket_name               = var.web_ui.bucket_name
   cloudfront_distribution_id        = var.web_ui.cloudfront_distribution_id
+  cloudfront_allowed_geos           = var.web_ui.allowed_geos
   should_allow_sign_up_email_domain = var.web_ui.enable_signup != ""
 
   # Hosting mode + public URL for CORS / UI build env. "CloudFront" creates the
@@ -836,6 +922,12 @@ module "web_ui" {
 
   # Lambda tracing configuration
   lambda_tracing_mode = var.lambda_tracing_mode
+
+  # Places the UI CodeBuild project in the VPC. The build runs npm install, so
+  # the subnets need egress to the registry.
+  vpc_id             = try(var.private_network.vpc_id, null)
+  subnet_ids         = var.vpc_subnet_ids
+  security_group_ids = var.vpc_security_group_ids
 
   tags = var.tags
 }
