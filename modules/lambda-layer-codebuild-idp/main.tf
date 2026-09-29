@@ -87,8 +87,9 @@ resource "terraform_data" "copy_idp_common_source" {
   triggers_replace = [
     var.idp_common_source_path,
     random_id.build_id.hex,
+    # pyproject.toml only: upstream removed setup.py in v0.6.6, and hashing a
+    # missing file fails the plan rather than degrading.
     var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/pyproject.toml") : "",
-    var.idp_common_source_path != "" ? filemd5("${var.idp_common_source_path}/setup.py") : "",
     local.idp_common_files_hash,
     filemd5("${path.module}/main.tf"),
     # The staging logic lives in the script below, so its content must be part
@@ -240,7 +241,7 @@ resource "aws_cloudwatch_log_group" "codebuild_log_group" {
   count = local.use_local_build ? 0 : 1
 
   name              = "/aws/codebuild/${var.layer_prefix}-lambda-layers-${random_string.layer_suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
 
   tags = merge(var.tags, {
     Name = "${var.layer_prefix}-codebuild-logs"

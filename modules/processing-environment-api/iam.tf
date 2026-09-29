@@ -679,6 +679,36 @@ resource "aws_iam_role_policy_attachment" "get_stepfunction_execution_resolver_s
   role       = aws_iam_role.get_stepfunction_execution_resolver_role.name
   policy_arn = aws_iam_policy.get_stepfunction_execution_resolver_stepfunctions_policy.arn
 }
+# Users-table read for the RBAC config-version scoping the v0.6.9 resolver does.
+# Only when RBAC is on; the resolver treats an empty table name as fail-open.
+resource "aws_iam_policy" "get_stepfunction_execution_resolver_users_policy" {
+  # Gated on the flag, not users_table_name: that name is unknown at plan time
+  # on a fresh deploy, so a count using it fails the first apply.
+  count       = var.rbac_enabled ? 1 : 0
+  name        = "GetStepFunctionExecutionResolverUsersPolicy-${random_string.suffix.result}"
+  description = "Read the RBAC Users table so the resolver can scope by allowed config versions"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = ["dynamodb:Query", "dynamodb:GetItem"]
+        Effect = "Allow"
+        Resource = [
+          local.users_table_arn_prefix,
+          "${local.users_table_arn_prefix}/index/*",
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "get_stepfunction_execution_resolver_users_attachment" {
+  count      = var.rbac_enabled ? 1 : 0
+  role       = aws_iam_role.get_stepfunction_execution_resolver_role.name
+  policy_arn = aws_iam_policy.get_stepfunction_execution_resolver_users_policy[0].arn
+}
+
 resource "aws_iam_role_policy_attachment" "get_stepfunction_execution_resolver_vpc_attachment" {
   count      = var.vpc_config != null ? 1 : 0
   role       = aws_iam_role.get_stepfunction_execution_resolver_role.name
@@ -745,7 +775,7 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_bedrock_policy" {
         Action   = local.knowledge_base_model_permissions.inference_profile_statement.actions
         Resource = local.knowledge_base_model_permissions.inference_profile_statement.resources
       }] : [],
-      # Knowledge base permissions (always included)
+      # Fallback is upstream's account/region-scoped pattern, not "*".
       [{
         Action = [
           "bedrock:Retrieve",
@@ -753,7 +783,7 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_bedrock_policy" {
         ]
         Effect = "Allow"
         Resource = [
-          var.knowledge_base.knowledge_base_arn != null ? var.knowledge_base.knowledge_base_arn : "*"
+          var.knowledge_base.knowledge_base_arn != null ? var.knowledge_base.knowledge_base_arn : "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
         ]
       }],
       # Fallback permissions if no model_id is provided
@@ -766,6 +796,12 @@ resource "aws_iam_policy" "query_knowledge_base_resolver_bedrock_policy" {
         Resource = [
           "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}::foundation-model/${var.knowledge_base.model_id}"
         ]
+      }] : [],
+      local.knowledge_base_guardrail != null ? [{
+        Sid      = "Guardrail"
+        Effect   = "Allow"
+        Action   = "bedrock:ApplyGuardrail"
+        Resource = "${local.guardrail_arn_prefix}/${split(":", local.knowledge_base_guardrail)[0]}"
       }] : []
     )
   })

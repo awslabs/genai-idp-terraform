@@ -19,7 +19,7 @@ This repository uses a dual-version scheme to track both the upstream IDP soluti
 
 ### Current Version
 
-The current release is **`0.6.4-tf.0`** (compatible with upstream IDP v0.6.4). See [`CHANGELOG.md`](CHANGELOG.md) for the full history and upgrade notes.
+The current release is **`0.6.9-tf.0`** (compatible with upstream IDP v0.6.9). See [`CHANGELOG.md`](CHANGELOG.md) for the full history and upgrade notes.
 
 ### Version Format Examples
 
@@ -30,14 +30,15 @@ The current release is **`0.6.4-tf.0`** (compatible with upstream IDP v0.6.4). S
 | `0.4.16-tf.2` | IDP v0.4.16, sagemaker-udop fixes |
 | `0.5.12-tf.0` | IDP v0.5.12, façade processors, feature-plugins, RBAC/federation/VPC, parity drop-ins |
 | `0.5.16-tf.0` | IDP v0.5.16, opt-in local build path for Lambda layers, processor images, and the web UI (`var.build`) |
-| `0.6.4-tf.0` | IDP v0.6.4, single `processor` variable, API Gateway REST transport replacing AppSync, models and pipeline features driven by the YAML config (current) |
+| `0.6.4-tf.0` | IDP v0.6.4, single `processor` variable, API Gateway REST transport replacing AppSync, models and pipeline features driven by the YAML config |
+| `0.6.9-tf.0` | IDP v0.6.9 (current) |
 
 The Terraform version (`tf.X`) resets to `0` when the upstream IDP version changes.
 
 ### Key Features
 
 - **Modular Architecture**: Reusable Terraform modules for flexible composition
-- **Multiple AI Processing Patterns**: Three distinct approaches for different use cases
+- **One Engine, Several Patterns**: a single unified processor, with optional façades for BDA, Bedrock LLM, and SageMaker UDOP classification
 - **Serverless Design**: Built on AWS Lambda, Step Functions, and other serverless technologies
 - **Security First**: KMS encryption, IAM least privilege, and VPC support with comprehensive security fixes
 - **Comprehensive Monitoring**: Built-in CloudWatch dashboards and alerting
@@ -49,7 +50,21 @@ The Terraform version (`tf.X`) resets to `0` when the upstream IDP version chang
 
 ## Processing Patterns
 
-The GenAI IDP Accelerator supports three different processing patterns, each optimized for specific use cases:
+All document processing runs on one engine, the **unified processor**. The three
+pattern modules below are thin façades over it, each preconfiguring the engine for
+a particular classification approach.
+
+### Unified Processor (the main processor)
+
+- **Best for**: most deployments, including all three patterns below
+- **Processing**: the single Step Functions pipeline that every pattern executes
+- **Setup**: fully automated; the document classes and extraction logic come from your YAML config
+- **Customization**: the whole pipeline is config-driven, so one deployment can serve several document types
+- **Use it directly** unless you specifically need a façade's preconfiguration. This
+  is the example the CI pipeline deploys and validates on every change.
+
+The three façades each instantiate `modules/processors/unified-processor` as their
+engine and differ only in how documents get classified:
 
 ### Pattern 1: BDA Processor (Bedrock Data Automation)
 
@@ -78,16 +93,18 @@ The GenAI IDP Accelerator supports three different processing patterns, each opt
 ```
 genai-idp-terraform/
 ├── modules/                           # Reusable Terraform modules
-│   ├── processors/                    # Document processing patterns
-│   │   ├── bda-processor/            # Pattern 1: Bedrock Data Automation
-│   │   ├── bedrock-llm-processor/    # Pattern 2: Bedrock LLM Processing
-│   │   └── sagemaker-udop-processor/ # Pattern 3: SageMaker UDOP Processing
+│   ├── processors/                    # Document processing
+│   │   ├── unified-processor/        # The processing engine (main); the three below wrap it
+│   │   ├── bda-processor/            # Façade, Pattern 1: Bedrock Data Automation
+│   │   ├── bedrock-llm-processor/    # Façade, Pattern 2: Bedrock LLM Processing
+│   │   └── sagemaker-udop-processor/ # Façade, Pattern 3: SageMaker UDOP Processing
 │   ├── processing-environment/        # Core processing infrastructure
-│   ├── processing-environment-api/    # GraphQL API for status tracking
+│   ├── processing-environment-api/    # REST API for status tracking
 │   ├── web-ui/                       # React-based web interface
 │   ├── knowledge-base/               # Vector database for RAG
 │   └── [supporting modules]/         # Additional infrastructure components
 ├── examples/                         # Complete deployment examples
+│   ├── unified-processor/           # Main example; deployed and validated by CI
 │   ├── bda-processor/               # BDA processor deployment
 │   ├── bedrock-llm-processor/       # Bedrock LLM processor deployment
 │   ├── sagemaker-udop-processor/    # SageMaker UDOP processor deployment
@@ -132,42 +149,87 @@ Before deploying the solution, ensure you have:
   artifacts in AWS CodeBuild and the deploy host needs no container runtime.
   See [docs/content/deployment-guides/local-lambda-build.md](docs/content/deployment-guides/local-lambda-build.md).
 
+### How this repository must be obtained
+
+`sources/` is a git submodule pinned to an upstream IDP release tag. That decides
+which consumption paths work:
+
+| Path | Works | Notes |
+|---|---|---|
+| `git clone --recursive` | yes | or `git submodule update --init` after a plain clone |
+| Terraform module with a `git::` source | yes | Terraform initialises submodules recursively, no extra step |
+| Source archive: release zip, tarball, registry package | **no** | archives cannot carry a submodule, so `sources/` arrives empty |
+
+The archive limitation is a property of git and of archive formats, not something
+this repository can work around. Use a git clone or a `git::` module source.
+
 ### AWS Requirements
 
 - **AWS Account**: With appropriate permissions for all services used
-- **Bedrock Model Access**: Enable access to required models in the AWS Console
+- **Bedrock Model Access**: automatic, but Anthropic models need a one-time use-case submission (see below)
 - **Service Quotas**: Ensure adequate quotas for Lambda, Step Functions, etc.
 
-### Enable Bedrock Model Access
+### Bedrock Model Access
 
-**Important**: Before deploying, you must enable access to Bedrock models:
+You no longer request access to each model. Since September 2025 Bedrock enables
+all serverless foundation models automatically in every commercial Region, so the
+old "Model access" checkbox flow is gone. See
+[Request access to models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
 
-1. Go to the [AWS Console](https://console.aws.amazon.com/)
-2. Navigate to **Amazon Bedrock**
-3. Click **"Model access"** in the left navigation
-4. Request access to the models you plan to use:
-   - **Claude 3 Sonnet**: `anthropic.claude-3-sonnet-20240229-v1:0`
-   - **Claude 3 Haiku**: `anthropic.claude-3-haiku-20240307-v1:0`
-   - **Nova Pro**: `us.amazon.nova-pro-v1:0`
-   - **Titan Text Express**: `amazon.titan-text-express-v1`
-5. Click the checkbox next to each model and **"Request model access"**
+Two prerequisites still apply, and both are one-time:
 
-This is a one-time manual step that cannot be automated through Terraform.
+- **Anthropic first-time use**: Anthropic requires use-case details once per
+  account (or once at the organization's management account) before you invoke a
+  Claude model. Submit them by opening any Anthropic model in the Bedrock console
+  catalog, or by calling `PutUseCaseForModelAccess`. Access is granted immediately
+  on submission. This example defaults to Claude, so it applies to a default
+  deployment.
+- **AWS Marketplace permissions**: the invoking role needs
+  `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe` and
+  `aws-marketplace:ViewSubscriptions`. Bedrock subscribes to third-party models on
+  first invocation, and without these the subscription fails and calls return
+  `AccessDeniedException`.
+
+On the very first invocation of a third-party model the subscription completes in
+the background, usually within 15 minutes, so early calls can fail before it
+settles. Neither step can be automated through Terraform.
 
 ## Quick Start
 
-### 1. Choose Your Processing Pattern
+> ### Clone with submodules
+>
+> `sources/` is a **git submodule** pinned to the upstream IDP release this wrapper
+> wraps, rather than a copy of it. A plain `git clone` leaves it empty and every
+> Lambda build then fails.
+>
+> ```bash
+> git clone --recursive https://github.com/awslabs/genai-idp-terraform.git
+> ```
+>
+> Already cloned without it:
+>
+> ```bash
+> git submodule update --init
+> ```
+>
+> `terraform plan` fails early with a message naming this if the submodule is
+> missing, so you will not be left guessing.
 
-Select the pattern that best fits your use case:
+### 1. Choose Your Example
+
+Start with the unified processor unless you need a façade's preconfiguration:
 
 ```bash
-# For flexible, custom document processing (Recommended for most use cases)
-cd examples/bedrock-llm-processor
+# The main processor: config-driven, covers most use cases (start here)
+cd examples/unified-processor
 
-# For standard documents with existing BDA project
+# Façade for standard documents with an existing BDA project
 cd examples/bda-processor
 
-# For specialized processing with custom UDOP models
+# Façade for Bedrock LLM classification
+cd examples/bedrock-llm-processor
+
+# Façade for specialized processing with custom UDOP models
 cd examples/sagemaker-udop-processor
 ```
 
@@ -187,8 +249,9 @@ nano terraform.tfvars
 
 ```hcl
 # terraform.tfvars
-aws_region = "us-east-1"
-prefix     = "my-idp"
+region      = "us-east-1"
+prefix      = "my-idp"
+admin_email = "you@example.com"
 
 tags = {
   Environment = "development"
@@ -218,9 +281,9 @@ After deployment, Terraform will output important information:
 terraform output
 
 # Example outputs:
-# web_ui_url = "https://d1234567890.cloudfront.net"
-# api_endpoint = "https://abcdef.appsync-api.us-east-1.amazonaws.com/graphql"
+# web_ui_url   = "https://d1234567890.cloudfront.net"
 # input_bucket = "my-idp-input-documents-abc123"
+# name_prefix  = "my-idp-ab12cd34"
 ```
 
 ## Usage Examples
@@ -268,16 +331,22 @@ aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/your-prefix"
 
 ```hcl
 # terraform.tfvars
-aws_region = "us-east-1"
-prefix     = "my-idp"
+region      = "us-east-1"
+prefix      = "my-idp"
+admin_email = "you@example.com"
 
-# Optional: Custom model selection
-classification_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-extraction_model_id     = "anthropic.claude-3-sonnet-20240229-v1:0"
+# Per-stage model IDs live in the YAML config, not in tfvars. Point this at a
+# config from sources/config_library/unified/ or your own copy, and set the
+# models inside it. Defaults to the lending package sample.
+config_file_path = "../../sources/config_library/unified/lending-package-sample/config.yaml"
 
-# Optional: Performance tuning
-max_processing_concurrency = 50
-classification_max_workers = 20
+# Optional. The models your config references are granted automatically; list
+# extras here only if something invokes a model the config does not name.
+allowed_bedrock_model_ids = []
+
+# Logging
+log_level          = "INFO"
+log_retention_days = 30
 
 # Build strategy (CodeBuild by default; flip to local-build via tfvars)
 # See docs/content/deployment-guides/local-lambda-build.md.
@@ -303,46 +372,43 @@ for prerequisites, architecture selection, and migration guidance.
 
 ### Advanced Configuration
 
+These are the toggles `examples/unified-processor` exposes. Pipeline behaviour
+such as classification method, extraction limits and summarization comes from the
+YAML config rather than from tfvars.
+
 ```hcl
-# Enable additional features
-enable_web_ui           = true
-enable_knowledge_base   = true
-enable_evaluation       = true
-enable_summarization    = true
+# Subsystems, each default-off unless noted
+create_knowledge_base       = true   # Bedrock Knowledge Base + OpenSearch Serverless
+create_discovery            = true   # document discovery pipeline
+chat_with_document_enabled  = true
+enable_evaluation           = true   # also needs evaluation.enabled in the config
+enable_agent_companion_chat = true
+enable_agent_analytics      = true   # requires reporting
+enable_mcp                  = true
+enable_test_studio          = true
+enable_finetuning           = true   # requires enable_test_studio
 
-# Discovery Configuration (optional)
-discovery = {
+# Web UI (on by default). Set enabled = false to deploy the backend only.
+web_ui = {
+  enabled         = true
+  logging_enabled = true
+}
+
+# Role-based access control (off by default)
+rbac = {
   enabled = true
 }
 
-# Chat with Document Configuration (optional)
-chat_with_document = {
-  enabled = true
-  # Optional: Add Bedrock Guardrail for content filtering
-  guardrail_id_and_version = "your-guardrail-id:1"
-}
-
-# HITL (Human-in-the-Loop) Configuration
-# Set to non-null value to enable HITL functionality
-bda_metadata_table_arn = "arn:aws:dynamodb:us-east-1:123456789012:table/my-bda-metadata-table"
-
-# Custom configuration
-custom_config = {
-  classification = {
-    method = "multimodalPageLevelClassification"
-  }
-  extraction = {
-    max_tokens = 8000
-  }
-}
+# Optional Bedrock guardrail applied to every model-invoking function
+bedrock_guardrail_id_and_version = "your-guardrail-id:1"
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Web UI        │    │   GraphQL API    │    │  S3 Buckets     │
-│  (CloudFront)   │◄──►│   (AppSync)      │◄──►│  (Input/Output) │
+│   Web UI        │    │    REST API      │    │  S3 Buckets     │
+│  (CloudFront)   │◄──►│  (API Gateway)   │◄──►│  (Input/Output) │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                 │
                                 ▼
@@ -542,6 +608,7 @@ Error: Access denied to BDA metadata table
 We welcome contributions! Each module includes detailed contributor documentation:
 
 - **[Main Contributing Guide](CONTRIBUTING.md)**: Overall repository guidelines and workflow
+- **[Unified Processor](modules/processors/unified-processor/README.md)**: the processing engine the façades wrap
 - **[BDA Processor](modules/processors/bda-processor/README.md)**: Pattern 1 implementation guidance
 - **[Bedrock LLM Processor](modules/processors/bedrock-llm-processor/README.md)**: Pattern 2 implementation guidance
 - **[SageMaker UDOP Processor](modules/processors/sagemaker-udop-processor/README.md)**: Pattern 3 implementation guidance
@@ -647,7 +714,7 @@ This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE
 | <a name="input_user_identity"></a> [user\_identity](#input\_user\_identity) | Configuration for external Cognito User Identity resources. If provided, the module will use this instead of creating its own user identity resources. | <pre>object({<br/>    user_pool_arn          = string<br/>    user_pool_client_id    = optional(string)<br/>    identity_pool_id       = optional(string)<br/>    authenticated_role_arn = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_vpc_security_group_ids"></a> [vpc\_security\_group\_ids](#input\_vpc\_security\_group\_ids) | List of security group IDs for Lambda functions (optional) | `list(string)` | `[]` | no |
 | <a name="input_vpc_subnet_ids"></a> [vpc\_subnet\_ids](#input\_vpc\_subnet\_ids) | List of subnet IDs for Lambda functions to run in (optional) | `list(string)` | `[]` | no |
-| <a name="input_web_ui"></a> [web\_ui](#input\_web\_ui) | Web UI configuration object | <pre>object({<br/>    enabled                    = optional(bool, true)<br/>    create_infrastructure      = optional(bool, true)<br/>    bucket_name                = optional(string, null)<br/>    cloudfront_distribution_id = optional(string, null)<br/>    logging_enabled            = optional(bool, false)<br/>    logging_bucket_arn         = optional(string, null)<br/>    enable_signup              = optional(string, "")<br/>    display_name               = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "bucket_name": null,<br/>  "cloudfront_distribution_id": null,<br/>  "create_infrastructure": true,<br/>  "display_name": null,<br/>  "enable_signup": "",<br/>  "enabled": true,<br/>  "logging_bucket_arn": null,<br/>  "logging_enabled": false<br/>}</pre> | no |
+| <a name="input_web_ui"></a> [web\_ui](#input\_web\_ui) | Web UI configuration object | <pre>object({<br/>    enabled                    = optional(bool, true)<br/>    create_infrastructure      = optional(bool, true)<br/>    bucket_name                = optional(string, null)<br/>    cloudfront_distribution_id = optional(string, null)<br/>    logging_enabled            = optional(bool, true)<br/>    logging_bucket_arn         = optional(string, null)<br/>    enable_signup              = optional(string, "")<br/>    display_name               = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "bucket_name": null,<br/>  "cloudfront_distribution_id": null,<br/>  "create_infrastructure": true,<br/>  "display_name": null,<br/>  "enable_signup": "",<br/>  "enabled": true,<br/>  "logging_bucket_arn": null,<br/>  "logging_enabled": true<br/>}</pre> | no |
 | <a name="input_working_bucket_arn"></a> [working\_bucket\_arn](#input\_working\_bucket\_arn) | ARN of the S3 bucket for temporary working files during document processing | `string` | n/a | yes |
 
 ## Outputs

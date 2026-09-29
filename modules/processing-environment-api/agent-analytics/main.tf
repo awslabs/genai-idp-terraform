@@ -136,7 +136,8 @@ resource "null_resource" "create_module_build_dir" {
 # This includes only the necessary extras: core, agents, and appsync
 # This avoids the 262MB layer limit issue by not including heavy dependencies like OCR, image processing, etc.
 module "agent_analytics_idp_layer" {
-  source = "../../idp-common-layer"
+  source             = "../../idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
   layer_prefix             = "agent-analytics-${local.suffix}"
@@ -186,7 +187,8 @@ locals {
 }
 
 module "agent_dependencies_layer" {
-  source = "../../lambda-layer-codebuild"
+  source             = "../../lambda-layer-codebuild"
+  log_retention_days = var.log_retention_days
 
   name_prefix              = "agent-deps-${local.suffix}"
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
@@ -384,7 +386,7 @@ resource "aws_lambda_function" "agent_processor" {
       ATHENA_OUTPUT_LOCATION           = "s3://${local.reporting_bucket_name}/athena-results/"
       DOCUMENT_ANALYSIS_AGENT_MODEL_ID = var.bedrock_model_id
       AWS_STACK_NAME                   = "terraform-${var.name_prefix}"
-      GUARDRAIL_ID_AND_VERSION         = ""
+      GUARDRAIL_ID_AND_VERSION         = var.guardrail_id_and_version != null ? var.guardrail_id_and_version : ""
       METRIC_NAMESPACE                 = "GenAI/IDP/AgentAnalytics"
     }
   }

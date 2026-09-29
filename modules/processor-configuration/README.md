@@ -11,7 +11,7 @@
 | Name | Version |
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.66.0 |
 
 ## Modules
 
@@ -21,6 +21,7 @@ No modules.
 
 | Name | Type |
 |------|------|
+| [aws_cloudwatch_log_group.configuration_seeder](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_iam_policy.dynamodb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.kms_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_role.lambda_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -54,6 +55,7 @@ No modules.
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP common Lambda layer (full processor-extras flavor). Optional — `base_layer_arn` alone is enough for the seeder. | `string` | `null` | no |
 | <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). Must match the architecture the idp\_common layers were built for; mismatches break native deps (e.g. pydantic\_core). | `string` | `"arm64"` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention period in days | `number` | `30` | no |
 | <a name="input_model_config_limits"></a> [model\_config\_limits](#input\_model\_config\_limits) | Per-model token limits stored under the 'DefaultModelConfigLimits' key, in the shape of upstream's config\_library/model\_config\_limits.yaml ({ model\_limits = [...] }). Order is significant: matching is first-match-wins. Null skips seeding, which leaves the UI Model Limits page empty (the Lambdas then fall back to the on-disk YAML). | `any` | `null` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for resource names | `string` | n/a | yes |
 | <a name="input_pricing"></a> [pricing](#input\_pricing) | Pricing catalogue stored under the 'DefaultPricing' key, in the shape of upstream's config\_library/pricing.yaml ({ pricing = [...] }). Null skips seeding, which leaves the UI Pricing page and any cost figures empty. | `any` | `null` | no |

@@ -74,9 +74,15 @@ locals {
   knowledge_base_arn = var.knowledge_base.knowledge_base_arn
   knowledge_base_id  = var.knowledge_base.knowledge_base_arn != null ? element(split("/", var.knowledge_base.knowledge_base_arn), 1) : null
 
-  # Guardrail
-  guardrail_id  = var.guardrail != null ? var.guardrail.guardrail_id : null
-  guardrail_arn = var.guardrail != null ? var.guardrail.guardrail_arn : null
+  # The knowledge_base field is kept for direct module consumers; the root can
+  # only supply the module-level input.
+  knowledge_base_guardrail = (
+    var.knowledge_base.guardrail_id_and_version != null
+    ? var.knowledge_base.guardrail_id_and_version
+    : var.guardrail_id_and_version
+  )
+
+  guardrail_arn_prefix = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:guardrail"
 
   # Knowledge Base model id for the query_knowledgebase_resolver. That vendored
   # Lambda builds the modelArn as `inference-profile/{MODEL_ID}`, so MODEL_ID must
@@ -114,6 +120,7 @@ module "discovery" {
 
   lambda_architecture = var.lambda_architecture
 
+  metric_namespace         = var.metric_namespace
   name_prefix              = "discovery-${random_string.suffix.result}"
   allowed_cors_origins     = var.discovery_allowed_cors_origins
   input_bucket_arn         = local.input_bucket_arn
@@ -210,6 +217,7 @@ module "agent_analytics" {
   # Configuration
   bedrock_model_id          = var.agent_analytics.model_id
   allowed_bedrock_model_ids = var.agent_analytics.allowed_bedrock_model_ids
+  guardrail_id_and_version  = var.guardrail_id_and_version
   log_level                 = var.log_level
   log_retention_days        = var.log_retention_days
   data_retention_days       = var.data_retention_in_days

@@ -813,4 +813,4 @@ resource "aws_cloudwatch_metric_alarm" "api_health_alarm" {
 
 ---
 
-Next: [Cost Optimization](cost-optimization.md) | [Best Practices](best-practices.md)
+Next: [Troubleshooting](troubleshooting.md) | [Security Best Practices](../security/aws-best-practices.md)

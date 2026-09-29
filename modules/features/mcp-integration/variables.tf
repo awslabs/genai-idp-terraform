@@ -103,7 +103,8 @@ variable "log_level" {
 variable "log_retention_days" {
   description = "CloudWatch log retention (days) for MCP log groups."
   type        = number
-  default     = 7
+  default     = 30
+  nullable    = false
 }
 
 variable "lambda_tracing_mode" {
@@ -149,4 +150,10 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "guardrail_id_and_version" {
+  description = "Bedrock Guardrail as `id:version` applied to the MCP handler's model invocations. Null applies no guardrail."
+  type        = string
+  default     = null
 }

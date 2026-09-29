@@ -165,6 +165,25 @@ resource "aws_iam_role_policy" "test_studio_lambdas" {
           Resource = [local.configuration_table_arn, "${local.configuration_table_arn}/index/*"]
         }
       ] : [],
+      # test_set_resolver delegates run creation to the test runner on the
+      # draft-labeling path.
+      [
+        {
+          Effect   = "Allow"
+          Action   = ["lambda:InvokeFunction"]
+          Resource = local.test_runner_function_arn
+        }
+      ],
+      # abort_test_runs stops each document's workflow through abort_workflow.
+      # Referenced directly: abort_workflow has its own role and does not read
+      # local.test_studio_env, so this is not the cycle test_runner would be.
+      [
+        {
+          Effect   = "Allow"
+          Action   = ["lambda:InvokeFunction"]
+          Resource = aws_lambda_function.abort_workflow.arn
+        }
+      ],
       # test_results_resolver invokes the aggregation function for accuracy.
       var.evaluation_enabled ? [
         {
@@ -344,6 +363,12 @@ locals {
 
   # Left absent rather than empty when evaluation is off: the resolver routes on
   # any value being present and only falls back when the variable is unset.
+  # Constructed rather than aws_lambda_function.test_runner[0].arn: test_runner
+  # itself consumes local.test_studio_env, so referencing the resource from a
+  # consumer of that local is a dependency cycle. test_set_resolver hard-reads this
+  # on the draft-labeling path, so an unset value is a KeyError.
+  test_runner_function_arn = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.api_name}-test-runner"
+
   test_studio_env = merge(
     local.test_studio_env_base,
     length(aws_lambda_function.test_execution_aggregation) > 0 ? {
@@ -485,7 +510,7 @@ resource "aws_lambda_function" "test_set_resolver" {
   timeout          = 30
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   # Presigner: honor S3_ENDPOINT_URL for VPCE-targeted presigned URLs.
-  environment { variables = merge(local.test_studio_env, local.s3_endpoint_url_env) }
+  environment { variables = merge(local.test_studio_env, local.s3_endpoint_url_env, { TEST_RUNNER_FUNCTION_ARN = local.test_runner_function_arn }) }
   tracing_config { mode = var.lambda_tracing_mode }
   dynamic "vpc_config" {
     for_each = var.vpc_config != null ? [var.vpc_config] : []
@@ -668,6 +693,60 @@ resource "aws_lambda_function" "delete_tests" {
     }
   }
   depends_on = [aws_cloudwatch_log_group.delete_tests]
+  tags       = var.tags
+}
+
+# =============================================================================
+# Lambda: abort_test_runs
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "abort_test_runs" {
+  count             = var.enable_test_studio ? 1 : 0
+  name              = "/aws/lambda/${local.api_name}-abort-test-runs"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = local.encryption_key_arn
+  tags              = var.tags
+}
+
+data "archive_file" "abort_test_runs" {
+  count       = var.enable_test_studio ? 1 : 0
+  type        = "zip"
+  source_dir  = "${path.module}/../../sources/nested/api-resolvers/src/lambda/abort_test_runs"
+  output_path = "${path.module}/../../.terraform/archives/abort_test_runs.zip"
+}
+
+resource "aws_lambda_function" "abort_test_runs" {
+  architectures = [var.lambda_architecture]
+  count         = var.enable_test_studio ? 1 : 0
+  function_name = "${local.api_name}-abort-test-runs"
+  role          = aws_iam_role.test_studio_lambdas[0].arn
+  filename      = data.archive_file.abort_test_runs[0].output_path
+  # Upstream names this entry point lambda_handler, unlike its siblings.
+  source_code_hash = data.archive_file.abort_test_runs[0].output_base64sha256
+  handler          = "index.lambda_handler"
+  runtime          = "python3.12"
+  memory_size      = 512
+  timeout          = 60
+  layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
+  # Not local.test_studio_env: this resolver reads TRACKING_TABLE_NAME, where that
+  # local publishes TRACKING_TABLE, and nothing there carries the abort target.
+  environment {
+    variables = {
+      LOG_LEVEL                          = var.log_level
+      TRACKING_TABLE_NAME                = local.tracking_table_name
+      ABORT_WORKFLOW_FUNCTION_NAME       = aws_lambda_function.abort_workflow.function_name
+      TEST_RESULT_CACHE_UPDATE_QUEUE_URL = aws_sqs_queue.test_result_cache_update_queue[0].url
+    }
+  }
+  tracing_config { mode = var.lambda_tracing_mode }
+  dynamic "vpc_config" {
+    for_each = var.vpc_config != null ? [var.vpc_config] : []
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.abort_test_runs]
   tags       = var.tags
 }
 

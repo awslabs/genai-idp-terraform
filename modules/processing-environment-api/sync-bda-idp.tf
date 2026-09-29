@@ -30,7 +30,7 @@ resource "aws_iam_role_policy" "sync_bda_idp" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -44,31 +44,46 @@ resource "aws_iam_role_policy" "sync_bda_idp" {
         Effect = "Allow"
         Action = [
           "bedrock:CreateBlueprint",
+          "bedrock:CreateBlueprintVersion",
           "bedrock:UpdateBlueprint",
           "bedrock:DeleteBlueprint",
           "bedrock:GetBlueprint",
           "bedrock:ListBlueprints",
+          "bedrock:InvokeDataAutomationAsync",
           "bedrock:CreateDataAutomationProject",
           "bedrock:UpdateDataAutomationProject",
+          "bedrock:DeleteDataAutomationProject",
           "bedrock:GetDataAutomationProject",
+          "bedrock:GetDataAutomationStatus",
           "bedrock:ListDataAutomationProjects"
         ]
         Resource = "*"
       },
       {
-        # Configuration table read, plus the UpdateItem that
-        # set_bda_project_arn / clear_bda_project_arn use to record the linked
-        # project ARN and sync status against the config version.
+        # PutItem is required: get_or_create_project_for_version records the
+        # project link with put_item, and the caller swallows AccessDenied.
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:UpdateItem"]
+        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:PutItem", "dynamodb:UpdateItem"]
         Resource = compact([local.configuration_table_arn, "${local.configuration_table_arn}/index/*"])
       },
       {
         Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Action   = "cloudwatch:PutMetricData"
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey", "kms:DescribeKey"]
         Resource = local.encryption_key_arn != null ? local.encryption_key_arn : "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/00000000-0000-0000-0000-000000000000"
       }
-    ]
+      ],
+      # Users-table read backs the allowedConfigVersions scope check, which
+      # silently allows every version when the table is unreachable.
+      var.users_table_name != "" ? [{
+        Effect   = "Allow"
+        Action   = ["dynamodb:Query", "dynamodb:GetItem"]
+        Resource = [local.users_table_arn_prefix, "${local.users_table_arn_prefix}/index/*"]
+    }] : [])
   })
 }
 
@@ -102,8 +117,8 @@ resource "aws_lambda_function" "sync_bda_idp" {
   source_code_hash = data.archive_file.sync_bda_idp.output_base64sha256
   handler          = "index.handler"
   runtime          = "python3.12"
-  timeout          = 60
-  memory_size      = 256
+  timeout          = 300
+  memory_size      = 512
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
 
   environment {
@@ -111,6 +126,7 @@ resource "aws_lambda_function" "sync_bda_idp" {
       LOG_LEVEL                = var.log_level
       BDA_PROJECT_ARN          = var.bda_project_arn
       CONFIGURATION_TABLE_NAME = local.configuration_table_name != null ? local.configuration_table_name : ""
+      USERS_TABLE_NAME         = var.users_table_name
     }
   }
 

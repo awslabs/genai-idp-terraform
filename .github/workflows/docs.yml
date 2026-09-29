@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        # No submodules: the mkdocs build reads only docs/ and its config
+        # references nothing under sources/, so the pinned tree is not needed.
         uses: actions/checkout@v4
 
       - name: Setup Python

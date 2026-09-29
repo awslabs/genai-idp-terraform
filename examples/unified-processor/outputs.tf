@@ -125,5 +125,16 @@ output "e2e_stack" {
     # "Discovery bucket not configured"). The e2e suite asserts it is populated
     # when create_discovery = true.
     discovery_bucket = try(module.genai_idp_accelerator.api.discovery_bucket_name, null)
+    # Classes each seeded config version declares, read from the config files
+    # themselves. The suites assert a classification against the version they
+    # uploaded as: a sample sent as the wrong version does not fail, it silently
+    # extracts every field as null.
+    document_classes = merge(
+      { default = compact([for c in try(local.config.classes, []) : try(c["x-aws-idp-document-type"], null)]) },
+      {
+        for name, cfg in local.additional_configurations :
+        name => compact([for c in try(cfg.classes, []) : try(c["x-aws-idp-document-type"], null)])
+      }
+    )
   }
 }

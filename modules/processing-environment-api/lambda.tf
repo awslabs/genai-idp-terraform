@@ -342,6 +342,14 @@ resource "aws_lambda_function" "get_stepfunction_execution_resolver" {
   environment {
     variables = {
       TRACKING_TABLE_NAME = local.tracking_table_name
+      # v0.6.9 rejects any executionArn not naming this state machine, closing an
+      # IDOR. It FAILS CLOSED when unset, so every call 403s and the UI reports
+      # "Error loading processing flow".
+      STATE_MACHINE_ARN = var.state_machine_arn != null ? var.state_machine_arn : ""
+      # RBAC: read-only lookup of the caller's allowedConfigVersions, so a scoped
+      # caller cannot read processing detail for a document handled under a version
+      # outside their scope. Empty when RBAC is off, where the resolver fails open.
+      USERS_TABLE_NAME = var.users_table_name
     }
   }
 
@@ -404,7 +412,7 @@ resource "aws_lambda_function" "query_knowledge_base_resolver" {
       KB_REGION                = data.aws_region.current.region
       MODEL_ID                 = local.knowledge_base_model_id != null ? local.knowledge_base_model_id : ""
       LOG_LEVEL                = var.log_level
-      GUARDRAIL_ID_AND_VERSION = var.knowledge_base.guardrail_id_and_version != null ? var.knowledge_base.guardrail_id_and_version : ""
+      GUARDRAIL_ID_AND_VERSION = local.knowledge_base_guardrail != null ? local.knowledge_base_guardrail : ""
     }
   }
 

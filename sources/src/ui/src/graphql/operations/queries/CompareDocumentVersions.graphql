@@ -1,3 +1,0 @@
-query CompareDocumentVersions($objectKey: ID!, $runIdA: String!, $runIdB: String!) {
-  compareDocumentVersions(objectKey: $objectKey, runIdA: $runIdA, runIdB: $runIdB)
-}

@@ -90,9 +90,10 @@ module "engine" {
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # Lambda layers
-  idp_common_layer_arn = var.idp_common_layer_arn
-  base_layer_arn       = var.base_layer_arn
-  evaluation_layer_arn = var.evaluation_layer_arn
+  idp_common_layer_arn      = var.idp_common_layer_arn
+  base_layer_arn            = var.base_layer_arn
+  evaluation_layer_arn      = var.evaluation_layer_arn
+  rule_validation_layer_arn = var.rule_validation_layer_arn
 
   # Model configuration (per-stage models come from the YAML config, not TF)
   classification_max_workers = var.classification_max_workers
@@ -114,7 +115,8 @@ module "engine" {
   is_summarization_enabled = local.is_summarization_enabled
 
   # Concurrency
-  max_processing_concurrency = var.max_processing_concurrency
+  max_processing_concurrency         = var.max_processing_concurrency
+  workflow_execution_timeout_seconds = var.workflow_execution_timeout_seconds
 
   # Document processing configuration
   config = var.config

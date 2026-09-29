@@ -87,6 +87,7 @@ locals {
       addDocumentsToTestSet = aws_lambda_function.test_set_resolver[0].arn
       compareTestRuns       = aws_lambda_function.test_results_resolver[0].arn
       deleteTests           = aws_lambda_function.delete_tests[0].arn
+      abortTestRuns         = aws_lambda_function.abort_test_runs[0].arn
     } : {},
 
     var.agent_analytics.enabled ? {

@@ -1,21 +1,11 @@
 # Deployment Guides
 
-This section provides comprehensive guides for deploying the GenAI IDP Accelerator in different environments and scenarios. Whether you're setting up a development environment or deploying to staging, these guides will help you implement best practices and avoid common pitfalls.
+This section covers operating a deployment once it is stood up: monitoring it,
+choosing how artifacts are built, and diagnosing failures. For a first deployment,
+start with the [Quick Start](../getting-started/quick-start.md) and the README of
+the example you are using.
 
 ## Guide Overview
-
-### [Environment Setup](environment-setup.md)
-
-**Purpose**: Configure different environments (dev, staging)
-
-**Topics Covered**:
-
-- Multi-environment architecture
-- Environment-specific configurations
-- State management strategies
-- Network and VPC setup
-
-**Best For**: Teams setting up multiple environments
 
 ### [Monitoring](monitoring.md)
 
@@ -30,18 +20,18 @@ This section provides comprehensive guides for deploying the GenAI IDP Accelerat
 
 **Best For**: Operations teams and system monitoring
 
-### [Best Practices](best-practices.md)
+### [Local Lambda Build](local-lambda-build.md)
 
-**Purpose**: Follow recommended practices for deployment and operations
+**Purpose**: Build Lambda layers and processor images on the deploy host instead of
+in CodeBuild
 
-**Topics Covered**:
+**Best For**: Faster iteration, and avoiding per-apply CodeBuild cost
 
-- Security best practices
-- Performance optimization
-- Operational procedures
-- Testing and validation
+### [Local Web UI Build](local-web-ui-build.md)
 
-**Best For**: All deployments
+**Purpose**: Build the web UI bundle locally rather than in CodeBuild
+
+**Best For**: Front-end iteration against a deployed backend
 
 ### [Troubleshooting](troubleshooting.md)
 

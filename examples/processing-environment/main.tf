@@ -247,7 +247,8 @@ module "assets_bucket" {
 
 # Create the IDP Common Layer
 module "idp_common_layer" {
-  source = "../../modules/idp-common-layer"
+  source             = "../../modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   # Use a unique layer prefix per stack to avoid conflicts with parallel deployments
   layer_prefix = "${var.prefix}-processing-env-${random_string.suffix.result}"
@@ -268,12 +269,34 @@ module "idp_common_layer" {
   container_runtime   = var.build.container_runtime
 }
 
+# Dedicated reporting layer. The save_reporting_data writer imports the
+# reporting extras, which are too large to fold into the shared layer.
+module "idp_reporting_layer" {
+  count              = var.enable_reporting ? 1 : 0
+  source             = "../../modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
+
+  layer_prefix             = "${var.prefix}-processing-env-reporting-${random_string.suffix.result}"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["reporting"]
+
+  force_rebuild = var.force_layer_rebuild
+
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
+}
+
 # Create the Processing Environment
 module "processing_environment" {
   source = "../../modules/processing-environment"
 
   # Required: External IDP common layer ARN
   idp_common_layer_arn = module.idp_common_layer.layer_arn
+
+  # Without this the writer silently falls back to the shared layer, which has
+  # no reporting extras, and fails at runtime with an import error.
+  reporting_layer_arn = var.enable_reporting ? module.idp_reporting_layer[0].layer_arn : null
 
   # Required: S3 bucket for staging the module's internal Lambda layer builds
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn

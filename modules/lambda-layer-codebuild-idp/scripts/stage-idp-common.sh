@@ -12,8 +12,7 @@
 #
 # Inputs (all via env):
 #   IDP_COMMON_SOURCE_PATH  directory holding the idp_common package source
-#                           (the directory containing idp_common/, setup.py and
-#                           pyproject.toml)
+#                           (the directory containing idp_common/ and pyproject.toml)
 #   STAGING_DEST            directory to mirror that source into; created if
 #                           absent
 #

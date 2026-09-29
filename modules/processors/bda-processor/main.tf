@@ -114,9 +114,10 @@ module "engine" {
   enable_encryption  = var.enable_encryption
 
   # Layers
-  idp_common_layer_arn = var.idp_common_layer_arn
-  base_layer_arn       = var.base_layer_arn
-  evaluation_layer_arn = var.evaluation_layer_arn
+  idp_common_layer_arn      = var.idp_common_layer_arn
+  base_layer_arn            = var.base_layer_arn
+  evaluation_layer_arn      = var.evaluation_layer_arn
+  rule_validation_layer_arn = var.rule_validation_layer_arn
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -137,8 +138,9 @@ module "engine" {
   save_reporting_function_arn    = var.save_reporting_function_arn
 
   # Document processing configuration
-  config                     = local.config_with_bda
-  max_processing_concurrency = var.max_processing_concurrency
+  config                             = local.config_with_bda
+  max_processing_concurrency         = var.max_processing_concurrency
+  workflow_execution_timeout_seconds = var.workflow_execution_timeout_seconds
 
   # Extra non-active config versions seeded alongside the default
   additional_configurations = var.additional_configurations

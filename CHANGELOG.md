@@ -6,6 +6,200 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [0.6.9-tf.0] - 2026-09-28
+
+**Partial parity by design.** `sources/` is pinned at upstream v0.6.9 and the
+pipeline is reconciled against it, but several v0.6.9 surfaces are deliberately
+not adopted, each listed below with its reason. Read this as "the wrapper tracks
+0.6.9", not "every 0.6.9 surface is adopted".
+
+### Parity status
+
+Landed: the submodule pin and the three version markers, the pipeline state
+machine (execution timeout, `onError: fail` handling, evaluation failure path),
+and the one reference the pin broke.
+
+Deliberately deferred, each with a recorded reason:
+
+- `feature-platform/seller-entitlement-service` and
+  `feature-platform/idp-data-generator`. No owning wrapper module, and paid
+  Marketplace extension hosting is a subsystem rather than an upgrade item.
+- Upstream's log group rename, and the `LoggingConfig` binding that depends on
+  it. We name our own log groups at Lambda's default path, so nothing is broken;
+  adopting it would be 76 destroy-and-creates orphaning existing log data.
+- Log level allowed values, and the `INFO` to `WARN` default change. Predates
+  this span and is unrelated to v0.6.9.
+- Six of the seven new upstream root parameters. All carry defaults, so ignoring
+  them changes nothing; each is an opt-in behaviour to assess separately.
+
+Not yet assessed: per-page `document_boundary` persistence, the evaluation
+comparator inference change, extension-catalogue changes, Z3 dual-engine rule
+validation routing, and the eight changed `config_library` config files. Several
+may need no wrapper change at all, which is why these are listed as unassessed
+rather than as gaps.
+
+Validated on a release candidate: an empty-state deploy stood up 881 resources
+with RBAC enabled, and the layer build resolved against v0.6.9 dependencies as
+part of it. The feature-parity and browser suites both passed against that stack.
+Fixing the empty-state path is what produced the `rbac_enabled` change in the
+behaviour list below.
+
+### Breaking Changes
+
+None. No consumer-facing input was renamed or removed, no resource address
+changed, and no state operation is required: every input added carries a default.
+The single declaration removed is `processing-environment-api`'s `guardrail`
+object variable, which was dead — the root never passed it, and nothing read it
+past two unused locals. Upstream's log-group rename was deliberately not adopted,
+which is what keeps this release free of resource churn.
+
+The behaviour changes below can still surprise a running deployment, so
+[docs/migration-v0.6.4-to-v0.6.9.md](docs/migration-v0.6.4-to-v0.6.9.md) lists the
+condition under which each one needs action.
+
+### Behaviour Changes
+
+- **CloudWatch log retention now defaults to 30 days, was 7.** Upstream's
+  `LogRetentionDays` defaults to 30; we defaulted to 7, so every deployment that
+  did not set the variable kept a quarter of the forensic window the product
+  intends. Going softer than upstream on a security-relevant default is a defect
+  in the port rather than a choice, so this restores parity. Changed in all 24
+  declarations: the root, the six examples (whose own defaults shadow the root's,
+  so changing only the root would have been invisible to every real deployment)
+  and the module-level fallbacks, one of which — `features/feature-platform` —
+  was already 30 and is what made the inconsistency visible. **This raises
+  CloudWatch cost** for anyone relying on the default, roughly proportional to log
+  volume; set `log_retention_days = 7` to keep the old behaviour. Applying it is an
+  in-place update to existing log groups, so no log data is lost and no resource is
+  replaced.
+
+  The default is now declared **once**. Previously each example redeclared
+  `log_retention_days` with its own default, which shadowed the root's — which is
+  why changing this needed 24 edits rather than one, and the same shadowing that
+  made the new guardrail input unreachable from the examples. The examples now
+  default to `null` and pass the caller's choice through, and every receiving
+  variable is `nullable = false`, so a null resolves to that receiver's default
+  instead of overriding it. Net effect for a deployment that does not set the
+  variable: unchanged, still 30. For one that explicitly passed `null`: previously
+  that produced log groups with **no expiry at all**; it now resolves to the
+  default.
+- **Document-processing executions now time out after 6 hours.** The pipeline
+  state machine gains a top-level `TimeoutSeconds`, bound to the new
+  `processor.workflow_execution_timeout_seconds` (default `21600`, matching
+  upstream's `WorkflowExecutionTimeoutSeconds`). Without it an execution runs for
+  up to a year while holding a concurrency slot, so one stalled document could
+  starve the pipeline. If your documents legitimately take longer than six hours,
+  raise this value: those executions now fail rather than hang. No state
+  migration, since changing the definition is an in-place update.
+- **A pipeline hook configured `onError: fail` now halts the document.**
+  Upstream v0.6.9 raises a named `HookFatalError`, and our post-step hook states
+  caught `States.ALL` and routed forward, so a hook asking to gate the pipeline
+  was silently ignored and the document continued as though it had succeeded.
+  Each post-step hook now catches `HookFatalError` ahead of its `States.ALL`
+  catcher. Hooks using the default `onError: continue` are unaffected.
+- **A failed evaluation no longer fails the whole execution.**
+  `EvaluationStep` had retries but no catch, so an exhausted retry discarded
+  extraction output that had already been written. It now records the failure,
+  so `EvaluationStatus` reflects reality instead of staying `RUNNING`, and
+  rejoins the normal tail.
+
+### Fixed
+
+Carried over from the 0.6.4 parity backlog, all additive, no resource is
+destroyed or renamed:
+
+- **The twelve leftover `appsync:GraphQL` grants are removed.** v0.6 deleted
+  AppSync and this line has no `aws_appsync_*` resource, but twelve grants
+  survived the migration. They were not merely unused: `api_arn` is now the API
+  Gateway REST execution ARN, so ten of them granted an AppSync action against an
+  `execute-api` resource it can never match, and each carried a `: ["*"]` fallback
+  that granted `appsync:GraphQL` on **every** resource whenever the API was
+  disabled. The thirteenth, on the authenticated-user role, used a real
+  `apis/*/types/*` pattern and so would have matched any AppSync API in the
+  account. Verified dead before removal: no deployed Lambda has a non-empty
+  `APPSYNC_*` variable, so nothing could call AppSync. Two addresses are destroyed
+  (`queue_sender_appsync_policy` and its attachment); the modules still exist, so
+  no `removed {}` block is needed. `local.api_statements`, now always empty, is
+  gone too; `local.processing_environment_api_statements` carries the real
+  `execute-api:Invoke` grant.
+- **The Knowledge Base retrieve grant no longer falls back to `"*"`.** With the
+  feature enabled but no `knowledge_base_arn` supplied, `bedrock:Retrieve` and
+  `RetrieveAndGenerate` were granted on every resource. Now scoped to upstream's
+  `knowledge-base/*` pattern within the deployment's own account and region
+  (`nested/api-resolvers/template.yaml:1769-1772`). Narrower only: a deployment
+  that supplies the ARN was already scoped to it and is unaffected. Note that
+  enabled-without-an-ARN is a non-functional configuration regardless, since
+  `KB_ID` resolves to `""`; it now fails without also widening the grant.
+- **A configured Bedrock guardrail now reaches every model-invoking function.**
+  Upstream applies one deployment-level guardrail (`BedrockGuardrailId` +
+  `BedrockGuardrailVersion`, one `HasGuardrailConfig` condition) to five
+  functions. This wrapper had no deployment-level equivalent: the only wired
+  consumer was `api.chat_with_document`, so an operator who configured a
+  guardrail got none on the streaming chat path (`GUARDRAIL_ID_AND_VERSION`
+  hardcoded to `""`), none on the analytics agent (likewise), none on the MCP
+  handler (no env var at all), and none on the Knowledge Base resolver, which
+  read a `knowledge_base.guardrail_id_and_version` field the root could never
+  populate. Four silently unguarded paths, each reading as though the setting had
+  applied. New root input `bedrock_guardrail_id_and_version` (`id:version`,
+  default null) now feeds all of them, each with the matching
+  `bedrock:ApplyGuardrail` grant scoped to that guardrail's ARN;
+  `api.chat_with_document.guardrail_id_and_version` still overrides it for that
+  feature, so existing configurations are unchanged. Threaded through the five
+  examples that instantiate the root module. Also removes
+  `processing-environment-api`'s dead `guardrail` object variable, which the root
+  never passed and which was read into two locals and never used again.
+- **Syncing BDA blueprints no longer leaks a Bedrock project on every run.**
+  The sync role could create a Data Automation project but not record its ARN,
+  because `dynamodb:PutItem` was missing and the calling code deliberately
+  swallows the resulting AccessDenied. Each sync of a version with no linked
+  project therefore created a real project, failed to save the link, and
+  reported success, so the next sync created another. Also grants
+  `bedrock:CreateBlueprintVersion`, which the sync path calls, and raises the
+  timeout from 60s to upstream's 300s with memory from 256MB to 512MB.
+- **Config-version scoping applies to BDA sync.** The resolver reads
+  `USERS_TABLE_NAME` to look up a caller's `allowedConfigVersions`, and neither
+  the variable nor the table read was wired, so the check resolved to "no
+  restriction" and a scoped caller could sync any version. Group gating off the
+  token was unaffected.
+- **A first deploy with RBAC enabled no longer fails at plan.** Two resolver IAM
+  resources counted on `users_table_name != ""`, which the root fills from the
+  RBAC module's DynamoDB table name. On an empty state that name is unknown until
+  apply, so the count could not be resolved and the first `apply` died with
+  "Invalid count argument". They now gate on a plan-time `rbac_enabled` flag.
+  Existing deployments were unaffected, because the name is known once the table
+  exists, which is why this survived until an empty-state deploy was tried. No
+  resource address changed, so no state operation is needed.
+- **Metrics publish from the BDA sync role and the discovery processor.**
+  Neither could call `cloudwatch:PutMetricData`. The grant is scoped by an
+  `aws:cloudwatch:namespace` condition, so a compromised function cannot write
+  metrics that trip alarms on a neighbouring stack. This adds an optional
+  `metric_namespace` input to `processing-environment-api`.
+- **The deprecated `chat_with_document` spelling now builds the feature.**
+  Setting the pre-consolidation top-level variable populated the API config and
+  switched on the `bedrock-agent-runtime` VPC endpoint, but left the feature's
+  count at zero, so the deployment paid for an endpoint with nothing behind it
+  and reported no error. The guard meant to catch this asserted on the same
+  unresolved value, so it could not warn either.
+- **`examples/processing-environment` reporting writer starts.** With
+  `enable_reporting = true` the example supplied no reporting layer, so the
+  writer silently fell back to a layer without the Parquet dependencies and
+  failed at runtime on import. It now builds a dedicated reporting layer, as
+  the root already did.
+- **The Lambda env-var guard is scoped per function.** It compared against
+  every name assigned anywhere in the Terraform, so a variable set on one
+  function and read by another read as satisfied. That is how
+  `DATA_RETENTION_IN_DAYS` reached the tracker unset while a sibling function
+  100 lines earlier set the same name.
+- `processing-environment-api` failed to validate against v0.6.9: upstream
+  parameterised `${Partition}` in the finetuning state machine definition and our
+  `templatefile` call did not pass it. Note `make check-sources` cannot catch this
+  class of breakage, since the referenced path still resolves.
+- `make validate` reported success unconditionally, and never validated the ten
+  modules under `modules/processors/` and `modules/features/`. It now fails on
+  error and covers 30 modules instead of 20.
+
+---
+
 ## [0.6.4-tf.0] - 2026-09-14
 
 Upgrade to upstream IDP v0.6.4. See
@@ -299,8 +493,8 @@ the migration steps behind every breaking change below.
   `403 ... authorization_exception` on `opensearch_index`. It could not self-heal:
   the index is read before the policy update applies, so the run that would fix
   the policy dies first. AOSS matches any session of a role, so the policy now
-  names the role. `deployer_role_arn` sets it explicitly (CI passes
-  `AWS_CREDS_TARGET_ROLE`); otherwise it is derived from the caller, and a
+  names the role. `deployer_role_arn` sets it explicitly, which is what a CI
+  pipeline should pass; otherwise it is derived from the caller, and a
   validation rejects a session ARN. NOTE: an existing collection needs one
   targeted apply to migrate, run by a principal already in the policy:
   `terraform apply -target='aws_opensearchserverless_access_policy.knowledge_base_data_policy[0]'`.

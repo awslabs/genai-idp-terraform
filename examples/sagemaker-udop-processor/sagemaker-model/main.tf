@@ -292,7 +292,7 @@ module "generate_demo_data_lambda" {
   }
 
   # CloudWatch Logs
-  cloudwatch_logs_retention_in_days = 14
+  cloudwatch_logs_retention_in_days = var.log_retention_days
 
   # Dependencies - Wait for image to be pushed to ECR
   depends_on = [null_resource.push_generate_demo_data]
@@ -379,7 +379,7 @@ module "sagemaker_train_lambda" {
   }
 
   # CloudWatch Logs
-  cloudwatch_logs_retention_in_days = 14
+  cloudwatch_logs_retention_in_days = var.log_retention_days
 
   # Dependencies - Wait for image to be pushed to ECR
   depends_on = [null_resource.push_sagemaker_train]
@@ -420,7 +420,7 @@ module "sagemaker_train_is_complete_lambda" {
   }
 
   # CloudWatch Logs
-  cloudwatch_logs_retention_in_days = 7
+  cloudwatch_logs_retention_in_days = var.log_retention_days
 
   tags = local.common_tags
 }

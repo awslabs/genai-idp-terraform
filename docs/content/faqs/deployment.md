@@ -14,13 +14,20 @@ Before your first deployment, ensure you have:
 - Access to Amazon Bedrock models in your region
 - S3 bucket for Terraform state (recommended)
 
-### How do I request Bedrock model access?
+### Do I need to request Bedrock model access?
 
-1. Go to the Amazon Bedrock console
-2. Navigate to "Model access" in the left sidebar
-3. Click "Request model access"
-4. Select the models you need (Claude, Titan, etc.)
-5. Submit the request and wait for approval (usually immediate)
+No. Since September 2025 Bedrock enables all serverless foundation models
+automatically in every commercial Region, so there is no per-model request to
+make. Two one-time prerequisites remain:
+
+1. For Anthropic models, submit use-case details once per account (or once at the
+   organization's management account), via the Bedrock console model catalog or
+   `PutUseCaseForModelAccess`. Access is granted immediately on submission.
+2. Give the invoking role `aws-marketplace:Subscribe`,
+   `aws-marketplace:Unsubscribe` and `aws-marketplace:ViewSubscriptions`, so the
+   automatic third-party subscription can complete.
+
+See [Request access to models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
 
 ### What regions are supported?
 
@@ -271,6 +278,6 @@ data "aws_ssm_parameter" "api_key" {
 
 For more deployment help, see:
 
-- [Environment Setup Guide](../deployment-guides/environment-setup.md)
+- [Quick Start](../getting-started/quick-start.md)
 - [Troubleshooting Guide](../deployment-guides/troubleshooting.md)
-- [Best Practices](../deployment-guides/best-practices.md)
+- [Security Best Practices](../security/aws-best-practices.md)

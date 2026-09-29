@@ -1,7 +1,6 @@
 nav:
   - index.md
-  - environment-setup.md
   - monitoring.md
-  - best-practices.md
   - local-lambda-build.md
+  - local-web-ui-build.md
   - troubleshooting.md

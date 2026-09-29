@@ -256,12 +256,9 @@ knowledge_base_model_id    = "us.amazon.nova-pro-v1:0"
 | [aws_opensearchserverless_security_policy.knowledge_base_encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearchserverless_security_policy) | resource |
 | [aws_opensearchserverless_security_policy.knowledge_base_network](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearchserverless_security_policy) | resource |
 | [aws_s3_bucket.input_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
-| [aws_s3_bucket.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket.output_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket.working_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
-| [aws_s3_bucket_acl.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_acl) | resource |
 | [aws_s3_bucket_notification.input_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) | resource |
-| [aws_s3_bucket_ownership_controls.logging_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_ownership_controls) | resource |
 | [awscc_bedrock_data_automation_project.bda_project](https://registry.terraform.io/providers/hashicorp/awscc/latest/docs/resources/bedrock_data_automation_project) | resource |
 | [opensearch_index.knowledge_base_index](https://registry.terraform.io/providers/opensearch-project/opensearch/2.2.0/docs/resources/index) | resource |
 | [random_string.suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string) | resource |
@@ -276,7 +273,9 @@ knowledge_base_model_id    = "us.amazon.nova-pro-v1:0"
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_additional_callback_urls"></a> [additional\_callback\_urls](#input\_additional\_callback\_urls) | Extra OAuth callback URLs to allow on the user pool client, on top of<br>localhost. Set this to the deployed Web UI url, with a trailing slash, or<br>hosted-UI and federated sign-in fail with redirect\_mismatch. The url is only<br>known after the first apply, so this is a second-pass value: apply, read<br>`web_ui_url`, set this, apply again. | `list(string)` | `[]` | no |
 | <a name="input_additional_config_files"></a> [additional\_config\_files](#input\_additional\_config\_files) | Optional extra config versions to seed alongside the default and the BDA version, as version\_name => path to a YAML file (relative to this example dir or absolute). Each shows in the UI version dropdown as an editable, non-active version. A top-level bda\_project\_arn key inside a file links that version to a BDA project. | `map(string)` | `{}` | no |
+| <a name="input_additional_logout_urls"></a> [additional\_logout\_urls](#input\_additional\_logout\_urls) | Extra OAuth logout URLs to allow on the user pool client, on top of localhost. | `list(string)` | `[]` | no |
 | <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Optional email address for the admin user. If provided, an admin user will be created in the Cognito User Pool. | `string` | `null` | no |
 | <a name="input_bda_project_arn"></a> [bda\_project\_arn](#input\_bda\_project\_arn) | ARN of an existing Bedrock Data Automation project to link to the BDA configuration version. Ignored when create\_bda\_project = true. Leave empty to seed the BDA version unlinked (it degrades to the Bedrock-LLM branch until a project is linked). | `string` | `""` | no |
 | <a name="input_bda_version_name"></a> [bda\_version\_name](#input\_bda\_version\_name) | Name of the BDA-linked configuration version seeded alongside the Bedrock-LLM default. Upload a document with S3 object metadata config-version=<this value> to route it through the BDA branch. | `string` | `"bda"` | no |
@@ -298,7 +297,7 @@ knowledge_base_model_id    = "us.amazon.nova-pro-v1:0"
 | <a name="input_summarization_enabled"></a> [summarization\_enabled](#input\_summarization\_enabled) | Enable document summarization for the Bedrock-LLM branch | `bool` | `false` | no |
 | <a name="input_summarization_model_id"></a> [summarization\_model\_id](#input\_summarization\_model\_id) | Model ID for document summarization | `string` | `"us.amazon.nova-2-lite-v1:0"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
-| <a name="input_web_ui"></a> [web\_ui](#input\_web\_ui) | Web UI configuration object | <pre>object({<br>    enabled                    = optional(bool, true)<br>    create_infrastructure      = optional(bool, true)<br>    bucket_name                = optional(string, null)<br>    cloudfront_distribution_id = optional(string, null)<br>    logging_enabled            = optional(bool, false)<br>    logging_bucket_arn         = optional(string, null)<br>    enable_signup              = optional(string, "")<br>  })</pre> | <pre>{<br>  "enabled": true<br>}</pre> | no |
+| <a name="input_web_ui"></a> [web\_ui](#input\_web\_ui) | Web UI configuration object | <pre>object({<br>    enabled                    = optional(bool, true)<br>    create_infrastructure      = optional(bool, true)<br>    bucket_name                = optional(string, null)<br>    cloudfront_distribution_id = optional(string, null)<br>    logging_enabled            = optional(bool, true)<br>    logging_bucket_arn         = optional(string, null)<br>    logging_bucket_force_destroy = optional(bool, false)<br>    enable_signup              = optional(string, "")<br>  })</pre> | <pre>{<br>  "enabled": true<br>}</pre> | no |
 
 ## Outputs
 

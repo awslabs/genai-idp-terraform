@@ -41,7 +41,7 @@ variable "allowed_cors_origins" {
 }
 
 variable "appsync_api_url" {
-  description = "URL of the AppSync GraphQL API for status updates"
+  description = "Legacy APPSYNC_API_URL value, empty since v0.6.4. The processor writes the DiscoveryTable directly"
   type        = string
   default     = null
 }
@@ -65,7 +65,8 @@ variable "log_level" {
 variable "log_retention_days" {
   description = "CloudWatch log retention period in days"
   type        = number
-  default     = 7
+  default     = 30
+  nullable    = false
 
   validation {
     condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653], var.log_retention_days)
@@ -128,4 +129,10 @@ variable "lambda_architecture" {
     condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
     error_message = "lambda_architecture must be one of: x86_64, arm64."
   }
+}
+
+variable "metric_namespace" {
+  description = "CloudWatch metric namespace for the discovery processor. When null, the metric-publish grant is omitted."
+  type        = string
+  default     = null
 }

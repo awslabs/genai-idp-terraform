@@ -92,11 +92,18 @@ terraform plan -detailed-exitcode
 Error: AccessDeniedException: Your account is not authorized to invoke this model
 ```
 
-**Solution**: Request model access in Bedrock console
+**Solution**: Model access is automatic, so this error means a prerequisite is
+missing rather than that a model needs enabling.
 
-1. Go to Amazon Bedrock console
-2. Navigate to Model access
-3. Request access for required models (Claude, Titan, etc.)
+1. For a Claude model, submit Anthropic's use-case details once per account, via
+   the Bedrock console model catalog or `PutUseCaseForModelAccess`.
+2. Confirm the invoking role has `aws-marketplace:Subscribe`,
+   `aws-marketplace:Unsubscribe` and `aws-marketplace:ViewSubscriptions`. Without
+   them the automatic third-party subscription fails and every call returns this
+   error.
+3. On the very first invocation the subscription can take up to 15 minutes to
+   settle, so retry before investigating further.
+4. Check the model ID is available in your Region.
 
 ### Amazon Textract
 

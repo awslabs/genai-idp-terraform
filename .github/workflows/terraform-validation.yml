@@ -17,6 +17,8 @@ jobs:
     name: terraform fmt
     runs-on: ubuntu-latest
     steps:
+      # No submodules: fmt only parses and formats .tf files and never reads
+      # sources/, so cloning the pinned upstream tree would be dead weight.
       - uses: actions/checkout@v5
 
       - uses: hashicorp/setup-terraform@v3
@@ -38,6 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        # terraform validate evaluates configuration that references paths under sources/.
+        with:
+          submodules: true
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -67,6 +72,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        # tflint evaluates expressions, so it needs the vendored tree present.
+        with:
+          submodules: true
 
       - uses: terraform-linters/setup-tflint@v4
         with:
@@ -99,6 +107,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        # tfsec parses the configuration, so it needs the vendored tree present.
+        with:
+          submodules: true
 
       - name: tfsec per module
         # tfsec 1.28.x cannot parse Terraform 1.5+ check{} blocks used at the
@@ -122,6 +133,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        # checkov parses and evaluates configuration, so it needs the vendored tree.
+        with:
+          submodules: true
 
       - uses: actions/setup-python@v5
         with:

@@ -278,7 +278,14 @@ resource "aws_iam_policy" "agent_processor_policy" {
             "${var.reporting_bucket_arn}/*"
           ]
         }
-    ])
+      ],
+      var.guardrail_id_and_version != null ? [{
+        Sid      = "Guardrail"
+        Effect   = "Allow"
+        Action   = "bedrock:ApplyGuardrail"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
+      }] : []
+    )
   })
 
   tags = var.tags

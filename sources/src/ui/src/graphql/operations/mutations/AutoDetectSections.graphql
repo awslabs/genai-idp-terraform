@@ -1,3 +1,0 @@
-mutation AutoDetectSections($documentKey: String!, $bucket: String!, $version: String) {
-  autoDetectSections(documentKey: $documentKey, bucket: $bucket, version: $version)
-}

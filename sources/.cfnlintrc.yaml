@@ -1,6 +1,0 @@
-# cfn-lint config — repo-level settings.
-#
-# Inline check suppressions are handled per-template via
-# Metadata.cfn-lint.config.ignore_checks (e.g. nested/api-resolvers/template.yaml
-# uses this for W1030/W1031), keeping each suppression next to the offending
-# resource and avoiding masking legitimate violations elsewhere.

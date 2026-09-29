@@ -27,6 +27,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ROOT="${CHECK_SOURCES_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd -P)}"
 
+# `sources/` is a submodule. Uninitialised, it is an empty directory, and every
+# reference below then fails: a hundred errors for one cause. Name it instead.
+if [ ! -e "${ROOT}/sources/VERSION" ]; then
+  echo "✗ sources/ is not initialised, so no reference into it can resolve."
+  echo "       sources/ is a git submodule pinned to an upstream IDP release."
+  echo "       Fix with:  git -C \"${ROOT}\" submodule update --init"
+  echo "       Or clone with:  git clone --recursive <repository-url>"
+  exit 1
+fi
+
 errors=0
 checked=0
 
