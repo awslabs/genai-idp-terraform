@@ -108,6 +108,7 @@ variable "log_retention_days" {
   description = "CloudWatch log retention in days."
   type        = number
   default     = 30
+  nullable    = false
 }
 
 variable "lambda_tracing_mode" {

@@ -950,7 +950,7 @@ resource "aws_iam_role_policy" "finetuning_pd_codebuild" {
 resource "aws_cloudwatch_log_group" "finetuning_pd_codebuild" {
   count             = local.use_codebuild_finetuning_pd ? 1 : 0
   name              = "/aws/codebuild/${local.api_name}-ft-pd-${random_string.suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
   tags              = merge(var.tags, { Name = "${local.api_name}-ft-pd-codebuild-logs" })
 }
 
@@ -1148,7 +1148,7 @@ resource "aws_iam_role_policy" "finetuning_pd_cb_trigger_lambda" {
 resource "aws_cloudwatch_log_group" "finetuning_pd_cb_trigger_lambda" {
   count             = local.use_codebuild_finetuning_pd ? 1 : 0
   name              = "/aws/lambda/${local.api_name}-ft-pd-cbt-${random_string.suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
   tags              = merge(var.tags, { Name = "${local.api_name}-ft-pd-codebuild-trigger-lambda-logs" })
 }
 
@@ -1407,6 +1407,9 @@ resource "aws_sfn_state_machine" "finetuning" {
   role_arn = aws_iam_role.finetuning_state_machine[0].arn
 
   definition = templatefile("${path.module}/../../sources/src/lambda/finetuning_state_machine/definition.json", {
+    # v0.6.9 parameterised the partition in the service-integration ARNs; a
+    # hardcoded 'aws' fails validation in GovCloud.
+    Partition                      = data.aws_partition.current.partition
     FinetuningListDocumentsArn     = aws_lambda_function.finetuning_list_documents[0].arn
     FinetuningProcessDocumentArn   = aws_lambda_function.finetuning_process_document[0].arn
     FinetuningMergeDataArn         = aws_lambda_function.finetuning_merge_data[0].arn

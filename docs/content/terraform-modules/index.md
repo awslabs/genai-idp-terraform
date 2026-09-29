@@ -321,4 +321,4 @@ For complete examples, see the [Examples](../examples/index.md) section.
 - Use IAM roles instead of users
 - Implement proper network security
 
-For more detailed guidance, see the [Best Practices](../deployment-guides/best-practices.md) guide.
+For more detailed guidance, see the [Security Best Practices](../security/aws-best-practices.md) guide.

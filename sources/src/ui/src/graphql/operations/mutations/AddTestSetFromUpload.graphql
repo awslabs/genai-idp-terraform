@@ -1,7 +1,0 @@
-mutation AddTestSetFromUpload($input: TestSetUploadInput!) {
-  addTestSetFromUpload(input: $input) {
-    testSetId
-    presignedUrl
-    objectKey
-  }
-}

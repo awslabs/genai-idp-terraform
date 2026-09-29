@@ -57,18 +57,22 @@ Before deploying this example, ensure you have:
 
 ### Enable Bedrock Model Access
 
-**⚠️ Important**: Before deploying, you must enable access to Bedrock models:
+You no longer request access per model. Since September 2025 Bedrock enables all
+serverless foundation models automatically in every commercial Region. See
+[Request access to models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
 
-1. Go to the [AWS Console](https://console.aws.amazon.com/)
-2. Navigate to **Amazon Bedrock**
-3. Click **"Model access"** in the left navigation
-4. Request access to the models you plan to use:
-   - **Claude 3.5 Sonnet**: `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
-   - **Nova Pro**: `us.amazon.nova-pro-v1:0`
-   - **Claude 3 Sonnet**: `anthropic.claude-3-sonnet-20240229-v1:0`
-5. Click the checkbox next to each model and **"Request model access"**
+Two one-time prerequisites still apply, neither automatable through Terraform:
 
-This is a one-time manual step that cannot be automated through Terraform.
+- **Anthropic first-time use**: submit use-case details once per account (or once
+  at the organization's management account) before invoking a Claude model, via
+  the Bedrock console catalog or `PutUseCaseForModelAccess`.
+- **AWS Marketplace permissions**: the invoking role needs
+  `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe` and
+  `aws-marketplace:ViewSubscriptions`, or the automatic third-party subscription
+  fails and calls return `AccessDeniedException`.
+
+In a VPC deployment the Bedrock VPC endpoint must also be reachable, or calls fail
+with a timeout rather than an access error.
 
 ## Quick Start
 

@@ -15,7 +15,7 @@
 | Name | Version |
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.66.0 |
 | <a name="provider_local"></a> [local](#provider\_local) | 2.9.1 |
 | <a name="provider_null"></a> [null](#provider\_null) | 3.3.2 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.9.1 |
@@ -76,6 +76,7 @@ No modules.
 | <a name="input_lambda_local"></a> [lambda\_local](#input\_lambda\_local) | When true, build the Lambda layer locally on the deploy host instead of via AWS CodeBuild. See modules/lambda-layer-local-build. | `bool` | `false` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for Lambda functions. Valid values: Active, PassThrough | `string` | `"Active"` | no |
 | <a name="input_layer_prefix"></a> [layer\_prefix](#input\_layer\_prefix) | Prefix for layer names | `string` | n/a | yes |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention period in days | `number` | `30` | no |
 | <a name="input_requirements_files"></a> [requirements\_files](#input\_requirements\_files) | Map of requirements files content for different layer types | `map(string)` | n/a | yes |
 | <a name="input_requirements_hash"></a> [requirements\_hash](#input\_requirements\_hash) | Hash of requirements to trigger rebuilds. If empty, will be calculated from requirements\_files. | `string` | `""` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security groups for the layer-build CodeBuild project. Must allow outbound HTTPS. | `list(string)` | `[]` | no |

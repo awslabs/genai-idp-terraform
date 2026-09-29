@@ -324,28 +324,12 @@ resource "aws_iam_role" "unauthenticated" {
 
 # Basic policy for authenticated users
 resource "aws_iam_policy" "authenticated_policy" {
-  #checkov:skip=CKV_AWS_355:Cognito Sync and Mobile Analytics services do not support resource-level permissions
-  #checkov:skip=CKV_AWS_290:Cognito Sync and Mobile Analytics services do not support resource-level permissions
   name        = "${var.name_prefix}-authenticated-policy"
   description = "Basic policy for authenticated users"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "mobileanalytics:PutEvents"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "cognito-sync:*"
-        ]
-        Resource = "*"
-      },
       # Cognito Identity permissions scoped to specific identity pool
       # Excludes credential exposure actions like GetCredentialsForIdentity
       {
@@ -371,37 +355,6 @@ resource "aws_iam_policy" "authenticated_policy" {
 resource "aws_iam_role_policy_attachment" "authenticated_policy_attachment" {
   role       = aws_iam_role.authenticated.name
   policy_arn = aws_iam_policy.authenticated_policy.arn
-}
-
-# Basic policy for unauthenticated users (if enabled)
-resource "aws_iam_policy" "unauthenticated_policy" {
-  #checkov:skip=CKV_AWS_355:Cognito Sync and Mobile Analytics services do not support resource-level permissions
-  #checkov:skip=CKV_AWS_290:Cognito Sync and Mobile Analytics services do not support resource-level permissions
-  count       = var.identity_pool_options.allow_unauthenticated_identities ? 1 : 0
-  name        = "${var.name_prefix}-unauthenticated-policy"
-  description = "Basic policy for unauthenticated users"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "mobileanalytics:PutEvents",
-          "cognito-sync:*"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "unauthenticated_policy_attachment" {
-  count      = var.identity_pool_options.allow_unauthenticated_identities ? 1 : 0
-  role       = aws_iam_role.unauthenticated[0].name
-  policy_arn = aws_iam_policy.unauthenticated_policy[0].arn
 }
 
 # Attach roles to identity pool

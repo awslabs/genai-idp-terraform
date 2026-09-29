@@ -48,19 +48,35 @@ check-sources: ## Assert no .tf references a non-existent sources/ path (guards 
 	@./scripts/check-sources-paths.sh
 
 # Terraform validation
-validate: check-sources ## Validate all Terraform configurations
+check-lambda-env: ## Assert every deployed Lambda's required env vars are set (guards upstream pin moves)
+	@echo "Checking Lambda environment variables..."
+	@python3 tests/check-lambda-env-vars.py
+
+check-field-coverage: ## Assert every upstream API field is servable (guards "unknown operation" regressions)
+	@echo "Checking dispatcher field coverage..."
+	@python3 tests/check-dispatcher-field-coverage.py
+
+validate: check-sources check-lambda-env check-field-coverage ## Validate all Terraform configurations
 	@echo "Validating Terraform configurations in modules..."
-	@for dir in modules/*/; do \
+	@failed=""; \
+	for dir in modules/*/ modules/processors/*/ modules/features/*/; do \
 		if [ -f "$$dir/main.tf" ] || [ -f "$$dir/versions.tf" ]; then \
 			if [ "$$dir" = "modules/web-ui/" ]; then \
 				echo "Skipping $$dir (requires aws.us-east-1 provider alias - validated via examples instead)"; \
 				continue; \
 			fi; \
 			echo "Validating $$dir"; \
-			cd "$$dir" && terraform init -backend=false && terraform validate && cd - > /dev/null; \
+			if ! ( cd "$$dir" && terraform init -backend=false -input=false > /dev/null && terraform validate ); then \
+				failed="$$failed $$dir"; \
+			fi; \
 		fi; \
-	done
-	@echo "✅ All Terraform module configurations are valid"
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo "❌ Terraform validation FAILED:"; \
+		for f in $$failed; do echo "   $$f"; done; \
+		exit 1; \
+	fi; \
+	echo "✅ All Terraform module configurations are valid"
 
 # TFLint
 lint: ## Run TFLint on all Terraform files

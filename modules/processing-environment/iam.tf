@@ -139,31 +139,10 @@ resource "aws_iam_role_policy_attachment" "queue_sender_kms_attachment" {
   policy_arn = aws_iam_policy.queue_sender_kms_policy["enabled"].arn
 }
 
-# Add AppSync permissions if API is provided
-resource "aws_iam_policy" "queue_sender_appsync_policy" {
-  count       = var.api != null ? 1 : 0
-  name        = "idp-queue-sender-appsync-policy-${random_string.suffix.result}"
-  description = "AppSync policy for QueueSender Lambda Function"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Effect   = "Allow"
-        Resource = "${var.api.api_arn}/types/Mutation/*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "queue_sender_appsync_attachment" {
-  count      = var.api != null ? 1 : 0
-  role       = aws_iam_role.queue_sender_role.name
-  policy_arn = aws_iam_policy.queue_sender_appsync_policy[0].arn
-}
+# The former `queue_sender_appsync_policy` and its attachment are gone, for the
+# same reason as `workflow_tracker_appsync_policy` below: v0.6 removed AppSync, so
+# `var.api.api_arn` is an API Gateway ARN that `appsync:GraphQL` can never match.
+# Both addresses are destroyed by a normal plan, so no `removed {}` block is needed.
 
 # IAM Role for WorkflowTracker Lambda Function
 resource "aws_iam_role" "workflow_tracker_role" {

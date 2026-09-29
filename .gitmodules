@@ -1,0 +1,3 @@
+[submodule "sources"]
+	path = sources
+	url = https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws.git

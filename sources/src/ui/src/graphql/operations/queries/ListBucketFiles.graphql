@@ -1,3 +1,0 @@
-query ListBucketFiles($bucketType: String!, $filePattern: String!, $modifiedAfter: String) {
-  listBucketFiles(bucketType: $bucketType, filePattern: $filePattern, modifiedAfter: $modifiedAfter)
-}

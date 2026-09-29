@@ -163,7 +163,9 @@ resource "aws_lambda_function" "rule_validation_function" {
   filename         = data.archive_file.rule_validation_lambda[0].output_path
   source_code_hash = data.archive_file.rule_validation_lambda[0].output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  # Prefer the rule-validation layer: it carries z3-solver, which the Z3 engine
+  # imports lazily. Falls back to base, where only the LLM engine works.
+  layers = [coalesce(var.rule_validation_layer_arn, var.base_layer_arn, var.idp_common_layer_arn)]
 
   kms_key_arn = local.encryption_key_arn
 
@@ -207,7 +209,9 @@ resource "aws_lambda_function" "rule_validation_orchestration_function" {
   filename         = data.archive_file.rule_validation_orchestration_lambda[0].output_path
   source_code_hash = data.archive_file.rule_validation_orchestration_lambda[0].output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  # Prefer the rule-validation layer: it carries z3-solver, which the Z3 engine
+  # imports lazily. Falls back to base, where only the LLM engine works.
+  layers = [coalesce(var.rule_validation_layer_arn, var.base_layer_arn, var.idp_common_layer_arn)]
 
   kms_key_arn = local.encryption_key_arn
 
@@ -254,7 +258,9 @@ resource "aws_lambda_function" "rule_validation_policy_classification_function" 
   filename         = data.archive_file.rule_validation_policy_classification_lambda[0].output_path
   source_code_hash = data.archive_file.rule_validation_policy_classification_lambda[0].output_base64sha256
 
-  layers = [var.base_layer_arn != null ? var.base_layer_arn : var.idp_common_layer_arn]
+  # Prefer the rule-validation layer: it carries z3-solver, which the Z3 engine
+  # imports lazily. Falls back to base, where only the LLM engine works.
+  layers = [coalesce(var.rule_validation_layer_arn, var.base_layer_arn, var.idp_common_layer_arn)]
 
   kms_key_arn = local.encryption_key_arn
 

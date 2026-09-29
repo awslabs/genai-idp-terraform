@@ -1,9 +1,0 @@
-mutation ClaimReview($objectKey: String!) {
-  claimReview(objectKey: $objectKey) {
-    ObjectKey
-    ObjectStatus
-    HITLStatus
-    HITLReviewOwner
-    HITLReviewOwnerEmail
-  }
-}

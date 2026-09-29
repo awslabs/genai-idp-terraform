@@ -15,7 +15,7 @@
 | Name | Version |
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.65.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.66.0 |
 | <a name="provider_local"></a> [local](#provider\_local) | 2.9.1 |
 | <a name="provider_null"></a> [null](#provider\_null) | 3.3.2 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.9.1 |
@@ -69,6 +69,7 @@
 | [aws_api_gateway_stage.api](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_stage) | resource |
 | [aws_cloudformation_stack.fcc_dataset](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudformation_stack) | resource |
 | [aws_cloudformation_stack.w2_dataset](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudformation_stack) | resource |
+| [aws_cloudwatch_log_group.abort_test_runs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.abort_workflow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.agent_chat_cb_trigger_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.agent_chat_codebuild](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
@@ -135,6 +136,7 @@
 | [aws_iam_policy.get_file_contents_resolver_vpc_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.get_stepfunction_execution_resolver_logs_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.get_stepfunction_execution_resolver_stepfunctions_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.get_stepfunction_execution_resolver_users_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.get_stepfunction_execution_resolver_vpc_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.query_knowledge_base_resolver_bedrock_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.query_knowledge_base_resolver_kms_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -254,6 +256,7 @@
 | [aws_iam_role_policy_attachment.get_file_contents_resolver_vpc_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_logs_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_stepfunctions_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_users_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.get_stepfunction_execution_resolver_vpc_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.http_api_dispatcher_xray](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.query_knowledge_base_resolver_bedrock_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
@@ -277,6 +280,7 @@
 | [aws_lambda_event_source_mapping.test_file_copy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_event_source_mapping) | resource |
 | [aws_lambda_event_source_mapping.test_result_cache_update](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_event_source_mapping) | resource |
 | [aws_lambda_event_source_mapping.test_set_copy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_event_source_mapping) | resource |
+| [aws_lambda_function.abort_test_runs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.abort_workflow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.agent_chat_cb_trigger](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
 | [aws_lambda_function.agent_chat_processor](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) | resource |
@@ -363,6 +367,7 @@
 | [time_sleep.finetuning_pd_cb_iam_propagation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [time_sleep.finetuning_pd_cb_trigger_iam_propagation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [time_sleep.wait_for_iam_propagation](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
+| [archive_file.abort_test_runs](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.abort_workflow](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.agent_chat_cb_idp](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.agent_chat_cb_src](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
@@ -454,7 +459,7 @@
 | <a name="input_evaluation_enabled"></a> [evaluation\_enabled](#input\_evaluation\_enabled) | Whether evaluation functionality is enabled | `bool` | `false` | no |
 | <a name="input_evaluation_layer_arn"></a> [evaluation\_layer\_arn](#input\_evaluation\_layer\_arn) | ARN of the evaluation Lambda layer (idp\_common with the evaluation extra). Required when evaluation\_enabled is true: the Test Studio aggregation function carries it as its only layer. | `string` | `null` | no |
 | <a name="input_feature_platform_field_functions"></a> [feature\_platform\_field\_functions](#input\_feature\_platform\_field\_functions) | Feature Platform API field -> Lambda ARN map, merged into the REST<br>dispatcher's field-function map (IDP v0.6.4).<br><br>Supplied as its own input rather than through `enabled_feature_contracts`<br>because the Feature Platform module is wired at the root outside the<br>feature-contract map. Wire it from `module.feature_platform[0].field_functions`.<br><br>Replaces the AppSync data sources and per-field resolvers the Feature Platform<br>module used to create against the GraphQL API. Empty by default, so the<br>dispatcher is unchanged when the Feature Platform is disabled. | `map(string)` | `{}` | no |
-| <a name="input_guardrail"></a> [guardrail](#input\_guardrail) | Optional Bedrock guardrail to apply to model interactions | <pre>object({<br>    guardrail_id  = string<br>    guardrail_arn = string<br>  })</pre> | `null` | no |
+| <a name="input_guardrail_id_and_version"></a> [guardrail\_id\_and\_version](#input\_guardrail\_id\_and\_version) | Bedrock Guardrail as `id:version`, applied to the streaming chat path, the analytics agent and the Knowledge Base resolver. Null applies no guardrail. | `string` | `null` | no |
 | <a name="input_has_feature_iam"></a> [has\_feature\_iam](#input\_has\_feature\_iam) | Whether an enabled feature contributes IAM statements to compose. | `bool` | `false` | no |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP Common Lambda layer (required for Edit Sections feature) | `string` | `null` | no |
 | <a name="input_input_bucket_arn"></a> [input\_bucket\_arn](#input\_input\_bucket\_arn) | ARN of the S3 bucket where source documents are stored | `string` | `null` | no |
@@ -467,8 +472,9 @@
 | <a name="input_lambda_web_adapter_layer_arn"></a> [lambda\_web\_adapter\_layer\_arn](#input\_lambda\_web\_adapter\_layer\_arn) | ARN of the AWS Lambda Web Adapter (LWA) layer attached to the chat token-streaming processor. When empty (default), the module constructs the upstream default (arn:<partition>:lambda:<region>:753240598075:layer:LambdaAdapterLayerX86:25). | `string` | `""` | no |
 | <a name="input_log_config"></a> [log\_config](#input\_log\_config) | Logging configuration for this API | <pre>object({<br>    cloudwatch_logs_role_arn = optional(string)<br>    exclude_verbose_content  = optional(bool, false)<br>    field_log_level          = string<br>  })</pre> | `null` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | Log level for Lambda functions | `string` | `"INFO"` | no |
-| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention period in days | `number` | `7` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention period in days | `number` | `30` | no |
 | <a name="input_lookup_function_name"></a> [lookup\_function\_name](#input\_lookup\_function\_name) | Name of the LookupFunction Lambda (used by Agent Chat Processor to look up document info) | `string` | `null` | no |
+| <a name="input_metric_namespace"></a> [metric\_namespace](#input\_metric\_namespace) | CloudWatch metric namespace for API-side Lambdas. When null, metric-publish grants are omitted. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the GraphQL API | `string` | `null` | no |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the S3 bucket where processed document outputs are stored | `string` | `null` | no |
 | <a name="input_owner_contact"></a> [owner\_contact](#input\_owner\_contact) | The owner contact information for an API resource | `string` | `null` | no |
@@ -477,6 +483,7 @@
 | <a name="input_public_artifacts_prefix"></a> [public\_artifacts\_prefix](#input\_public\_artifacts\_prefix) | S3 key prefix under public\_artifacts\_bucket where versioned IDP templates live. Threaded into the resolver's PUBLIC\_ARTIFACTS\_PREFIX env var. Only used when public\_artifacts\_bucket is set. | `string` | `"artifacts/genai-idp"` | no |
 | <a name="input_public_artifacts_region"></a> [public\_artifacts\_region](#input\_public\_artifacts\_region) | Region of public\_artifacts\_bucket, threaded into the resolver's PUBLIC\_ARTIFACTS\_REGION env var. When empty, the shipped resolver defaults to AWS\_REGION. Only used when public\_artifacts\_bucket is set. | `string` | `""` | no |
 | <a name="input_query_depth_limit"></a> [query\_depth\_limit](#input\_query\_depth\_limit) | A number indicating the maximum depth resolvers should be accepted when handling queries | `number` | `0` | no |
+| <a name="input_rbac_enabled"></a> [rbac\_enabled](#input\_rbac\_enabled) | Whether RBAC is on. Gate counts on this, never on users\_table\_name: that is a resource attribute, so on a fresh deploy it is unknown at plan time and a count depending on it fails. | `bool` | `false` | no |
 | <a name="input_resolver_count_limit"></a> [resolver\_count\_limit](#input\_resolver\_count\_limit) | A number indicating the maximum number of resolvers that should be accepted when handling queries | `number` | `0` | no |
 | <a name="input_s3_endpoint_url"></a> [s3\_endpoint\_url](#input\_s3\_endpoint\_url) | Optional S3 endpoint URL for presigner/dataset Lambdas. When set (e.g.<br>"https://bucket.vpce-abc123.s3.us-east-1.vpce.amazonaws.com"), those<br>Lambdas generate presigned URLs and issue S3 calls against the S3 interface<br>VPC endpoint using virtual-host addressing (private-network path). When<br>null (default), presigned URLs use the global regional S3 endpoint.<br>Mirrors upstream S3PresignedUrlViaVpcEndpoint / S3VpcEndpointDnsNameOverride. | `string` | `null` | no |
 | <a name="input_serve_web_ui"></a> [serve\_web\_ui](#input\_serve\_web\_ui) | When true, serve the React SPA from web\_ui\_bucket\_name as an S3 proxy on this REST API (GET / -> index.html, GET /{proxy+} -> assets). Mirrors upstream ServeWebUI / WebUIHosting=APIGateway. The SPA then inherits the API's endpoint type (visibility) and stage WAF. Requires web\_ui\_bucket\_name. | `bool` | `false` | no |

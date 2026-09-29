@@ -11,6 +11,17 @@
 
 # Validation: Web UI requires user_identity to be provided
 #tfsec:ignore:*
+# The agentcore gateway-manager build runs `pip3 install` through local-exec
+# whenever MCP is on, and is not gated on build.lambda_local, so choosing
+# CodeBuild for layers does not move this one off the apply host.
+#tfsec:ignore:*
+check "mcp_build_runs_locally" {
+  assert {
+    condition     = !local.feature_enable.mcp || var.build.lambda_local
+    error_message = "api.enable_mcp builds the agentcore gateway-manager with local pip3 even though build.lambda_local is false. The apply host needs pip3, a Python matching the Lambda runtime, and egress to PyPI. Set build.lambda_local = true to make that explicit, or disable MCP."
+  }
+}
+
 check "web_ui_requires_user_identity" {
   assert {
     condition     = !var.web_ui.enabled || var.user_identity != null
@@ -99,14 +110,7 @@ check "evaluation_enabled_without_baseline_bucket" {
   }
 }
 
-# Validation: Web UI logging bucket requirement
-#tfsec:ignore:*
-check "web_ui_logging_bucket" {
-  assert {
-    condition     = !var.web_ui.logging_enabled || var.web_ui.logging_bucket_arn != null
-    error_message = "web_ui.logging_bucket_arn is required when web_ui.logging_enabled is true."
-  }
-}
+
 
 # Validation: presigned-URL-via-VPCE requires a supplied endpoint DNS name.
 # The S3 interface endpoint is owned outside this module (the deployment's own
@@ -193,7 +197,8 @@ module "assets_bucket" {
 # IDP Common Layer
 #
 module "idp_common_layer" {
-  source = "./modules/idp-common-layer"
+  source             = "./modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   layer_prefix             = "${local.name_prefix}-idp-layer"
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
@@ -214,7 +219,8 @@ module "idp_common_layer" {
 # Base layer: docs_service extras — used by queue_sender, workflow_tracker, lookup_function,
 # post_processing_decompressor, and evaluation functions (v0.4.11+)
 module "idp_base_layer" {
-  source = "./modules/idp-common-layer"
+  source             = "./modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   layer_prefix             = "${local.name_prefix}-base-layer"
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
@@ -230,7 +236,8 @@ module "idp_base_layer" {
 
 # Reporting layer: reporting extras — used by save_reporting_data function (v0.4.11+)
 module "idp_reporting_layer" {
-  source = "./modules/idp-common-layer"
+  source             = "./modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   layer_prefix             = "${local.name_prefix}-reporting-layer"
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
@@ -246,7 +253,8 @@ module "idp_reporting_layer" {
 
 # Agents layer: agents extras — used by agent companion chat and agent analytics functions (v0.4.11+)
 module "idp_agents_layer" {
-  source = "./modules/idp-common-layer"
+  source             = "./modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   layer_prefix             = "${local.name_prefix}-agents-layer"
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
@@ -262,9 +270,30 @@ module "idp_agents_layer" {
 
 # Evaluation layer: evaluation + docs_service extras for the per-processor
 # evaluation Lambda (munkres + numpy). Built only when evaluation is enabled.
+# Rule validation's Z3 engine needs z3-solver, a 26 MB wheel. Its own layer
+# rather than the base layer, which 60 Lambda attachments share. Built only when
+# rule validation is on.
+module "idp_rule_validation_layer" {
+  count              = local.rule_validation_enabled ? 1 : 0
+  source             = "./modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
+
+  layer_prefix             = "${local.name_prefix}-rule-validation-layer"
+  lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
+  idp_common_extras        = ["rule_validation", "docs_service"]
+  force_rebuild            = var.force_rebuild_layers
+  lambda_tracing_mode      = var.lambda_tracing_mode
+
+  # Build strategy (see var.build in variables.tf)
+  lambda_local        = var.build.lambda_local
+  lambda_architecture = var.build.lambda_architecture
+  container_runtime   = var.build.container_runtime
+}
+
 module "idp_evaluation_layer" {
-  count  = local.evaluation_enabled ? 1 : 0
-  source = "./modules/idp-common-layer"
+  count              = local.evaluation_enabled ? 1 : 0
+  source             = "./modules/idp-common-layer"
+  log_retention_days = var.log_retention_days
 
   layer_prefix             = "${local.name_prefix}-evaluation-layer"
   lambda_layers_bucket_arn = module.assets_bucket.bucket_arn
@@ -306,10 +335,8 @@ module "user_identity" {
 }
 
 # Human Review (REMOVED in v0.5.12-tf.0). HITL is now the built-in
-# complete_section_review Lambda + AppSync resolvers in
-# processing-environment-api (gated by var.enable_hitl). var.human_review is
-# kept as a deprecation shim: its enabled field still gates the legacy A2I IAM
-# statements in locals.tf so existing tfvars keep planning.
+# complete_section_review Lambda (gated by var.enable_hitl). var.human_review is
+# inert but kept: removing it would break existing tfvars.
 
 #
 # Processing Environment
@@ -383,7 +410,8 @@ module "processing_environment_api" {
   count  = local.api_enabled ? 1 : 0
   source = "./modules/processing-environment-api"
 
-  name = "${local.name_prefix}-api"
+  name             = "${local.name_prefix}-api"
+  metric_namespace = module.processing_environment.metric_namespace
 
   # Presigned-URL-via-VPCE (v0.5.16). When enabled with a supplied endpoint DNS
   # name, presigner Lambdas target the S3 interface VPC endpoint. Supplied as a
@@ -442,6 +470,8 @@ module "processing_environment_api" {
   # Encryption key
   encryption_key_arn = var.encryption_key_arn
 
+  guardrail_id_and_version = var.bedrock_guardrail_id_and_version
+
   # VPC configuration
   vpc_config = length(var.vpc_subnet_ids) > 0 ? {
     subnet_ids         = var.vpc_subnet_ids
@@ -478,7 +508,7 @@ module "processing_environment_api" {
   # Chat with Document configuration
   chat_with_document = local.chat_with_document_config.enabled ? {
     enabled                  = true
-    guardrail_id_and_version = local.chat_with_document_config.guardrail_id_and_version
+    guardrail_id_and_version = local.chat_with_document_guardrail
   } : { enabled = false }
 
   # Process Changes configuration (Edit Sections feature)
@@ -549,6 +579,8 @@ module "processing_environment_api" {
   # RBAC Users table for the streaming processor's scope enforcement (empty when
   # RBAC is off).
   users_table_name = local.feature_enable.rbac ? module.rbac[0].users_table_name : ""
+  # Plan-time companion to the above, for counts.
+  rbac_enabled = local.feature_enable.rbac
 
   # Deterministic web-ui settings SSM parameter name for the streaming
   # processor. Passed as a plain string (NOT module.web_ui) to avoid a
@@ -614,10 +646,11 @@ module "bda_processor" {
   log_level          = module.processing_environment.log_level
   log_retention_days = module.processing_environment.log_retention_days
 
-  enable_encryption    = var.enable_encryption
-  encryption_key_arn   = var.encryption_key_arn
-  idp_common_layer_arn = module.idp_common_layer.layer_arn
-  base_layer_arn       = module.processing_environment.base_layer_arn
+  enable_encryption         = var.enable_encryption
+  encryption_key_arn        = var.encryption_key_arn
+  idp_common_layer_arn      = module.idp_common_layer.layer_arn
+  base_layer_arn            = module.processing_environment.base_layer_arn
+  rule_validation_layer_arn = local.rule_validation_enabled ? module.idp_rule_validation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -636,7 +669,8 @@ module "bda_processor" {
   enable_rule_validation = local.rule_validation_enabled
 
   # Optional: Document processing configuration
-  config = var.processor.config
+  workflow_execution_timeout_seconds = var.processor.workflow_execution_timeout_seconds
+  config                             = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.processor.additional_configurations
@@ -681,11 +715,12 @@ module "bedrock_llm_processor" {
   log_level          = module.processing_environment.log_level
   log_retention_days = module.processing_environment.log_retention_days
 
-  encryption_key_arn   = var.encryption_key_arn
-  enable_encryption    = var.enable_encryption
-  idp_common_layer_arn = module.idp_common_layer.layer_arn
-  base_layer_arn       = module.processing_environment.base_layer_arn
-  evaluation_layer_arn = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  encryption_key_arn        = var.encryption_key_arn
+  enable_encryption         = var.enable_encryption
+  idp_common_layer_arn      = module.idp_common_layer.layer_arn
+  base_layer_arn            = module.processing_environment.base_layer_arn
+  evaluation_layer_arn      = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  rule_validation_layer_arn = local.rule_validation_enabled ? module.idp_rule_validation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -703,7 +738,8 @@ module "bedrock_llm_processor" {
   save_reporting_function_arn    = module.processing_environment.save_reporting_data_function_arn
 
   # Optional: Document processing configuration
-  config = var.processor.config
+  workflow_execution_timeout_seconds = var.processor.workflow_execution_timeout_seconds
+  config                             = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.processor.additional_configurations
@@ -757,10 +793,11 @@ module "sagemaker_udop_processor" {
   log_level          = module.processing_environment.log_level
   log_retention_days = module.processing_environment.log_retention_days
 
-  encryption_key_arn   = var.encryption_key_arn
-  idp_common_layer_arn = module.idp_common_layer.layer_arn
-  base_layer_arn       = module.processing_environment.base_layer_arn
-  evaluation_layer_arn = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  encryption_key_arn        = var.encryption_key_arn
+  idp_common_layer_arn      = module.idp_common_layer.layer_arn
+  base_layer_arn            = module.processing_environment.base_layer_arn
+  evaluation_layer_arn      = local.evaluation_enabled ? module.idp_evaluation_layer[0].layer_arn : null
+  rule_validation_layer_arn = local.rule_validation_enabled ? module.idp_rule_validation_layer[0].layer_arn : null
 
   # VPC configuration
   vpc_subnet_ids         = var.vpc_subnet_ids
@@ -783,7 +820,8 @@ module "sagemaker_udop_processor" {
   enable_rule_validation = local.rule_validation_enabled
 
   # Optional: Document processing configuration
-  config = var.processor.config
+  workflow_execution_timeout_seconds = var.processor.workflow_execution_timeout_seconds
+  config                             = var.processor.config
 
   # Optional: extra non-active config versions seeded alongside the default
   additional_configurations = var.processor.additional_configurations
@@ -800,12 +838,23 @@ module "sagemaker_udop_processor" {
   tags = var.tags
 }
 
+module "logging_bucket" {
+  count  = local.create_logging_bucket ? 1 : 0
+  source = "./modules/logging-bucket"
+
+  bucket_name   = "${local.name_prefix}-logs"
+  force_destroy = var.web_ui.logging_bucket_force_destroy
+
+  tags = var.tags
+}
+
 #
 # Web UI (Optional)
 #
 module "web_ui" {
-  count  = var.web_ui.enabled ? 1 : 0
-  source = "./modules/web-ui"
+  count              = var.web_ui.enabled ? 1 : 0
+  source             = "./modules/web-ui"
+  log_retention_days = var.log_retention_days
 
   lambda_architecture = var.build.lambda_architecture
 
@@ -861,9 +910,9 @@ module "web_ui" {
   working_bucket_cors_enabled = true
 
   # Optional: Logging bucket for CloudFront and S3 access logs
-  logging_bucket = var.web_ui.logging_enabled ? {
+  logging_bucket = local.logging_bucket_available ? {
     bucket_name = local.logging_bucket_name
-    bucket_arn  = var.web_ui.logging_bucket_arn
+    bucket_arn  = local.logging_bucket_arn
   } : null
 
   # Test Studio bucket, for settings.TestSetBucket + its CORS. Separate flag as
@@ -946,12 +995,8 @@ resource "aws_iam_role_policy" "authenticated_user_permissions" {
     Version = "2012-10-17"
     Statement = concat(
       local.base_authenticated_statements,
-      local.api_statements,
       local.web_ui_statements,
       local.evaluation_statements,
-      local.human_review_sagemaker_statement,
-      local.human_review_ssm_statement,
-      local.human_review_a2i_statement,
       local.processing_environment_api_statements
     )
   })
@@ -1046,6 +1091,7 @@ module "processor_attachment" {
 
   # Processing environment resources
   document_queue_arn             = module.processing_environment.document_queue_arn
+  document_queue_url             = module.processing_environment.document_queue_url
   queue_sender_function_arn      = module.processing_environment.queue_sender_function_arn
   queue_sender_function_name     = module.processing_environment.queue_sender_function_name
   workflow_tracker_function_arn  = module.processing_environment.workflow_tracker_function_arn

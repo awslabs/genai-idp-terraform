@@ -1,5 +1,0 @@
-subscription OnCreateDocument {
-  onCreateDocument {
-    ObjectKey
-  }
-}

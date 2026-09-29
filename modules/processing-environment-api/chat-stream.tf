@@ -71,8 +71,9 @@ locals {
 # other layer in the stack. idp_common (bedrock/appsync/config/agents) is NOT
 # here — it ships in the base + agents layers attached to the function.
 module "chat_stream_deps_layer" {
-  count  = local.chat_stream_enabled ? 1 : 0
-  source = "../lambda-layer-codebuild"
+  count              = local.chat_stream_enabled ? 1 : 0
+  source             = "../lambda-layer-codebuild"
+  log_retention_days = var.log_retention_days
 
   name_prefix              = "chat-stream-${random_string.suffix.result}"
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
@@ -427,6 +428,14 @@ resource "aws_iam_role_policy" "chat_stream_processor" {
             "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.users_table_name}/index/*",
           ]
         }
+      ] : [],
+      var.guardrail_id_and_version != null ? [
+        {
+          Sid      = "Guardrail"
+          Effect   = "Allow"
+          Action   = "bedrock:ApplyGuardrail"
+          Resource = "${local.guardrail_arn_prefix}/${split(":", var.guardrail_id_and_version)[0]}"
+        }
       ] : []
     )
   })
@@ -504,8 +513,7 @@ resource "aws_lambda_function" "chat_stream_processor" {
       CONFIGURATION_BUCKET     = local.chat_stream_config_bucket_name
       TRACKING_TABLE_NAME      = local.tracking_table_name != null ? local.tracking_table_name : ""
       USERS_TABLE_NAME         = var.users_table_name
-      # No guardrail plumbed into the streaming endpoint (kept empty).
-      GUARDRAIL_ID_AND_VERSION = ""
+      GUARDRAIL_ID_AND_VERSION = var.guardrail_id_and_version != null ? var.guardrail_id_and_version : ""
 
       # Agent-chat processor env (mirrors AgentChatProcessorFunction).
       LOOKUP_FUNCTION_NAME        = var.lookup_function_name != null ? var.lookup_function_name : ""
@@ -580,9 +588,12 @@ resource "aws_lambda_function_url" "chat_stream" {
 resource "aws_lambda_permission" "chat_stream_url" {
   count = local.chat_stream_enabled ? 1 : 0
 
-  statement_id           = "AllowCognitoInvokeChatStreamUrl"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.chat_stream_processor[0].function_name
-  principal              = data.aws_caller_identity.current.account_id
+  statement_id  = "AllowCognitoInvokeChatStreamUrl"
+  action        = "lambda:InvokeFunctionUrl"
+  function_name = aws_lambda_function.chat_stream_processor[0].function_name
+  # Root-ARN form, not the bare account id: Lambda stores an account principal as
+  # this ARN, so the short form never matches and replaced the permission on every
+  # apply. Same principal either way.
+  principal              = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
   function_url_auth_type = "AWS_IAM"
 }

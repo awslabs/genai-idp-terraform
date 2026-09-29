@@ -85,6 +85,7 @@ module "processor_configuration" {
   name_prefix              = var.name
   configuration_table_name = local.configuration_table_name
   encryption_key_arn       = var.encryption_key_arn
+  log_retention_days       = local.log_retention_days
 
   configuration = local.config_with_overrides
   schema        = jsondecode(file("${path.module}/schema.json"))
@@ -262,18 +263,28 @@ locals {
         MaxAttempts     = 3
         BackoffRate     = 2
       }]
-      Catch = [{
-        ErrorEquals = ["States.ALL"]
-        ResultPath  = null
-        Next        = local.post_summ_next
-      }]
+      Catch = [
+        {
+          ErrorEquals = ["HookFatalError"]
+          ResultPath  = null
+          Next        = "PostStepHookFailed"
+        },
+        {
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = null
+          Next        = local.post_summ_next
+        }
+      ]
       Next = local.post_summ_next
     }
   }]...)
 
   # The evaluation Lambda returns {"document": ...}, and ResultPath "$" makes
   # that the whole state payload — already the shape PostprocessingHook reads.
-  eval_states = local.eval_enabled ? {
+  # merge([for ...]...) rather than a ternary: the three states are
+  # heterogeneously shaped (Task/Task/Pass), so a ternary against an empty object
+  # fails type unification (same pattern as summ_states / bda_states).
+  eval_states = merge([for _ in(local.eval_enabled ? [1] : []) : {
     EvaluationStep = {
       Type     = "Task"
       Resource = aws_lambda_function.evaluation_function[0].arn
@@ -284,8 +295,56 @@ locals {
       ResultPath = "$"
       Retry      = local.standard_retry
       Next       = "PostprocessingHook"
+      # An evaluation failure must not fail the document: extraction already
+      # succeeded and its output is written. Record the failure, then rejoin the tail.
+      Catch = [{
+        ErrorEquals = ["States.ALL"]
+        ResultPath  = "$.EvaluationError"
+        Next        = "RecordEvaluationFailure"
+      }]
     }
-  } : {}
+
+    # Same Lambda, record-only mode, so EvaluationStatus reflects reality rather
+    # than staying RUNNING. $ is the bare document here, so EvaluationError lands
+    # as a sibling of the document's own fields.
+    RecordEvaluationFailure = {
+      Type     = "Task"
+      Resource = aws_lambda_function.evaluation_function[0].arn
+      Parameters = {
+        "execution_arn.$"     = "$$.Execution.Id"
+        "record_failure_only" = true
+        "failure_reason"      = "Evaluation step failed or timed out"
+        "error.$"             = "$.EvaluationError"
+        "document.$"          = "$"
+      }
+      ResultPath = "$"
+      # Timeout listed first with one attempt: this is a minimum-work step, so it
+      # hands off to the Catch below rather than retrying ten times.
+      Retry = concat([{
+        ErrorEquals     = ["Sandbox.Timedout", "States.Timeout"]
+        IntervalSeconds = 5
+        MaxAttempts     = 1
+        BackoffRate     = 1.0
+      }], local.standard_retry)
+      Catch = [{
+        ErrorEquals = ["States.ALL"]
+        ResultPath  = "$.RecordFailureError"
+        Next        = "NormalizeEvaluationFailureOutput"
+      }]
+      Next = "PostprocessingHook"
+    }
+
+    # Reached only when the recorder itself failed, where $ is the bare document.
+    # Rebuilds the { document: ... } envelope every later state reads.
+    NormalizeEvaluationFailureOutput = {
+      Type = "Pass"
+      Parameters = {
+        "document.$" = "$"
+      }
+      ResultPath = "$"
+      Next       = "PostprocessingHook"
+    }
+  }]...)
 
   # Rule-validation sub-flow, ported from the upstream unified ASL so the
   # Lambdas in lambda_rule_validation.tf actually run. Gated on
@@ -413,12 +472,19 @@ locals {
         MaxAttempts     = 3
         BackoffRate     = 2
       }]
-      # On failure there's no Payload; use the error-path Apply instead.
-      Catch = [{
-        ErrorEquals = ["States.ALL"]
-        ResultPath  = "$.HookResults.postRuleValidation.error"
-        Next        = "ApplyPostRuleValidationHookDocumentOnError"
-      }]
+      # On other failures there's no Payload; use the error-path Apply instead.
+      Catch = [
+        {
+          ErrorEquals = ["HookFatalError"]
+          ResultPath  = null
+          Next        = "PostStepHookFailed"
+        },
+        {
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = "$.HookResults.postRuleValidation.error"
+          Next        = "ApplyPostRuleValidationHookDocumentOnError"
+        }
+      ]
       Next = "ApplyPostRuleValidationHookDocument"
     }
 
@@ -566,11 +632,18 @@ locals {
         }
         ResultPath = "$.HookResults.postprocessing"
         Retry      = local.hook_retry
-        Catch = [{
-          ErrorEquals = ["States.ALL"]
-          ResultPath  = null
-          Next        = "WorkflowComplete"
-        }]
+        Catch = [
+          {
+            ErrorEquals = ["HookFatalError"]
+            ResultPath  = null
+            Next        = "PostStepHookFailed"
+          },
+          {
+            ErrorEquals = ["States.ALL"]
+            ResultPath  = null
+            Next        = "WorkflowComplete"
+          }
+        ]
         Next = "ApplyPostprocessingHookDocument"
       }
 
@@ -796,11 +869,18 @@ locals {
           MaxAttempts     = 3
           BackoffRate     = 2
         }]
-        Catch = [{
-          ErrorEquals = ["States.ALL"]
-          ResultPath  = "$.HookResults.postOcr.error"
-          Next        = "ClassificationStep"
-        }]
+        Catch = [
+          {
+            ErrorEquals = ["HookFatalError"]
+            ResultPath  = null
+            Next        = "PostStepHookFailed"
+          },
+          {
+            ErrorEquals = ["States.ALL"]
+            ResultPath  = "$.HookResults.postOcr.error"
+            Next        = "ClassificationStep"
+          }
+        ]
         Next = "ClassificationStep"
       }
 
@@ -836,11 +916,18 @@ locals {
           MaxAttempts     = 3
           BackoffRate     = 2
         }]
-        Catch = [{
-          ErrorEquals = ["States.ALL"]
-          ResultPath  = "$.HookResults.postClassification.error"
-          Next        = "ProcessSections"
-        }]
+        Catch = [
+          {
+            ErrorEquals = ["HookFatalError"]
+            ResultPath  = null
+            Next        = "PostStepHookFailed"
+          },
+          {
+            ErrorEquals = ["States.ALL"]
+            ResultPath  = "$.HookResults.postClassification.error"
+            Next        = "ProcessSections"
+          }
+        ]
         Next = "ProcessSections"
       }
 
@@ -882,11 +969,18 @@ locals {
                 MaxAttempts     = 3
                 BackoffRate     = 2
               }]
-              Catch = [{
-                ErrorEquals = ["States.ALL"]
-                ResultPath  = "$.HookResults.postExtraction.error"
-                Next        = "AssessmentStep"
-              }]
+              Catch = [
+                {
+                  ErrorEquals = ["HookFatalError"]
+                  ResultPath  = null
+                  Next        = "PostExtractionHookFailed"
+                },
+                {
+                  ErrorEquals = ["States.ALL"]
+                  ResultPath  = "$.HookResults.postExtraction.error"
+                  Next        = "AssessmentStep"
+                }
+              ]
               Next = "AssessmentStep"
             }
             AssessmentStep = {
@@ -920,16 +1014,39 @@ locals {
                 MaxAttempts     = 3
                 BackoffRate     = 2
               }]
-              Catch = [{
-                ErrorEquals = ["States.ALL"]
-                ResultPath  = "$.HookResults.postAssessment.error"
-                Next        = "SectionComplete"
-              }]
+              # Ours only: upstream has no postAssessment hook point.
+              Catch = [
+                {
+                  ErrorEquals = ["HookFatalError"]
+                  ResultPath  = null
+                  Next        = "PostAssessmentHookFailed"
+                },
+                {
+                  ErrorEquals = ["States.ALL"]
+                  ResultPath  = "$.HookResults.postAssessment.error"
+                  Next        = "SectionComplete"
+                }
+              ]
               Next = "SectionComplete"
             }
             SectionComplete = {
               Type = "Pass"
               End  = true
+            }
+
+            # Map-scoped: ASL state names are local to the Iterator, so a hook in
+            # here cannot target PostStepHookFailed. The Map has no Catch, so
+            # failing the section fails the execution, which is what onError:fail asks.
+            PostExtractionHookFailed = {
+              Type      = "Fail"
+              Error     = "HookFatalError"
+              CausePath = "States.Format('{} || onError:fail aborted the section rather than assessing and merging it as though the hook had succeeded.', $.Cause)"
+            }
+
+            PostAssessmentHookFailed = {
+              Type      = "Fail"
+              Error     = "HookFatalError"
+              CausePath = "States.Format('{} || onError:fail aborted the section rather than completing it as though the hook had succeeded.', $.Cause)"
             }
           }
         }
@@ -971,6 +1088,17 @@ locals {
       WorkflowComplete = {
         Type = "Pass"
         End  = true
+      }
+
+      # Terminal state for a hook that declared onError:fail. Every post-step hook
+      # lists HookFatalError BEFORE its States.ALL catcher: ASL takes the first
+      # match, and States.ALL routes forward, so reordering them silently restores
+      # fail-open behaviour. CausePath, not Cause: a Fail state's Cause replaces the
+      # original error, and the dispatcher message names the failing hook.
+      PostStepHookFailed = {
+        Type      = "Fail"
+        Error     = "HookFatalError"
+        CausePath = "States.Format('{} || onError:fail aborted the document rather than continuing as though the hook had succeeded.', $.Cause)"
       }
     },
     local.hitl_states,
@@ -1024,9 +1152,13 @@ resource "aws_sfn_state_machine" "document_processing" {
   # preprocessing extension point runs before the BDA/pipeline routing decision
   # so it fires in both modes. It is inert until a config version populates the
   # `preprocessing` section.
+  # Bounds a stalled execution, which would otherwise run for up to a year while
+  # holding a concurrency slot. aws_sfn_state_machine has no timeout argument, so
+  # the ASL top-level key is the only mechanism.
   definition = jsonencode({
-    StartAt = "PreprocessingHook"
-    States  = local.sfn_states
+    TimeoutSeconds = var.workflow_execution_timeout_seconds
+    StartAt        = "PreprocessingHook"
+    States         = local.sfn_states
   })
 
   logging_configuration {

@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 variable "name" {
-  description = "The name of the GraphQL API"
+  description = "The name of the REST API"
   type        = string
   default     = null
 }
 
 variable "xray_enabled" {
-  description = "A flag indicating whether or not X-Ray tracing is enabled for the GraphQL API"
+  description = "A flag indicating whether or not X-Ray tracing is enabled for the REST API"
   type        = bool
   default     = false
 }
@@ -96,7 +96,7 @@ variable "environment_variables" {
 }
 
 variable "domain_name" {
-  description = "The domain name configuration for the GraphQL API"
+  description = "The domain name configuration for the REST API"
   type = object({
     certificate_arn = string
     domain_name     = string
@@ -105,7 +105,7 @@ variable "domain_name" {
 }
 
 variable "authorization_config" {
-  description = "Authorization configuration for the GraphQL API. Must be set explicitly; the module no longer defaults to API_KEY because that exposes every mutation to anyone with the key."
+  description = "Authorization configuration for the REST API. Must be set explicitly; the module no longer defaults to API_KEY because that exposes every mutation to anyone with the key."
   type = object({
     default_authorization = object({
       authorization_type = string
@@ -242,13 +242,10 @@ variable "knowledge_base" {
   }
 }
 
-variable "guardrail" {
-  description = "Optional Bedrock guardrail to apply to model interactions"
-  type = object({
-    guardrail_id  = string
-    guardrail_arn = string
-  })
-  default = null
+variable "guardrail_id_and_version" {
+  description = "Bedrock Guardrail as `id:version`, applied to the streaming chat path, the analytics agent and the Knowledge Base resolver. Null applies no guardrail."
+  type        = string
+  default     = null
 }
 
 variable "tracking_table" {
@@ -282,7 +279,8 @@ variable "log_level" {
 variable "log_retention_days" {
   description = "Log retention period in days"
   type        = number
-  default     = 7
+  default     = 30
+  nullable    = false
   validation {
     condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653], var.log_retention_days)
     error_message = "Log retention days must be one of the allowed values."
@@ -419,6 +417,12 @@ variable "users_table_name" {
   description = "Name of the RBAC Users DynamoDB table (USERS_TABLE_NAME for the chat token-streaming processor). Threaded from module.rbac[0].users_table_name at the root when RBAC is enabled, else empty."
   type        = string
   default     = ""
+}
+
+variable "rbac_enabled" {
+  description = "Whether RBAC is on. Gate counts on this, never on users_table_name: that is a resource attribute, so on a fresh deploy it is unknown at plan time and a count depending on it fails."
+  type        = bool
+  default     = false
 }
 
 variable "settings_parameter_name" {
@@ -647,4 +651,10 @@ variable "feature_platform_field_functions" {
   EOT
   type        = map(string)
   default     = {}
+}
+
+variable "metric_namespace" {
+  description = "CloudWatch metric namespace for API-side Lambdas. When null, metric-publish grants are omitted."
+  type        = string
+  default     = null
 }

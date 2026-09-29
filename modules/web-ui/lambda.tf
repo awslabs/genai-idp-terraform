@@ -128,7 +128,7 @@ resource "aws_iam_role_policy" "ui_codebuild_trigger_lambda_policy" {
 resource "aws_cloudwatch_log_group" "ui_codebuild_trigger_lambda_logs" {
   count             = var.ui_local ? 0 : 1
   name              = "/aws/lambda/${var.name_prefix}-ui-cb-trigger-${random_string.suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
 
   tags = merge(local.common_tags, {
     Name = "${var.name_prefix}-ui-codebuild-trigger-lambda-logs"

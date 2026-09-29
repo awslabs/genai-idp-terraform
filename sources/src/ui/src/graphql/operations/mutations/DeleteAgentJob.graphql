@@ -1,3 +1,0 @@
-mutation DeleteAgentJob($jobId: ID!) {
-  deleteAgentJob(jobId: $jobId)
-}

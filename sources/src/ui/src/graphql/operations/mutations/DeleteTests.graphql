@@ -1,3 +1,0 @@
-mutation DeleteTests($testRunIds: [String!]!) {
-  deleteTests(testRunIds: $testRunIds)
-}

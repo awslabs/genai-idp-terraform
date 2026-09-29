@@ -11,9 +11,9 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.0.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.1.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.66.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.3.2 |
 
 ## Modules
 
@@ -53,12 +53,13 @@ No modules.
 | <a name="input_base_layer_arn"></a> [base\_layer\_arn](#input\_base\_layer\_arn) | ARN of the base Lambda layer (shared Python deps). Attached to the MCP handler via compact([...]). | `string` | `null` | no |
 | <a name="input_enabled"></a> [enabled](#input\_enabled) | Whether MCP integration is requested. The root forwards<br>`var.api.enable_mcp` here. Even when true, the GovCloud guard disables all<br>resources in `us-gov-*` regions (AgentCore is unavailable there). | `bool` | `true` | no |
 | <a name="input_encryption_key_arn"></a> [encryption\_key\_arn](#input\_encryption\_key\_arn) | ARN of the KMS key for encrypting MCP log groups and used by the gateway manager. Optional. | `string` | `null` | no |
+| <a name="input_guardrail_id_and_version"></a> [guardrail\_id\_and\_version](#input\_guardrail\_id\_and\_version) | Bedrock Guardrail as `id:version` applied to the MCP handler's model invocations. Null applies no guardrail. | `string` | `null` | no |
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the IDP Common Lambda layer. Attached to the MCP handler via compact([...]). | `string` | `null` | no |
 | <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). Must match the architecture the idp\_common layers were built for; mismatches break native deps (e.g. pydantic\_core). | `string` | `"arm64"` | no |
 | <a name="input_lambda_tracing_mode"></a> [lambda\_tracing\_mode](#input\_lambda\_tracing\_mode) | X-Ray tracing mode for the MCP Lambda functions. Valid values: Active, PassThrough. | `string` | `"Active"` | no |
 | <a name="input_lambda_vpc_access_policy_arn"></a> [lambda\_vpc\_access\_policy\_arn](#input\_lambda\_vpc\_access\_policy\_arn) | ARN of the managed policy granting Lambda VPC/ENI access, attached to the<br>MCP handler role only when `vpc_config` is set. Defaults to the AWS-managed<br>`AWSLambdaVPCAccessExecutionRole` for the current partition. | `string` | `null` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | Log level for the MCP Lambda functions. | `string` | `"INFO"` | no |
-| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch log retention (days) for MCP log groups. | `number` | `7` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch log retention (days) for MCP log groups. | `number` | `30` | no |
 | <a name="input_mcp_callback_urls"></a> [mcp\_callback\_urls](#input\_mcp\_callback\_urls) | Optional OAuth 2.0 callback URLs for the MCP external app client. Required by<br>Cognito when the `code` flow is enabled, but unused by AgentCore Gateway<br>(which uses JWT validation). When empty, falls back to a Cognito-hosted UI<br>placeholder. Wire to the CloudFront distribution URL for cleanest behaviour. | `list(string)` | `[]` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name prefix for MCP resources (Lambdas, roles, gateway). Mirrors the<br>`processing-environment-api` API name so resource names share the<br>`<api_name>-agentcore-*` shape. | `string` | n/a | yes |
 | <a name="input_output_bucket_arn"></a> [output\_bucket\_arn](#input\_output\_bucket\_arn) | ARN of the output S3 bucket the MCP handler reads/writes for Athena results and reporting data. | `string` | n/a | yes |

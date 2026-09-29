@@ -8,8 +8,10 @@
 locals {
   # Per-feature enable map. try(..., false) keeps an absent flag from enabling.
   feature_enable = {
-    mcp                = try(var.api.enable_mcp, false)
-    chat_with_document = try(var.api.chat_with_document.enabled, false)
+    mcp = try(var.api.enable_mcp, false)
+    # Resolved local, not var.api directly: the deprecated top-level spelling
+    # must reach the count, or the feature silently never instantiates.
+    chat_with_document = try(local.chat_with_document_config.enabled, false)
     hitl               = try(var.api.enable_hitl, false)
     rbac               = try(var.rbac.enabled, false)
     federation         = try(var.idp_federation.enabled, false)
@@ -47,6 +49,8 @@ module "mcp_integration" {
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
   encryption_key_arn = var.encryption_key_arn
+
+  guardrail_id_and_version = var.bedrock_guardrail_id_and_version
 
   log_level           = var.log_level
   log_retention_days  = var.log_retention_days
@@ -90,7 +94,7 @@ module "chat_with_document" {
   idp_common_layer_arn = module.idp_common_layer.layer_arn
 
   config                    = local.chat_with_document_processor_config
-  guardrail_id_and_version  = local.chat_with_document_config.guardrail_id_and_version
+  guardrail_id_and_version  = local.chat_with_document_guardrail
   allowed_bedrock_model_ids = local.chat_with_document_config.allowed_bedrock_model_ids
 
   encryption_key_arn  = var.encryption_key_arn

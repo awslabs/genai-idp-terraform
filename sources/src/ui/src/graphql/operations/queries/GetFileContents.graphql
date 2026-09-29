@@ -1,8 +1,0 @@
-query GetFileContents($s3Uri: String!, $versionId: String) {
-  getFileContents(s3Uri: $s3Uri, versionId: $versionId) {
-    content
-    contentType
-    size
-    isBinary
-  }
-}

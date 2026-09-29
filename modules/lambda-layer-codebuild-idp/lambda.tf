@@ -99,7 +99,7 @@ resource "aws_cloudwatch_log_group" "codebuild_trigger_lambda_logs" {
   count = local.use_local_build ? 0 : 1
 
   name              = "/aws/lambda/${var.layer_prefix}-cb-trigger-${random_string.layer_suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
 
   tags = {
     Name = "${var.layer_prefix}-codebuild-trigger-lambda-logs"

@@ -78,7 +78,7 @@ resource "aws_iam_role_policy" "agentcore_mcp_handler" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -131,7 +131,14 @@ resource "aws_iam_role_policy" "agentcore_mcp_handler" {
         Action   = ["bedrock-mantle:CreateInference", "bedrock-mantle:GetProject", "bedrock-mantle:ListProjects", "bedrock-mantle:ListTagsForResources"]
         Resource = "*"
       }
-    ]
+      ],
+      var.guardrail_id_and_version != null ? [{
+        Sid      = "Guardrail"
+        Effect   = "Allow"
+        Action   = "bedrock:ApplyGuardrail"
+        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:guardrail/${split(":", var.guardrail_id_and_version)[0]}"
+      }] : []
+    )
   })
 }
 
@@ -185,8 +192,9 @@ resource "aws_lambda_function" "agentcore_mcp_handler" {
 
   environment {
     variables = {
-      LOG_LEVEL     = var.log_level
-      OUTPUT_BUCKET = local.output_bucket_name
+      LOG_LEVEL                = var.log_level
+      OUTPUT_BUCKET            = local.output_bucket_name
+      GUARDRAIL_ID_AND_VERSION = var.guardrail_id_and_version != null ? var.guardrail_id_and_version : ""
     }
   }
 
@@ -252,17 +260,15 @@ resource "aws_iam_role_policy" "agentcore_gateway_manager" {
           "logs:DeleteDeliveryDestination",
           "logs:DescribeDeliveryDestinations",
           "logs:DescribeDeliverySources",
-          "iam:CreateRole",
-          "iam:AttachRolePolicy",
-          "iam:GetRole",
           "cognito-idp:DescribeUserPool"
         ]
         Resource = "*"
       },
       {
-        # IAM PassRole for AgentCore Gateway execution role
+        # Read/pass the gateway execution role only. CreateRole and AttachRolePolicy
+        # are deliberately absent: they are the escalation path upstream removed.
         Effect   = "Allow"
-        Action   = ["iam:PassRole"]
+        Action   = ["iam:GetRole", "iam:PassRole"]
         Resource = aws_iam_role.agentcore_gateway_execution[0].arn
       },
       {

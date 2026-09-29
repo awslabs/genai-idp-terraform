@@ -60,9 +60,10 @@ module "engine" {
   vpc_security_group_ids = var.vpc_security_group_ids
 
   # Lambda layers
-  idp_common_layer_arn = var.idp_common_layer_arn
-  base_layer_arn       = var.base_layer_arn
-  evaluation_layer_arn = var.evaluation_layer_arn
+  idp_common_layer_arn      = var.idp_common_layer_arn
+  base_layer_arn            = var.base_layer_arn
+  evaluation_layer_arn      = var.evaluation_layer_arn
+  rule_validation_layer_arn = var.rule_validation_layer_arn
 
   # Rule validation
   enable_rule_validation = var.enable_rule_validation
@@ -106,7 +107,8 @@ module "engine" {
   summarization_guardrail  = var.summarization_guardrail
 
   # Concurrency
-  max_processing_concurrency = var.max_processing_concurrency
+  max_processing_concurrency         = var.max_processing_concurrency
+  workflow_execution_timeout_seconds = var.workflow_execution_timeout_seconds
 
   # HITL
   enable_hitl = var.enable_hitl

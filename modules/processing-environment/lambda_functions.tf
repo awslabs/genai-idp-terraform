@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 module "lambda_layers" {
-  source = "../lambda-layer-codebuild"
+  source             = "../lambda-layer-codebuild"
+  log_retention_days = var.log_retention_days
 
   name_prefix              = "processing-environment-${random_string.suffix.result}"
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn
@@ -216,6 +217,14 @@ resource "aws_lambda_function" "workflow_tracker" {
       LOG_LEVEL                    = var.log_level
       REPORTING_BUCKET             = var.enable_reporting ? local.reporting_bucket_name : ""
       SAVE_REPORTING_FUNCTION_NAME = var.enable_reporting ? aws_lambda_function.save_reporting_data[0].function_name : ""
+      # The tracker computes the TTL it stamps on tracking records from this. Left
+      # unset it falls back to the source's own 365, silently ignoring a shorter
+      # retention the operator configured.
+      DATA_RETENTION_IN_DAYS = var.data_tracking_retention_days
+      # Pinned to upstream's literal rather than left to the source default, which
+      # is also "true" today: inheriting it means an upstream default flip would
+      # silently change behaviour here.
+      DOCUMENT_VERSIONING_ENABLED = "true"
     }
   }
 

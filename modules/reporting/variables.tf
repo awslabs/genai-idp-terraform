@@ -40,7 +40,8 @@ variable "log_level" {
 variable "log_retention_days" {
   description = "CloudWatch log retention period in days"
   type        = number
-  default     = 7
+  default     = 30
+  nullable    = false
 }
 
 variable "crawler_table_level" {

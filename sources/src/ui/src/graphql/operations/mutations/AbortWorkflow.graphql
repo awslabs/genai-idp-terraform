@@ -1,9 +1,0 @@
-mutation AbortWorkflow($objectKeys: [String!]!) {
-  abortWorkflow(objectKeys: $objectKeys) {
-    success
-    message
-    abortedCount
-    failedCount
-    errors
-  }
-}

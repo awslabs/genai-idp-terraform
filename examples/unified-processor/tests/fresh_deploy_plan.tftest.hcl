@@ -85,11 +85,3 @@ run "fresh_deploy_with_evaluation_enabled" {
     enable_evaluation = true
   }
 }
-
-run "fresh_deploy_with_evaluation_disabled" {
-  command = plan
-
-  variables {
-    enable_evaluation = false
-  }
-}

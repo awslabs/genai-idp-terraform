@@ -343,6 +343,7 @@ resource "aws_lambda_function" "discovery_processor" {
     variables = {
       LOG_LEVEL                = var.log_level
       BEDROCK_LOG_LEVEL        = var.log_level
+      METRIC_NAMESPACE         = var.metric_namespace != null ? var.metric_namespace : ""
       DISCOVERY_TRACKING_TABLE = aws_dynamodb_table.discovery_tracking.name
       CONFIGURATION_TABLE_NAME = var.configuration_table_name != null ? var.configuration_table_name : ""
       # APPSYNC_API_URL intentionally empty post-v0.6.4: the processor writes

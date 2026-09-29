@@ -1,9 +1,0 @@
-mutation AbortTestRuns($testRunIds: [String!]!) {
-  abortTestRuns(testRunIds: $testRunIds) {
-    success
-    message
-    abortedCount
-    failedCount
-    errors
-  }
-}

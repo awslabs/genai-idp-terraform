@@ -202,16 +202,6 @@ resource "aws_iam_role_policy" "bda_process_results_lambda" {
           ]
         },
         {
-          Effect = "Allow"
-          Action = [
-            "appsync:GraphQL"
-          ]
-          Resource = local.api_arn != null ? [
-            "${local.api_arn}/types/Query/*",
-            "${local.api_arn}/types/Mutation/*"
-          ] : ["*"]
-        },
-        {
           # process_results reads stack settings via SSM (idp_common settings_helper).
           Effect = "Allow"
           Action = [

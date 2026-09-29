@@ -105,18 +105,6 @@ resource "aws_iam_policy" "queue_processor_policy" {
           var.working_bucket_arn,
           "${var.working_bucket_arn}/*"
         ]
-      },
-      # AppSync permissions for GraphQL API
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = var.api_arn != null ? [
-          "${var.api_arn}/types/Query/*",
-          "${var.api_arn}/types/Mutation/*",
-          "${var.api_arn}/types/Subscription/*"
-        ] : ["*"]
       }
     ]
   })

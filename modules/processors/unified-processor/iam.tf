@@ -235,17 +235,6 @@ resource "aws_iam_role_policy" "ocr_lambda" {
         ]
       },
       {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = local.api_arn != null ? [
-          "${local.api_arn}/types/Query/*",
-          "${local.api_arn}/types/Mutation/*",
-          "${local.api_arn}/types/Subscription/*"
-        ] : ["*"]
-      },
-      {
         # PutMetricData needs wildcard, constrained by namespace condition
         Effect = "Allow"
         Action = [
@@ -379,17 +368,6 @@ resource "aws_iam_role_policy" "classification_lambda" {
         {
           Effect = "Allow"
           Action = [
-            "appsync:GraphQL"
-          ]
-          Resource = local.api_arn != null ? [
-            "${local.api_arn}/types/Query/*",
-            "${local.api_arn}/types/Mutation/*",
-            "${local.api_arn}/types/Subscription/*"
-          ] : ["*"]
-        },
-        {
-          Effect = "Allow"
-          Action = [
             "cloudwatch:PutMetricData"
           ]
           Resource = "*"
@@ -485,17 +463,6 @@ resource "aws_iam_role_policy" "extraction_lambda" {
         {
           Effect = "Allow"
           Action = [
-            "appsync:GraphQL"
-          ]
-          Resource = local.api_arn != null ? [
-            "${local.api_arn}/types/Query/*",
-            "${local.api_arn}/types/Mutation/*",
-            "${local.api_arn}/types/Subscription/*"
-          ] : ["*"]
-        },
-        {
-          Effect = "Allow"
-          Action = [
             "cloudwatch:PutMetricData"
           ]
           Resource = "*"
@@ -570,17 +537,6 @@ resource "aws_iam_role_policy" "process_results_lambda" {
           local.configuration_table_arn,
           "${local.configuration_table_arn}/index/*"
         ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = local.api_arn != null ? [
-          "${local.api_arn}/types/Query/*",
-          "${local.api_arn}/types/Mutation/*",
-          "${local.api_arn}/types/Subscription/*"
-        ] : ["*"]
       },
       {
         Effect = "Allow"
@@ -693,17 +649,6 @@ resource "aws_iam_role_policy" "summarization_lambda" {
             local.configuration_table_arn,
             local.tracking_table_arn
           ]
-        },
-        {
-          Effect = "Allow"
-          Action = [
-            "appsync:GraphQL"
-          ]
-          Resource = local.api_arn != null ? [
-            "${local.api_arn}/types/Query/*",
-            "${local.api_arn}/types/Mutation/*",
-            "${local.api_arn}/types/Subscription/*"
-          ] : ["*"]
         },
         {
           Effect = "Allow"
@@ -922,27 +867,6 @@ resource "aws_iam_role_policy" "assessment_lambda" {
   })
 }
 
-# Add AppSync permissions if API is provided
-resource "aws_iam_role_policy" "assessment_lambda_appsync" {
-  count = var.enable_api ? 1 : 0
-
-  name = "${local.name_prefix}-assessment-lambda-appsync-policy"
-  role = aws_iam_role.assessment_lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = "${local.api_arn}/types/Mutation/*"
-      }
-    ]
-  })
-}
-
 # Add KMS permissions if encryption key is provided
 resource "aws_iam_role_policy" "assessment_lambda_kms" {
   name = "${local.name_prefix}-assessment-lambda-kms-policy"
@@ -1104,26 +1028,4 @@ resource "aws_iam_role_policy_attachment" "evaluation_lambda_kms" {
 
   role       = aws_iam_role.evaluation_lambda[0].name
   policy_arn = aws_iam_policy.kms_policy.arn
-}
-
-# Add AppSync permissions if API is provided (evaluation Lambda calls
-# `document_service.update_document` to publish status updates)
-resource "aws_iam_role_policy" "evaluation_lambda_appsync" {
-  count = var.evaluation_enabled && var.enable_api ? 1 : 0
-
-  name = "${local.name_prefix}-evaluation-lambda-appsync-policy"
-  role = aws_iam_role.evaluation_lambda[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "appsync:GraphQL"
-        ]
-        Resource = "${local.api_arn}/types/Mutation/*"
-      }
-    ]
-  })
 }

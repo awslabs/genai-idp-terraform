@@ -163,7 +163,7 @@ resource "aws_iam_policy" "discovery_processor_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect = "Allow"
         Action = [
@@ -258,7 +258,19 @@ resource "aws_iam_policy" "discovery_processor_policy" {
         ]
         Resource = "*"
       }
-    ]
+      ],
+      # Scoped to this stack's namespace so a compromised Lambda cannot write
+      # metrics that trip alarms on neighbouring stacks.
+      var.metric_namespace != null ? [{
+        Effect   = "Allow"
+        Action   = "cloudwatch:PutMetricData"
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = var.metric_namespace
+          }
+        }
+    }] : [])
   })
 
   tags = var.tags

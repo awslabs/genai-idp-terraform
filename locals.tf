@@ -34,6 +34,14 @@ locals {
   # Deprecated var.knowledge_base takes precedence if explicitly set (non-null), otherwise use api.knowledge_base
   knowledge_base_config = var.knowledge_base != null ? var.knowledge_base : var.api.knowledge_base
 
+  # The per-feature guardrail still wins where one exists.
+  # Ternary not coalesce(), which errors when every argument is null.
+  chat_with_document_guardrail = (
+    local.chat_with_document_config.guardrail_id_and_version != null
+    ? local.chat_with_document_config.guardrail_id_and_version
+    : var.bedrock_guardrail_id_and_version
+  )
+
   # ---------------------------------------------------------------------------
   # REST API visibility (v0.6.4 rename)
   # ---------------------------------------------------------------------------
@@ -206,7 +214,13 @@ locals {
   working_bucket_name = element(split(":", var.working_bucket_arn), 5)
 
   # Optional bucket names
-  logging_bucket_name             = var.web_ui.logging_enabled ? element(split(":", var.web_ui.logging_bucket_arn), 5) : null
+  # A supplied ARN wins, otherwise create one. Conditions read variables only: gating on
+  # the created bucket's ARN would leave web-ui's count unknown at plan.
+  create_logging_bucket           = var.web_ui.enabled && var.web_ui.logging_enabled && var.web_ui.logging_bucket_arn == null
+  logging_bucket_supplied         = var.web_ui.logging_enabled && var.web_ui.logging_bucket_arn != null
+  logging_bucket_available        = local.create_logging_bucket || local.logging_bucket_supplied
+  logging_bucket_arn              = local.create_logging_bucket ? module.logging_bucket[0].bucket_arn : var.web_ui.logging_bucket_arn
+  logging_bucket_name             = local.create_logging_bucket ? module.logging_bucket[0].bucket_name : (local.logging_bucket_supplied ? element(split(":", var.web_ui.logging_bucket_arn), 5) : null)
   evaluation_baseline_bucket_name = local.evaluation_enabled ? element(split(":", var.evaluation.baseline_bucket_arn), 5) : null
   reporting_bucket_name           = var.reporting.enabled && var.reporting.bucket_arn != null ? try(regex("arn:(aws|aws-us-gov):s3:::([^/]+)", var.reporting.bucket_arn)[1], "") : ""
   web_ui_reporting_bucket_name    = local.reporting_bucket_name
@@ -301,47 +315,8 @@ locals {
         "arn:${data.aws_partition.current.partition}:states:${var.region}:${data.aws_caller_identity.current.account_id}:execution:${local.name_prefix}-*:*",
         "arn:${data.aws_partition.current.partition}:states:${var.region}:${data.aws_caller_identity.current.account_id}:stateMachine:${local.name_prefix}-*"
       ]
-    },
-    # AppSync permissions for authenticated users
-    {
-      Effect = "Allow"
-      Action = [
-        "appsync:GraphQL"
-      ]
-      Resource = [
-        "arn:${data.aws_partition.current.partition}:appsync:${var.region}:${data.aws_caller_identity.current.account_id}:apis/*/types/Query/*",
-        "arn:${data.aws_partition.current.partition}:appsync:${var.region}:${data.aws_caller_identity.current.account_id}:apis/*/types/Mutation/*",
-        "arn:${data.aws_partition.current.partition}:appsync:${var.region}:${data.aws_caller_identity.current.account_id}:apis/*/types/Subscription/*"
-      ]
     }
   ]
-
-  # Human review statements (conditional)
-  human_review_a2i_statement = var.human_review.enabled ? [
-    {
-      # SageMaker A2I human loop operations do not support resource-level permissions - service limitation
-      Effect = "Allow"
-      Action = [
-        "sagemaker:CreateHumanLoop",
-        "sagemaker:ListHumanLoops",
-        "sagemaker:DescribeHumanLoop",
-        "sagemaker:StopHumanLoop"
-      ]
-      Resource = "*"
-    }
-  ] : []
-
-  human_review_ssm_statement = var.human_review.enabled ? [
-    {
-      Effect = "Allow"
-      Action = [
-        "ssm:GetParameter"
-      ]
-      Resource = [
-        "arn:${data.aws_partition.current.partition}:ssm:*:*:parameter/${local.name_prefix}/human-review/*"
-      ]
-    }
-  ] : []
 
   # Processing Environment API statements (conditional)
   processing_environment_api_statements = local.api_enabled ? [
@@ -368,19 +343,6 @@ locals {
     }
   ] : []
 
-  # API statements (conditional)
-  api_statements = local.api_enabled ? [
-    {
-      Effect = "Allow"
-      Action = [
-        "appsync:GraphQL"
-      ]
-      Resource = [
-        "${module.processing_environment_api[0].api_arn}/*"
-      ]
-    }
-  ] : []
-
   # Evaluation statements (conditional)
   evaluation_statements = local.evaluation_enabled ? [
     {
@@ -402,19 +364,4 @@ locals {
     }
   ] : []
 
-  # Human review SageMaker statement (conditional)
-  human_review_sagemaker_statement = var.human_review.enabled ? [
-    {
-      # SageMaker workteam and human loop operations do not support resource-level permissions - service limitation
-      Effect = "Allow"
-      Action = [
-        "sagemaker:DescribeWorkteam",
-        "sagemaker:ListWorkteams",
-        "sagemaker:ListHumanLoops",
-        "sagemaker:DescribeHumanLoop",
-        "sagemaker:StopHumanLoop"
-      ]
-      Resource = "*"
-    }
-  ] : []
 }

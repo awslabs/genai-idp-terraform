@@ -118,7 +118,7 @@ variable "enable_encryption" {
 # DEPRECATED: Individual API feature variables (continued)
 #
 variable "enable_api" {
-  description = "DEPRECATED: Use api.enabled instead. Enable GraphQL API for programmatic access and notifications"
+  description = "DEPRECATED: Use api.enabled instead. Enable the REST API for programmatic access and notifications"
   type        = bool
   default     = null
 }
@@ -184,10 +184,14 @@ variable "log_level" {
   }
 }
 
+# The single authority for the retention default. `nullable = false` is what makes
+# that true: an example passing null resolves to this default instead of overriding
+# it, so the value is declared in one place.
 variable "log_retention_days" {
-  description = "CloudWatch log retention period in days"
+  description = "CloudWatch log retention period in days. Applies to every log group this deployment creates."
   type        = number
-  default     = 7
+  default     = 30
+  nullable    = false
   validation {
     condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653], var.log_retention_days)
     error_message = "Log retention days must be one of the allowed values."
@@ -198,6 +202,20 @@ variable "data_tracking_retention_days" {
   description = "Document tracking data retention period in days"
   type        = number
   default     = 365
+}
+
+# Mirrors upstream's single BedrockGuardrailId + BedrockGuardrailVersion pair.
+# One `id:version` string because that is the form the runtime reads.
+variable "bedrock_guardrail_id_and_version" {
+  description = "Bedrock Guardrail to apply to every model interaction in this deployment, as `id:version` (e.g. \"abcd1234efgh:DRAFT\"). Applies to chat, the streaming chat path, the analytics agent, the MCP handler and the Knowledge Base resolver. A per-feature guardrail (api.chat_with_document.guardrail_id_and_version) overrides this for that feature. Null (default) applies no guardrail."
+  type        = string
+  default     = null
+
+  validation {
+    # Guards the split() that builds the guardrail ARN in each consumer.
+    condition     = var.bedrock_guardrail_id_and_version == null || can(regex("^[a-z0-9]+:([0-9]+|DRAFT)$", var.bedrock_guardrail_id_and_version))
+    error_message = "bedrock_guardrail_id_and_version must be \"<id>:<version>\", where version is a number or DRAFT (e.g. \"abcd1234efgh:1\" or \"abcd1234efgh:DRAFT\")."
+  }
 }
 
 variable "core_table_capacity" {
@@ -279,6 +297,9 @@ variable "processor" {
     # API-side HITL feature remains var.api.enable_hitl.
 
     # shared
+    # Bounds a stalled execution, which would otherwise hold a concurrency slot
+    # for up to a year. 6 hours, matching upstream.
+    workflow_execution_timeout_seconds = optional(number, 21600)
     # Rule-validation enablement is config-authoritative
     # (config.rule_validation.enabled), derived at plan time (see
     # local.rule_validation_enabled). No rule-validation toggle here.
@@ -399,11 +420,13 @@ variable "web_ui" {
     create_infrastructure      = optional(bool, true)
     bucket_name                = optional(string, null)
     cloudfront_distribution_id = optional(string, null)
-    logging_enabled            = optional(bool, false)
+    logging_enabled            = optional(bool, true)
     logging_bucket_arn         = optional(string, null)
-    enable_signup              = optional(string, "")
-    display_name               = optional(string, null)
-    console_title              = optional(string, "IDP Accelerator Console")
+    # Only applies to a bucket this stack creates, never a supplied one.
+    logging_bucket_force_destroy = optional(bool, false)
+    enable_signup                = optional(string, "")
+    display_name                 = optional(string, null)
+    console_title                = optional(string, "IDP Accelerator Console")
     # Country codes allowed to reach CloudFront; empty means no restriction.
     allowed_geos = optional(list(string), [])
 
@@ -456,7 +479,7 @@ variable "web_ui" {
     create_infrastructure      = true
     bucket_name                = null
     cloudfront_distribution_id = null
-    logging_enabled            = false
+    logging_enabled            = true
     logging_bucket_arn         = null
     enable_signup              = ""
     display_name               = null
@@ -474,7 +497,7 @@ variable "web_ui" {
 # API Configuration (Consolidated)
 #
 variable "api" {
-  description = "Configuration for GraphQL API and all API-related features"
+  description = "Configuration for the REST API and all API-related features"
   type = object({
     # Core API configuration
     enabled = optional(bool, true)

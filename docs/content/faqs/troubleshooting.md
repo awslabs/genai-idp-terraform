@@ -53,20 +53,28 @@ Error: AccessDeniedException: Your account is not authorized to invoke this mode
 
 **Solutions**:
 
-1. **Request model access**:
-   - Go to Amazon Bedrock console
-   - Navigate to "Model access"
-   - Request access for required models
+Model access is automatic, so this points at a missing prerequisite rather than a
+model that needs enabling.
 
-2. **Check region availability**:
+1. **Anthropic first-time use**: submit use-case details once per account, via the
+   Bedrock console model catalog or `PutUseCaseForModelAccess`.
+
+2. **AWS Marketplace permissions**: the invoking role needs
+   `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe` and
+   `aws-marketplace:ViewSubscriptions`. Without them the automatic third-party
+   subscription fails and every call returns this error.
+
+3. **Retry once**: on a first invocation the subscription can take up to 15
+   minutes to settle.
+
+4. **Check region availability**:
    - Bedrock models aren't available in all regions
    - Use supported regions like `us-east-1`, `us-west-2`
 
-3. **Verify model ARN**:
+5. **Verify the model ID**, which belongs in the YAML config rather than tfvars:
 
-   ```hcl
-   # Correct model ARN format
-   model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+   ```yaml
+   model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
    ```
 
 ## Resource Limits
@@ -502,10 +510,60 @@ Runtime.OutOfMemoryError: JavaScript heap out of memory
        }
    ```
 
+## Feature Platform
+
+### Installable features cannot be installed on a Terraform deployment
+
+Features published by `idp-feature-cli` are CloudFormation stacks. They discover
+host resources through `Fn::ImportValue` on `"${MainStackName}-<Name>"` exports, 23
+of them, and only a CloudFormation stack can create such an export. This wrapper
+deploys with Terraform and creates no CloudFormation stack, so a feature fails at
+CREATE with `No export named ... found`.
+
+**This is out of scope by architecture, not an unfinished gap.** Installable
+features are a CloudFormation-native extension model. Reproducing it here would
+mean running a CloudFormation stack purely to publish exports for consumers this
+deployment does not have, and it would hand CloudFormation control of teardown:
+CloudFormation refuses to delete a stack whose exports are imported, so an
+installed feature would block `terraform destroy`.
+
+**The extension mechanism here is a Terraform module.** `modules/features/` already
+holds `rbac`, `hitl`, `mcp-integration`, `chat-with-document` and `idp-federation`.
+Add capability by writing a module, which is the native equivalent.
+
+What the wrapper does deploy is the feature platform's **host** side, mirroring
+upstream's `feature-platform/main-stack-extensions`: the catalogue, the
+installed-features table and the registration functions. Those back UI surfaces;
+they do not make third-party CloudFormation features installable.
+
+## Web UI
+
+### "Document KB" appears when no knowledge base is deployed
+
+The **Document KB** navigation item is shown whether or not a knowledge base is
+deployed. Opening it with the knowledge base disabled returns no results rather
+than saying why.
+
+This is vendored upstream UI behaviour, not a Terraform misconfiguration, and
+Terraform cannot correct it:
+
+- `navigation.tsx` lists `Document KB` unconditionally. Its only filters hide
+  **Capacity Planning** based on `IDPPattern`, and grey out **Custom Models**
+  outside `us-east-1`. Nothing consults knowledge-base state.
+- The settings object the UI reads carries no knowledge-base flag at all
+  (`BuildDateTime`, `DiscoveryBucket`, `EvaluationBaselineBucket`, `IDPPattern`,
+  `InputBucket`, `OutputBucket`, `StackName`, `TestSetBucket`, `Version`), so
+  there is no value this wrapper could publish that would gate the item.
+
+No workaround is needed: the item is inert when the knowledge base is off. Enable
+the knowledge base if you want the page to work. A real fix belongs upstream,
+either gating the item on a published setting or having the page state that no
+knowledge base is configured.
+
 ---
 
 For more troubleshooting help, see:
 
 - [Deployment Troubleshooting](../deployment-guides/troubleshooting.md)
 - [Monitoring Guide](../deployment-guides/monitoring.md)
-- [Best Practices](../deployment-guides/best-practices.md)
+- [Security Best Practices](../security/aws-best-practices.md)

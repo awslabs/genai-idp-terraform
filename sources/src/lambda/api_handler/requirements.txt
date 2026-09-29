@@ -1,3 +1,0 @@
-aws-lambda-powertools[pydantic]
-boto3
-pydantic>=2.0.0

@@ -20,7 +20,8 @@ locals {
 # The lambda-layer-codebuild-idp module now handles comprehensive change detection
 # including all Python files in the idp_common package
 module "idp_common_layer" {
-  source = "../lambda-layer-codebuild-idp"
+  source             = "../lambda-layer-codebuild-idp"
+  log_retention_days = var.log_retention_days
 
   layer_prefix             = var.layer_prefix
   lambda_layers_bucket_arn = var.lambda_layers_bucket_arn

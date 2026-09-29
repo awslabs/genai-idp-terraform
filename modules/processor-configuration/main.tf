@@ -1,6 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Named explicitly rather than /aws/lambda/<fn>, which Lambda already auto-created
+# untracked on existing stacks; logging_config below points the function here.
+resource "aws_cloudwatch_log_group" "configuration_seeder" {
+  name              = "/aws/lambda/${var.name_prefix}-configuration-seeder-logs"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = var.encryption_key_arn
+
+  tags = var.tags
+}
+
 # Lambda function for configuration seeding
 resource "aws_lambda_function" "configuration_seeder" {
   architectures = [var.lambda_architecture]
@@ -33,6 +43,11 @@ resource "aws_lambda_function" "configuration_seeder" {
       subnet_ids         = vpc_config.value.subnet_ids
       security_group_ids = vpc_config.value.security_group_ids
     }
+  }
+
+  logging_config {
+    log_format = "Text"
+    log_group  = aws_cloudwatch_log_group.configuration_seeder.name
   }
 
   tracing_config {

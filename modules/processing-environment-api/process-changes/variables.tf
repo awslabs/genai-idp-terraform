@@ -23,7 +23,8 @@ variable "log_level" {
 variable "log_retention_days" {
   description = "CloudWatch log retention in days"
   type        = number
-  default     = 7
+  default     = 30
+  nullable    = false
 }
 
 variable "tracking_table_name" {

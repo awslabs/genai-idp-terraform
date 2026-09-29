@@ -143,14 +143,20 @@ enable_geo_restriction  = false
 
 ### **Bedrock Model Access**
 
-**Important**: Enable model access in AWS Console before deployment:
+You no longer request access per model. Since September 2025 Bedrock enables all
+serverless foundation models automatically in every commercial Region. See
+[Request access to models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
 
-1. Navigate to **Amazon Bedrock** → **Model access**
-2. Request access to required models:
-   - **Claude 3 Sonnet**: `anthropic.claude-3-sonnet-20240229-v1:0`
-   - **Claude 3 Haiku**: `anthropic.claude-3-haiku-20240307-v1:0`
-   - **Nova Pro**: `us.amazon.nova-pro-v1:0`
-   - **Titan Text Express**: `amazon.titan-text-express-v1`
+Two one-time prerequisites still apply:
+
+- **Anthropic first-time use**: submit use-case details once per account (or once
+  at the organization's management account) before invoking a Claude model, via
+  the Bedrock console catalog or `PutUseCaseForModelAccess`. These examples default
+  to Claude, so this applies.
+- **AWS Marketplace permissions**: the invoking role needs
+  `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe` and
+  `aws-marketplace:ViewSubscriptions`, or the automatic third-party subscription
+  fails and calls return `AccessDeniedException`.
 
 ### **Service Quotas**
 

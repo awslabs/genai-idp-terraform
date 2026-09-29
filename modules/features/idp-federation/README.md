@@ -11,9 +11,9 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | >= 2.0 |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.0.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | 2.8.1 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.66.0 |
+| <a name="provider_time"></a> [time](#provider\_time) | 0.14.2 |
 
 ## Modules
 
@@ -51,7 +51,7 @@ No modules.
 | <a name="input_idp_common_layer_arn"></a> [idp\_common\_layer\_arn](#input\_idp\_common\_layer\_arn) | ARN of the idp\_common Lambda layer, when supplied separately from the base layer. | `string` | `null` | no |
 | <a name="input_lambda_architecture"></a> [lambda\_architecture](#input\_lambda\_architecture) | Target Lambda architecture (x86\_64 \| arm64). Must match the architecture the idp\_common layers were built for; mismatches break native deps (e.g. pydantic\_core). | `string` | `"arm64"` | no |
 | <a name="input_log_level"></a> [log\_level](#input\_log\_level) | Log level for the group-mapping Lambda. | `string` | `"INFO"` | no |
-| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch log retention period in days for the group-mapping Lambda. | `number` | `7` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch log retention period in days for the group-mapping Lambda. | `number` | `30` | no |
 | <a name="input_oidc_authorize_scopes"></a> [oidc\_authorize\_scopes](#input\_oidc\_authorize\_scopes) | (OIDC) Space-delimited OAuth scopes requested from the OIDC provider. Mirrors the upstream default of `openid email profile`. | `string` | `"openid email profile"` | no |
 | <a name="input_oidc_client_id"></a> [oidc\_client\_id](#input\_oidc\_client\_id) | (OIDC) The client ID registered with the OIDC identity provider. Mirrors the upstream `ExternalIdPOIDCClientId`. | `string` | `""` | no |
 | <a name="input_oidc_client_secret_ref"></a> [oidc\_client\_secret\_ref](#input\_oidc\_client\_secret\_ref) | (OIDC) Reference to the OIDC client secret — an AWS Secrets Manager secret<br>ARN (or SSM parameter name) — NOT the raw secret value. The secret is<br>resolved at apply time and passed only to the Cognito provider details; the<br>plaintext is never stored as a module input value or output. Mirrors the<br>upstream `ExternalIdPOIDCClientSecretArn`. | `string` | `""` | no |

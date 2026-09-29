@@ -526,7 +526,7 @@ resource "aws_cloudwatch_log_group" "agent_chat_codebuild" {
   count = local.use_codebuild_agent_chat ? 1 : 0
 
   name              = "/aws/codebuild/${local.api_name}-agent-chat-${random_string.suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
 
   tags = merge(var.tags, {
     Name = "${local.api_name}-agent-chat-codebuild-logs"
@@ -785,7 +785,7 @@ resource "aws_cloudwatch_log_group" "agent_chat_cb_trigger_lambda" {
   count = local.use_codebuild_agent_chat ? 1 : 0
 
   name              = "/aws/lambda/${local.api_name}-agent-chat-cbt-${random_string.suffix.result}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
 
   tags = merge(var.tags, {
     Name = "${local.api_name}-agent-chat-codebuild-trigger-lambda-logs"
@@ -1141,7 +1141,12 @@ resource "aws_lambda_function" "create_chat_session_resolver" {
   layers           = compact([var.base_layer_arn, var.idp_common_layer_arn])
   environment {
     variables = {
-      LOG_LEVEL           = var.log_level
+      LOG_LEVEL = var.log_level
+      # The code reads CHAT_HISTORY_TABLE, at module scope, so a missing value is a
+      # KeyError on import rather than a handled error. It writes the session record
+      # (PK=USER#, SK=SESSION#), so it wants the sessions table. Upstream's own
+      # templates never wire this source dir, so the mismatch is ours to close.
+      CHAT_HISTORY_TABLE  = aws_dynamodb_table.agent_chat_sessions[0].name
       CHAT_SESSIONS_TABLE = aws_dynamodb_table.agent_chat_sessions[0].name
     }
   }

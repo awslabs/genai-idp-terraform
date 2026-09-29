@@ -306,30 +306,7 @@ resource "aws_glue_catalog_database" "reporting" {
   tags        = var.tags
 }
 
-# Optional logging bucket (created conditionally)
-resource "aws_s3_bucket" "logging_bucket" {
-  count         = var.web_ui.logging_enabled ? 1 : 0
-  bucket        = "${var.prefix}-logging-${random_string.suffix.result}"
-  force_destroy = true
-  tags          = var.tags
-}
-
-# CloudFront standard logging requires legacy ACLs on the destination bucket.
-resource "aws_s3_bucket_ownership_controls" "logging_bucket" {
-  count  = var.web_ui.logging_enabled ? 1 : 0
-  bucket = aws_s3_bucket.logging_bucket[0].id
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_acl" "logging_bucket" {
-  count      = var.web_ui.logging_enabled ? 1 : 0
-  bucket     = aws_s3_bucket.logging_bucket[0].id
-  acl        = "log-delivery-write"
-  depends_on = [aws_s3_bucket_ownership_controls.logging_bucket]
-}
+# The root module creates the access-log bucket when web_ui.logging_enabled is set.
 
 # Enable EventBridge notifications on input bucket (required for processor to work).
 #
@@ -481,9 +458,11 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
   # Federated sign-in fails with invalid_scope without "phone".
-  allowed_oauth_scopes         = ["email", "openid", "phone", "profile"]
-  callback_urls                = ["http://localhost:3000"]
-  logout_urls                  = ["http://localhost:3000"]
+  allowed_oauth_scopes = ["email", "openid", "phone", "profile"]
+  # Localhost is kept for local UI development; the deployed Web UI url is
+  # supplied rather than derived. See var.additional_callback_urls for why.
+  callback_urls                = distinct(concat(["http://localhost:3000"], var.additional_callback_urls))
+  logout_urls                  = distinct(concat(["http://localhost:3000"], var.additional_logout_urls))
   supported_identity_providers = distinct(concat(["COGNITO"], try(var.federation_pool_wiring.supported_identity_providers, [])))
 
   access_token_validity  = 60
@@ -742,22 +721,24 @@ module "genai_idp_accelerator" {
 
   # Web UI configuration
   web_ui = {
-    enabled                    = var.web_ui.enabled
-    create_infrastructure      = var.web_ui.create_infrastructure
-    bucket_name                = var.web_ui.bucket_name
-    cloudfront_distribution_id = var.web_ui.cloudfront_distribution_id
-    logging_enabled            = var.web_ui.logging_enabled
-    logging_bucket_arn         = var.web_ui.logging_enabled ? aws_s3_bucket.logging_bucket[0].arn : null
-    enable_signup              = var.web_ui.enable_signup
-    display_name               = "Unified Processor (dual-mode)"
+    enabled                      = var.web_ui.enabled
+    create_infrastructure        = var.web_ui.create_infrastructure
+    bucket_name                  = var.web_ui.bucket_name
+    cloudfront_distribution_id   = var.web_ui.cloudfront_distribution_id
+    logging_enabled              = var.web_ui.logging_enabled
+    logging_bucket_arn           = var.web_ui.logging_bucket_arn
+    logging_bucket_force_destroy = var.web_ui.logging_bucket_force_destroy
+    enable_signup                = var.web_ui.enable_signup
+    display_name                 = "Unified Processor (dual-mode)"
   }
 
   # General configuration
-  prefix                       = var.prefix
-  seed_managed_configs         = var.seed_managed_configs
-  log_level                    = var.log_level
-  log_retention_days           = var.log_retention_days
-  data_tracking_retention_days = var.data_tracking_retention_days
+  prefix                           = var.prefix
+  seed_managed_configs             = var.seed_managed_configs
+  log_level                        = var.log_level
+  log_retention_days               = var.log_retention_days
+  data_tracking_retention_days     = var.data_tracking_retention_days
+  bedrock_guardrail_id_and_version = var.bedrock_guardrail_id_and_version
 
   tags = var.tags
 }

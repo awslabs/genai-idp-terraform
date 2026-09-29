@@ -1,3 +1,0 @@
-mutation ReprocessDocument($objectKeys: [String!]!, $version: String) {
-  reprocessDocument(objectKeys: $objectKeys, version: $version)
-}
