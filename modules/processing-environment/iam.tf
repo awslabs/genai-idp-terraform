@@ -192,8 +192,10 @@ resource "aws_iam_policy" "workflow_tracker_policy" {
         Resource = aws_sqs_queue.workflow_tracker_dlq.arn
       },
       {
+        # The decrement transaction puts an idempotency marker and updates the counter.
         Action = [
           "dynamodb:GetItem",
+          "dynamodb:PutItem",
           "dynamodb:UpdateItem"
         ]
         Effect   = "Allow"

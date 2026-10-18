@@ -54,11 +54,12 @@ resource "aws_iam_policy" "queue_processor_policy" {
         ]
         Resource = var.document_queue_arn
       },
-      # Step Functions permissions to start executions
+      # Start executions and reconcile the concurrency counter against running executions.
       {
         Effect = "Allow"
         Action = [
-          "states:StartExecution"
+          "states:StartExecution",
+          "states:ListExecutions"
         ]
         Resource = var.processor.state_machine_arn
       },
