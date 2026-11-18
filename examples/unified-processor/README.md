@@ -1,5 +1,11 @@
 # Unified Processor Example — dual-mode runtime routing (BDA + Bedrock-LLM)
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This example answers a single question:
 
 > **What if one deployment has TWO configurations — one running on Bedrock Data

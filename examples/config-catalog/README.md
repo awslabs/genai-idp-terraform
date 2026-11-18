@@ -1,5 +1,11 @@
 # Config catalog
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 Drop-in folder for extra document-processing configuration versions. Each YAML
 here can be seeded as an additional, editable configuration version that shows
 up in the web UI's Configuration Version dropdown next to the default.

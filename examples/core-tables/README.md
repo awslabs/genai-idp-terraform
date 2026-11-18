@@ -1,5 +1,11 @@
 # GenAI IDP Core Tables Example
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This example demonstrates how to use the core table modules from the GenAI IDP Accelerator. It creates the three fundamental DynamoDB tables needed for the document processing solution:
 
 - **Concurrency Table**: For managing concurrent document processing tasks

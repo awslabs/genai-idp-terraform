@@ -1,5 +1,11 @@
 # Bedrock LLM Processor Example with Isolated VPC
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This example demonstrates how to deploy the GenAI IDP Accelerator with the Bedrock LLM processor in a fully isolated VPC environment. This configuration provides maximum security by running Lambda functions in isolated subnets with no internet access, using VPC endpoints for all AWS service communication.
 
 ## Architecture Overview
