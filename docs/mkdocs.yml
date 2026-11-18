@@ -18,7 +18,8 @@ extra:
 
 theme:
   name: material
-  # custom_dir: overrides
+  # Supplies overrides/main.html, which renders the site-wide deprecation banner.
+  custom_dir: overrides
   logo: assets/images/aws-logo.png
   icon:
     repo: fontawesome/brands/git-alt

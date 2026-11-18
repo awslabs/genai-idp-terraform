@@ -1,5 +1,23 @@
 # Home
 
+!!! danger "This project is deprecated"
+    **This repository is deprecated and is no longer actively developed.**
+    Terraform is now a first-class deployment option of the
+    [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws),
+    shipped and tested with every release starting from **v0.6.15**.
+
+    - **New deployments**: follow the
+      [Terraform user guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md).
+    - **Existing deployments of this project**: follow the
+      [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
+      (`idp-cli terraform migrate-from-genai-idp-terraform`), which keeps your buckets, tables, KMS key and
+      Cognito users (including passwords).
+    - **Issues and feature requests**: open them in the
+      [successor repository](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues).
+
+    Full rationale, migration summary and known caveats:
+    [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 Welcome to the GenAI **Intelligent Document Processing** (IDP) Accelerator for Terraform documentation. This accelerator provides a comprehensive set of Terraform modules and configurations to deploy **Intelligent Document Processing** solutions on AWS.
 
 [![Compatible with GenAI IDP version: 0.6.4](https://img.shields.io/badge/Compatible%20with%20GenAI%20IDP-0.6.4-brightgreen)](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/releases/tag/v0.6.4)

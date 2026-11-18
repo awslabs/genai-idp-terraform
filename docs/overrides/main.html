@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{#-
+  Site-wide deprecation banner.
+
+  This repository is deprecated in favour of the Terraform support shipped with
+  the GenAI IDP Accelerator from v0.6.15 onwards. The announcement bar renders
+  above the header on every page, so no per-page edit is required.
+-#}
+{% block announce %}
+  <strong>This project is deprecated and is no longer actively developed.</strong>
+  Terraform is now a first-class deployment option of the
+  <a href="https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws">GenAI IDP Accelerator</a>,
+  shipped and tested with every release from <strong>v0.6.15</strong>.
+  New deployments: see the
+  <a href="https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md">Terraform user guide</a>.
+  Existing deployments: see the
+  <a href="https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md">migration guide</a>.
+{% endblock %}
