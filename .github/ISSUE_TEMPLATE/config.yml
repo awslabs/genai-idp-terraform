@@ -1,0 +1,28 @@
+# This repository is deprecated. Terraform is now a first-class deployment
+# option of the GenAI IDP Accelerator, shipped and tested with every release
+# from v0.6.15 onwards. New issues and feature requests belong upstream.
+#
+# Blank issues stay enabled so existing users of this repository can still
+# reach the maintainers, but the contact links below are the recommended route.
+blank_issues_enabled: true
+
+contact_links:
+  - name: ⚠️ This repository is deprecated — report issues upstream
+    url: https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues
+    about: >-
+      genai-idp-terraform is no longer actively developed. Terraform is now a
+      first-class deployment option of the GenAI IDP Accelerator (v0.6.15+).
+      Please open bugs, questions and feature requests in the successor
+      repository.
+
+  - name: 📘 Terraform user guide (new deployments)
+    url: https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md
+    about: >-
+      How to deploy the GenAI IDP Accelerator with Terraform upstream.
+
+  - name: 🔁 Migration guide (existing deployments of this repository)
+    url: https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md
+    about: >-
+      In-place migration with `idp-cli terraform
+      migrate-from-genai-idp-terraform`. Keeps your buckets, tables, KMS key and
+      Cognito users, including passwords.
