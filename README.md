@@ -1,10 +1,132 @@
 # GenAI IDP Accelerator for Terraform
 
+> [!WARNING]
+> **This repository is deprecated and is no longer actively developed.**
+> Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws),
+> shipped and tested with every release starting from **v0.6.15**.
+>
+> - New deployments: follow the [Terraform user guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md).
+> - Existing deployments of this repository: follow the
+>   [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
+>   (`idp-cli terraform migrate-from-genai-idp-terraform`), which keeps your buckets, tables, KMS key and
+>   Cognito users (including passwords).
+> - Questions, bugs and feature requests belong in the
+>   [successor repository's issues](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues).
+>
+> See [Deprecation & migration](#deprecation--migration) for the full rationale, migration summary and caveats.
+
 A modular Terraform implementation of the GenAI **Intelligent Document Processing** (IDP) Accelerator, designed to transform unstructured documents into structured data at scale using AWS's latest AI/ML services.
 
 ## Overview
 
 This project provides a Terraform-based implementation of the [GenAI **Intelligent Document Processing** Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws), offering flexible deployment options and infrastructure-as-code management for **Intelligent Document Processing** workflows.
+
+## Deprecation & migration
+
+### Why this repository is deprecated
+
+This repository existed to bring Terraform support to the GenAI IDP Accelerator before upstream offered
+it: each upstream release was pinned as an immutable submodule under `sources/` and reimplemented as
+Terraform modules on top — a "catch-up" model.
+
+Since upstream **v0.6.15** (released 2026-11-13), the Accelerator generates its Terraform module from its
+own CloudFormation templates and ships it with every release, covered by automated tests (functional
+integration run, parity tier, security-scan diff). A separate catch-up repository is therefore no longer
+needed, and would only lag behind upstream. Terraform support in upstream v0.6.15 is labelled
+**Experimental**.
+
+### Status of this repository
+
+- **No new features.** The last release is `0.6.9-tf.0`, wrapping upstream IDP v0.6.9.
+- **No further upstream catch-up.** Upstream releases after v0.6.9 are not and will not be wrapped here.
+- **Existing deployments keep working.** Nothing is withdrawn; the code at the last tag still deploys.
+  There will be no fixes for upstream changes, however, so migration is the supported path forward.
+
+<!-- TODO(owner decision): support policy — critical security fixes until YYYY-MM-DD / none; archive date -->
+
+### Where to go instead
+
+| What you need | Where |
+|---|---|
+| Deploy with Terraform (new deployments) | [Terraform user guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md) |
+| Migrate an existing deployment of this repository | [Migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md) |
+| `idp-cli` reference (`--terraform`, `terraform migrate-from-genai-idp-terraform`) | [idp-cli docs](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/idp-cli.md) |
+| How the Terraform is generated (translator, gates, overrides) | [Developer docs](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/terraform/README.md) |
+| Overview and demo video | [Terraform overview](https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/terraform/) |
+| Issues, questions, feature requests | [Successor repository issues](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues) |
+
+### Migration path (summary)
+
+Upstream ships a supported in-place migration from this repository. It adopts your existing S3 buckets,
+DynamoDB tables, KMS key and Cognito user pool through Terraform `import {}` blocks, so documents,
+results, configuration, users and their passwords are preserved. It has been tested live from this
+repository's `v0.6.9-tf.0` and from `0.6.4`.
+
+Every phase is dry-run by default; `--apply` executes. The steps below are a summary — follow the
+[migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
+for the authoritative procedure.
+
+1. **Prepare.** Terraform >= 1.7 (or OpenTofu), `idp-cli` from the successor repository, access to the old
+   deployment's state, a maintenance window, and backups — on-demand DynamoDB backups of the adopted
+   tables and copies of critical bucket data. Save the old state:
+
+   ```bash
+   terraform state pull > old-idp.tfstate
+   ```
+
+2. **Plan.** Maps every resource (adopted / recreated / kept) and writes `adopt.tf` with `import {}`
+   blocks. Changes nothing in AWS.
+
+   ```bash
+   idp-cli terraform migrate-from-genai-idp-terraform plan \
+     --stack-name <new> --region <r> \
+     --old-state old-idp.tfstate --admin-email <admin>
+   ```
+
+3. **Check retention.** The new module adds S3 expiry rules (default 365 days for input/output, 30 days
+   for the working bucket). Raise `DataRetentionInDays` if you hold older data, or it will be deleted.
+
+   ```bash
+   idp-cli terraform migrate-from-genai-idp-terraform check-retention ...
+   ```
+
+4. **Freeze.** Disables the old upload rule so documents are not processed twice. From this point on,
+   never run `terraform apply` in the old deployment.
+
+   ```bash
+   idp-cli terraform migrate-from-genai-idp-terraform freeze --apply --wait ...
+   ```
+
+5. **Fix config.** Removes stale revision counters so your configuration is not overwritten.
+
+   ```bash
+   idp-cli terraform migrate-from-genai-idp-terraform fix-config --apply ...
+   ```
+
+6. **Finish.** Continue with the remaining phases — apply, restore configuration, detach, destroy the old
+   deployment — exactly as in the migration guide.
+
+### Known migration caveats
+
+From upstream's v0.6.15 validation:
+
+- Destroying the old deployment can clear the region's API Gateway CloudWatch logging role
+  (`aws_api_gateway_account`). Re-set it afterwards, or API Gateway logging stops region-wide.
+- Migrating from `0.6.4`: the configuration-restore step may fail and the deployment then runs the preset
+  configuration. Restore with `idp-cli config-download --config-revision 1` followed by `config-upload`.
+- Terraform support in upstream v0.6.15 is labelled **Experimental**. Rehearse the migration in a
+  non-production account before touching production.
+
+### Acknowledgements
+
+Thanks to **Grzegorz Ciupryk** and **Rafał Pawlaszek**, who built and maintained the bulk of this
+implementation, and to everyone who filed issues, reported bugs and ran this in their own accounts — your
+reports shaped every release here.
+
+Thanks to **Bob Strahan** and the GenAI IDP Accelerator team for taking Terraform on as a first-class,
+tested deployment option upstream, and for building a migration path off this repository rather than
+leaving its users stranded.
 
 ## Experimental Status
 
