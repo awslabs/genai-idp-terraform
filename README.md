@@ -30,11 +30,17 @@ This repository existed to bring Terraform support to the GenAI IDP Accelerator 
 it: each upstream release was pinned as an immutable submodule under `sources/` and reimplemented as
 Terraform modules on top — a "catch-up" model.
 
-Since upstream **v0.6.15** (released 2026-11-13), the Accelerator generates its Terraform module from its
-own CloudFormation templates and ships it with every release, covered by automated tests (functional
-integration run, parity tier, security-scan diff). A separate catch-up repository is therefore no longer
-needed, and would only lag behind upstream. Terraform support in upstream v0.6.15 is labelled
-**Experimental**.
+Since upstream **v0.6.15** (released 2026-11-13), the Accelerator generates a Terraform module from its
+own CloudFormation templates and publishes it with every release. Every upstream pull request checks the
+translation and compares a security scan of each Terraform resource with its CloudFormation source. A
+separate catch-up repository is therefore no longer needed, and would only lag behind upstream.
+
+Terraform support in upstream v0.6.15 is labelled **Experimental**: the module has been deployed end to
+end and has passed upstream's integration suite, but it has had far less use than the CloudFormation
+templates. The Terraform user guide lists
+[how the translation is checked](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md#how-the-translation-is-checked)
+and its
+[current limitations](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md#differences-from-cloudformation-and-current-limitations).
 
 ### Status of this repository
 
@@ -58,65 +64,89 @@ needed, and would only lag behind upstream. Terraform support in upstream v0.6.1
 
 ### Migration path (summary)
 
-Upstream ships a supported in-place migration from this repository. It adopts your existing S3 buckets,
-DynamoDB tables, KMS key and Cognito user pool through Terraform `import {}` blocks, so documents,
-results, configuration, users and their passwords are preserved. It has been tested live from this
-repository's `v0.6.9-tf.0` and from `0.6.4`.
+Upstream ships an in-place migration from this repository,
+`idp-cli terraform migrate-from-genai-idp-terraform`. A new deployment of the upstream module adopts your
+existing S3 buckets, DynamoDB tables, KMS key and Cognito user pool, so documents, results,
+configuration, users and their passwords stay where they are. Everything else (functions, queues, the
+state machine, the web UI, the knowledge base) is created afresh by the new deployment and destroyed with
+the old one.
 
-Every phase is dry-run by default; `--apply` executes. The steps below are a summary — follow the
-[migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
-for the authoritative procedure.
+Upstream tests the migration end to end, as part of its release validation, from this repository's
+`v0.6.9-tf.0` tag using the `examples/unified-processor` configuration. The other example configurations
+have not been tried, so rehearse the migration in a non-production account first. If you run an older
+release of this repository, upgrade to `v0.6.9-tf.0` before migrating; the
+[0.6.4 to 0.6.9 notes](docs/migration-v0.6.4-to-v0.6.9.md) involve no state migration.
 
-1. **Prepare.** Terraform >= 1.7 (or OpenTofu), `idp-cli` from the successor repository, access to the old
-   deployment's state, a maintenance window, and backups — on-demand DynamoDB backups of the adopted
-   tables and copies of critical bucket data. Save the old state:
+The [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
+is the procedure. This summary only shows its shape, so take commands and flags from the guide.
 
-   ```bash
-   terraform state pull > old-idp.tfstate
-   ```
+**Before you start** you need Terraform 1.7 or later (or OpenTofu), `idp-cli` from the successor
+repository, and the upstream module at **v0.6.15 or later**: an older module would replace the Cognito
+user pool, deleting every user, and the migration refuses to apply it. You also need access to the old
+deployment's directory and state, a maintenance window, and backups you can restore without either
+Terraform state: an on-demand DynamoDB backup of each adopted table, a copy of any bucket data you cannot
+afford to lose, and an export of any CloudWatch logs you need, since those are destroyed with the old
+deployment.
 
-2. **Plan.** Maps every resource (adopted / recreated / kept) and writes `adopt.tf` with `import {}`
-   blocks. Changes nothing in AWS.
+Each phase is a dry run until you pass `--apply`, and each prints how to undo its own change:
 
-   ```bash
-   idp-cli terraform migrate-from-genai-idp-terraform plan \
-     --stack-name <new> --region <r> \
-     --old-state old-idp.tfstate --admin-email <admin>
-   ```
+| Phase | What it does |
+|---|---|
+| `plan` | Maps every resource in the old state to adopt, recreate or keep, and writes the `import` blocks. Changes nothing in AWS. |
+| `check-retention` | Fails for each kept bucket holding objects older than the expiry rule the new module would put on it. |
+| `freeze` | Disables the old deployment's upload rule, then reports the documents still in flight and can wait for them. |
+| `fix-config` | Backs up your configuration rows and removes the revision counters that would let the first deploy overwrite them. |
+| `adopt-user-pool` | Imports the user pool and aligns its schema in state, so the first apply does not fail. |
+| `apply` | Plans, checks and applies the adoption. |
+| `restore-config` | Restores any configuration profile the first deploy replaced. |
+| `detach` | After you have verified the new deployment, removes everything the migration keeps from the old state. |
+| `check-destroy` | Confirms the old deployment's destroy plan deletes nothing the migration kept, before you run it. |
 
-3. **Check retention.** The new module adds S3 expiry rules (default 365 days for input/output, 30 days
-   for the working bucket). Raise `DataRetentionInDays` if you hold older data, or it will be deleted.
-
-   ```bash
-   idp-cli terraform migrate-from-genai-idp-terraform check-retention ...
-   ```
-
-4. **Freeze.** Disables the old upload rule so documents are not processed twice. From this point on,
-   never run `terraform apply` in the old deployment.
-
-   ```bash
-   idp-cli terraform migrate-from-genai-idp-terraform freeze --apply --wait ...
-   ```
-
-5. **Fix config.** Removes stale revision counters so your configuration is not overwritten.
-
-   ```bash
-   idp-cli terraform migrate-from-genai-idp-terraform fix-config --apply ...
-   ```
-
-6. **Finish.** Continue with the remaining phases — apply, restore configuration, detach, destroy the old
-   deployment — exactly as in the migration guide.
+In upstream's measured run the whole sequence took about 2 hours 45 minutes, including a wait of about an
+hour that DynamoDB imposes (see the first caveat below).
 
 ### Known migration caveats
 
-From upstream's v0.6.15 validation:
+From upstream's [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md#hazards):
 
-- Destroying the old deployment can clear the region's API Gateway CloudWatch logging role
-  (`aws_api_gateway_account`). Re-set it afterwards, or API Gateway logging stops region-wide.
-- Migrating from `0.6.4`: the configuration-restore step may fail and the deployment then runs the preset
-  configuration. Restore with `idp-cli config-download --config-revision 1` followed by `config-upload`.
-- Terraform support in upstream v0.6.15 is labelled **Experimental**. Rehearse the migration in a
-  non-production account before touching production.
+- **Two features are not handled yet.** If you enabled fine-tuning (`api.enable_finetuning`) or external
+  identity provider federation (`idp_federation.enabled`, which creates a Cognito hosted-UI domain),
+  `plan` refuses and writes nothing. Upstream's
+  [side-by-side cutover](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md#fallback-side-by-side-cutover)
+  is the alternative; it keeps no resources and copies the data across instead.
+- **Turn off the agent jobs table's time-to-live at least an hour before `apply`.** This repository's
+  table expires rows on `expiresAfter`, and the new module uses `ExpiresAfter`. DynamoDB cannot move
+  time-to-live to another attribute while it is on, and refuses a second change within about an hour of
+  the first, so an `apply` run too soon fails part way through. `apply` prints the command and asks you
+  to accept the change explicitly. Nothing else depends on the setting, so do this before the maintenance
+  window. Rows written before the migration no longer expire.
+- **Expiry rules apply to the objects you already have.** By default the new module expires objects
+  after 365 days in the input, output, test-set and discovery buckets (`DataRetentionInDays`), after 30
+  days in the working bucket (`LogRetentionDays`), and after a fixed 180 days in the access-log bucket.
+  `check-retention` tells you what that would delete.
+- **Never run `terraform apply` in the old deployment after `freeze`.** It would turn the upload rule
+  back on and rewrite settings on resources the new deployment now owns. After `detach`, the old
+  deployment may only be destroyed.
+- **Usernames are case-sensitive** on the adopted user pool, including the admin username you pass to
+  `plan`.
+- **Finish or reject pending human reviews in the old web UI before `freeze`.** Whether the new
+  deployment can complete a review the old one started has not been verified.
+- **Some history does not carry over:** discovery jobs, test-set definitions (their documents stay in the
+  adopted bucket), installed features, and the knowledge base index. The new knowledge base starts empty;
+  re-sync it from the adopted output bucket.
+
+From operating this repository:
+
+- **Destroying the old deployment can reset the region's API Gateway account setting.** With `log_level`
+  at `INFO` or `DEBUG` (the default is `INFO`), this repository manages `aws_api_gateway_account`, the
+  per-region setting that names the CloudWatch role API Gateway logs with. The migration destroys it with
+  the old deployment. With AWS provider v6 that always resets the setting, whichever deployment set it
+  last; with v5 the setting can be left naming a role the same destroy deletes. Either way, CloudWatch
+  logging stops for every REST API in that account and region that relies on the setting. After the
+  destroy, check `aws apigateway get-account`. If `cloudwatchRoleArn` is missing or names a deleted role
+  and anything in that region logs through it, set it again: running `terraform apply` once more in the
+  new deployment does this when its `LogLevel` is `INFO` or `DEBUG` (upstream's default is `WARN`);
+  otherwise point it at a role of your own.
 
 ### Acknowledgements
 

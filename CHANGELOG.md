@@ -6,16 +6,17 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
-## [Unreleased] - 2026-11-18
+## [Unreleased]
 
 ### Deprecated
 
 **This repository is superseded by GenAI IDP Accelerator v0.6.15+ Terraform support.**
 
 Since upstream [v0.6.15](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/releases/tag/v0.6.15)
-(released 2026-11-13), the GenAI IDP Accelerator generates its Terraform module from its own
-CloudFormation templates and ships it with every release, covered by automated tests (functional
-integration run, parity tier, security-scan diff). The catch-up model this repository implemented —
+(released 2026-11-13), the GenAI IDP Accelerator generates a Terraform module from its own
+CloudFormation templates and publishes it with every release. Every upstream pull request checks the
+translation and compares a security scan of each Terraform resource with its CloudFormation source. The
+catch-up model this repository implemented —
 upstream pinned as an immutable submodule under `sources/`, Terraform modules reimplemented on top — is
 therefore obsolete and would only lag behind upstream. Terraform support in upstream v0.6.15 is labelled
 **Experimental**.
@@ -36,10 +37,11 @@ Where to go instead:
 Upstream ships a supported in-place migration from this repository:
 `idp-cli terraform migrate-from-genai-idp-terraform` (phased, dry-run by default, `--apply` to execute).
 It adopts existing S3 buckets, DynamoDB tables, the KMS key and the Cognito user pool through Terraform
-`import {}` blocks, so documents, results, configuration, users and their passwords are preserved. It was
-tested live from this repository's `v0.6.9-tf.0` and from `0.6.4`. See
-[Deprecation & migration](README.md#deprecation--migration) in the README for a step summary and the known
-caveats.
+`import` blocks, so documents, results, configuration, users and their passwords are preserved. Upstream
+tests it end to end from this repository's `v0.6.9-tf.0` tag, using the `examples/unified-processor`
+configuration, and it needs the upstream module at v0.6.15 or later. See
+[Deprecation & migration](README.md#deprecation--migration) in the README for its prerequisites, its
+phases and the known caveats.
 
 ### Changed
 
