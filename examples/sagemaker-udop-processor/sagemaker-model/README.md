@@ -1,5 +1,11 @@
 # SageMaker UDOP Model Training Module (Enhanced)
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This enhanced Terraform module creates and trains a SageMaker UDOP model using the RVL-CDIP dataset with enhanced features including Docker container images and robust Lambda deployment using the `terraform-aws-modules/lambda/aws` module.
 
 ## Features

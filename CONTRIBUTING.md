@@ -1,5 +1,19 @@
 # Contributing to GenAI IDP Accelerator for Terraform
 
+> [!WARNING]
+> **This repository is deprecated and is no longer actively developed.**
+> Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws),
+> shipped and tested with every release from **v0.6.15** onwards.
+>
+> Please direct new issues, questions and feature requests to the
+> [successor repository](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues),
+> and contribute Terraform changes there. Pull requests against this repository are generally not
+> accepted. See [Deprecation & migration](README.md#deprecation--migration) for the rationale and the
+> migration path for existing deployments.
+>
+> The guidance below is retained for reference.
+
 Welcome to the GenAI IDP Accelerator for Terraform repository! This document provides comprehensive guidance for contributors working on the Terraform implementation of the GenAI **Intelligent Document Processing** (IDP) Accelerator.
 
 ## Code of Conduct

@@ -1,5 +1,11 @@
 # Bedrock LLM Processor Example
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This example demonstrates how to deploy a complete document processing solution using the Bedrock LLM processor from the GenAI IDP Accelerator.
 
 ## 🔄 **Processor Comparison: BDA vs Bedrock LLM**

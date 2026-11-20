@@ -1,5 +1,11 @@
 # Processing Environment Example
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This example demonstrates how to use the Processing Environment module from the GenAI IDP Accelerator. It creates all the necessary resources including S3 buckets, KMS key, IDP common layer, and the processing environment.
 
 ## Architecture

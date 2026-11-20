@@ -1,5 +1,11 @@
 # SageMaker UDOP Processor Example with Automated Model Training
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 > **⚠️ DEPRECATION NOTICE**: The SageMaker UDOP processor (Pattern 3) is deprecated. For new deployments, use the BDA processor (Pattern 1) or Bedrock LLM processor (Pattern 2).
 
 This example demonstrates how to deploy a complete document processing solution using the SageMaker UDOP processor from the GenAI IDP Accelerator with automated model training and an integrated Web UI.

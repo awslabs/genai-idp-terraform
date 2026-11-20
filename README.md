@@ -1,10 +1,162 @@
 # GenAI IDP Accelerator for Terraform
 
+> [!WARNING]
+> **This repository is deprecated and is no longer actively developed.**
+> Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws),
+> shipped and tested with every release starting from **v0.6.15**.
+>
+> - New deployments: follow the [Terraform user guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md).
+> - Existing deployments of this repository: follow the
+>   [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
+>   (`idp-cli terraform migrate-from-genai-idp-terraform`), which keeps your buckets, tables, KMS key and
+>   Cognito users (including passwords).
+> - Questions, bugs and feature requests belong in the
+>   [successor repository's issues](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues).
+>
+> See [Deprecation & migration](#deprecation--migration) for the full rationale, migration summary and caveats.
+
 A modular Terraform implementation of the GenAI **Intelligent Document Processing** (IDP) Accelerator, designed to transform unstructured documents into structured data at scale using AWS's latest AI/ML services.
 
 ## Overview
 
 This project provides a Terraform-based implementation of the [GenAI **Intelligent Document Processing** Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws), offering flexible deployment options and infrastructure-as-code management for **Intelligent Document Processing** workflows.
+
+## Deprecation & migration
+
+### Why this repository is deprecated
+
+This repository existed to bring Terraform support to the GenAI IDP Accelerator before upstream offered
+it: each upstream release was pinned as an immutable submodule under `sources/` and reimplemented as
+Terraform modules on top — a "catch-up" model.
+
+Since upstream **v0.6.15** (released 2026-11-13), the Accelerator generates a Terraform module from its
+own CloudFormation templates and publishes it with every release. Every upstream pull request checks the
+translation and compares a security scan of each Terraform resource with its CloudFormation source. A
+separate catch-up repository is therefore no longer needed, and would only lag behind upstream.
+
+Terraform support in upstream v0.6.15 is labelled **Experimental**: the module has been deployed end to
+end and has passed upstream's integration suite, but it has had far less use than the CloudFormation
+templates. The Terraform user guide lists
+[how the translation is checked](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md#how-the-translation-is-checked)
+and its
+[current limitations](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md#differences-from-cloudformation-and-current-limitations).
+
+### Status of this repository
+
+- **No new features.** The last release is `0.6.9-tf.0`, wrapping upstream IDP v0.6.9.
+- **No further upstream catch-up.** Upstream releases after v0.6.9 are not and will not be wrapped here.
+- **Existing deployments keep working.** Nothing is withdrawn; the code at the last tag still deploys.
+  There will be no fixes for upstream changes, however, so migration is the supported path forward.
+
+<!-- TODO(owner decision): support policy — critical security fixes until YYYY-MM-DD / none; archive date -->
+
+### Where to go instead
+
+| What you need | Where |
+|---|---|
+| Deploy with Terraform (new deployments) | [Terraform user guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md) |
+| Migrate an existing deployment of this repository | [Migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md) |
+| `idp-cli` reference (`--terraform`, `terraform migrate-from-genai-idp-terraform`) | [idp-cli docs](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/idp-cli.md) |
+| How the Terraform is generated (translator, gates, overrides) | [Developer docs](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/terraform/README.md) |
+| Overview and demo video | [Terraform overview](https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/terraform/) |
+| Issues, questions, feature requests | [Successor repository issues](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues) |
+
+### Migration path (summary)
+
+Upstream ships an in-place migration from this repository,
+`idp-cli terraform migrate-from-genai-idp-terraform`. A new deployment of the upstream module adopts your
+existing S3 buckets, DynamoDB tables, KMS key and Cognito user pool, so documents, results,
+configuration, users and their passwords stay where they are. Everything else (functions, queues, the
+state machine, the web UI, the knowledge base) is created afresh by the new deployment and destroyed with
+the old one.
+
+Upstream tests the migration end to end, as part of its release validation, from this repository's
+`v0.6.9-tf.0` tag using the `examples/unified-processor` configuration. The other example configurations
+have not been tried, so rehearse the migration in a non-production account first. If you run an older
+release of this repository, upgrade to `v0.6.9-tf.0` before migrating; the
+[0.6.4 to 0.6.9 notes](docs/migration-v0.6.4-to-v0.6.9.md) involve no state migration.
+
+The [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md)
+is the procedure. This summary only shows its shape, so take commands and flags from the guide.
+
+**Before you start** you need Terraform 1.7 or later (or OpenTofu), `idp-cli` from the successor
+repository, and the upstream module at **v0.6.15 or later**: an older module would replace the Cognito
+user pool, deleting every user, and the migration refuses to apply it. You also need access to the old
+deployment's directory and state, a maintenance window, and backups you can restore without either
+Terraform state: an on-demand DynamoDB backup of each adopted table, a copy of any bucket data you cannot
+afford to lose, and an export of any CloudWatch logs you need, since those are destroyed with the old
+deployment.
+
+Each phase is a dry run until you pass `--apply`, and each prints how to undo its own change:
+
+| Phase | What it does |
+|---|---|
+| `plan` | Maps every resource in the old state to adopt, recreate or keep, and writes the `import` blocks. Changes nothing in AWS. |
+| `check-retention` | Fails for each kept bucket holding objects older than the expiry rule the new module would put on it. |
+| `freeze` | Disables the old deployment's upload rule, then reports the documents still in flight and can wait for them. |
+| `fix-config` | Backs up your configuration rows and removes the revision counters that would let the first deploy overwrite them. |
+| `adopt-user-pool` | Imports the user pool and aligns its schema in state, so the first apply does not fail. |
+| `apply` | Plans, checks and applies the adoption. |
+| `restore-config` | Restores any configuration profile the first deploy replaced. |
+| `detach` | After you have verified the new deployment, removes everything the migration keeps from the old state. |
+| `check-destroy` | Confirms the old deployment's destroy plan deletes nothing the migration kept, before you run it. |
+
+In upstream's measured run the whole sequence took about 2 hours 45 minutes, including a wait of about an
+hour that DynamoDB imposes (see the first caveat below).
+
+### Known migration caveats
+
+From upstream's [migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md#hazards):
+
+- **Two features are not handled yet.** If you enabled fine-tuning (`api.enable_finetuning`) or external
+  identity provider federation (`idp_federation.enabled`, which creates a Cognito hosted-UI domain),
+  `plan` refuses and writes nothing. Upstream's
+  [side-by-side cutover](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md#fallback-side-by-side-cutover)
+  is the alternative; it keeps no resources and copies the data across instead.
+- **Turn off the agent jobs table's time-to-live at least an hour before `apply`.** This repository's
+  table expires rows on `expiresAfter`, and the new module uses `ExpiresAfter`. DynamoDB cannot move
+  time-to-live to another attribute while it is on, and refuses a second change within about an hour of
+  the first, so an `apply` run too soon fails part way through. `apply` prints the command and asks you
+  to accept the change explicitly. Nothing else depends on the setting, so do this before the maintenance
+  window. Rows written before the migration no longer expire.
+- **Expiry rules apply to the objects you already have.** By default the new module expires objects
+  after 365 days in the input, output, test-set and discovery buckets (`DataRetentionInDays`), after 30
+  days in the working bucket (`LogRetentionDays`), and after a fixed 180 days in the access-log bucket.
+  `check-retention` tells you what that would delete.
+- **Never run `terraform apply` in the old deployment after `freeze`.** It would turn the upload rule
+  back on and rewrite settings on resources the new deployment now owns. After `detach`, the old
+  deployment may only be destroyed.
+- **Usernames are case-sensitive** on the adopted user pool, including the admin username you pass to
+  `plan`.
+- **Finish or reject pending human reviews in the old web UI before `freeze`.** Whether the new
+  deployment can complete a review the old one started has not been verified.
+- **Some history does not carry over:** discovery jobs, test-set definitions (their documents stay in the
+  adopted bucket), installed features, and the knowledge base index. The new knowledge base starts empty;
+  re-sync it from the adopted output bucket.
+
+From operating this repository:
+
+- **Destroying the old deployment can reset the region's API Gateway account setting.** With `log_level`
+  at `INFO` or `DEBUG` (the default is `INFO`), this repository manages `aws_api_gateway_account`, the
+  per-region setting that names the CloudWatch role API Gateway logs with. The migration destroys it with
+  the old deployment. With AWS provider v6 that always resets the setting, whichever deployment set it
+  last; with v5 the setting can be left naming a role the same destroy deletes. Either way, CloudWatch
+  logging stops for every REST API in that account and region that relies on the setting. After the
+  destroy, check `aws apigateway get-account`. If `cloudwatchRoleArn` is missing or names a deleted role
+  and anything in that region logs through it, set it again: running `terraform apply` once more in the
+  new deployment does this when its `LogLevel` is `INFO` or `DEBUG` (upstream's default is `WARN`);
+  otherwise point it at a role of your own.
+
+### Acknowledgements
+
+Thanks to **Grzegorz Ciupryk** and **Rafał Pawlaszek**, who built and maintained the bulk of this
+implementation, and to everyone who filed issues, reported bugs and ran this in their own accounts — your
+reports shaped every release here.
+
+Thanks to **Bob Strahan** and the GenAI IDP Accelerator team for taking Terraform on as a first-class,
+tested deployment option upstream, and for building a migration path off this repository rather than
+leaving its users stranded.
 
 ## Experimental Status
 

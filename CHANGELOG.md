@@ -6,6 +6,56 @@ Format: `vX.Y.Z-tf.N` where `X.Y.Z` is the upstream IDP version and `tf.N` is th
 
 ---
 
+## [Unreleased]
+
+### Deprecated
+
+**This repository is superseded by GenAI IDP Accelerator v0.6.15+ Terraform support.**
+
+Since upstream [v0.6.15](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/releases/tag/v0.6.15)
+(released 2026-11-13), the GenAI IDP Accelerator generates a Terraform module from its own
+CloudFormation templates and publishes it with every release. Every upstream pull request checks the
+translation and compares a security scan of each Terraform resource with its CloudFormation source. The
+catch-up model this repository implemented —
+upstream pinned as an immutable submodule under `sources/`, Terraform modules reimplemented on top — is
+therefore obsolete and would only lag behind upstream. Terraform support in upstream v0.6.15 is labelled
+**Experimental**.
+
+This repository receives no new features and no further upstream catch-up beyond `0.6.9-tf.0`
+(upstream IDP v0.6.9). Existing deployments keep working; migration is the supported path forward.
+
+Where to go instead:
+
+- [Successor repository](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+- [Terraform user guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform.md) — new deployments
+- [Migration guide](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/terraform-migration.md) — existing deployments of this repository
+- [idp-cli reference](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/docs/idp-cli.md) — `--terraform` options, `terraform migrate-from-genai-idp-terraform`
+- [Developer docs](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/terraform/README.md) — translator, gates, overrides
+- [Terraform overview and demo video](https://aws-solutions-library-samples.github.io/accelerated-intelligent-document-processing-on-aws/terraform/)
+- [Issues and feature requests](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues)
+
+Upstream ships a supported in-place migration from this repository:
+`idp-cli terraform migrate-from-genai-idp-terraform` (phased, dry-run by default, `--apply` to execute).
+It adopts existing S3 buckets, DynamoDB tables, the KMS key and the Cognito user pool through Terraform
+`import` blocks, so documents, results, configuration, users and their passwords are preserved. Upstream
+tests it end to end from this repository's `v0.6.9-tf.0` tag, using the `examples/unified-processor`
+configuration, and it needs the upstream module at v0.6.15 or later. See
+[Deprecation & migration](README.md#deprecation--migration) in the README for its prerequisites, its
+phases and the known caveats.
+
+### Changed
+
+Docs and repository metadata only — no Terraform resources, variables, module interfaces or the `sources/`
+submodule pin were touched:
+
+- Deprecation banner and a `Deprecation & migration` section in `README.md`.
+- Site-wide deprecation banner on the documentation site, plus a notice on its landing page.
+- One-line deprecation note on all example and module READMEs.
+- Deprecation notice and successor-repository links in the issue and pull request templates, and in
+  `CONTRIBUTING.md`.
+
+---
+
 ## [0.6.9-tf.0] - 2026-09-28
 
 **Partial parity by design.** `sources/` is pinned at upstream v0.6.9 and the

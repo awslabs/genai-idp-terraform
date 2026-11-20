@@ -1,5 +1,11 @@
 # BDA Processor Example with Web UI
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This example demonstrates how to deploy a complete document processing solution using the BDA (Bedrock Data Automation) processor from the GenAI IDP Accelerator with an integrated Web UI.
 
 ## Architecture Overview

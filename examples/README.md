@@ -1,5 +1,11 @@
 # GenAI IDP Accelerator - Terraform Examples
 
+> [!WARNING]
+> **This repository is deprecated.** Terraform is now a first-class deployment option of the
+> [GenAI IDP Accelerator](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws)
+> from **v0.6.15** onwards. See
+> [Deprecation & migration](https://github.com/awslabs/genai-idp-terraform#deprecation--migration).
+
 This directory contains comprehensive examples demonstrating how to deploy the GenAI IDP Accelerator using Terraform. Each example is designed to be easily deployable with `terraform init`, `terraform plan`, and `terraform apply` after setting up the `terraform.tfvars` file.
 
 ## Quick Start
